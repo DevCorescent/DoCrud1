@@ -15,14 +15,14 @@ function invalidateAuthSettingsCache() {
 }
 
 export const defaultMailSettings: MailSettings = {
-  host: 'smtp.titan.email',
-  port: 465,
-  secure: true,
+  host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
+  port: Number(process.env.SMTP_PORT) || 465,
+  secure: process.env.SMTP_SECURE !== 'false',
   requireAuth: true,
-  username: 'support@docrud.com',
-  password: 'Docrud@2026',
-  fromName: 'Docrud Support',
-  fromEmail: 'support@docrud.com',
+  username: process.env.SMTP_USERNAME || 'support@docrud.com',
+  password: process.env.SMTP_PASSWORD || '',
+  fromName: process.env.SMTP_FROM_NAME || 'Docrud Support',
+  fromEmail: process.env.SMTP_FROM_EMAIL || 'support@docrud.com',
   replyTo: '',
   testRecipient: '',
 };

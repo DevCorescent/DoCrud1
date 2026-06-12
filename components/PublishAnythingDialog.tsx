@@ -68,6 +68,31 @@ async function fileToDataUrl(file: File) {
   });
 }
 
+async function compressImage(file: File, maxPx = 1280, quality = 0.82): Promise<File> {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif') return file;
+  return new Promise<File>((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(file); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => {
+        if (!blob) { resolve(file); return; }
+        resolve(new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }));
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 /* ─── categories ────────────────────────────────────────────── */
 const CATEGORIES = [
   { id: 'post',         label: 'Post',        icon: ImageIcon,     desc: 'Photo & caption',           color: 'rose'    },
@@ -560,11 +585,7 @@ export default function PublishAnythingDialog({
           onPublished({ id: publishedId, title: resume.displayName || '', content: resumeBodyLines, category: 'resume' });
         }
         onOpenChange(false);
-        if (publishedId) {
-          router.push(`/published/${publishedId}`);
-        } else {
-          router.push('/published');
-        }
+        router.refresh();
         return;
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed.');
@@ -612,17 +633,15 @@ export default function PublishAnythingDialog({
         const f = new File([blob], `tutorial_${Date.now()}.txt`, { type: 'text/plain' });
         dataUrl = await fileToDataUrl(f); fileName = f.name; mimeType = 'text/plain'; sizeInBytes = f.size;
       }
-      // post: handle images
+      // post: handle images — compress first to keep payload manageable
       else if (category === 'post' && postImages.length > 0) {
-        if (postImages.length === 1) {
-          const img = postImages[0];
-          if (fields.visibility === 'public' && img.size > MAX_PUBLIC_IMAGE_BYTES) {
-            throw new Error(`Image too large for public publishing (max ${formatBytes(MAX_PUBLIC_IMAGE_BYTES)}).`);
-          }
+        const compressed = await Promise.all(postImages.map(img => compressImage(img)));
+        if (compressed.length === 1) {
+          const img = compressed[0];
           dataUrl = await fileToDataUrl(img);
           fileName = img.name; mimeType = img.type || 'image/jpeg'; sizeInBytes = img.size;
         } else {
-          const gallery = await buildPostHtml(postImages, fields.postCaption);
+          const gallery = await buildPostHtml(compressed, fields.postCaption);
           dataUrl = gallery.dataUrl; fileName = gallery.fileName; mimeType = gallery.mimeType; sizeInBytes = gallery.sizeInBytes;
         }
       } else if (hasFile && fields.file) {
@@ -671,10 +690,11 @@ export default function PublishAnythingDialog({
       // Auto-derive from first post/product image when no explicit cover was provided
       if (!resolvedThumbnailUrl) {
         if (category === 'post' && postImages.length > 0) {
-          // Use first image as thumbnail regardless of single vs gallery
-          resolvedThumbnailUrl = await fileToDataUrl(postImages[0]);
+          const thumb = await compressImage(postImages[0], 800, 0.75);
+          resolvedThumbnailUrl = await fileToDataUrl(thumb);
         } else if (category === 'product' && productImages.length > 0) {
-          resolvedThumbnailUrl = await fileToDataUrl(productImages[0]);
+          const thumb = await compressImage(productImages[0], 800, 0.75);
+          resolvedThumbnailUrl = await fileToDataUrl(thumb);
         }
         // For document/image uploads, the main dataUrl is image — backend handles it automatically
       }
@@ -726,10 +746,10 @@ export default function PublishAnythingDialog({
           category,
         });
       }
-      // Navigate directly to the published item
+      // Close dialog and refresh current page data without navigating away
       if (publishedId && fields.visibility === 'public') {
         onOpenChange(false);
-        if (!businessPageId) router.push(`/published/${publishedId}`);
+        router.refresh();
       } else {
         setSuccessHref(publishedId ? `/transfer/${publishedId}` : '/file-directory');
       }

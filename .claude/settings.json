@@ -33,7 +33,11 @@
       "Bash(Select-String -Path \"d:\\\\docrud_kushagra\\\\lib\\\\published-feed-data.ts\" -Pattern \"^\\\\];\")",
       "Bash(Select-Object -First 1 LineNumber)",
       "PowerShell(\\(Select-String -Path \"d:\\\\docrud_kushagra\\\\lib\\\\published-feed-data.ts\" -Pattern \"^\\\\];\"\\).LineNumber)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(cat next.config.ts)",
+      "Bash(cat next.config.js)",
+      "Bash(cat next.config.mjs)"
     ]
   }
 }

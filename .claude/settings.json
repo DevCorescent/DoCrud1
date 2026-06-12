@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(@\\(\"docrudians\",\"forms\",\"individual-signup\",\"pdf-editor\",\"privacy-policy\",\"schedule-demo\",\"signed-document-policy\",\"signup\",\"talent\"\\) | ForEach-Object { $f = \"d:\\\\docrud_kushagra\\\\app\\\\$_\\\\page.tsx\"; $head = Get-Content $f -TotalCount 5; Write-Host \"=== $_ ===\"; $head; Write-Host \"\" })",
+      "PowerShell(@\\(\"file-directory\",\"forms/builder\",\"knowledge\",\"pdf-editor/workspace\",\"shared-document-policy\",\"terms-and-conditions\",\"visualizer\"\\) | ForEach-Object { $f = \"d:\\\\docrud_kushagra\\\\app\\\\$_\\\\page.tsx\"; $head = Get-Content $f -TotalCount 8; Write-Host \"=== $_ ===\"; $head; Write-Host \"\" })",
+      "PowerShell(@\\(\"blog\",\"document-encrypter\",\"file-transfers\",\"support\"\\) | ForEach-Object { $f = \"d:\\\\docrud_kushagra\\\\app\\\\$_\\\\page.tsx\"; $head = Get-Content $f -TotalCount 6; Write-Host \"=== $_ ===\"; $head; Write-Host \"\" })",
+      "Bash(xargs grep *)",
+      "Bash(grep -E \"u$|settings|dashboard\")",
+      "Bash(curl -s http://localhost:3000/api/public/published)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const fs=require\\('fs'\\); const data=JSON.parse\\(fs.readFileSync\\('d:/docrud_kushagra/data/file-transfers.json','utf8'\\)\\); const pub=Array.isArray\\(data\\)?data:\\(data.transfers||[]\\); console.log\\('total:',pub.length,'public:',pub.filter\\(t=>t.directoryVisibility==='public'&&t.authMode==='public'\\).length\\);\")",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const j=JSON.parse\\(d\\); console.log\\('items count:', j.items?.length ?? 'no items key'\\);\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('items:', len\\(d.get\\('items',[]\\)\\)\\)\")",
+      "Bash(node -e \"const fs=require\\('fs'\\); const raw=JSON.parse\\(fs.readFileSync\\('d:/docrud_kushagra/data/file-transfers.json','utf8'\\)\\); console.log\\('type:', typeof raw, 'isArray:', Array.isArray\\(raw\\)\\); if\\(!Array.isArray\\(raw\\)\\) console.log\\('keys:', Object.keys\\(raw\\).slice\\(0,5\\)\\);\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s -c /tmp/cookies.txt http://localhost:3000/)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -X POST http://localhost:3000/api/admin/seed-db -H \"Cookie: $\\(curl -s -c /tmp/cookies.txt http://localhost:3000/ && cat /tmp/cookies.txt)",
+      "Bash(curl -s -X POST \"http://localhost:3000/api/admin/seed-db?secret=docrud-seed-2024\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('items from DB:', len\\(d.get\\('items',[]\\)\\)\\)\")",
+      "Bash(python -c \"import urllib.request,json; r=urllib.request.urlopen\\('http://localhost:3000/api/public/published'\\); d=json.loads\\(r.read\\(\\)\\); print\\('items from DB:', len\\(d.get\\('items',[]\\)\\)\\)\")",
+      "Bash(curl -s http://localhost:3000/api/history -H \"Cookie: test\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('history items:', len\\(d.get\\('history',d if isinstance\\(d,list\\) else []\\)\\)\\)\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/public/file-directory/publish -H 'Content-Type: application/json' -d '{\"fileName\":\"test.txt\",\"mimeType\":\"text/plain\",\"dataUrl\":\"data:text/plain;base64,dGVzdA==\",\"sizeInBytes\":4,\"directoryVisibility\":\"public\",\"directoryCategory\":\"document\",\"directoryTags\":[],\"authMode\":\"public\",\"title\":\"Test Post\"}')",
+      "Bash(python -c ' *)",
+      "Bash(curl --max-time 30 -s -X POST http://localhost:3000/api/public/file-directory/publish -H \"Content-Type: application/json\" -d \"{\\\\\"fileName\\\\\":\\\\\"test.txt\\\\\",\\\\\"mimeType\\\\\":\\\\\"text/plain\\\\\",\\\\\"dataUrl\\\\\":\\\\\"data:text/plain;base64,dGVzdA==\\\\\",\\\\\"sizeInBytes\\\\\":4,\\\\\"directoryVisibility\\\\\":\\\\\"public\\\\\",\\\\\"directoryCategory\\\\\":\\\\\"document\\\\\",\\\\\"directoryTags\\\\\":[],\\\\\"authMode\\\\\":\\\\\"public\\\\\",\\\\\"title\\\\\":\\\\\"Test\\\\\"}\")",
+      "Bash(curl --max-time 8 -s -X POST http://localhost:3000/api/credits -H \"Content-Type: application/json\" -d \"{}\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\docrud_kushagra\\\\lib\\\\server\" -Filter \"*.ts\")",
+      "Bash(Get-ChildItem -Path \"d:\\\\docrud_kushagra\\\\data\" -Recurse -Filter \"*.json\")",
+      "Bash(Select-Object FullName, Length)",
+      "Bash(node --input-type=module --experimental-vm-modules)",
+      "Bash(psql \"postgres://a409ae33c3bf0583136a6f95f2eaebc6b8038c31e20034ea775281ce3d1e4909:sk_EHaVqB6MXs2tQn8WZtIqb@db.prisma.io:5432/postgres?sslmode=require\" -c \"DELETE FROM file_transfers; DELETE FROM app_state WHERE key LIKE '%file-transfer%'; SELECT 'done' AS result;\")",
+      "Bash(Select-String -Path \"d:\\\\docrud_kushagra\\\\lib\\\\published-feed-data.ts\" -Pattern \"^\\\\];\")",
+      "Bash(Select-Object -First 1 LineNumber)",
+      "PowerShell(\\(Select-String -Path \"d:\\\\docrud_kushagra\\\\lib\\\\published-feed-data.ts\" -Pattern \"^\\\\];\"\\).LineNumber)",
+      "Bash(git commit *)"
+    ]
+  }
+}

@@ -99,9 +99,10 @@ export function resolveFileTransferDataUrl(
 }
 
 export async function getFileTransfers(): Promise<SecureFileTransfer[]> {
-  const result = await readJsonFile<SecureFileTransfer[]>(fileTransfersPath, []);
-  console.log(`[getFileTransfers] returned ${result.length} items`);
-  return result;
+  if (getDbPool()) {
+    return selectAllFileTransferRows();
+  }
+  return readJsonFile<SecureFileTransfer[]>(fileTransfersPath, []);
 }
 
 export async function saveFileTransfers(transfers: SecureFileTransfer[]): Promise<void> {

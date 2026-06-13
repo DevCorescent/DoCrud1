@@ -80,6 +80,24 @@ export async function GET(
     const t = transfers.find((x) => x.id === id);
     if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+    // ── 1.5. Stored thumbnailUrl data URL (e.g. product cover image) ────────
+    if (t.thumbnailUrl?.startsWith('data:image/')) {
+      const parts = t.thumbnailUrl.split(',');
+      if (parts.length === 2 && parts[1]) {
+        const mimeType = t.thumbnailUrl.split(';')[0].replace('data:', '').toLowerCase();
+        const buffer = Buffer.from(parts[1], 'base64');
+        saveToDisk(id, buffer, mimeType);
+        return new NextResponse(buffer, {
+          status: 200,
+          headers: {
+            'Content-Type': mimeType,
+            'Cache-Control': 'public, max-age=86400',
+            'Content-Length': String(buffer.length),
+          },
+        });
+      }
+    }
+
     // ── 2. Main content is itself an image ──────────────────────────────────
     if (t.mimeType?.startsWith('image/') && t.dataUrl?.startsWith('data:image/')) {
       const parts = t.dataUrl.split(',');

@@ -237,12 +237,22 @@ export async function POST(req: NextRequest) {
     }
 
     /* ── save file to disk ── */
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    try {
+      await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    } catch (mkdirErr) {
+      console.error('[upload-resume] mkdir failed', UPLOAD_DIR, mkdirErr);
+      return NextResponse.json({ error: 'Server storage error — please try again.' }, { status: 500 });
+    }
     const uid = userId.replace(/[^a-z0-9]/gi, '').slice(0, 12);
     const rand = crypto.randomBytes(6).toString('hex');
     const extMap: Record<KnownType, string> = { pdf: 'pdf', docx: 'docx', doc: 'doc', txt: 'txt' };
     const filename = `resume_${uid}_${rand}.${extMap[fileType]}`;
-    await fs.writeFile(path.join(UPLOAD_DIR, filename), buf);
+    try {
+      await fs.writeFile(path.join(UPLOAD_DIR, filename), buf);
+    } catch (writeErr) {
+      console.error('[upload-resume] writeFile failed', path.join(UPLOAD_DIR, filename), writeErr);
+      return NextResponse.json({ error: 'Server storage error — please try again.' }, { status: 500 });
+    }
     const fileUrl = `/uploads/resumes/${filename}`;
 
     /* ── AI parse ── */
@@ -426,7 +436,12 @@ Be thorough. Extract EVERYTHING. If a field is genuinely missing from the resume
     };
     patch.resumeFiles = [newEntry, ...(existing.resumeFiles ?? [])].slice(0, MAX_HISTORY);
 
-    await updateProfileData(userId, patch as Parameters<typeof updateProfileData>[1]);
+    try {
+      await updateProfileData(userId, patch as Parameters<typeof updateProfileData>[1]);
+    } catch (dbErr) {
+      console.error('[upload-resume] updateProfileData failed for', userId, dbErr);
+      return NextResponse.json({ error: 'Profile update failed — please try again.' }, { status: 500 });
+    }
     const updated = await getProfileData(userId);
 
     return NextResponse.json({

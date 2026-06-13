@@ -84,7 +84,13 @@ export async function GET(request: NextRequest) {
             undefined,
           videoUrl: t.videoUrl || undefined,
           mimeType: t.mimeType || null,
-          thumbnailUrl: t.thumbnailUrl || undefined,
+          thumbnailUrl: (() => {
+            const u = t.thumbnailUrl;
+            if (u && !u.startsWith('data:')) return u;
+            if (t.mimeType?.startsWith('image/') && t.dataUrl?.startsWith('data:image/')) return `/api/public/thumbnail/${t.id}`;
+            if (t.mimeType === 'text/html' && (t.directoryCategory === 'post' || t.directoryCategory === 'product') && t.dataUrl?.startsWith('data:text/html')) return `/api/public/thumbnail/${t.id}`;
+            return undefined;
+          })(),
           applicationUrl: t.applicationUrl || undefined,
           moderationStatus: t.moderationStatus || 'active',
           moderationNote: t.moderationNote,

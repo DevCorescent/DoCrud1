@@ -13,6 +13,8 @@ import {
   VideoDetailContent,
   MilestoneDetailContent,
   TutorialDetailContent,
+  ImageSlider,
+  extractImagesFromGalleryHtml,
 } from './PublishedCategoryPages';
 import { useRouter } from 'next/navigation';
 import {
@@ -1869,6 +1871,17 @@ export default function PublishedItemPage({ id }: { id: string }) {
                 ))}
               </div>
             )}
+
+            {/* Product image gallery — renders all images from the HTML gallery dataUrl */}
+            {item.category === 'product' && item.mimeType === 'text/html' && item.dataUrl && (() => {
+              const imgs = extractImagesFromGalleryHtml(item.dataUrl);
+              if (imgs.length === 0) return null;
+              return (
+                <div className="mt-6">
+                  <ImageSlider images={imgs} />
+                </div>
+              );
+            })()}
 
             {/* body */}
             <div className="mt-7">

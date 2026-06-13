@@ -109,7 +109,7 @@ function randomColor(): string {
    1. PostDetailContent — Instagram/LinkedIn style post
 ═══════════════════════════════════════════════════════════════════ */
 /* ─── Image slider helper ────────────────────────────────────────── */
-function extractImagesFromGalleryHtml(dataUrl: string): string[] {
+export function extractImagesFromGalleryHtml(dataUrl: string): string[] {
   try {
     // dataUrl is "data:text/html;base64,..."
     const b64 = dataUrl.replace(/^data:[^;]+;base64,/, '');
@@ -124,7 +124,7 @@ function extractImagesFromGalleryHtml(dataUrl: string): string[] {
   }
 }
 
-function ImageSlider({ images }: { images: string[] }) {
+export function ImageSlider({ images }: { images: string[] }) {
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState(false);
   const touchStart = useRef<number | null>(null);
@@ -391,6 +391,7 @@ export function PollDetailContent({
     try { const v = localStorage.getItem(storageKey); return v !== null ? parseInt(v, 10) : null; } catch { return null; }
   });
   const [showToast, setShowToast] = useState(false);
+  const [toastMsg, setToastMsg] = useState('Thanks for voting!');
   const [voteCount, setVoteCount] = useState<number>(() => {
     try { const s = item.stats?.[0]?.v; if (!s) return 128; const n = parseInt(s.replace(/[^\d]/g, ''), 10); return isNaN(n) ? 128 : n; } catch { return 128; }
   });
@@ -414,9 +415,11 @@ export function PollDetailContent({
   }, [showResults]);
 
   const castVote = (idx: number) => {
-    if (votedOption !== null || isClosed) return;
+    if (isClosed) return;
+    const isChanging = votedOption !== null && votedOption !== idx;
     setVotedOption(idx);
-    setVoteCount((c) => c + 1);
+    if (!isChanging) setVoteCount((c) => c + 1);
+    setToastMsg(isChanging ? 'Vote changed!' : 'Thanks for voting!');
     setShowToast(true);
     setTimeout(() => setShowToast(false), 3000);
     try { localStorage.setItem(storageKey, String(idx)); } catch {}
@@ -453,7 +456,7 @@ export function PollDetailContent({
               key={idx}
               type="button"
               onClick={() => castVote(idx)}
-              disabled={showResults}
+              disabled={isClosed}
               aria-label={`Vote for ${opt}`}
               className={`relative w-full overflow-hidden rounded-xl border py-4 px-5 text-left transition-all duration-200 ${
                 isChosen
@@ -511,7 +514,7 @@ export function PollDetailContent({
       >
         <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/25 bg-[#111114] px-5 py-3 text-sm font-semibold text-emerald-400 shadow-2xl">
           <CheckCircle2 className="h-4 w-4" />
-          Thanks for voting!
+          {toastMsg}
         </div>
       </div>
 
@@ -519,6 +522,19 @@ export function PollDetailContent({
       {showResults && (
         <button
           type="button"
+          onClick={() => {
+            const url = typeof window !== 'undefined' ? window.location.href : '';
+            const text = `${item.title} — Poll results`;
+            if (typeof navigator !== 'undefined' && navigator.share) {
+              navigator.share({ title: item.title, text, url }).catch(() => {});
+            } else if (typeof navigator !== 'undefined' && navigator.clipboard) {
+              navigator.clipboard.writeText(url).then(() => {
+                setToastMsg('Link copied!');
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 3000);
+              }).catch(() => {});
+            }
+          }}
           className="inline-flex items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white/55 transition hover:bg-white/[0.08] hover:text-white"
         >
           <Share2 className="h-4 w-4" />

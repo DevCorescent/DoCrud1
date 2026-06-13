@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStoredUsers, getAuthSession } from '@/lib/server/auth';
+import { getStoredUserById } from '@/lib/server/users';
 import { getProfileData, getFollowCounts, isFollowing as checkIsFollowing } from '@/lib/server/user-profiles';
 import { getPublicGigListings } from '@/lib/server/gigs';
 import { getPublicAnalyticsForUser } from '@/lib/server/file-transfers';
@@ -18,7 +19,9 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     const { userId } = params;
 
     const users = await getStoredUsers();
-    const found = users.find((u) => u.id === userId);
+    let found = users.find((u) => u.id === userId);
+    // Fallback: cache may be stale for newly registered users — do a direct DB row lookup
+    if (!found) found = await getStoredUserById(userId) ?? undefined;
     if (!found) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }

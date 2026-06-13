@@ -1527,9 +1527,9 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
           onCancel={() => setAdjustTarget(null)}
         />
       )}
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
+    <div className="fixed inset-0 z-[10000] flex items-end md:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full md:max-w-2xl md:mx-4 bg-[#111113] border border-white/[0.08] rounded-t-[28px] md:rounded-[24px] flex flex-col max-h-[92vh] md:max-h-[88vh]">
+      <div className="relative z-10 w-full md:max-w-2xl md:mx-4 bg-[#111113] border border-white/[0.08] rounded-t-[28px] md:rounded-[24px] flex flex-col max-h-[calc(92vh-62px)] md:max-h-[88vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07] shrink-0">
           <h2 className="font-semibold text-white">Edit Profile</h2>

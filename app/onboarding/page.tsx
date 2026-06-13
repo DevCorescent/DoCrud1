@@ -1815,7 +1815,7 @@ function OnboardingPageInner() {
         avatarUrl:   finalAvatarUrl || undefined,
         bannerUrl:   finalBannerUrl || undefined,
       }),
-    });
+    }).catch(() => { /* non-blocking: handleComplete will re-save images */ });
     next();
   }
 
@@ -1975,6 +1975,7 @@ function OnboardingPageInner() {
     if (s === OTP_SCR && !otpVerifiedRef.current) return s;
     return Math.min(s + 1, TOTAL_SCR - 1);
   }), []);
+  const prev = useCallback(() => setScreen(s => Math.max(s - 1, PROFILE_SCR)), []);
   const skip  = () => router.push('/login');
 
   async function sendOtp() {
@@ -2039,11 +2040,27 @@ function OnboardingPageInner() {
         pendingAvatarUploadRef.current,
         pendingBannerUploadRef.current,
       ]);
-      const finalAvatarUrl = resolvedAvatar ?? (avatarUrl.startsWith('blob:') ? '' : avatarUrl);
-      const finalBannerUrl = resolvedBanner ?? (bannerUrl.startsWith('blob:') ? '' : bannerUrl);
+      /* If the upload-image endpoint returned null (session race / network error),
+         fall back to re-uploading via the profile PATCH using base64 data URLs. */
+      async function blobToDataUrl(blobUrl: string): Promise<string> {
+        try {
+          const r = await fetch(blobUrl);
+          const blob = await r.blob();
+          return new Promise<string>((res) => {
+            const reader = new FileReader();
+            reader.onload = (e) => res(String(e.target?.result || ''));
+            reader.readAsDataURL(blob);
+          });
+        } catch { return ''; }
+      }
+      let finalAvatarUrl = resolvedAvatar ?? (avatarUrl.startsWith('blob:') ? '' : avatarUrl);
+      let finalBannerUrl = resolvedBanner ?? (bannerUrl.startsWith('blob:') ? '' : bannerUrl);
+      if (!finalAvatarUrl && avatarUrl.startsWith('blob:')) finalAvatarUrl = await blobToDataUrl(avatarUrl);
+      if (!finalBannerUrl && bannerUrl.startsWith('blob:')) finalBannerUrl = await blobToDataUrl(bannerUrl);
+
       await Promise.all([
         ...followed.map(id => fetch('/api/profile/follow', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ targetUserId:id, action:'follow' }) })),
-        fetch('/api/onboarding/complete', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ profile:{ headline, bio, location, website, avatarUrl: finalAvatarUrl, bannerUrl: finalBannerUrl, openToWork, skills, interests, experience, education, onboardingDone:true, profileSetupDone:true } }) }),
+        fetch('/api/onboarding/complete', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ profile:{ headline, bio, location, website, avatarUrl: finalAvatarUrl || undefined, bannerUrl: finalBannerUrl || undefined, openToWork, skills, interests, experience, education, onboardingDone:true, profileSetupDone:true } }) }),
       ]);
       setScreen(DONE_SCR);
     } catch { setScreen(DONE_SCR); }
@@ -3706,9 +3723,20 @@ function OnboardingPageInner() {
 
         {/* Top bar — fixed height */}
         <div className="relative z-10 flex h-12 shrink-0 items-center justify-between px-5 sm:px-6">
-          <span className="text-[10.5px] font-semibold text-white/20">
-            {isTour ? `${screen + 1} of ${TOUR_END + 1}` : screen < DONE_SCR ? `Step ${postAuthStep} of ${postAuthTotal}` : ''}
-          </span>
+          {(screen === SKILLS_SCR || screen === PEOPLE_SCR) ? (
+            <button
+              onClick={prev}
+              className="flex items-center gap-1.5 rounded-[9px] border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-semibold text-white/38 hover:text-white/60 hover:bg-white/[0.06] transition-all">
+              <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Back
+            </button>
+          ) : (
+            <span className="text-[10.5px] font-semibold text-white/20">
+              {isTour ? `${screen + 1} of ${TOUR_END + 1}` : screen < DONE_SCR ? `Step ${postAuthStep} of ${postAuthTotal}` : ''}
+            </span>
+          )}
           {screen < DONE_SCR && (
             <button onClick={skip}
               className="rounded-[9px] border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[10.5px] font-semibold text-white/28 hover:text-white/50 hover:bg-white/[0.06] transition-all">

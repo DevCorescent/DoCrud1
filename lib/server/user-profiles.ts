@@ -1,6 +1,6 @@
 import { readJsonFile, writeJsonFile, userProfilesPath, followsPath } from '@/lib/server/storage';
 import { getDbPool } from '@/lib/server/database';
-import { selectUserProfileRow, upsertUserProfileRow } from '@/lib/server/db/user-profiles-rows';
+import { selectAllUserProfileRows, selectUserProfileRow, upsertUserProfileRow } from '@/lib/server/db/user-profiles-rows';
 
 export interface UserProfileData {
   headline?: string;
@@ -83,6 +83,9 @@ export interface FollowsData {
 }
 
 export async function getAllProfiles(): Promise<Record<string, UserProfileData>> {
+  if (getDbPool()) {
+    return selectAllUserProfileRows();
+  }
   return readJsonFile<Record<string, UserProfileData>>(userProfilesPath, {});
 }
 

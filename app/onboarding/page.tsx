@@ -2032,6 +2032,18 @@ function OnboardingPageInner() {
     finally { setSLoading(false); }
   }
 
+  async function blobToDataUrl(blobUrl: string): Promise<string> {
+    try {
+      const r = await fetch(blobUrl);
+      const blob = await r.blob();
+      return new Promise<string>((res) => {
+        const reader = new FileReader();
+        reader.onload = (e) => res(String(e.target?.result || ''));
+        reader.readAsDataURL(blob);
+      });
+    } catch { return ''; }
+  }
+
   async function handleComplete() {
     setCompleting(true);
     try {
@@ -2040,19 +2052,6 @@ function OnboardingPageInner() {
         pendingAvatarUploadRef.current,
         pendingBannerUploadRef.current,
       ]);
-      /* If the upload-image endpoint returned null (session race / network error),
-         fall back to re-uploading via the profile PATCH using base64 data URLs. */
-      async function blobToDataUrl(blobUrl: string): Promise<string> {
-        try {
-          const r = await fetch(blobUrl);
-          const blob = await r.blob();
-          return new Promise<string>((res) => {
-            const reader = new FileReader();
-            reader.onload = (e) => res(String(e.target?.result || ''));
-            reader.readAsDataURL(blob);
-          });
-        } catch { return ''; }
-      }
       let finalAvatarUrl = resolvedAvatar ?? (avatarUrl.startsWith('blob:') ? '' : avatarUrl);
       let finalBannerUrl = resolvedBanner ?? (bannerUrl.startsWith('blob:') ? '' : bannerUrl);
       if (!finalAvatarUrl && avatarUrl.startsWith('blob:')) finalAvatarUrl = await blobToDataUrl(avatarUrl);

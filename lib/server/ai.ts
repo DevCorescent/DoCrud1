@@ -40,7 +40,7 @@ export function getAiModelName() {
   return process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
 }
 
-export async function generateAiText(messages: AiMessage[]) {
+export async function generateAiText(messages: AiMessage[], options?: { jsonMode?: boolean }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   let response: Response;
@@ -56,6 +56,7 @@ export async function generateAiText(messages: AiMessage[]) {
         model: getAiModelName(),
         messages,
         temperature: 0.2,
+        ...(options?.jsonMode ? { response_format: { type: 'json_object' } } : {}),
       }),
     });
   } catch (error) {

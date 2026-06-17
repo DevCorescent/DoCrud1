@@ -836,6 +836,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
+                  className="[&::placeholder]:text-white/35"
                   style={{
                     flex: 1, background: 'transparent', border: 'none', outline: 'none',
                     fontSize: 17, fontWeight: 500, color: 'rgba(255,255,255,0.90)',

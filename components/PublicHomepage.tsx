@@ -8669,7 +8669,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
             <div>
               <div className="text-sm font-semibold text-white">All chats</div>
-              <div className="mt-1 text-xs text-slate-400">Search and open your full chat history.</div>
+              <div className="mt-1 text-xs text-white/40">Search and open your full chat history.</div>
             </div>
             <button
               type="button"
@@ -8685,7 +8685,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
               value={chatHistoryQuery}
               onChange={(e) => setChatHistoryQuery(e.target.value)}
               placeholder="Search chats by title…"
-              className="h-10 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-white placeholder:text-slate-400 focus:border-white/20 focus:outline-none"
+              className="h-10 w-full rounded-2xl border border-white/10 bg-white/5 px-4 text-sm text-white placeholder:text-white/35 focus:border-white/20 focus:outline-none"
             />
             <div className="mt-3 max-h-[420px] space-y-2 overflow-y-auto pr-1 scrollbar-minimal">
               {(threads || [])

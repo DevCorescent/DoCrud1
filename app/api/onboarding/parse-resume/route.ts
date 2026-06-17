@@ -103,7 +103,7 @@ Rules:
         role: 'user',
         content: `Parse this resume:\n\n${trimmed}`,
       },
-    ]);
+    ], { jsonMode: true });
 
     let parsed: {
       name?: string | null;

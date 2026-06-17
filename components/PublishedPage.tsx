@@ -927,7 +927,7 @@ function TrendingPanel({
       setHistory(readTrendHistory());
     };
     load();
-    const iv = setInterval(load, 2000);
+    const iv = setInterval(load, 10_000);
     return () => clearInterval(iv);
   }, []);
 
@@ -2706,7 +2706,7 @@ export default function PublishedPage() {
       } catch {}
     };
     sync();
-    const iv = setInterval(sync, 2000);
+    const iv = setInterval(sync, 10_000);
     return () => clearInterval(iv);
   }, []);
 

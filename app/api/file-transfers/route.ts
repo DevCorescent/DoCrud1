@@ -6,6 +6,7 @@ import { selectFileTransferRowById } from '@/lib/server/db/file-transfers-rows';
 import { attachFileToLocker, createFileLocker, ensureLockerRotation, getVisibleLockersForUser } from '@/lib/server/file-lockers';
 import { checkDriveQuota } from '@/lib/server/drive-storage';
 import { SecureFileTransfer } from '@/types/document';
+import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,11 +107,30 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Upload file content to R2 for unencrypted transfers.
+    // Encrypted transfers keep the base64 payload in MongoDB (encryption is local).
+    let resolvedDataUrl = payload.dataUrl.trim();
+    if (isR2Configured() && !payload.encryptionEnabled && resolvedDataUrl.startsWith('data:')) {
+      try {
+        const commaIdx = resolvedDataUrl.indexOf(',');
+        if (commaIdx !== -1) {
+          const base64Data = resolvedDataUrl.slice(commaIdx + 1);
+          const buffer = Buffer.from(base64Data, 'base64');
+          const ext = (payload.fileName.trim().split('.').pop() ?? 'bin').toLowerCase();
+          const key = `files/${Date.now()}-${payload.fileName.trim().replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          resolvedDataUrl = await uploadToR2(key, buffer, payload.mimeType.trim());
+        }
+      } catch (r2Err) {
+        console.error('[file-transfers] R2 upload failed, falling back to base64:', r2Err);
+        resolvedDataUrl = payload.dataUrl.trim(); // fallback: keep base64
+      }
+    }
+
     const transfer = await appendFileTransfer({
       title: payload.title?.trim() || undefined,
       fileName: payload.fileName.trim(),
       mimeType: payload.mimeType.trim(),
-      dataUrl: payload.dataUrl.trim(),
+      dataUrl: resolvedDataUrl,
       sizeInBytes: Number(payload.sizeInBytes || 0),
       notes: payload.notes?.trim() || '',
       folderId: payload.folderId?.trim() || undefined,

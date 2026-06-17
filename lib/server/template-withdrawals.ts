@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 import { getEmailOutbox } from '@/lib/server/email-outbox';
 import { readJsonFile, templateMarketplaceIncomePath, templateMarketplaceWithdrawalsPath, writeJsonFile } from '@/lib/server/storage';
 import type { TemplateMarketplaceIncomeRecord, TemplateMarketplaceWithdrawal, TemplateMarketplaceWithdrawalStatus, User } from '@/types/document';
@@ -22,53 +22,27 @@ function normalizeStatus(input: unknown): TemplateMarketplaceWithdrawalStatus {
   return 'requested';
 }
 
-export async function listTemplateWithdrawals(params: {
-  sellerUserId: string;
-  limit?: number;
-}) {
+type WithdrawalDoc = TemplateMarketplaceWithdrawal & { _id: string };
+function strip({ _id: _u, ...rest }: WithdrawalDoc): TemplateMarketplaceWithdrawal { return rest; }
+
+export async function listTemplateWithdrawals(params: { sellerUserId: string; limit?: number }) {
   const limit = Math.min(300, Math.max(20, Math.round(params.limit ?? 120)));
-  const pool = getDbPool();
-  if (!pool) {
-    const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
-    return raw
-      .filter((w) => w.sellerUserId === params.sellerUserId)
-      .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
-      .slice(0, limit);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<WithdrawalDoc>('template_marketplace_withdrawals')
+        .find({ sellerUserId: params.sellerUserId })
+        .sort({ requestedAt: -1 })
+        .limit(limit)
+        .toArray();
+      return docs.map(strip);
+    }
   }
-
-  const result = await pool.query(
-    `
-      SELECT
-        id, seller_user_id, seller_email, currency, amount_in_paise, status,
-        payout_method_label, payout_method_details,
-        admin_note, transaction_ref,
-        requested_at, reviewed_at, paid_at, updated_at
-      FROM template_marketplace_withdrawals
-      WHERE seller_user_id = $1
-      ORDER BY requested_at DESC
-      LIMIT $2
-    `,
-    [params.sellerUserId, limit],
-  );
-
-  return result.rows.map((row) => ({
-    id: String(row.id),
-    sellerUserId: String(row.seller_user_id),
-    sellerEmail: row.seller_email ? String(row.seller_email) : undefined,
-    currency: 'INR' as const,
-    amountInPaise: Number(row.amount_in_paise || 0),
-    status: normalizeStatus(row.status),
-    payoutMethod: {
-      label: String(row.payout_method_label || 'Any'),
-      details: String(row.payout_method_details || ''),
-    },
-    adminNote: row.admin_note ? String(row.admin_note) : undefined,
-    transactionRef: row.transaction_ref ? String(row.transaction_ref) : undefined,
-    requestedAt: new Date(row.requested_at).toISOString(),
-    reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : undefined,
-    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : undefined,
-    updatedAt: new Date(row.updated_at).toISOString(),
-  })) as TemplateMarketplaceWithdrawal[];
+  const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
+  return raw
+    .filter((w) => w.sellerUserId === params.sellerUserId)
+    .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
+    .slice(0, limit);
 }
 
 export async function listAllTemplateWithdrawals(params: {
@@ -77,48 +51,23 @@ export async function listAllTemplateWithdrawals(params: {
 }) {
   const limit = Math.min(800, Math.max(50, Math.round(params.limit ?? 300)));
   const status = params.status && params.status !== 'all' ? normalizeStatus(params.status) : null;
-  const pool = getDbPool();
-  if (!pool) {
-    const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
-    return raw
-      .filter((w) => (status ? w.status === status : true))
-      .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
-      .slice(0, limit);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const filter = status ? { status } : {};
+      const docs = await db.collection<WithdrawalDoc>('template_marketplace_withdrawals')
+        .find(filter)
+        .sort({ requestedAt: -1 })
+        .limit(limit)
+        .toArray();
+      return docs.map(strip);
+    }
   }
-
-  const result = await pool.query(
-    `
-      SELECT
-        id, seller_user_id, seller_email, currency, amount_in_paise, status,
-        payout_method_label, payout_method_details,
-        admin_note, transaction_ref,
-        requested_at, reviewed_at, paid_at, updated_at
-      FROM template_marketplace_withdrawals
-      WHERE ($1::text IS NULL OR status = $1)
-      ORDER BY requested_at DESC
-      LIMIT $2
-    `,
-    [status, limit],
-  );
-
-  return result.rows.map((row) => ({
-    id: String(row.id),
-    sellerUserId: String(row.seller_user_id),
-    sellerEmail: row.seller_email ? String(row.seller_email) : undefined,
-    currency: 'INR' as const,
-    amountInPaise: Number(row.amount_in_paise || 0),
-    status: normalizeStatus(row.status),
-    payoutMethod: {
-      label: String(row.payout_method_label || 'Any'),
-      details: String(row.payout_method_details || ''),
-    },
-    adminNote: row.admin_note ? String(row.admin_note) : undefined,
-    transactionRef: row.transaction_ref ? String(row.transaction_ref) : undefined,
-    requestedAt: new Date(row.requested_at).toISOString(),
-    reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : undefined,
-    paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : undefined,
-    updatedAt: new Date(row.updated_at).toISOString(),
-  })) as TemplateMarketplaceWithdrawal[];
+  const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
+  return raw
+    .filter((w) => (status ? w.status === status : true))
+    .sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())
+    .slice(0, limit);
 }
 
 export async function getSellerWithdrawalSummary(sellerUserId: string) {
@@ -151,19 +100,14 @@ export async function createTemplateWithdrawalRequest(params: {
   payoutMethodDetails: string;
 }) {
   const amountInPaise = clampPaise(params.amountInPaise);
-  if (amountInPaise < WITHDRAW_MIN_PAISE) {
-    throw new Error('Minimum withdrawal is ₹1000.');
-  }
+  if (amountInPaise < WITHDRAW_MIN_PAISE) throw new Error('Minimum withdrawal is ₹1000.');
+
   const summary = await getSellerWithdrawalSummary(params.actor.id);
-  if (amountInPaise > summary.availableToWithdrawInPaise) {
-    throw new Error('Withdrawal amount exceeds available balance.');
-  }
+  if (amountInPaise > summary.availableToWithdrawInPaise) throw new Error('Withdrawal amount exceeds available balance.');
 
   const label = String(params.payoutMethodLabel || '').trim().slice(0, 40) || 'Any';
   const details = String(params.payoutMethodDetails || '').trim().slice(0, 1200);
-  if (!details) {
-    throw new Error('Payment method details are required.');
-  }
+  if (!details) throw new Error('Payment method details are required.');
 
   const now = nowIso();
   const record: TemplateMarketplaceWithdrawal = {
@@ -178,23 +122,15 @@ export async function createTemplateWithdrawalRequest(params: {
     updatedAt: now,
   };
 
-  const pool = getDbPool();
-  if (!pool) {
-    const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
-    await writeJsonFile(templateMarketplaceWithdrawalsPath, [record, ...raw].slice(0, 30_000));
-  } else {
-    await pool.query(
-      `
-        INSERT INTO template_marketplace_withdrawals (
-          id, seller_user_id, seller_email, currency, amount_in_paise, status,
-          payout_method_label, payout_method_details,
-          requested_at, updated_at
-        ) VALUES ($1,$2,$3,'INR',$4,'requested',$5,$6,NOW(),NOW())
-      `,
-      [record.id, record.sellerUserId, record.sellerEmail || null, record.amountInPaise, record.payoutMethod.label, record.payoutMethod.details],
-    );
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection<WithdrawalDoc>('template_marketplace_withdrawals').insertOne({ ...record, _id: record.id });
+      return record;
+    }
   }
-
+  const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
+  await writeJsonFile(templateMarketplaceWithdrawalsPath, [record, ...raw].slice(0, 30_000));
   return record;
 }
 
@@ -209,36 +145,18 @@ export async function updateTemplateWithdrawalByAdmin(params: {
   const id = String(params.id || '').trim();
   if (!id) throw new Error('Withdrawal id is required.');
 
-  const pool = getDbPool();
   const now = nowIso();
 
-  const loadOne = async () => {
-    if (!pool) {
-      const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
-      return raw.find((w) => w.id === id) || null;
+  const loadOne = async (): Promise<TemplateMarketplaceWithdrawal | null> => {
+    if (getDbPool()) {
+      const db = await getMongoDb();
+      if (db) {
+        const doc = await db.collection<WithdrawalDoc>('template_marketplace_withdrawals').findOne({ _id: id as any });
+        return doc ? strip(doc) : null;
+      }
     }
-    const result = await pool.query(
-      `SELECT id, seller_user_id, seller_email, currency, amount_in_paise, status, payout_method_label, payout_method_details, admin_note, transaction_ref, requested_at, reviewed_at, paid_at, updated_at
-       FROM template_marketplace_withdrawals WHERE id = $1 LIMIT 1`,
-      [id],
-    );
-    const row = result.rows[0];
-    if (!row) return null;
-    return {
-      id: String(row.id),
-      sellerUserId: String(row.seller_user_id),
-      sellerEmail: row.seller_email ? String(row.seller_email) : undefined,
-      currency: 'INR' as const,
-      amountInPaise: Number(row.amount_in_paise || 0),
-      status: normalizeStatus(row.status),
-      payoutMethod: { label: String(row.payout_method_label || 'Any'), details: String(row.payout_method_details || '') },
-      adminNote: row.admin_note ? String(row.admin_note) : undefined,
-      transactionRef: row.transaction_ref ? String(row.transaction_ref) : undefined,
-      requestedAt: new Date(row.requested_at).toISOString(),
-      reviewedAt: row.reviewed_at ? new Date(row.reviewed_at).toISOString() : undefined,
-      paidAt: row.paid_at ? new Date(row.paid_at).toISOString() : undefined,
-      updatedAt: new Date(row.updated_at).toISOString(),
-    } as TemplateMarketplaceWithdrawal;
+    const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
+    return raw.find((w) => w.id === id) || null;
   };
 
   const current = await loadOne();
@@ -253,14 +171,21 @@ export async function updateTemplateWithdrawalByAdmin(params: {
       ? 'rejected'
       : 'paid';
 
-  if (params.action === 'mark_paid' && !transactionRef) {
-    throw new Error('Transaction reference is required to mark as paid.');
-  }
+  if (params.action === 'mark_paid' && !transactionRef) throw new Error('Transaction reference is required to mark as paid.');
 
   const reviewedAt = params.action === 'approve' || params.action === 'reject' ? now : current.reviewedAt || now;
   const paidAt = params.action === 'mark_paid' ? now : current.paidAt;
 
-  if (!pool) {
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const setFields: Record<string, unknown> = { status: nextStatus, reviewedAt, updatedAt: now };
+      if (adminNote !== undefined) setFields.adminNote = adminNote;
+      if (transactionRef !== undefined) setFields.transactionRef = transactionRef;
+      if (paidAt) setFields.paidAt = paidAt;
+      await db.collection('template_marketplace_withdrawals').updateOne({ _id: id as any }, { $set: setFields });
+    }
+  } else {
     const raw = await readJsonFile<TemplateMarketplaceWithdrawal[]>(templateMarketplaceWithdrawalsPath, []);
     const next = raw.map((w) => {
       if (w.id !== id) return w;
@@ -269,30 +194,14 @@ export async function updateTemplateWithdrawalByAdmin(params: {
         status: nextStatus,
         adminNote: adminNote ?? w.adminNote,
         transactionRef: transactionRef ?? w.transactionRef,
-        reviewedAt: reviewedAt,
+        reviewedAt,
         paidAt,
         updatedAt: now,
       };
     });
     await writeJsonFile(templateMarketplaceWithdrawalsPath, next.slice(0, 30_000));
-  } else {
-    await pool.query(
-      `
-        UPDATE template_marketplace_withdrawals
-        SET
-          status = $2,
-          admin_note = COALESCE($3, admin_note),
-          transaction_ref = COALESCE($4, transaction_ref),
-          reviewed_at = COALESCE($5, reviewed_at),
-          paid_at = $6,
-          updated_at = NOW()
-        WHERE id = $1
-      `,
-      [id, nextStatus, adminNote || null, transactionRef || null, reviewedAt ? new Date(reviewedAt) : null, paidAt ? new Date(paidAt) : null],
-    );
   }
 
-  // Notify seller on completion (paid).
   if (params.action === 'mark_paid' && current.sellerEmail) {
     const outbox = await getEmailOutbox(300);
     const reminderKey = `tpl-withdrawal-paid:${id}`;

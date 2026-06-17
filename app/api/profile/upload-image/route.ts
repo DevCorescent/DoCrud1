@@ -5,6 +5,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getAuthSession } from '@/lib/server/auth';
+import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'profile');
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -40,19 +41,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File too large — maximum 5 MB' }, { status: 400 });
     }
 
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
-
     const uid = session.user.id.replace(/[^a-z0-9]/gi, '').slice(0, 12);
     const rand = crypto.randomBytes(6).toString('hex');
     const ext = EXT_MAP[file.type] ?? 'jpg';
     const filename = `${type}_${uid}_${rand}.${ext}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
-
     const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(filepath, buffer);
 
-    const url = `/uploads/profile/${filename}`;
-    return NextResponse.json({ url });
+    if (isR2Configured()) {
+      const url = await uploadToR2(`profiles/${filename}`, buffer, file.type);
+      return NextResponse.json({ url });
+    }
+
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
+    return NextResponse.json({ url: `/uploads/profile/${filename}` });
   } catch (err) {
     console.error('[profile/upload-image]', err);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

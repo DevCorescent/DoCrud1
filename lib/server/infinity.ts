@@ -1,5 +1,5 @@
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 
 /* ── Constants ──────────────────────────────────────────────────── */
 
@@ -131,43 +131,36 @@ export interface InfinitySubscriber {
  * Uses Postgres when available for efficiency; falls back to full user scan.
  */
 export async function listInfinitySubscribers(): Promise<InfinitySubscriber[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const result = await pool.query<{
-      user_id: string;
-      email:   string;
-      name:    string | null;
-      record:  Record<string, unknown>;
-    }>(`
-      SELECT
-        up.user_id,
-        u.email,
-        u.name,
-        up.full_record AS record
-      FROM user_profiles up
-      JOIN users u ON u.id = up.user_id
-      WHERE (up.full_record->>'docrudInfinity')::boolean = true
-      ORDER BY up.full_record->>'docrudInfinityPurchasedAt' DESC NULLS LAST
-    `);
-
-    const now = Date.now();
-    return result.rows.map((row) => {
-      const r = row.record as Record<string, unknown>;
-      const expiresAt = r.docrudInfinityExpiresAt as string | undefined;
-      const isExpired = !!expiresAt && new Date(expiresAt).getTime() < now;
-      return {
-        userId:       row.user_id,
-        email:        row.email,
-        name:         row.name ?? undefined,
-        active:       !isExpired,
-        isExpired,
-        period:       r.docrudInfinityPeriod as 'monthly' | 'annual' | undefined,
-        purchasedAt:  r.docrudInfinityPurchasedAt as string | undefined,
-        expiresAt,
-        renewalCount: (r.docrudInfinityRenewalCount as number) ?? 0,
-        grantedFree:  !!(r.docrudInfinityGrantedFree),
-      };
-    });
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const profiles = await db.collection<Record<string, unknown> & { _id: string }>('user_profiles')
+        .find({ docrudInfinity: true })
+        .sort({ docrudInfinityPurchasedAt: -1 })
+        .toArray();
+      const userIds = profiles.map((p) => p._id);
+      const userDocs = await db.collection<{ _id: string; email: string; name?: string }>('users')
+        .find({ _id: { $in: userIds } }).toArray();
+      const userMap = Object.fromEntries(userDocs.map((u) => [u._id, u]));
+      const now = Date.now();
+      return profiles.map((p) => {
+        const u = userMap[p._id as string];
+        const expiresAt = p.docrudInfinityExpiresAt as string | undefined;
+        const isExpired = !!expiresAt && new Date(expiresAt).getTime() < now;
+        return {
+          userId:       p._id as string,
+          email:        u?.email ?? '',
+          name:         (u?.name) ?? undefined,
+          active:       !isExpired,
+          isExpired,
+          period:       p.docrudInfinityPeriod as 'monthly' | 'annual' | undefined,
+          purchasedAt:  p.docrudInfinityPurchasedAt as string | undefined,
+          expiresAt,
+          renewalCount: (p.docrudInfinityRenewalCount as number) ?? 0,
+          grantedFree:  !!(p.docrudInfinityGrantedFree),
+        };
+      });
+    }
   }
 
   // JSON fallback — scan all users

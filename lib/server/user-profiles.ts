@@ -1,5 +1,5 @@
 import { readJsonFile, writeJsonFile, userProfilesPath, followsPath } from '@/lib/server/storage';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 import { selectAllUserProfileRows, selectUserProfileRow, upsertUserProfileRow } from '@/lib/server/db/user-profiles-rows';
 
 export interface UserProfileData {
@@ -127,10 +127,12 @@ async function saveFollowsData(data: FollowsData): Promise<void> {
 }
 
 export async function getFollowers(userId: string): Promise<string[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const result = await pool.query<{ follower_id: string }>(`SELECT follower_id FROM user_follows WHERE target_id = $1`, [userId]);
-    return result.rows.map((r) => r.follower_id);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (!db) return [];
+    const docs = await db.collection<{ _id: string; followerId: string; targetId: string }>('user_follows')
+      .find({ targetId: userId }).toArray();
+    return docs.map((d) => d.followerId);
   }
   const follows = await getFollowsData();
   return Object.entries(follows)
@@ -139,34 +141,36 @@ export async function getFollowers(userId: string): Promise<string[]> {
 }
 
 export async function getFollowing(userId: string): Promise<string[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const result = await pool.query<{ target_id: string }>(`SELECT target_id FROM user_follows WHERE follower_id = $1`, [userId]);
-    return result.rows.map((r) => r.target_id);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (!db) return [];
+    const docs = await db.collection<{ _id: string; followerId: string; targetId: string }>('user_follows')
+      .find({ followerId: userId }).toArray();
+    return docs.map((d) => d.targetId);
   }
   const follows = await getFollowsData();
   return follows[userId] ?? [];
 }
 
 export async function isFollowing(followerId: string, targetId: string): Promise<boolean> {
-  const pool = getDbPool();
-  if (pool) {
-    const result = await pool.query<{ exists: boolean }>(
-      `SELECT EXISTS(SELECT 1 FROM user_follows WHERE follower_id = $1 AND target_id = $2) AS exists`,
-      [followerId, targetId]
-    );
-    return result.rows[0]?.exists ?? false;
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (!db) return false;
+    const count = await db.collection('user_follows').countDocuments({ followerId, targetId });
+    return count > 0;
   }
   const following = await getFollowing(followerId);
   return following.includes(targetId);
 }
 
 export async function followUser(followerId: string, targetId: string): Promise<void> {
-  const pool = getDbPool();
-  if (pool) {
-    await pool.query(
-      `INSERT INTO user_follows (follower_id, target_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-      [followerId, targetId]
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (!db) return;
+    await db.collection('user_follows').replaceOne(
+      { _id: `${followerId}_${targetId}` as any },
+      { _id: `${followerId}_${targetId}`, followerId, targetId, createdAt: new Date().toISOString() },
+      { upsert: true },
     );
     return;
   }
@@ -179,9 +183,10 @@ export async function followUser(followerId: string, targetId: string): Promise<
 }
 
 export async function unfollowUser(followerId: string, targetId: string): Promise<void> {
-  const pool = getDbPool();
-  if (pool) {
-    await pool.query(`DELETE FROM user_follows WHERE follower_id = $1 AND target_id = $2`, [followerId, targetId]);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (!db) return;
+    await db.collection('user_follows').deleteOne({ followerId, targetId });
     return;
   }
   const follows = await getFollowsData();
@@ -191,16 +196,15 @@ export async function unfollowUser(followerId: string, targetId: string): Promis
 }
 
 export async function getFollowCounts(userId: string): Promise<{ followers: number; following: number }> {
-  const pool = getDbPool();
-  if (pool) {
-    const [fersResult, fingResult] = await Promise.all([
-      pool.query<{ count: string }>(`SELECT COUNT(*) AS count FROM user_follows WHERE target_id = $1`, [userId]),
-      pool.query<{ count: string }>(`SELECT COUNT(*) AS count FROM user_follows WHERE follower_id = $1`, [userId]),
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (!db) return { followers: 0, following: 0 };
+    const col = db.collection('user_follows');
+    const [followers, following] = await Promise.all([
+      col.countDocuments({ targetId: userId }),
+      col.countDocuments({ followerId: userId }),
     ]);
-    return {
-      followers: parseInt(fersResult.rows[0]?.count ?? '0', 10),
-      following: parseInt(fingResult.rows[0]?.count ?? '0', 10),
-    };
+    return { followers, following };
   }
   const [followers, following] = await Promise.all([getFollowers(userId), getFollowing(userId)]);
   return { followers: followers.length, following: following.length };

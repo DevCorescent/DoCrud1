@@ -1,0 +1,612 @@
+[
+  {
+    "id": "tplmkt-demo-522dfc9d-62fd-4ef4-87be-3c8345bd4b14",
+    "templateSnapshot": {
+      "id": "demo-13a27cac-0908-4234-a604-5a3efacb9da7",
+      "name": "Offer Letter (India)",
+      "description": "Clean offer letter with compensation table and joining checklist.",
+      "category": "HR",
+      "fields": [
+        {
+          "id": "de6a9a68-b8fe-4aea-ba97-9b389ec1fd08",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "7b648546-edcd-4cf3-8107-64a8dad654d3",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "38b6ef8c-f044-406c-a45e-92b1d47b78a6",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Offer Letter</h1><p>Date: {{effective_date}}</p><p>Dear {{recipient_name}},</p><p>We are pleased to offer you a position at <strong>{{company_name}}</strong>.</p><p class=\"muted\">This template is a marketplace demo.</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 19900,
+    "currency": "INR",
+    "tags": [
+      "hr",
+      "offer-letter",
+      "india",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 24
+  },
+  {
+    "id": "tplmkt-demo-7127c118-438d-4a8e-9733-b975b6525aed",
+    "templateSnapshot": {
+      "id": "demo-534b791f-50c5-414a-9b06-1904533c52a4",
+      "name": "Service Agreement (Starter)",
+      "description": "Simple service agreement with scope, SLA, and payment terms.",
+      "category": "Legal",
+      "fields": [
+        {
+          "id": "51b5faea-86d5-4f37-b59b-7752e8fdf462",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "2daa7ff2-81bc-4ae9-8a4a-4ac8b0f49c3e",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "5c5c84e3-b929-497a-9a6a-6e24389f4478",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Service Agreement</h1><p>Between <strong>{{company_name}}</strong> and {{recipient_name}}.</p><h2>Scope</h2><p>[Edit scope here]</p><h2>Terms</h2><p>[Edit terms here]</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 29900,
+    "currency": "INR",
+    "tags": [
+      "legal",
+      "agreement",
+      "service",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 93
+  },
+  {
+    "id": "tplmkt-demo-f678bc58-b193-4774-8890-cc35735f1394",
+    "templateSnapshot": {
+      "id": "demo-1059b4de-1ddb-42a4-a1b4-3de1d55833ff",
+      "name": "Invoice (GST-ready)",
+      "description": "GST-ready invoice layout with totals and notes section.",
+      "category": "Finance",
+      "fields": [
+        {
+          "id": "fc3ba8a1-5a9b-4c3a-860f-d1ac4cfb1199",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "2702b201-3e1e-44a4-9208-74cf7d8473b4",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "40256f34-b854-462f-8230-6c4db9020f62",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Invoice</h1><p><strong>{{company_name}}</strong></p><p>Billed to: {{recipient_name}}</p><p>Date: {{effective_date}}</p><hr/><p class=\"muted\">Add line items in your own version.</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 9900,
+    "currency": "INR",
+    "tags": [
+      "finance",
+      "invoice",
+      "gst",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 103
+  },
+  {
+    "id": "tplmkt-demo-d1dae546-12a4-4b3c-a420-b663b85e7795",
+    "templateSnapshot": {
+      "id": "demo-1ea3a4ed-8e95-4ac9-a8d5-2e3bfa070908",
+      "name": "NDA (Mutual)",
+      "description": "Mutual NDA with clean definitions and signature blocks.",
+      "category": "Legal",
+      "fields": [
+        {
+          "id": "fc587258-9271-4443-a357-2df5ac94c1c3",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "cb2c9b42-375f-4e86-a03c-81172fb8176e",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "9ef9a3a1-713e-42cc-8903-58ce8e4ccf1b",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Mutual NDA</h1><p>This NDA is between <strong>{{company_name}}</strong> and {{recipient_name}} on {{effective_date}}.</p><h2>Confidential Information</h2><p>[Define here]</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 14900,
+    "currency": "INR",
+    "tags": [
+      "legal",
+      "nda",
+      "mutual",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 106
+  },
+  {
+    "id": "tplmkt-demo-cd876b3c-56af-4802-a183-3822837e78b1",
+    "templateSnapshot": {
+      "id": "demo-f9c913cd-bd9a-4eca-beea-c0d04399ddf7",
+      "name": "Vendor Onboarding Letter",
+      "description": "Vendor onboarding packet cover letter with doc checklist.",
+      "category": "Operations",
+      "fields": [
+        {
+          "id": "0a5664b7-4384-48b0-8bc3-daee3a5d8c25",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "11eb9ecc-00cc-49a2-9fc2-84fd480f3ec4",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "4aef4c9b-3e55-4825-8be8-cbec3410ab23",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Vendor Onboarding</h1><p>Hello {{recipient_name}},</p><p>Please share the compliance documents required to onboard you at <strong>{{company_name}}</strong>.</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 12900,
+    "currency": "INR",
+    "tags": [
+      "ops",
+      "vendor",
+      "onboarding",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 62
+  },
+  {
+    "id": "tplmkt-demo-38f612e4-6430-4e09-9e6f-ad5243e9845c",
+    "templateSnapshot": {
+      "id": "demo-64a56a89-8038-4836-8298-d6e0af5d4d9f",
+      "name": "Board Meeting Minutes",
+      "description": "MOM template with attendees, agenda, decisions, and actions.",
+      "category": "Operations",
+      "fields": [
+        {
+          "id": "2ef2032f-984a-4e1f-abd5-3041638287d8",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "bea8cfbb-1aed-4fd0-8d3a-a86e52213221",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "bf1b11ce-83f7-443a-84dd-955f084d16ef",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Meeting Minutes</h1><p>Organization: <strong>{{company_name}}</strong></p><p>Date: {{effective_date}}</p><h2>Agenda</h2><p>[Add agenda]</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 7900,
+    "currency": "INR",
+    "tags": [
+      "mom",
+      "meeting",
+      "minutes",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 63
+  },
+  {
+    "id": "tplmkt-demo-e2620171-f842-42e9-abd2-325e12b5ae9a",
+    "templateSnapshot": {
+      "id": "demo-cf400423-9544-4d4b-818f-1da701df65a0",
+      "name": "Sales Proposal (One Pager)",
+      "description": "One-page proposal with scope, timeline, and pricing.",
+      "category": "Sales",
+      "fields": [
+        {
+          "id": "e7224bcd-ba7b-45dc-bd46-c89cdbce8b6d",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "fb5cabd9-6164-4b31-b25f-c7289f7e4366",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "7ef60085-49cf-4739-8083-0894697610b0",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Proposal</h1><p>Prepared by <strong>{{company_name}}</strong></p><p>For {{recipient_name}}</p><h2>Summary</h2><p>[Add summary]</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 24900,
+    "currency": "INR",
+    "tags": [
+      "sales",
+      "proposal",
+      "one-pager",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 15
+  },
+  {
+    "id": "tplmkt-demo-1dfe3046-59cd-4510-b7cb-e54447ab5785",
+    "templateSnapshot": {
+      "id": "demo-441f2483-2dcd-4ee8-bc24-efa026f79c70",
+      "name": "Client Intake Form Cover",
+      "description": "Cover page for client intake and requirements.",
+      "category": "Client Ops",
+      "fields": [
+        {
+          "id": "984ea2bd-bf1f-4996-82c2-7c0093ef287e",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "f461aed5-309b-4c08-9438-b8028c83204e",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "c8032e54-a4e3-449d-b030-26a0b5b82cbd",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Client Intake</h1><p>Welcome to <strong>{{company_name}}</strong>.</p><p>Primary contact: {{recipient_name}}</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 0,
+    "currency": "INR",
+    "tags": [
+      "client-ops",
+      "intake",
+      "workflow",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 48
+  },
+  {
+    "id": "tplmkt-demo-8434ae02-2e38-4a11-aea2-124b70d8008f",
+    "templateSnapshot": {
+      "id": "demo-6e046080-0e06-472b-8f90-8b1fdd168978",
+      "name": "Policy Notice (Workplace)",
+      "description": "Policy notice format with acknowledgement section.",
+      "category": "HR",
+      "fields": [
+        {
+          "id": "89592ae0-0b6e-41ea-838e-4eb0ec2b3af9",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "59ad1df7-b8d8-41fe-a7cb-3a8a353c41c0",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "111e9583-8f99-4658-9743-526383e80441",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Policy Notice</h1><p>Issued by <strong>{{company_name}}</strong> on {{effective_date}}.</p><p>Recipient: {{recipient_name}}</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 8900,
+    "currency": "INR",
+    "tags": [
+      "hr",
+      "policy",
+      "notice",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 102
+  },
+  {
+    "id": "tplmkt-demo-95b79a84-4800-4ee9-a3cc-28766e6d33d3",
+    "templateSnapshot": {
+      "id": "demo-c1c85111-0e9c-45e5-99b1-4674a15d617b",
+      "name": "Project Kickoff Brief",
+      "description": "Kickoff doc with goals, milestones, and owners.",
+      "category": "Project",
+      "fields": [
+        {
+          "id": "a4aca875-e7fd-4eb5-8422-bca0e7152dbb",
+          "name": "company_name",
+          "label": "Company Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Company",
+          "order": 1
+        },
+        {
+          "id": "9feb89e4-190e-44e4-8392-8ade38f3e612",
+          "name": "recipient_name",
+          "label": "Recipient Name",
+          "type": "text",
+          "required": true,
+          "placeholder": "Recipient",
+          "order": 2
+        },
+        {
+          "id": "61f4c6d4-62f1-48b5-9e6d-24c02c97fa30",
+          "name": "effective_date",
+          "label": "Effective Date",
+          "type": "date",
+          "required": true,
+          "order": 3
+        }
+      ],
+      "template": "<style>\n    :root { --ink:#0A0F3C; --muted:#475569; }\n    html,body{ margin:0; padding:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:var(--ink); }\n    .page{ padding:36px; }\n    h1{ margin:0 0 12px; font-size:22px; letter-spacing:-0.02em; }\n    h2{ margin:18px 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:0.14em; color:var(--muted); }\n    p{ margin:10px 0; line-height:1.6; }\n    .muted{ color:var(--muted); font-size:12px; }\n    hr{ border:0; border-top:1px solid rgba(148,163,184,0.35); margin:14px 0; }\n  </style>\n<main class=\"page\"><h1>Kickoff Brief</h1><p>Project for {{recipient_name}}</p><p>Team: <strong>{{company_name}}</strong></p><p>Date: {{effective_date}}</p></main>",
+      "isCustom": true,
+      "createdBy": "docrud",
+      "createdAt": "2026-06-16T05:43:38.381Z",
+      "updatedAt": "2026-06-16T05:43:38.381Z",
+      "renderSettings": {
+        "pageSize": "A4",
+        "pageMarginMm": 18,
+        "pageNumbersEnabled": true
+      }
+    },
+    "sellerUserId": "system",
+    "sellerName": "docrud",
+    "priceInPaise": 6900,
+    "currency": "INR",
+    "tags": [
+      "project",
+      "kickoff",
+      "brief",
+      "demo"
+    ],
+    "status": "published",
+    "createdAt": "2026-06-16T05:43:38.381Z",
+    "updatedAt": "2026-06-16T05:43:38.381Z",
+    "purchaseCount": 41
+  }
+]

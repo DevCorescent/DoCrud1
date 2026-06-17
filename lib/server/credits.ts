@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 
 function uuidv4(): string {
   return crypto.randomUUID();
@@ -67,56 +67,75 @@ function defaultUserCredits(): UserCredits {
   };
 }
 
-async function dbGetUserCredits(userId: string): Promise<UserCredits | null> {
-  const pool = getDbPool();
-  if (!pool) return null;
+type UCDoc = {
+  _id: string;
+  balance: number;
+  totalEarned: number;
+  totalSpent: number;
+  streak: { current: number; longest: number; lastPostDate: string | null; streakStartDate: string | null };
+  milestones: string[];
+  dailyEarnLog: Record<string, string[]>;
+  verified: boolean;
+};
 
-  const [ucRow, txRows] = await Promise.all([
-    pool.query<Record<string, unknown>>(`SELECT * FROM user_credits WHERE user_id = $1`, [userId]),
-    pool.query<Record<string, unknown>>(
-      `SELECT id, type, amount, reason, description, created_at FROM credit_transactions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 200`,
-      [userId]
-    ),
+type TxDoc = {
+  _id: string;
+  userId: string;
+  type: 'earn' | 'spend';
+  amount: number;
+  reason: string;
+  description: string;
+  createdAt: string;
+};
+
+async function dbGetUserCredits(userId: string): Promise<UserCredits | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const [uc, txDocs] = await Promise.all([
+    db.collection<UCDoc>('user_credits').findOne({ _id: userId }),
+    db.collection<TxDoc>('credit_transactions')
+      .find({ userId }).sort({ createdAt: -1 }).limit(200).toArray(),
   ]);
 
-  if (!ucRow.rows[0]) return null;
-  const r = ucRow.rows[0];
+  if (!uc) return null;
   return {
-    balance: parseFloat(r.balance as string),
-    totalEarned: parseFloat(r.total_earned as string),
-    totalSpent: parseFloat(r.total_spent as string),
-    streak: {
-      current: r.streak_current as number,
-      longest: r.streak_longest as number,
-      lastPostDate: (r.streak_last_post_date as string | null) ?? null,
-      streakStartDate: (r.streak_start_date as string | null) ?? null,
-    },
-    milestones: (r.milestones as string[]) ?? [],
-    dailyEarnLog: (r.daily_earn_log as Record<string, string[]>) ?? {},
-    verified: r.verified as boolean,
-    transactions: txRows.rows.map((t) => ({
-      id: t.id as string,
-      type: t.type as 'earn' | 'spend',
-      amount: parseFloat(t.amount as string),
-      reason: t.reason as string,
-      description: t.description as string,
-      createdAt: (t.created_at as Date).toISOString(),
+    balance: uc.balance ?? 0,
+    totalEarned: uc.totalEarned ?? 0,
+    totalSpent: uc.totalSpent ?? 0,
+    streak: uc.streak ?? { current: 0, longest: 0, lastPostDate: null, streakStartDate: null },
+    milestones: uc.milestones ?? [],
+    dailyEarnLog: uc.dailyEarnLog ?? {},
+    verified: uc.verified ?? false,
+    transactions: txDocs.map((t) => ({
+      id: t._id,
+      type: t.type,
+      amount: t.amount,
+      reason: t.reason,
+      description: t.description,
+      createdAt: t.createdAt,
     })),
   };
 }
 
 async function dbEnsureUser(userId: string): Promise<UserCredits> {
-  const pool = getDbPool()!;
-  await pool.query(
-    `INSERT INTO user_credits (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
-    [userId]
+  const db = (await getMongoDb())!;
+  await db.collection<UCDoc>('user_credits').updateOne(
+    { _id: userId },
+    {
+      $setOnInsert: {
+        _id: userId, balance: 0, totalEarned: 0, totalSpent: 0,
+        streak: { current: 0, longest: 0, lastPostDate: null, streakStartDate: null },
+        milestones: [], dailyEarnLog: {}, verified: false,
+      } as UCDoc,
+    },
+    { upsert: true },
   );
   return (await dbGetUserCredits(userId)) ?? defaultUserCredits();
 }
 
 export async function getUserCredits(userId: string): Promise<UserCredits> {
-  const pool = getDbPool();
-  if (!pool) return defaultUserCredits();
+  if (!getDbPool()) return defaultUserCredits();
   const existing = await dbGetUserCredits(userId);
   if (existing) return existing;
   return dbEnsureUser(userId);
@@ -128,8 +147,7 @@ export async function earnCredits(
   amount?: number,
   description?: string,
 ): Promise<UserCredits> {
-  const pool = getDbPool();
-  if (!pool) return defaultUserCredits();
+  if (!getDbPool()) return defaultUserCredits();
 
   const rule = CREDIT_RULES[reason];
   const today = getToday();
@@ -153,66 +171,71 @@ export async function earnCredits(
   if (!newLog[today]) newLog[today] = [];
   newLog[today] = [...newLog[today], reason];
 
-  await pool.query(
-    `UPDATE user_credits SET balance = balance + $1, total_earned = total_earned + $1, daily_earn_log = $2::jsonb, updated_at = NOW() WHERE user_id = $3`,
-    [earnAmount, JSON.stringify(newLog), userId]
+  const db = (await getMongoDb())!;
+  await db.collection<UCDoc>('user_credits').updateOne(
+    { _id: userId },
+    { $inc: { balance: earnAmount, totalEarned: earnAmount }, $set: { dailyEarnLog: newLog, updatedAt: new Date().toISOString() } as any },
   );
-  await pool.query(
-    `INSERT INTO credit_transactions (id, user_id, type, amount, reason, description) VALUES ($1,$2,'earn',$3,$4,$5)`,
-    [txId, userId, earnAmount, reason, description ?? reason]
-  );
+  await db.collection<TxDoc>('credit_transactions').insertOne({
+    _id: txId, userId, type: 'earn', amount: earnAmount, reason,
+    description: description ?? reason, createdAt: new Date().toISOString(),
+  });
   return (await dbGetUserCredits(userId)) ?? defaultUserCredits();
 }
 
 export async function spendCredits(userId: string, amount: number, reason: string): Promise<UserCredits> {
-  const pool = getDbPool();
-  if (!pool) return defaultUserCredits();
+  if (!getDbPool()) return defaultUserCredits();
 
   const user = await getUserCredits(userId);
   if (user.balance < amount) throw new Error(`Insufficient credits. Balance: ${user.balance}, Required: ${amount}`);
   const txId = uuidv4();
-  await pool.query(
-    `UPDATE user_credits SET balance = balance - $1, total_spent = total_spent + $1, updated_at = NOW() WHERE user_id = $2`,
-    [amount, userId]
+
+  const db = (await getMongoDb())!;
+  await db.collection<UCDoc>('user_credits').updateOne(
+    { _id: userId },
+    { $inc: { balance: -amount, totalSpent: amount }, $set: { updatedAt: new Date().toISOString() } as any },
   );
-  await pool.query(
-    `INSERT INTO credit_transactions (id, user_id, type, amount, reason, description) VALUES ($1,$2,'spend',$3,$4,$4)`,
-    [txId, userId, amount, reason]
-  );
+  await db.collection<TxDoc>('credit_transactions').insertOne({
+    _id: txId, userId, type: 'spend', amount, reason, description: reason,
+    createdAt: new Date().toISOString(),
+  });
   return (await dbGetUserCredits(userId)) ?? defaultUserCredits();
 }
 
 export async function recordPost(userId: string): Promise<UserCredits> {
-  const pool = getDbPool();
-  if (!pool) return defaultUserCredits();
+  if (!getDbPool()) return defaultUserCredits();
 
   const today = getToday();
   await dbEnsureUser(userId);
-  const ucRow = await pool.query<Record<string, unknown>>(
-    `SELECT streak_current, streak_longest, streak_last_post_date, milestones FROM user_credits WHERE user_id = $1`,
-    [userId]
-  );
-  const r = ucRow.rows[0];
-  const lastPostDate = r.streak_last_post_date as string | null;
 
+  const db = (await getMongoDb())!;
+  const uc = await db.collection<UCDoc>('user_credits').findOne({ _id: userId });
+  if (!uc) return defaultUserCredits();
+
+  const lastPostDate = uc.streak?.lastPostDate ?? null;
   if (lastPostDate === today) return (await dbGetUserCredits(userId)) ?? defaultUserCredits();
 
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
-  const newCurrent = lastPostDate === yesterdayStr ? (r.streak_current as number) + 1 : 1;
-  const newLongest = Math.max(newCurrent, r.streak_longest as number);
+  const newCurrent = lastPostDate === yesterdayStr ? (uc.streak?.current ?? 0) + 1 : 1;
+  const newLongest = Math.max(newCurrent, uc.streak?.longest ?? 0);
   const newStartDate = lastPostDate === yesterdayStr ? undefined : today;
 
-  await pool.query(
-    `UPDATE user_credits SET streak_current=$1, streak_longest=$2, streak_last_post_date=$3${newStartDate ? ', streak_start_date=$5' : ''}, updated_at=NOW() WHERE user_id=$4`,
-    newStartDate ? [newCurrent, newLongest, today, userId, newStartDate] : [newCurrent, newLongest, today, userId]
-  );
+  const streakUpdate: Record<string, unknown> = {
+    'streak.current': newCurrent,
+    'streak.longest': newLongest,
+    'streak.lastPostDate': today,
+    updatedAt: new Date().toISOString(),
+  };
+  if (newStartDate) streakUpdate['streak.streakStartDate'] = newStartDate;
+
+  await db.collection<UCDoc>('user_credits').updateOne({ _id: userId }, { $set: streakUpdate as any });
 
   await earnCredits(userId, 'daily_post', 5, 'Daily post reward');
 
-  const milestones = (r.milestones as string[]) ?? [];
+  const milestones = uc.milestones ?? [];
   if (newCurrent >= 30 && !milestones.includes('streak_30')) await _grantMilestone(userId, 'streak_30');
   else if (newCurrent >= 10 && !milestones.includes('streak_10')) await _grantMilestone(userId, 'streak_10');
   else if (newCurrent >= 7 && !milestones.includes('streak_7')) await _grantMilestone(userId, 'streak_7');
@@ -223,31 +246,29 @@ export async function recordPost(userId: string): Promise<UserCredits> {
 async function _grantMilestone(userId: string, milestoneId: string): Promise<void> {
   const milestone = MILESTONES.find((m) => m.id === milestoneId);
   if (!milestone) return;
+  if (!getDbPool()) return;
 
-  const pool = getDbPool();
-  if (!pool) return;
-
-  const ucRow = await pool.query<{ milestones: string[]; verified: boolean }>(
-    `SELECT milestones, verified FROM user_credits WHERE user_id = $1`, [userId]
-  );
-  if (!ucRow.rows[0]) return;
-  const milestones = ucRow.rows[0].milestones ?? [];
+  const db = (await getMongoDb())!;
+  const uc = await db.collection<UCDoc>('user_credits').findOne({ _id: userId });
+  if (!uc) return;
+  const milestones = uc.milestones ?? [];
   if (milestones.includes(milestoneId)) return;
 
   const newMilestones = [...milestones, milestoneId];
   const grantsVerified = 'grantsVerified' in milestone && milestone.grantsVerified;
-  await pool.query(
-    `UPDATE user_credits SET milestones=$1::jsonb${grantsVerified ? ', verified=TRUE' : ''}, updated_at=NOW() WHERE user_id=$2`,
-    [JSON.stringify(newMilestones), userId]
-  );
+  const setData: Record<string, unknown> = { milestones: newMilestones, updatedAt: new Date().toISOString() };
+  if (grantsVerified) setData.verified = true;
+
+  await db.collection<UCDoc>('user_credits').updateOne({ _id: userId }, { $set: setData as any });
   const txId = uuidv4();
-  await pool.query(
-    `INSERT INTO credit_transactions (id, user_id, type, amount, reason, description) VALUES ($1,$2,'earn',$3,$4,$5)`,
-    [txId, userId, milestone.credits, milestoneId, `Milestone: ${milestone.title}`]
-  );
-  await pool.query(
-    `UPDATE user_credits SET balance = balance + $1, total_earned = total_earned + $1, updated_at = NOW() WHERE user_id = $2`,
-    [milestone.credits, userId]
+  await db.collection<TxDoc>('credit_transactions').insertOne({
+    _id: txId, userId, type: 'earn', amount: milestone.credits,
+    reason: milestoneId, description: `Milestone: ${milestone.title}`,
+    createdAt: new Date().toISOString(),
+  });
+  await db.collection<UCDoc>('user_credits').updateOne(
+    { _id: userId },
+    { $inc: { balance: milestone.credits, totalEarned: milestone.credits } },
   );
 }
 

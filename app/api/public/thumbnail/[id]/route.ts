@@ -80,7 +80,12 @@ export async function GET(
     const t = transfers.find((x) => x.id === id);
     if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    // ── 1.5. Stored thumbnailUrl data URL (e.g. product cover image) ────────
+    // ── 1.5a. thumbnailUrl is an external R2/CDN URL — redirect directly ────
+    if (t.thumbnailUrl && (t.thumbnailUrl.startsWith('https://') || t.thumbnailUrl.startsWith('http://'))) {
+      return NextResponse.redirect(t.thumbnailUrl, { status: 302 });
+    }
+
+    // ── 1.5b. Stored thumbnailUrl data URL (e.g. product cover image) ───────
     if (t.thumbnailUrl?.startsWith('data:image/')) {
       const parts = t.thumbnailUrl.split(',');
       if (parts.length === 2 && parts[1]) {

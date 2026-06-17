@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getSuperAdminSessionFromRequest } from '@/lib/server/super-admin-auth';
+import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'ad-banners');
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB
@@ -40,18 +41,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'File too large — maximum 4 MB' }, { status: 400 });
     }
 
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
-
-    const rand = crypto.randomBytes(8).toString('hex');
-    const ext = EXT_MAP[file.type] ?? 'jpg';
+    const rand     = crypto.randomBytes(8).toString('hex');
+    const ext      = EXT_MAP[file.type] ?? 'jpg';
     const filename = `banner_${rand}.${ext}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
+    const buffer   = Buffer.from(await file.arrayBuffer());
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(filepath, buffer);
+    if (isR2Configured()) {
+      const url = await uploadToR2(`ad-banners/${filename}`, buffer, file.type);
+      return NextResponse.json({ url });
+    }
 
-    const url = `/uploads/ad-banners/${filename}`;
-    return NextResponse.json({ url });
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
+    return NextResponse.json({ url: `/uploads/ad-banners/${filename}` });
   } catch (err) {
     console.error('[super-admin/ad-banners/upload]', err);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

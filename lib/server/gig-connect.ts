@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 import { gigConnectPurchasesPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getRazorpayConfig, verifyRazorpayPaymentSignature } from '@/lib/server/billing';
 import { consumeGigProposalFromSubscription, getGigProposalEntitlement } from '@/lib/server/connect-entitlements';
@@ -26,10 +26,10 @@ export type GigConnectPurchase = {
 };
 
 export const GIG_CONNECT_PRICING = {
-  oneTimeAmountInPaise: 4900, // ₹49
+  oneTimeAmountInPaise: 4900,
   oneTimeMinQuantity: 5,
   oneTimeMaxQuantity: 250,
-  monthlyPassAmountInPaise: 19900, // ₹199
+  monthlyPassAmountInPaise: 19900,
   monthlyPassCredits: 30,
   oneTimeValidDays: 30,
   monthlyValidDays: 30,
@@ -39,45 +39,47 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-export async function listGigConnectPurchases(buyerUserId: string) {
-  const pool = getDbPool();
-  if (!pool) {
-    const raw = await readJsonFile<GigConnectPurchase[]>(gigConnectPurchasesPath, []);
-    return raw.filter((p) => p.buyerUserId === buyerUserId);
-  }
+type PurchaseDoc = Omit<GigConnectPurchase, 'razorpay'> & {
+  _id: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpaySignature?: string;
+};
 
-  const result = await pool.query(
-    `
-      SELECT
-        id, buyer_user_id, product_mode, amount_in_paise, currency, status,
-        razorpay_order_id, razorpay_payment_id, razorpay_signature,
-        credits_granted, credits_used, valid_until, created_at, updated_at
-      FROM gig_connect_purchases
-      WHERE buyer_user_id = $1
-      ORDER BY created_at DESC
-      LIMIT 120
-    `,
-    [buyerUserId],
-  );
-
-  return result.rows.map((row) => ({
-    id: String(row.id),
-    buyerUserId: String(row.buyer_user_id),
-    productMode: row.product_mode === 'monthly_pass' ? 'monthly_pass' : 'one_time',
-    amountInPaise: Number(row.amount_in_paise || 0),
-    currency: 'INR' as const,
-    status: row.status === 'paid' ? 'paid' : row.status === 'expired' ? 'expired' : 'created',
+function docToPurchase(doc: PurchaseDoc): GigConnectPurchase {
+  const { _id: _u, razorpayOrderId, razorpayPaymentId, razorpaySignature, ...rest } = doc;
+  return {
+    ...rest,
     razorpay: {
-      orderId: row.razorpay_order_id ? String(row.razorpay_order_id) : undefined,
-      paymentId: row.razorpay_payment_id ? String(row.razorpay_payment_id) : undefined,
-      signature: row.razorpay_signature ? String(row.razorpay_signature) : undefined,
+      orderId: razorpayOrderId,
+      paymentId: razorpayPaymentId,
+      signature: razorpaySignature,
     },
-    creditsGranted: Number(row.credits_granted || 0),
-    creditsUsed: Number(row.credits_used || 0),
-    validUntil: row.valid_until ? new Date(row.valid_until).toISOString() : undefined,
-    createdAt: new Date(row.created_at).toISOString(),
-    updatedAt: new Date(row.updated_at).toISOString(),
-  })) as GigConnectPurchase[];
+  };
+}
+
+function purchaseToDoc(record: GigConnectPurchase): PurchaseDoc {
+  const { razorpay, ...rest } = record;
+  return {
+    ...rest,
+    _id: record.id,
+    razorpayOrderId: razorpay.orderId,
+    razorpayPaymentId: razorpay.paymentId,
+    razorpaySignature: razorpay.signature,
+  };
+}
+
+export async function listGigConnectPurchases(buyerUserId: string) {
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<PurchaseDoc>('gig_connect_purchases')
+        .find({ buyerUserId }).sort({ createdAt: -1 }).limit(120).toArray();
+      return docs.map(docToPurchase);
+    }
+  }
+  const raw = await readJsonFile<GigConnectPurchase[]>(gigConnectPurchasesPath, []);
+  return raw.filter((p) => p.buyerUserId === buyerUserId);
 }
 
 function isPurchaseActive(p: GigConnectPurchase) {
@@ -110,34 +112,34 @@ export async function consumeGigConnectCredit(params: { buyerUserId: string; pur
     return consumeGigProposalFromSubscription(params.buyerUserId);
   }
 
-  const pool = getDbPool();
   const now = nowIso();
-  if (!pool) {
-    const raw = await readJsonFile<GigConnectPurchase[]>(gigConnectPurchasesPath, []);
-    const index = raw.findIndex((p) => p.id === params.purchaseId && p.buyerUserId === params.buyerUserId);
-    if (index === -1) return null;
-    const target = raw[index];
-    if (!isPurchaseActive(target)) return null;
-    if (target.creditsUsed >= target.creditsGranted) return null;
-    raw[index] = { ...target, creditsUsed: target.creditsUsed + 1, updatedAt: now };
-    await writeJsonFile(gigConnectPurchasesPath, raw.slice(0, 6000));
-    return raw[index];
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const result = await db.collection<PurchaseDoc>('gig_connect_purchases').findOneAndUpdate(
+        {
+          _id: params.purchaseId,
+          buyerUserId: params.buyerUserId,
+          status: 'paid',
+          $or: [{ validUntil: { $exists: false } }, { validUntil: null as any }, { validUntil: { $gt: now } }],
+          $expr: { $lt: ['$creditsUsed', '$creditsGranted'] },
+        },
+        { $inc: { creditsUsed: 1 }, $set: { updatedAt: now } },
+        { returnDocument: 'after' },
+      );
+      return result ? { ok: true } : null;
+    }
   }
 
-  const result = await pool.query(
-    `
-      UPDATE gig_connect_purchases
-      SET credits_used = credits_used + 1, updated_at = NOW()
-      WHERE id = $1
-        AND buyer_user_id = $2
-        AND status = 'paid'
-        AND (valid_until IS NULL OR valid_until > NOW())
-        AND credits_used < credits_granted
-      RETURNING id
-    `,
-    [params.purchaseId, params.buyerUserId],
-  );
-  return result.rows[0] ? { ok: true } : null;
+  const raw = await readJsonFile<GigConnectPurchase[]>(gigConnectPurchasesPath, []);
+  const index = raw.findIndex((p) => p.id === params.purchaseId && p.buyerUserId === params.buyerUserId);
+  if (index === -1) return null;
+  const target = raw[index];
+  if (!isPurchaseActive(target)) return null;
+  if (target.creditsUsed >= target.creditsGranted) return null;
+  raw[index] = { ...target, creditsUsed: target.creditsUsed + 1, updatedAt: now };
+  await writeJsonFile(gigConnectPurchasesPath, raw.slice(0, 6000));
+  return raw[index];
 }
 
 export async function createGigConnectOrder(params: {
@@ -182,15 +184,14 @@ export async function createGigConnectOrder(params: {
     }),
   });
 
-  const payload = await response.json().catch(() => null) as any;
+  const payload = await response.json().catch(() => null) as Record<string, unknown>;
   if (!response.ok || !payload?.id) {
-    throw new Error(payload?.error?.description || 'Unable to create Razorpay order.');
+    const err = (payload?.error as Record<string, unknown> | undefined)?.description;
+    throw new Error(typeof err === 'string' ? err : 'Unable to create Razorpay order.');
   }
 
-  const pool = getDbPool();
   const id = crypto.randomUUID();
   const now = nowIso();
-
   const record: GigConnectPurchase = {
     id,
     buyerUserId: params.buyerUserId,
@@ -206,31 +207,14 @@ export async function createGigConnectOrder(params: {
     updatedAt: now,
   };
 
-  if (!pool) {
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection<PurchaseDoc>('gig_connect_purchases').insertOne(purchaseToDoc(record));
+    }
+  } else {
     const existing = await readJsonFile<GigConnectPurchase[]>(gigConnectPurchasesPath, []);
     await writeJsonFile(gigConnectPurchasesPath, [record, ...existing].slice(0, 6000));
-  } else {
-    await pool.query(
-      `
-        INSERT INTO gig_connect_purchases (
-          id, buyer_user_id, product_mode, amount_in_paise, currency,
-          status, razorpay_order_id, credits_granted, credits_used, valid_until, created_at, updated_at
-        ) VALUES (
-          $1,$2,$3,$4,$5,'created',$6,$7,$8,$9,NOW(),NOW()
-        )
-      `,
-      [
-        record.id,
-        record.buyerUserId,
-        record.productMode,
-        record.amountInPaise,
-        record.currency,
-        record.razorpay.orderId,
-        0,
-        0,
-        null,
-      ],
-    );
   }
 
   return {
@@ -241,10 +225,7 @@ export async function createGigConnectOrder(params: {
     currency: 'INR',
     mode,
     purchaseId: record.id,
-    buyer: {
-      name: params.buyerName || '',
-      email: params.buyerEmail || '',
-    },
+    buyer: { name: params.buyerName || '', email: params.buyerEmail || '' },
   };
 }
 
@@ -257,9 +238,7 @@ export async function verifyGigConnectPayment(params: {
   razorpay_signature: string;
 }) {
   const isValid = verifyRazorpayPaymentSignature(params.razorpay_order_id, params.razorpay_payment_id, params.razorpay_signature);
-  if (!isValid) {
-    throw new Error('Razorpay payment signature verification failed.');
-  }
+  if (!isValid) throw new Error('Razorpay payment signature verification failed.');
 
   const mode: GigConnectMode = params.mode === 'monthly_pass' ? 'monthly_pass' : 'one_time';
   const now = new Date();
@@ -268,108 +247,79 @@ export async function verifyGigConnectPayment(params: {
     ? new Date(now.getTime() + GIG_CONNECT_PRICING.monthlyValidDays * 24 * 60 * 60 * 1000).toISOString()
     : new Date(now.getTime() + GIG_CONNECT_PRICING.oneTimeValidDays * 24 * 60 * 60 * 1000).toISOString();
 
-  const pool = getDbPool();
-  if (!pool) {
-    const existing = await readJsonFile<GigConnectPurchase[]>(gigConnectPurchasesPath, []);
-    const idx = existing.findIndex((p) => p.id === params.purchaseId && p.buyerUserId === params.buyerUserId);
-    if (idx === -1) throw new Error('Purchase not found.');
-    const current = existing[idx];
-    if (current.razorpay.orderId !== params.razorpay_order_id) throw new Error('Purchase does not match this order.');
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const existing = await db.collection<PurchaseDoc>('gig_connect_purchases')
+        .findOne({ _id: params.purchaseId, buyerUserId: params.buyerUserId, razorpayOrderId: params.razorpay_order_id });
+      if (!existing) throw new Error('Purchase not found.');
 
-    const storedAmount = Math.max(0, Math.round(Number(current.amountInPaise || 0)));
-    const resolvedAmount = mode === 'monthly_pass' ? GIG_CONNECT_PRICING.monthlyPassAmountInPaise : storedAmount;
-    const creditsGranted = mode === 'monthly_pass'
-      ? GIG_CONNECT_PRICING.monthlyPassCredits
-      : Math.round(resolvedAmount / GIG_CONNECT_PRICING.oneTimeAmountInPaise);
-    if (mode === 'one_time') {
-      if (creditsGranted < GIG_CONNECT_PRICING.oneTimeMinQuantity) {
-        throw new Error(`Minimum purchase is ${GIG_CONNECT_PRICING.oneTimeMinQuantity} credits.`);
+      const storedAmount = Math.max(0, Math.round(Number(existing.amountInPaise || 0)));
+      const resolvedAmount = mode === 'monthly_pass' ? GIG_CONNECT_PRICING.monthlyPassAmountInPaise : storedAmount;
+      const creditsGranted = mode === 'monthly_pass'
+        ? GIG_CONNECT_PRICING.monthlyPassCredits
+        : Math.round(resolvedAmount / GIG_CONNECT_PRICING.oneTimeAmountInPaise);
+
+      if (mode === 'one_time') {
+        if (creditsGranted < GIG_CONNECT_PRICING.oneTimeMinQuantity) throw new Error(`Minimum purchase is ${GIG_CONNECT_PRICING.oneTimeMinQuantity} credits.`);
+        if (creditsGranted > GIG_CONNECT_PRICING.oneTimeMaxQuantity) throw new Error(`Maximum purchase is ${GIG_CONNECT_PRICING.oneTimeMaxQuantity} credits.`);
+        if (creditsGranted * GIG_CONNECT_PRICING.oneTimeAmountInPaise !== resolvedAmount) throw new Error('Purchase amount does not match requested credits.');
       }
-      if (creditsGranted > GIG_CONNECT_PRICING.oneTimeMaxQuantity) {
-        throw new Error(`Maximum purchase is ${GIG_CONNECT_PRICING.oneTimeMaxQuantity} credits.`);
-      }
-      if (creditsGranted * GIG_CONNECT_PRICING.oneTimeAmountInPaise !== resolvedAmount) {
-        throw new Error('Purchase amount does not match requested credits.');
-      }
+
+      const updated = await db.collection('gig_connect_purchases').updateOne(
+        { _id: params.purchaseId as any, buyerUserId: params.buyerUserId, razorpayOrderId: params.razorpay_order_id },
+        {
+          $set: {
+            status: 'paid',
+            productMode: mode,
+            amountInPaise: resolvedAmount,
+            razorpayPaymentId: params.razorpay_payment_id,
+            razorpaySignature: params.razorpay_signature,
+            creditsGranted,
+            creditsUsed: 0,
+            validUntil,
+            updatedAt: nowIsoValue,
+          },
+        },
+      );
+      if (!updated.modifiedCount) throw new Error('Purchase verification failed.');
+      return { ok: true };
     }
-
-    existing[idx] = {
-      ...current,
-      productMode: mode,
-      amountInPaise: resolvedAmount,
-      status: 'paid',
-      razorpay: {
-        orderId: params.razorpay_order_id,
-        paymentId: params.razorpay_payment_id,
-        signature: params.razorpay_signature,
-      },
-      creditsGranted,
-      creditsUsed: 0,
-      validUntil,
-      updatedAt: nowIsoValue,
-    };
-    await writeJsonFile(gigConnectPurchasesPath, existing.slice(0, 6000));
-    return existing[idx];
   }
 
-  const existingRow = await pool.query(
-    `
-      SELECT id, amount_in_paise
-      FROM gig_connect_purchases
-      WHERE id = $1 AND buyer_user_id = $2 AND razorpay_order_id = $3
-      LIMIT 1
-    `,
-    [params.purchaseId, params.buyerUserId, params.razorpay_order_id],
-  );
-  if (!existingRow.rows[0]) throw new Error('Purchase not found.');
+  const existingList = await readJsonFile<GigConnectPurchase[]>(gigConnectPurchasesPath, []);
+  const idx = existingList.findIndex((p) => p.id === params.purchaseId && p.buyerUserId === params.buyerUserId);
+  if (idx === -1) throw new Error('Purchase not found.');
+  const current = existingList[idx];
+  if (current.razorpay.orderId !== params.razorpay_order_id) throw new Error('Purchase does not match this order.');
 
-  const storedAmount = Math.max(0, Math.round(Number(existingRow.rows[0].amount_in_paise || 0)));
+  const storedAmount = Math.max(0, Math.round(Number(current.amountInPaise || 0)));
   const resolvedAmount = mode === 'monthly_pass' ? GIG_CONNECT_PRICING.monthlyPassAmountInPaise : storedAmount;
   const creditsGranted = mode === 'monthly_pass'
     ? GIG_CONNECT_PRICING.monthlyPassCredits
     : Math.round(resolvedAmount / GIG_CONNECT_PRICING.oneTimeAmountInPaise);
 
   if (mode === 'one_time') {
-    if (creditsGranted < GIG_CONNECT_PRICING.oneTimeMinQuantity) {
-      throw new Error(`Minimum purchase is ${GIG_CONNECT_PRICING.oneTimeMinQuantity} credits.`);
-    }
-    if (creditsGranted > GIG_CONNECT_PRICING.oneTimeMaxQuantity) {
-      throw new Error(`Maximum purchase is ${GIG_CONNECT_PRICING.oneTimeMaxQuantity} credits.`);
-    }
-    if (creditsGranted * GIG_CONNECT_PRICING.oneTimeAmountInPaise !== resolvedAmount) {
-      throw new Error('Purchase amount does not match requested credits.');
-    }
+    if (creditsGranted < GIG_CONNECT_PRICING.oneTimeMinQuantity) throw new Error(`Minimum purchase is ${GIG_CONNECT_PRICING.oneTimeMinQuantity} credits.`);
+    if (creditsGranted > GIG_CONNECT_PRICING.oneTimeMaxQuantity) throw new Error(`Maximum purchase is ${GIG_CONNECT_PRICING.oneTimeMaxQuantity} credits.`);
+    if (creditsGranted * GIG_CONNECT_PRICING.oneTimeAmountInPaise !== resolvedAmount) throw new Error('Purchase amount does not match requested credits.');
   }
 
-  const updated = await pool.query(
-    `
-      UPDATE gig_connect_purchases
-      SET
-        status = 'paid',
-        product_mode = $3,
-        amount_in_paise = $4,
-        razorpay_payment_id = $5,
-        razorpay_signature = $6,
-        credits_granted = $7,
-        credits_used = 0,
-        valid_until = $8,
-        updated_at = NOW()
-      WHERE id = $1 AND buyer_user_id = $2 AND razorpay_order_id = $9
-      RETURNING id
-    `,
-    [
-      params.purchaseId,
-      params.buyerUserId,
-      mode,
-      resolvedAmount,
-      params.razorpay_payment_id,
-      params.razorpay_signature,
-      creditsGranted,
-      new Date(validUntil),
-      params.razorpay_order_id,
-    ],
-  );
-
-  if (!updated.rows[0]) throw new Error('Purchase verification failed.');
-  return { ok: true };
+  existingList[idx] = {
+    ...current,
+    productMode: mode,
+    amountInPaise: resolvedAmount,
+    status: 'paid',
+    razorpay: {
+      orderId: params.razorpay_order_id,
+      paymentId: params.razorpay_payment_id,
+      signature: params.razorpay_signature,
+    },
+    creditsGranted,
+    creditsUsed: 0,
+    validUntil,
+    updatedAt: nowIsoValue,
+  };
+  await writeJsonFile(gigConnectPurchasesPath, existingList.slice(0, 6000));
+  return existingList[idx];
 }

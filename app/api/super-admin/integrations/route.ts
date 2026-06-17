@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       RAZORPAY_KEY_ID: Boolean(process.env.RAZORPAY_KEY_ID),
       RAZORPAY_KEY_SECRET: Boolean(process.env.RAZORPAY_KEY_SECRET),
       NEXTAUTH_SECRET: Boolean(process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET),
-      DATABASE_URL: Boolean(process.env.DATABASE_URL || process.env.SUPABASE_DB_URL),
+      DATABASE_URL: Boolean(process.env.MONGODB_URI || process.env.DATABASE_URL || process.env.SUPABASE_DB_URL),
       SUPER_ADMIN_EMAIL: Boolean(process.env.SUPER_ADMIN_EMAIL),
     },
   });

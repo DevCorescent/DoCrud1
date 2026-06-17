@@ -5,6 +5,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getAuthSession } from '@/lib/server/auth';
+import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'chat');
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
@@ -31,18 +32,20 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof File)) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File too large — maximum 20 MB' }, { status: 400 });
 
-    await fs.mkdir(UPLOAD_DIR, { recursive: true });
-
-    const isImage = IMAGE_TYPES.has(file.type);
-    const ext = EXT_MAP[file.type] ?? 'bin';
-    const rand = crypto.randomBytes(8).toString('hex');
+    const isImage  = IMAGE_TYPES.has(file.type);
+    const ext      = EXT_MAP[file.type] ?? 'bin';
+    const rand     = crypto.randomBytes(8).toString('hex');
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
     const filename = `${rand}_${safeName}.${ext}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
+    const buffer   = Buffer.from(await file.arrayBuffer());
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await fs.writeFile(filepath, buffer);
+    if (isR2Configured()) {
+      const url = await uploadToR2(`chat/${filename}`, buffer, file.type || 'application/octet-stream');
+      return NextResponse.json({ url, name: file.name, size: file.size, mimeType: file.type, type: isImage ? 'image' : 'file' });
+    }
 
+    await fs.mkdir(UPLOAD_DIR, { recursive: true });
+    await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
     return NextResponse.json({
       url: `/uploads/chat/${filename}`,
       name: file.name,

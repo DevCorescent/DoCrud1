@@ -1,7 +1,6 @@
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 import { readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import path from 'path';
-import { promises as fs } from 'fs';
 
 const dataDir = path.join(process.cwd(), 'data');
 export const businessPagesPath = path.join(dataDir, 'business-pages.json');
@@ -99,7 +98,6 @@ export interface BusinessEvent {
   createdAt: string;
 }
 
-// ── JSON store shape ──────────────────────────────────────────────────────────
 interface JsonStore {
   pages: BusinessPage[];
   posts: BusinessPost[];
@@ -111,120 +109,20 @@ interface JsonStore {
 
 const EMPTY_STORE: JsonStore = { pages: [], posts: [], jobs: [], products: [], events: [], followers: [] };
 
-async function readStore(): Promise<JsonStore> {
-  return readJsonFile<JsonStore>(businessPagesPath, EMPTY_STORE);
-}
+async function readStore(): Promise<JsonStore> { return readJsonFile<JsonStore>(businessPagesPath, EMPTY_STORE); }
+async function writeStore(store: JsonStore): Promise<void> { await writeJsonFile(businessPagesPath, store); }
 
-async function writeStore(store: JsonStore): Promise<void> {
-  await writeJsonFile(businessPagesPath, store);
-}
+type PageDoc = BusinessPage & { _id: string };
+type PostDoc = BusinessPost & { _id: string };
+type JobDoc = BusinessJob & { _id: string };
+type ProductDoc = BusinessProduct & { _id: string };
+type EventDoc = BusinessEvent & { _id: string };
 
-// ── Postgres helpers ─────────────────────────────────────────────────────────
-
-function rowToPage(r: Record<string, unknown>): BusinessPage {
-  return {
-    id: r.id as string,
-    slug: r.slug as string,
-    ownerUserId: r.owner_user_id as string,
-    name: r.name as string,
-    tagline: r.tagline as string | undefined,
-    description: r.description as string | undefined,
-    industry: r.industry as string,
-    companySize: r.company_size as string | undefined,
-    foundedYear: r.founded_year as number | undefined,
-    website: r.website as string | undefined,
-    logoUrl: r.logo_url as string | undefined,
-    coverUrl: r.cover_url as string | undefined,
-    location: r.location as string | undefined,
-    city: r.city as string | undefined,
-    country: r.country as string | undefined,
-    phone: r.phone as string | undefined,
-    email: r.email as string | undefined,
-    verified: r.verified as boolean,
-    status: r.status as string,
-    followerCount: r.follower_count as number,
-    viewCount: r.view_count as number,
-    postCount: r.post_count as number,
-    jobCount: r.job_count as number,
-    socialLinks: (r.social_links as Record<string, string>) || {},
-    metadata: (r.metadata as Record<string, unknown>) || {},
-    createdAt: (r.created_at as Date).toISOString(),
-    updatedAt: (r.updated_at as Date).toISOString(),
-  };
-}
-
-function rowToPost(r: Record<string, unknown>): BusinessPost {
-  return {
-    id: r.id as string,
-    pageId: r.page_id as string,
-    authorUserId: r.author_user_id as string,
-    content: r.content as string,
-    mediaUrls: (r.media_urls as string[]) || [],
-    postType: r.post_type as string,
-    likeCount: r.like_count as number,
-    commentCount: r.comment_count as number,
-    likedBy: (r.liked_by as string[]) || [],
-    pinned: r.pinned as boolean,
-    createdAt: (r.created_at as Date).toISOString(),
-    updatedAt: (r.updated_at as Date).toISOString(),
-  };
-}
-
-function rowToJob(r: Record<string, unknown>): BusinessJob {
-  return {
-    id: r.id as string,
-    pageId: r.page_id as string,
-    title: r.title as string,
-    description: r.description as string,
-    location: r.location as string | undefined,
-    jobType: r.job_type as string,
-    experienceLevel: r.experience_level as string | undefined,
-    salaryMin: r.salary_min as number | undefined,
-    salaryMax: r.salary_max as number | undefined,
-    salaryCurrency: r.salary_currency as string,
-    skills: (r.skills as string[]) || [],
-    status: r.status as string,
-    applyUrl: r.apply_url as string | undefined,
-    applicationCount: r.application_count as number,
-    createdAt: (r.created_at as Date).toISOString(),
-    updatedAt: (r.updated_at as Date).toISOString(),
-  };
-}
-
-function rowToProduct(r: Record<string, unknown>): BusinessProduct {
-  return {
-    id: r.id as string,
-    pageId: r.page_id as string,
-    name: r.name as string,
-    description: r.description as string | undefined,
-    price: r.price as string | undefined,
-    category: r.category as string | undefined,
-    imageUrl: r.image_url as string | undefined,
-    productUrl: r.product_url as string | undefined,
-    sortOrder: r.sort_order as number,
-    createdAt: (r.created_at as Date).toISOString(),
-  };
-}
-
-function rowToEvent(r: Record<string, unknown>): BusinessEvent {
-  return {
-    id: r.id as string,
-    pageId: r.page_id as string,
-    title: r.title as string,
-    description: r.description as string | undefined,
-    eventType: r.event_type as string,
-    startAt: (r.start_at as Date).toISOString(),
-    endAt: r.end_at ? (r.end_at as Date).toISOString() : undefined,
-    location: r.location as string | undefined,
-    isOnline: r.is_online as boolean,
-    registrationUrl: r.registration_url as string | undefined,
-    coverUrl: r.cover_url as string | undefined,
-    attendeeCount: r.attendee_count as number,
-    createdAt: (r.created_at as Date).toISOString(),
-  };
-}
-
-// ── Public API ───────────────────────────────────────────────────────────────
+function stripPage({ _id: _u, ...rest }: PageDoc): BusinessPage { return rest; }
+function stripPost({ _id: _u, ...rest }: PostDoc): BusinessPost { return rest; }
+function stripJob({ _id: _u, ...rest }: JobDoc): BusinessJob { return rest; }
+function stripProduct({ _id: _u, ...rest }: ProductDoc): BusinessProduct { return rest; }
+function stripEvent({ _id: _u, ...rest }: EventDoc): BusinessEvent { return rest; }
 
 export interface ListBusinessPagesOptions {
   industry?: string;
@@ -238,29 +136,34 @@ export interface ListBusinessPagesOptions {
 }
 
 export async function listBusinessPages(opts: ListBusinessPagesOptions = {}): Promise<{ pages: BusinessPage[]; total: number }> {
-  const pool = getDbPool();
   const { industry, companySize, country, verified, search, sortBy = 'newest', limit = 24, offset = 0 } = opts;
 
-  if (pool) {
-    const conditions: string[] = ["status = 'active'"];
-    const params: unknown[] = [];
-    let pi = 1;
-    if (industry) { conditions.push(`industry = $${pi++}`); params.push(industry); }
-    if (companySize) { conditions.push(`company_size = $${pi++}`); params.push(companySize); }
-    if (country) { conditions.push(`country ILIKE $${pi++}`); params.push(country); }
-    if (verified === true) { conditions.push(`verified = TRUE`); }
-    if (search) { conditions.push(`(name ILIKE $${pi} OR tagline ILIKE $${pi} OR description ILIKE $${pi})`); params.push(`%${search}%`); pi++; }
-    const where = `WHERE ${conditions.join(' AND ')}`;
-    const orderMap: Record<string, string> = { newest: 'created_at DESC', followers: 'follower_count DESC', name: 'name ASC' };
-    const orderBy = orderMap[sortBy] || 'created_at DESC';
-    const [countRes, rowsRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*) FROM business_pages ${where}`, params),
-      pool.query(`SELECT * FROM business_pages ${where} ORDER BY ${orderBy} LIMIT $${pi} OFFSET $${pi + 1}`, [...params, limit, offset]),
-    ]);
-    return { pages: rowsRes.rows.map((r) => rowToPage(r as Record<string, unknown>)), total: parseInt(countRes.rows[0]?.count || '0', 10) };
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const filter: Record<string, unknown> = { status: 'active' };
+      if (industry) filter.industry = industry;
+      if (companySize) filter.companySize = companySize;
+      if (country) filter.country = new RegExp(country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      if (verified === true) filter.verified = true;
+      if (search) {
+        const re = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        filter.$or = [{ name: re }, { tagline: re }, { description: re }];
+      }
+      const sortMap: Record<string, Record<string, number>> = {
+        newest: { createdAt: -1 },
+        followers: { followerCount: -1 },
+        name: { name: 1 },
+      };
+      const sort = sortMap[sortBy] || { createdAt: -1 };
+      const [total, docs] = await Promise.all([
+        db.collection('business_pages').countDocuments(filter),
+        db.collection<PageDoc>('business_pages').find(filter).sort(sort as any).skip(offset).limit(limit).toArray(),
+      ]);
+      return { pages: docs.map(stripPage), total };
+    }
   }
 
-  // JSON fallback
   const store = await readStore();
   let pages = store.pages.filter((p) => p.status === 'active');
   if (industry) pages = pages.filter((p) => p.industry === industry);
@@ -276,32 +179,37 @@ export async function listBusinessPages(opts: ListBusinessPagesOptions = {}): Pr
 }
 
 export async function getBusinessPageBySlug(slug: string): Promise<BusinessPage | null> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query('SELECT * FROM business_pages WHERE slug = $1 LIMIT 1', [slug]);
-    if (!res.rows[0]) return null;
-    return rowToPage(res.rows[0] as Record<string, unknown>);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const doc = await db.collection<PageDoc>('business_pages').findOne({ slug });
+      return doc ? stripPage(doc) : null;
+    }
   }
   const store = await readStore();
   return store.pages.find((p) => p.slug === slug) ?? null;
 }
 
 export async function getBusinessPageById(id: string): Promise<BusinessPage | null> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query('SELECT * FROM business_pages WHERE id = $1 LIMIT 1', [id]);
-    if (!res.rows[0]) return null;
-    return rowToPage(res.rows[0] as Record<string, unknown>);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const doc = await db.collection<PageDoc>('business_pages').findOne({ _id: id });
+      return doc ? stripPage(doc) : null;
+    }
   }
   const store = await readStore();
   return store.pages.find((p) => p.id === id) ?? null;
 }
 
 export async function getBusinessPagesByOwner(ownerUserId: string): Promise<BusinessPage[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query('SELECT * FROM business_pages WHERE owner_user_id = $1 ORDER BY created_at DESC', [ownerUserId]);
-    return res.rows.map((r) => rowToPage(r as Record<string, unknown>));
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<PageDoc>('business_pages')
+        .find({ ownerUserId }).sort({ createdAt: -1 }).toArray();
+      return docs.map(stripPage);
+    }
   }
   const store = await readStore();
   return store.pages.filter((p) => p.ownerUserId === ownerUserId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -313,23 +221,7 @@ export async function createBusinessPage(data: {
   website?: string; logoUrl?: string; location?: string; city?: string; country?: string;
   phone?: string; email?: string; socialLinks?: Record<string, string>;
 }): Promise<BusinessPage> {
-  const pool = getDbPool();
   const now = new Date().toISOString();
-
-  if (pool) {
-    const res = await pool.query(
-      `INSERT INTO business_pages (id, slug, owner_user_id, name, tagline, description, industry, company_size,
-        founded_year, website, logo_url, location, city, country, phone, email, social_links)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
-      [data.id, data.slug, data.ownerUserId, data.name, data.tagline || null, data.description || null,
-        data.industry, data.companySize || null, data.foundedYear || null, data.website || null,
-        data.logoUrl || null, data.location || null, data.city || null, data.country || null,
-        data.phone || null, data.email || null, JSON.stringify(data.socialLinks || {})],
-    );
-    return rowToPage(res.rows[0] as Record<string, unknown>);
-  }
-
-  // JSON fallback
   const newPage: BusinessPage = {
     id: data.id, slug: data.slug, ownerUserId: data.ownerUserId, name: data.name,
     tagline: data.tagline, description: data.description, industry: data.industry,
@@ -339,6 +231,14 @@ export async function createBusinessPage(data: {
     followerCount: 0, viewCount: 0, postCount: 0, jobCount: 0,
     socialLinks: data.socialLinks || {}, metadata: {}, createdAt: now, updatedAt: now,
   };
+
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection<PageDoc>('business_pages').insertOne({ ...newPage, _id: data.id });
+      return newPage;
+    }
+  }
   const store = await readStore();
   store.pages.push(newPage);
   await writeStore(store);
@@ -351,33 +251,15 @@ export async function updateBusinessPage(id: string, data: Partial<{
   city: string; country: string; phone: string; email: string;
   socialLinks: Record<string, string>; metadata: Record<string, unknown>;
 }>): Promise<BusinessPage | null> {
-  const pool = getDbPool();
-
-  if (pool) {
-    const colMap: Record<string, string> = {
-      name: 'name', tagline: 'tagline', description: 'description', industry: 'industry',
-      companySize: 'company_size', foundedYear: 'founded_year', website: 'website',
-      logoUrl: 'logo_url', coverUrl: 'cover_url', location: 'location', city: 'city',
-      country: 'country', phone: 'phone', email: 'email',
-      socialLinks: 'social_links', metadata: 'metadata',
-    };
-    const sets: string[] = ['updated_at = NOW()'];
-    const params: unknown[] = [];
-    let pi = 1;
-    for (const [key, col] of Object.entries(colMap)) {
-      if (key in data) {
-        const val = (data as Record<string, unknown>)[key];
-        sets.push(`${col} = $${pi++}`);
-        params.push(typeof val === 'object' && val !== null ? JSON.stringify(val) : val);
-      }
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const setFields = { ...data, updatedAt: new Date().toISOString() };
+      await db.collection('business_pages').updateOne({ _id: id as any }, { $set: setFields });
+      const doc = await db.collection<PageDoc>('business_pages').findOne({ _id: id as any });
+      return doc ? stripPage(doc) : null;
     }
-    params.push(id);
-    const res = await pool.query(`UPDATE business_pages SET ${sets.join(', ')} WHERE id = $${pi} RETURNING *`, params);
-    if (!res.rows[0]) return null;
-    return rowToPage(res.rows[0] as Record<string, unknown>);
   }
-
-  // JSON fallback
   const store = await readStore();
   const idx = store.pages.findIndex((p) => p.id === id);
   if (idx === -1) return null;
@@ -388,28 +270,31 @@ export async function updateBusinessPage(id: string, data: Partial<{
 }
 
 export async function recordBusinessPageView(id: string): Promise<void> {
-  const pool = getDbPool();
-  if (pool) { await pool.query('UPDATE business_pages SET view_count = view_count + 1 WHERE id = $1', [id]); return; }
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) { await db.collection('business_pages').updateOne({ _id: id as any }, { $inc: { viewCount: 1 } }); return; }
+  }
   const store = await readStore();
   const page = store.pages.find((p) => p.id === id);
   if (page) { page.viewCount += 1; await writeStore(store); }
 }
 
 export async function followBusinessPage(pageId: string, userId: string): Promise<boolean> {
-  const pool = getDbPool();
-
-  if (pool) {
-    const existing = await pool.query('SELECT 1 FROM business_page_followers WHERE page_id=$1 AND user_id=$2', [pageId, userId]);
-    if (existing.rows.length > 0) {
-      await pool.query('DELETE FROM business_page_followers WHERE page_id=$1 AND user_id=$2', [pageId, userId]);
-      await pool.query('UPDATE business_pages SET follower_count = GREATEST(0, follower_count - 1) WHERE id=$1', [pageId]);
-      return false;
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docId = `${pageId}_${userId}`;
+      const existing = await db.collection('business_page_followers').findOne({ _id: docId as any });
+      if (existing) {
+        await db.collection('business_page_followers').deleteOne({ _id: docId as any });
+        await db.collection('business_pages').updateOne({ _id: pageId as any }, { $inc: { followerCount: -1 } });
+        return false;
+      }
+      await (db.collection('business_page_followers') as any).insertOne({ _id: docId, pageId, userId, createdAt: new Date().toISOString() });
+      await db.collection('business_pages').updateOne({ _id: pageId as any }, { $inc: { followerCount: 1 } });
+      return true;
     }
-    await pool.query('INSERT INTO business_page_followers (page_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [pageId, userId]);
-    await pool.query('UPDATE business_pages SET follower_count = follower_count + 1 WHERE id=$1', [pageId]);
-    return true;
   }
-
   const store = await readStore();
   const existing = store.followers.findIndex((f) => f.pageId === pageId && f.userId === userId);
   if (existing >= 0) {
@@ -427,23 +312,25 @@ export async function followBusinessPage(pageId: string, userId: string): Promis
 }
 
 export async function isFollowingPage(pageId: string, userId: string): Promise<boolean> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query('SELECT 1 FROM business_page_followers WHERE page_id=$1 AND user_id=$2', [pageId, userId]);
-    return res.rows.length > 0;
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const count = await db.collection('business_page_followers').countDocuments({ _id: `${pageId}_${userId}` as any });
+      return count > 0;
+    }
   }
   const store = await readStore();
   return store.followers.some((f) => f.pageId === pageId && f.userId === userId);
 }
 
 export async function getPagePosts(pageId: string, limit = 20, offset = 0): Promise<BusinessPost[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query(
-      'SELECT * FROM business_page_posts WHERE page_id=$1 ORDER BY pinned DESC, created_at DESC LIMIT $2 OFFSET $3',
-      [pageId, limit, offset],
-    );
-    return res.rows.map((r) => rowToPost(r as Record<string, unknown>));
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<PostDoc>('business_page_posts')
+        .find({ pageId }).sort({ pinned: -1, createdAt: -1 }).skip(offset).limit(limit).toArray();
+      return docs.map(stripPost);
+    }
   }
   const store = await readStore();
   return store.posts.filter((p) => p.pageId === pageId)
@@ -452,23 +339,20 @@ export async function getPagePosts(pageId: string, limit = 20, offset = 0): Prom
 }
 
 export async function createPost(data: { id: string; pageId: string; authorUserId: string; content: string; mediaUrls?: string[]; postType?: string }): Promise<BusinessPost> {
-  const pool = getDbPool();
   const now = new Date().toISOString();
-
-  if (pool) {
-    const res = await pool.query(
-      `INSERT INTO business_page_posts (id, page_id, author_user_id, content, media_urls, post_type) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [data.id, data.pageId, data.authorUserId, data.content, JSON.stringify(data.mediaUrls || []), data.postType || 'update'],
-    );
-    await pool.query('UPDATE business_pages SET post_count = post_count + 1 WHERE id=$1', [data.pageId]);
-    return rowToPost(res.rows[0] as Record<string, unknown>);
-  }
-
   const newPost: BusinessPost = {
     id: data.id, pageId: data.pageId, authorUserId: data.authorUserId, content: data.content,
     mediaUrls: data.mediaUrls || [], postType: data.postType || 'update',
     likeCount: 0, commentCount: 0, likedBy: [], pinned: false, createdAt: now, updatedAt: now,
   };
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection<PostDoc>('business_page_posts').insertOne({ ...newPost, _id: data.id });
+      await db.collection('business_pages').updateOne({ _id: data.pageId as any }, { $inc: { postCount: 1 } });
+      return newPost;
+    }
+  }
   const store = await readStore();
   store.posts.push(newPost);
   const page = store.pages.find((p) => p.id === data.pageId);
@@ -478,11 +362,13 @@ export async function createPost(data: { id: string; pageId: string; authorUserI
 }
 
 export async function deletePost(postId: string, pageId: string): Promise<void> {
-  const pool = getDbPool();
-  if (pool) {
-    await pool.query('DELETE FROM business_page_posts WHERE id=$1 AND page_id=$2', [postId, pageId]);
-    await pool.query('UPDATE business_pages SET post_count = GREATEST(0, post_count - 1) WHERE id=$1', [pageId]);
-    return;
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection('business_page_posts').deleteOne({ _id: postId as any, pageId });
+      await db.collection('business_pages').updateOne({ _id: pageId as any }, { $inc: { postCount: -1 } });
+      return;
+    }
   }
   const store = await readStore();
   const before = store.posts.length;
@@ -495,23 +381,24 @@ export async function deletePost(postId: string, pageId: string): Promise<void> 
 }
 
 export async function togglePostLike(postId: string, userId: string): Promise<{ likeCount: number; liked: boolean }> {
-  const pool = getDbPool();
-
-  if (pool) {
-    const res = await pool.query('SELECT liked_by, like_count FROM business_page_posts WHERE id=$1', [postId]);
-    if (!res.rows[0]) return { likeCount: 0, liked: false };
-    const likedBy: string[] = res.rows[0].liked_by || [];
-    const already = likedBy.includes(userId);
-    if (already) {
-      const updated = likedBy.filter((u: string) => u !== userId);
-      await pool.query('UPDATE business_page_posts SET liked_by=$1, like_count=GREATEST(0,like_count-1) WHERE id=$2', [JSON.stringify(updated), postId]);
-      return { likeCount: Math.max(0, (res.rows[0].like_count as number) - 1), liked: false };
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const doc = await db.collection<PostDoc>('business_page_posts').findOne({ _id: postId as any });
+      if (!doc) return { likeCount: 0, liked: false };
+      const likedBy: string[] = doc.likedBy || [];
+      const already = likedBy.includes(userId);
+      if (already) {
+        const updated = likedBy.filter((u) => u !== userId);
+        const newCount = Math.max(0, doc.likeCount - 1);
+        await db.collection('business_page_posts').updateOne({ _id: postId as any }, { $set: { likedBy: updated, likeCount: newCount } });
+        return { likeCount: newCount, liked: false };
+      }
+      const newCount = doc.likeCount + 1;
+      await db.collection('business_page_posts').updateOne({ _id: postId as any }, { $addToSet: { likedBy: userId }, $inc: { likeCount: 1 } });
+      return { likeCount: newCount, liked: true };
     }
-    likedBy.push(userId);
-    await pool.query('UPDATE business_page_posts SET liked_by=$1, like_count=like_count+1 WHERE id=$2', [JSON.stringify(likedBy), postId]);
-    return { likeCount: (res.rows[0].like_count as number) + 1, liked: true };
   }
-
   const store = await readStore();
   const post = store.posts.find((p) => p.id === postId);
   if (!post) return { likeCount: 0, liked: false };
@@ -523,12 +410,14 @@ export async function togglePostLike(postId: string, userId: string): Promise<{ 
 }
 
 export async function getPageJobs(pageId: string, status?: string): Promise<BusinessJob[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const cond = status ? `AND status=$2` : '';
-    const params = status ? [pageId, status] : [pageId];
-    const res = await pool.query(`SELECT * FROM business_page_jobs WHERE page_id=$1 ${cond} ORDER BY created_at DESC`, params);
-    return res.rows.map((r) => rowToJob(r as Record<string, unknown>));
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const filter: Record<string, unknown> = { pageId };
+      if (status) filter.status = status;
+      const docs = await db.collection<JobDoc>('business_page_jobs').find(filter).sort({ createdAt: -1 }).toArray();
+      return docs.map(stripJob);
+    }
   }
   const store = await readStore();
   let jobs = store.jobs.filter((j) => j.pageId === pageId);
@@ -537,18 +426,7 @@ export async function getPageJobs(pageId: string, status?: string): Promise<Busi
 }
 
 export async function createJob(data: { id: string; pageId: string; title: string; description: string; location?: string; jobType?: string; experienceLevel?: string; salaryMin?: number; salaryMax?: number; skills?: string[]; applyUrl?: string }): Promise<BusinessJob> {
-  const pool = getDbPool();
   const now = new Date().toISOString();
-
-  if (pool) {
-    const res = await pool.query(
-      `INSERT INTO business_page_jobs (id, page_id, title, description, location, job_type, experience_level, salary_min, salary_max, skills, apply_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [data.id, data.pageId, data.title, data.description, data.location || null, data.jobType || 'full_time', data.experienceLevel || null, data.salaryMin || null, data.salaryMax || null, JSON.stringify(data.skills || []), data.applyUrl || null],
-    );
-    await pool.query('UPDATE business_pages SET job_count = job_count + 1 WHERE id=$1', [data.pageId]);
-    return rowToJob(res.rows[0] as Record<string, unknown>);
-  }
-
   const newJob: BusinessJob = {
     id: data.id, pageId: data.pageId, title: data.title, description: data.description,
     location: data.location, jobType: data.jobType || 'full_time', experienceLevel: data.experienceLevel,
@@ -556,6 +434,14 @@ export async function createJob(data: { id: string; pageId: string; title: strin
     skills: data.skills || [], status: 'open', applyUrl: data.applyUrl,
     applicationCount: 0, createdAt: now, updatedAt: now,
   };
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection<JobDoc>('business_page_jobs').insertOne({ ...newJob, _id: data.id });
+      await db.collection('business_pages').updateOne({ _id: data.pageId as any }, { $inc: { jobCount: 1 } });
+      return newJob;
+    }
+  }
   const store = await readStore();
   store.jobs.push(newJob);
   const page = store.pages.find((p) => p.id === data.pageId);
@@ -565,32 +451,32 @@ export async function createJob(data: { id: string; pageId: string; title: strin
 }
 
 export async function getPageProducts(pageId: string): Promise<BusinessProduct[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query('SELECT * FROM business_page_products WHERE page_id=$1 ORDER BY sort_order, created_at DESC', [pageId]);
-    return res.rows.map((r) => rowToProduct(r as Record<string, unknown>));
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<ProductDoc>('business_page_products')
+        .find({ pageId }).sort({ sortOrder: 1, createdAt: -1 }).toArray();
+      return docs.map(stripProduct);
+    }
   }
   const store = await readStore();
   return store.products.filter((p) => p.pageId === pageId).sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export async function createProduct(data: { id: string; pageId: string; name: string; description?: string; price?: string; category?: string; imageUrl?: string; productUrl?: string }): Promise<BusinessProduct> {
-  const pool = getDbPool();
   const now = new Date().toISOString();
-
-  if (pool) {
-    const res = await pool.query(
-      `INSERT INTO business_page_products (id, page_id, name, description, price, category, image_url, product_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [data.id, data.pageId, data.name, data.description || null, data.price || null, data.category || null, data.imageUrl || null, data.productUrl || null],
-    );
-    return rowToProduct(res.rows[0] as Record<string, unknown>);
-  }
-
   const newProduct: BusinessProduct = {
     id: data.id, pageId: data.pageId, name: data.name, description: data.description,
     price: data.price, category: data.category, imageUrl: data.imageUrl, productUrl: data.productUrl,
     sortOrder: 0, createdAt: now,
   };
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection<ProductDoc>('business_page_products').insertOne({ ...newProduct, _id: data.id });
+      return newProduct;
+    }
+  }
   const store = await readStore();
   store.products.push(newProduct);
   await writeStore(store);
@@ -598,27 +484,19 @@ export async function createProduct(data: { id: string; pageId: string; name: st
 }
 
 export async function getPageEvents(pageId: string): Promise<BusinessEvent[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query('SELECT * FROM business_page_events WHERE page_id=$1 ORDER BY start_at ASC', [pageId]);
-    return res.rows.map((r) => rowToEvent(r as Record<string, unknown>));
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<EventDoc>('business_page_events').find({ pageId }).sort({ startAt: 1 }).toArray();
+      return docs.map(stripEvent);
+    }
   }
   const store = await readStore();
   return store.events.filter((e) => e.pageId === pageId).sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
 }
 
 export async function createEvent(data: { id: string; pageId: string; title: string; description?: string; eventType?: string; startAt: string; endAt?: string; location?: string; isOnline?: boolean; registrationUrl?: string; coverUrl?: string }): Promise<BusinessEvent> {
-  const pool = getDbPool();
   const now = new Date().toISOString();
-
-  if (pool) {
-    const res = await pool.query(
-      `INSERT INTO business_page_events (id, page_id, title, description, event_type, start_at, end_at, location, is_online, registration_url, cover_url) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [data.id, data.pageId, data.title, data.description || null, data.eventType || 'webinar', data.startAt, data.endAt || null, data.location || null, data.isOnline !== false, data.registrationUrl || null, data.coverUrl || null],
-    );
-    return rowToEvent(res.rows[0] as Record<string, unknown>);
-  }
-
   const newEvent: BusinessEvent = {
     id: data.id, pageId: data.pageId, title: data.title, description: data.description,
     eventType: data.eventType || 'webinar', startAt: data.startAt, endAt: data.endAt,
@@ -626,6 +504,13 @@ export async function createEvent(data: { id: string; pageId: string; title: str
     registrationUrl: data.registrationUrl, coverUrl: data.coverUrl,
     attendeeCount: 0, createdAt: now,
   };
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection<EventDoc>('business_page_events').insertOne({ ...newEvent, _id: data.id });
+      return newEvent;
+    }
+  }
   const store = await readStore();
   store.events.push(newEvent);
   await writeStore(store);
@@ -650,76 +535,97 @@ export interface PageAnalytics {
   topPosts: { id: string; content: string; likeCount: number; commentCount: number; createdAt: string }[];
 }
 
+function getWeekMonday(date: Date): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  return d.toISOString().slice(0, 10);
+}
+
+function fillWeeks(items: { date: string }[], numWeeks: number): { week: string; count: number }[] {
+  const result: { week: string; count: number }[] = [];
+  for (let i = numWeeks - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i * 7);
+    result.push({ week: getWeekMonday(d), count: 0 });
+  }
+  for (const item of items) {
+    const week = getWeekMonday(new Date(item.date));
+    const entry = result.find((r) => r.week === week);
+    if (entry) entry.count += 1;
+  }
+  return result;
+}
+
 export async function getPageAnalytics(pageId: string): Promise<PageAnalytics> {
-  const pool = getDbPool();
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const twelveWeeksAgo = new Date(Date.now() - 12 * 7 * 24 * 60 * 60 * 1000).toISOString();
+      const tenWeeksAgo = new Date(Date.now() - 10 * 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  if (pool) {
-    const [
-      pageRes, recentRes, engageRes,
-      followersByWeekRes, postsByWeekRes,
-      productRes, eventRes, reviewRes, ratingDistRes, topPostsRes,
-    ] = await Promise.all([
-      pool.query('SELECT view_count, follower_count, post_count, job_count FROM business_pages WHERE id=$1', [pageId]),
-      pool.query("SELECT COUNT(*) FROM business_page_followers WHERE page_id=$1 AND created_at > NOW() - INTERVAL '30 days'", [pageId]),
-      pool.query('SELECT COALESCE(SUM(like_count),0) AS total_likes, COALESCE(SUM(comment_count),0) AS total_comments FROM business_page_posts WHERE page_id=$1', [pageId]),
-      pool.query(`
-        SELECT TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD') AS week, COUNT(*)::int AS count
-        FROM business_page_followers WHERE page_id=$1 AND created_at > NOW() - INTERVAL '12 weeks'
-        GROUP BY week ORDER BY week`, [pageId]),
-      pool.query(`
-        SELECT TO_CHAR(DATE_TRUNC('week', created_at), 'YYYY-MM-DD') AS week, COUNT(*)::int AS count
-        FROM business_page_posts WHERE page_id=$1 AND created_at > NOW() - INTERVAL '10 weeks'
-        GROUP BY week ORDER BY week`, [pageId]),
-      pool.query('SELECT COUNT(*)::int AS count FROM business_page_products WHERE page_id=$1', [pageId]),
-      pool.query('SELECT COUNT(*)::int AS count FROM business_page_events WHERE page_id=$1', [pageId]),
-      pool.query('SELECT COUNT(*)::int AS count, COALESCE(AVG(rating),0) AS avg FROM business_page_reviews WHERE page_id=$1', [pageId]),
-      pool.query('SELECT rating, COUNT(*)::int AS count FROM business_page_reviews WHERE page_id=$1 GROUP BY rating ORDER BY rating DESC', [pageId]),
-      pool.query('SELECT id, content, like_count, comment_count, created_at FROM business_page_posts WHERE page_id=$1 ORDER BY like_count DESC, created_at DESC LIMIT 5', [pageId]),
-    ]);
+      const [
+        page, recentFollowerDocs, engageAgg, followerDocs, postDates,
+        productCount, eventCount, reviewAgg, ratingDist, topPosts,
+      ] = await Promise.all([
+        db.collection<PageDoc>('business_pages').findOne({ _id: pageId }),
+        db.collection('business_page_followers').countDocuments({ pageId, createdAt: { $gt: thirtyDaysAgo } }),
+        db.collection('business_page_posts').aggregate<{ totalLikes: number; totalComments: number }>([
+          { $match: { pageId } },
+          { $group: { _id: null, totalLikes: { $sum: '$likeCount' }, totalComments: { $sum: '$commentCount' } } },
+        ]).toArray(),
+        db.collection<{ _id: string; createdAt: string }>('business_page_followers')
+          .find({ pageId, createdAt: { $gt: twelveWeeksAgo } }).project({ createdAt: 1 }).toArray(),
+        db.collection<{ _id: string; createdAt: string }>('business_page_posts')
+          .find({ pageId, createdAt: { $gt: tenWeeksAgo } }).project({ createdAt: 1 }).toArray(),
+        db.collection('business_page_products').countDocuments({ pageId }),
+        db.collection('business_page_events').countDocuments({ pageId }),
+        db.collection('business_page_reviews').aggregate<{ count: number; avg: number }>([
+          { $match: { pageId } },
+          { $group: { _id: null, count: { $sum: 1 }, avg: { $avg: '$rating' } } },
+        ]).toArray(),
+        db.collection('business_page_reviews').aggregate<{ _id: number; count: number }>([
+          { $match: { pageId } },
+          { $group: { _id: '$rating', count: { $sum: 1 } } },
+          { $sort: { _id: -1 } },
+        ]).toArray(),
+        db.collection<PostDoc>('business_page_posts')
+          .find({ pageId }).sort({ likeCount: -1, createdAt: -1 }).limit(5).toArray(),
+      ]);
 
-    const p = pageRes.rows[0] || {};
-    const e = engageRes.rows[0] || {};
-    const r = reviewRes.rows[0] || {};
+      const p = page ? stripPage(page) : null;
+      const eng = engageAgg[0];
+      const rev = reviewAgg[0];
 
-    // Fill missing weeks with 0
-    const fillWeeks = (rows: { week: string; count: number }[], numWeeks: number) => {
-      const map = new Map(rows.map(r => [r.week, r.count]));
-      const result: { week: string; count: number }[] = [];
-      for (let i = numWeeks - 1; i >= 0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i * 7);
-        const monday = new Date(d); monday.setDate(d.getDate() - d.getDay() + 1);
-        const key = monday.toISOString().slice(0, 10);
-        result.push({ week: key, count: map.get(key) ?? 0 });
-      }
-      return result;
+      return {
+        totalViews: p?.viewCount || 0,
+        followerCount: p?.followerCount || 0,
+        postCount: p?.postCount || 0,
+        jobCount: p?.jobCount || 0,
+        recentFollowers: recentFollowerDocs,
+        productCount,
+        eventCount,
+        reviewCount: rev?.count || 0,
+        avgRating: rev?.avg || 0,
+        totalLikes: eng?.totalLikes || 0,
+        totalComments: eng?.totalComments || 0,
+        followersByWeek: fillWeeks(followerDocs.map((d) => ({ date: d.createdAt })), 12),
+        postsByWeek: fillWeeks(postDates.map((d) => ({ date: d.createdAt })), 10),
+        ratingDistribution: ratingDist.map((r) => ({ rating: r._id, count: r.count })),
+        topPosts: topPosts.map(stripPost).map((post) => ({
+          id: post.id, content: post.content, likeCount: post.likeCount,
+          commentCount: post.commentCount, createdAt: post.createdAt,
+        })),
+      };
     }
-
-    return {
-      totalViews:         (p.view_count as number) || 0,
-      followerCount:      (p.follower_count as number) || 0,
-      postCount:          (p.post_count as number) || 0,
-      jobCount:           (p.job_count as number) || 0,
-      recentFollowers:    parseInt(recentRes.rows[0]?.count || '0', 10),
-      productCount:       productRes.rows[0]?.count || 0,
-      eventCount:         eventRes.rows[0]?.count || 0,
-      reviewCount:        r.count || 0,
-      avgRating:          parseFloat(r.avg) || 0,
-      totalLikes:         parseInt(e.total_likes) || 0,
-      totalComments:      parseInt(e.total_comments) || 0,
-      followersByWeek:    fillWeeks(followersByWeekRes.rows as { week: string; count: number }[], 12),
-      postsByWeek:        fillWeeks(postsByWeekRes.rows as { week: string; count: number }[], 10),
-      ratingDistribution: ratingDistRes.rows as { rating: number; count: number }[],
-      topPosts:           (topPostsRes.rows as { id: string; content: string; like_count: number; comment_count: number; created_at: string }[]).map(r => ({
-        id: r.id, content: r.content, likeCount: r.like_count, commentCount: r.comment_count, createdAt: r.created_at,
-      })),
-    };
   }
 
-  // JSON store fallback
   const store = await readStore();
   const page = store.pages.find((p) => p.id === pageId);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const recentFollowers = store.followers.filter((f: { pageId: string; createdAt: string }) => f.pageId === pageId && f.createdAt > thirtyDaysAgo).length;
+  const recentFollowers = store.followers.filter((f) => f.pageId === pageId && f.createdAt > thirtyDaysAgo).length;
   return {
     totalViews: page?.viewCount || 0, followerCount: page?.followerCount || 0,
     postCount: page?.postCount || 0, jobCount: page?.jobCount || 0,
@@ -730,10 +636,12 @@ export async function getPageAnalytics(pageId: string): Promise<PageAnalytics> {
 }
 
 export async function slugExists(slug: string): Promise<boolean> {
-  const pool = getDbPool();
-  if (pool) {
-    const res = await pool.query('SELECT 1 FROM business_pages WHERE slug=$1', [slug]);
-    return res.rows.length > 0;
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const count = await db.collection('business_pages').countDocuments({ slug });
+      return count > 0;
+    }
   }
   const store = await readStore();
   return store.pages.some((p) => p.slug === slug);

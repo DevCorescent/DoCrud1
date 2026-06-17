@@ -6,7 +6,7 @@ import { buildBillingThreshold } from '@/lib/server/billing';
 import { getUserUsageSummary } from '@/lib/server/saas';
 import { getVisibleDealRooms } from '@/lib/server/deal-rooms';
 import { getDeduplicatedSocialEventsForUser } from '@/lib/server/social-events';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 
 type NotificationState = {
   readMap: Record<string, string[]>;
@@ -252,14 +252,13 @@ async function buildBoardRoomNotifications(user: User, state: NotificationState)
 }
 
 export async function getNotificationState(userId?: string): Promise<NotificationState> {
-  const pool = getDbPool();
-  if (pool && userId) {
-    const result = await pool.query<{ notification_id: string }>(
-      `SELECT notification_id FROM notification_reads WHERE user_id = $1`,
-      [userId]
-    );
-    const readIds = result.rows.map((r) => r.notification_id);
-    return { readMap: { [userId]: readIds } };
+  if (getDbPool() && userId) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<{ _id: string; userId: string; notificationId: string }>('notification_reads')
+        .find({ userId }).toArray();
+      return { readMap: { [userId]: docs.map((d) => d.notificationId) } };
+    }
   }
   return readJsonFile<NotificationState>(notificationStatePath, emptyState);
 }
@@ -364,14 +363,21 @@ export async function getWorkspaceNotifications(user: User) {
 }
 
 export async function markWorkspaceNotificationsRead(userId: string, notificationIds: string[]) {
-  const pool = getDbPool();
-  if (pool && notificationIds.length > 0) {
-    const values = notificationIds.map((_, i) => `($1, $${i + 2}, NOW())`).join(', ');
-    await pool.query(
-      `INSERT INTO notification_reads (user_id, notification_id, read_at) VALUES ${values} ON CONFLICT DO NOTHING`,
-      [userId, ...notificationIds]
-    );
-    return { readMap: { [userId]: notificationIds } };
+  if (getDbPool() && notificationIds.length > 0) {
+    const db = await getMongoDb();
+    if (db) {
+      const col = db.collection('notification_reads');
+      await (col as any).bulkWrite(
+        notificationIds.map((notificationId) => ({
+          replaceOne: {
+            filter: { _id: `${userId}_${notificationId}` },
+            replacement: { _id: `${userId}_${notificationId}`, userId, notificationId, readAt: new Date().toISOString() },
+            upsert: true,
+          },
+        })),
+      );
+      return { readMap: { [userId]: notificationIds } };
+    }
   }
   const state = await getNotificationState();
   const existing = new Set(state.readMap[userId] || []);

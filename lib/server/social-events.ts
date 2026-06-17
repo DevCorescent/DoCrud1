@@ -1,5 +1,5 @@
 import { socialEventsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 
 export type SocialEventType = 'follow' | 'profile_view' | 'like' | 'comment' | 'mention' | 'gig_applied' | 'document_viewed';
 
@@ -49,15 +49,15 @@ export async function addSocialEvent(event: Omit<SocialEvent, 'id' | 'createdAt'
   const createdAt = new Date().toISOString();
   const newEvent: SocialEvent = { ...event, id, createdAt };
 
-  const pool = getDbPool();
-  if (pool) {
-    await pool.query(
-      `INSERT INTO social_events (id, type, actor_id, actor_name, actor_avatar, actor_headline, target_user_id, resource_id, resource_title, excerpt, href, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-      [id, event.type, event.actorId, event.actorName, event.actorAvatar ?? null,
-        event.actorHeadline ?? null, event.targetUserId, event.resourceId ?? null,
-        event.resourceTitle ?? null, event.excerpt ?? null, event.href ?? null, createdAt]
-    );
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      await db.collection('social_events').replaceOne(
+        { _id: id as any },
+        { ...newEvent, _id: id },
+        { upsert: true },
+      );
+    }
   } else {
     const data = await getSocialEvents();
     data.events = [newEvent, ...data.events].slice(0, MAX_EVENTS);
@@ -110,13 +110,12 @@ async function sendEventEmail(event: SocialEvent): Promise<void> {
 }
 
 export async function getSocialEventsForUser(userId: string): Promise<SocialEvent[]> {
-  const pool = getDbPool();
-  if (pool) {
-    const result = await pool.query<Record<string, unknown>>(
-      `SELECT * FROM social_events WHERE target_user_id = $1 ORDER BY created_at DESC LIMIT 60`,
-      [userId]
-    );
-    return result.rows.map(rowToEvent);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (!db) return [];
+    const docs = await db.collection<SocialEvent & { _id: string }>('social_events')
+      .find({ targetUserId: userId }).sort({ createdAt: -1 }).limit(60).toArray();
+    return docs.map(({ _id: _unused, ...e }) => e as SocialEvent);
   }
   const data = await getSocialEvents();
   return data.events.filter((e) => e.targetUserId === userId).slice(0, 60);

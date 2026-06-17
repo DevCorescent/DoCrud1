@@ -1,5 +1,5 @@
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 import { getFileTransfers } from '@/lib/server/file-transfers';
 
 export const FREE_DRIVE_GB   = 0.5;   // 500 MB for all users with no plan
@@ -47,15 +47,15 @@ export async function getUserDriveQuota(userId: string): Promise<DriveQuota> {
 
 /** Returns the total bytes used by a user's file transfers. */
 export async function getUserDriveUsedBytes(userId: string): Promise<number> {
-  const pool = getDbPool();
-  if (pool) {
-    const result = await pool.query<{ total: string }>(
-      `SELECT COALESCE(SUM(size_in_bytes), 0)::text AS total
-       FROM file_transfers
-       WHERE uploaded_by_user_id = $1 AND revoked_at IS NULL`,
-      [userId],
-    );
-    return parseInt(result.rows[0]?.total ?? '0', 10);
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const result = await db.collection('file_transfers').aggregate([
+        { $match: { uploadedByUserId: userId, revokedAt: null } },
+        { $group: { _id: null, total: { $sum: '$sizeInBytes' } } },
+      ]).toArray();
+      return (result[0] as { total?: number } | undefined)?.total ?? 0;
+    }
   }
 
   // JSON fallback

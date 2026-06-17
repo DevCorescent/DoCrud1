@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { getDbPool } from '@/lib/server/database';
+import { getDbPool, getMongoDb } from '@/lib/server/database';
 import { resumeDirectoryPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { extractDocumentText } from '@/lib/server/document-parser';
 import { generateAiText, isAiConfigured, parseStructuredJson } from '@/lib/server/ai';
@@ -315,8 +315,7 @@ export async function listResumeDirectory(params: {
   offset?: number;
   actorUserId?: string;
 }) {
-  const pool = getDbPool();
-  const useFileStore = !pool;
+  const useFileStore = !getDbPool();
 
   const q = normalize(params.q);
   const category = normalize(params.category);
@@ -358,88 +357,66 @@ export async function listResumeDirectory(params: {
     return { entries: page, total, meta };
   }
 
-  // DB mode (kept simple; full-text index is optional for later)
-  const where: string[] = ["visibility = 'public'"];
-  const values: any[] = [];
+  const db = await getMongoDb();
+  if (db) {
+    const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-  if (category) {
-    values.push(normalizedLower(category));
-    where.push(`LOWER(category) = $${values.length}`);
-  }
-  if (tags.length) {
-    for (const tag of tagsLower) {
-      values.push(tag);
-      where.push(`EXISTS (SELECT 1 FROM jsonb_array_elements_text(tags) AS t(v) WHERE LOWER(v) = $${values.length})`);
+    const filter: Record<string, unknown> = { visibility: 'public' };
+    if (category) filter.category = new RegExp(`^${escRe(normalizedLower(category))}$`, 'i');
+    if (tagsLower.length) filter.tags = { $all: tagsLower.map((t) => new RegExp(`^${escRe(t)}$`, 'i')) };
+    if (skillsLower.length) filter.skills = { $all: skillsLower.map((s) => new RegExp(`^${escRe(s)}$`, 'i')) };
+    if (hasContact) {
+      filter.$or = [
+        { 'contact.email': { $exists: true, $nin: ['', null] } },
+        { 'contact.phone': { $exists: true, $nin: ['', null] } },
+        { 'contact.linkedin': { $exists: true, $nin: ['', null] } },
+        { 'contact.website': { $exists: true, $nin: ['', null] } },
+      ];
     }
-  }
-  if (skills.length) {
-    for (const skill of skillsLower) {
-      values.push(skill);
-      where.push(`EXISTS (SELECT 1 FROM jsonb_array_elements_text(skills) AS s(v) WHERE LOWER(v) = $${values.length})`);
+    if (q) {
+      const re = new RegExp(escRe(q), 'i');
+      const textOr = [
+        { displayName: re }, { headline: re }, { location: re },
+        { category: re }, { summary: re }, { resumeText: re },
+      ];
+      filter.$and = [{ $or: textOr }];
     }
+
+    const [total, docs, metaDocs] = await Promise.all([
+      db.collection('resume_directory_entries').countDocuments(filter),
+      db.collection<EntryDoc>('resume_directory_entries')
+        .find(filter).sort({ updatedAt: -1 }).skip(offset).limit(limit).toArray(),
+      db.collection<EntryDoc>('resume_directory_entries')
+        .find({ visibility: 'public' }, { projection: { category: 1, tags: 1, skills: 1 } })
+        .sort({ updatedAt: -1 }).limit(800).toArray(),
+    ]);
+
+    const entries = docs.map(strip);
+    const meta = buildMetaFromEntries(metaDocs.map((d) => ({
+      ...strip(d),
+      id: d.id,
+      slug: d.slug || '',
+      ownerUserId: d.ownerUserId || '',
+      displayName: d.displayName || '',
+      category: d.category,
+      skills: d.skills || [],
+      tags: d.tags || [],
+      resumeText: '',
+      contact: d.contact || { visibility: 'hidden' },
+      visibility: 'public' as const,
+      viewCount: 0,
+      contactCount: 0,
+      createdAt: '',
+      updatedAt: '',
+    })));
+    return { entries, total, meta };
   }
-  if (hasContact) {
-    where.push(`(
-      (contact_email IS NOT NULL AND contact_email <> '')
-      OR (contact_phone IS NOT NULL AND contact_phone <> '')
-      OR (contact_linkedin IS NOT NULL AND contact_linkedin <> '')
-      OR (contact_website IS NOT NULL AND contact_website <> '')
-    )`);
-  }
-  if (q) {
-    values.push(`%${q}%`);
-    const idx = values.length;
-    where.push(`(
-      display_name ILIKE $${idx}
-      OR headline ILIKE $${idx}
-      OR location ILIKE $${idx}
-      OR category ILIKE $${idx}
-      OR summary ILIKE $${idx}
-      OR resume_text ILIKE $${idx}
-      OR tags::text ILIKE $${idx}
-      OR skills::text ILIKE $${idx}
-    )`);
-  }
 
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const totalResult = await pool!.query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM resume_directory_entries ${whereSql}`,
-    values,
-  );
-
-  values.push(limit);
-  values.push(offset);
-  const listResult = await pool!.query(
-    `
-      SELECT
-        id, slug, owner_user_id, display_name, avatar_file_name, avatar_mime_type, avatar_data_url,
-        headline, location, category, skills, tags, summary,
-        resume_text, resume_file_name, resume_mime_type, resume_data_url,
-        contact_email, contact_phone, contact_linkedin, contact_website, contact_visibility,
-        visibility, view_count, contact_count, created_at, updated_at
-      FROM resume_directory_entries
-      ${whereSql}
-      ORDER BY updated_at DESC
-      LIMIT $${values.length - 1}
-      OFFSET $${values.length}
-    `,
-    values,
-  );
-
-  const entries = listResult.rows.map((row) => mapRow(row));
-  const allVisible = await pool!.query(
-    `
-      SELECT category, tags, skills
-      FROM resume_directory_entries
-      WHERE visibility = 'public'
-      ORDER BY updated_at DESC
-      LIMIT 800
-    `,
-  );
-  const meta = buildMetaFromRows(allVisible.rows);
-
-  return { entries, total: Number(totalResult.rows[0]?.count || 0), meta };
+  return { entries: [], total: 0, meta: { categories: [], tags: [], skills: [] } };
 }
+
+type EntryDoc = ResumeDirectoryEntry & { _id: string };
+function strip({ _id: _u, ...rest }: EntryDoc): ResumeDirectoryEntry { return rest; }
 
 function buildMetaFromRows(rows: Array<{ category?: string; tags?: any; skills?: any }>): ResumeDirectoryMeta {
   const categoryCounts = new Map<string, number>();
@@ -487,146 +464,84 @@ function buildMetaFromEntries(entries: ResumeDirectoryEntry[]): ResumeDirectoryM
   })));
 }
 
-function mapRow(row: any): ResumeDirectoryEntry {
-  return {
-    id: String(row.id),
-    slug: String(row.slug),
-    ownerUserId: String(row.owner_user_id),
-    displayName: String(row.display_name),
-    avatarFileName: row.avatar_file_name ? String(row.avatar_file_name) : undefined,
-    avatarMimeType: row.avatar_mime_type ? String(row.avatar_mime_type) : undefined,
-    avatarDataUrl: row.avatar_data_url ? String(row.avatar_data_url) : undefined,
-    headline: row.headline ? String(row.headline) : undefined,
-    location: row.location ? String(row.location) : undefined,
-    category: String(row.category),
-    skills: Array.isArray(row.skills) ? row.skills : [],
-    tags: Array.isArray(row.tags) ? row.tags : [],
-    summary: row.summary ? String(row.summary) : undefined,
-    resumeText: String(row.resume_text || ''),
-    resumeFileName: row.resume_file_name ? String(row.resume_file_name) : undefined,
-    resumeMimeType: row.resume_mime_type ? String(row.resume_mime_type) : undefined,
-    resumeDataUrl: row.resume_data_url ? String(row.resume_data_url) : undefined,
-    contact: {
-      email: row.contact_email ? String(row.contact_email) : undefined,
-      phone: row.contact_phone ? String(row.contact_phone) : undefined,
-      linkedin: row.contact_linkedin ? String(row.contact_linkedin) : undefined,
-      website: row.contact_website ? String(row.contact_website) : undefined,
-      visibility: (row.contact_visibility === 'public' || row.contact_visibility === 'hidden') ? row.contact_visibility : 'members',
-    },
-    visibility: row.visibility === 'private' ? 'private' : 'public',
-    viewCount: Number(row.view_count || 0),
-    contactCount: Number(row.contact_count || 0),
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-  };
-}
-
 export async function getPublicResumeBySlug(slug: string) {
-  const pool = getDbPool();
   const normalizedSlug = normalize(slug);
   if (!normalizedSlug) return null;
 
-  if (!pool) {
+  if (!getDbPool()) {
     const raw = await readJsonFile<ResumeDirectoryEntry[]>(resumeDirectoryPath, []);
     const entry = raw.find((item) => item.slug === normalizedSlug && item.visibility === 'public');
     return entry || null;
   }
 
-  const result = await pool.query(
-    `
-      SELECT
-        id, slug, owner_user_id, display_name, avatar_file_name, avatar_mime_type, avatar_data_url,
-        headline, location, category, skills, tags, summary,
-        resume_text, resume_file_name, resume_mime_type, resume_data_url,
-        contact_email, contact_phone, contact_linkedin, contact_website, contact_visibility,
-        visibility, view_count, contact_count, created_at, updated_at
-      FROM resume_directory_entries
-      WHERE slug = $1 AND visibility = 'public'
-      LIMIT 1
-    `,
-    [normalizedSlug],
-  );
-  if (!result.rows[0]) return null;
-  return mapRow(result.rows[0]);
+  const db = await getMongoDb();
+  if (db) {
+    const doc = await db.collection<EntryDoc>('resume_directory_entries').findOne({ slug: normalizedSlug, visibility: 'public' });
+    return doc ? strip(doc) : null;
+  }
+  return null;
 }
 
 export async function getPublicResumeById(id: string) {
-  const pool = getDbPool();
   const normalizedId = normalize(id);
   if (!normalizedId) return null;
 
-  if (!pool) {
+  if (!getDbPool()) {
     const raw = await readJsonFile<ResumeDirectoryEntry[]>(resumeDirectoryPath, []);
     const entry = raw.find((item) => item.id === normalizedId && item.visibility === 'public');
     return entry || null;
   }
 
-  const result = await pool.query(
-    `
-      SELECT
-        id, slug, owner_user_id, display_name, avatar_file_name, avatar_mime_type, avatar_data_url,
-        headline, location, category, skills, tags, summary,
-        resume_text, resume_file_name, resume_mime_type, resume_data_url,
-        contact_email, contact_phone, contact_linkedin, contact_website, contact_visibility,
-        visibility, view_count, contact_count, created_at, updated_at
-      FROM resume_directory_entries
-      WHERE id = $1 AND visibility = 'public'
-      LIMIT 1
-    `,
-    [normalizedId],
-  );
-  if (!result.rows[0]) return null;
-  return mapRow(result.rows[0]);
+  const db = await getMongoDb();
+  if (db) {
+    const doc = await db.collection<EntryDoc>('resume_directory_entries').findOne({ _id: normalizedId, visibility: 'public' });
+    return doc ? strip(doc) : null;
+  }
+  return null;
 }
 
 export async function getPublicResumesByIds(ids: string[]) {
-  const pool = getDbPool();
   const normalized = clampList((ids || []).map((v) => normalize(v)).filter(Boolean), 220);
   if (!normalized.length) return [];
 
-  if (!pool) {
+  if (!getDbPool()) {
     const raw = await readJsonFile<ResumeDirectoryEntry[]>(resumeDirectoryPath, []);
     const byId = new Map(raw.filter((item) => item.visibility === 'public').map((item) => [item.id, item]));
     return normalized.map((id) => byId.get(id)).filter(Boolean) as ResumeDirectoryEntry[];
   }
 
-  const result = await pool.query(
-    `
-      SELECT
-        id, slug, owner_user_id, display_name, avatar_file_name, avatar_mime_type, avatar_data_url,
-        headline, location, category, skills, tags, summary,
-        resume_text, resume_file_name, resume_mime_type, resume_data_url,
-        contact_email, contact_phone, contact_linkedin, contact_website, contact_visibility,
-        visibility, view_count, contact_count, created_at, updated_at
-      FROM resume_directory_entries
-      WHERE visibility = 'public' AND id = ANY($1::text[])
-    `,
-    [normalized],
-  );
-
-  const byId = new Map(result.rows.map((row) => [String(row.id), mapRow(row)]));
-  return normalized.map((id) => byId.get(id)).filter(Boolean) as ResumeDirectoryEntry[];
+  const db = await getMongoDb();
+  if (db) {
+    const docs = await db.collection<EntryDoc>('resume_directory_entries')
+      .find({ _id: { $in: normalized }, visibility: 'public' }).toArray();
+    const byId = new Map(docs.map((doc) => [doc.id, strip(doc)]));
+    return normalized.map((id) => byId.get(id)).filter(Boolean) as ResumeDirectoryEntry[];
+  }
+  return [];
 }
 
 export async function recordResumeView(id: string) {
-  const pool = getDbPool();
   const normalizedId = normalize(id);
   if (!normalizedId) return;
 
-  if (!pool) {
+  if (!getDbPool()) {
     const raw = await readJsonFile<ResumeDirectoryEntry[]>(resumeDirectoryPath, []);
     const index = raw.findIndex((entry) => entry.id === normalizedId);
     if (index === -1) return;
     const now = new Date().toISOString();
-    raw[index] = { ...raw[index], viewCount: (raw[index].viewCount || 0) + 1, updatedAt: now };
+    raw[index] = { ...raw[index]!, viewCount: (raw[index]!.viewCount || 0) + 1, updatedAt: now };
     await writeJsonFile(resumeDirectoryPath, raw.slice(0, 4000));
     return;
   }
 
-  await pool.query(
-    `UPDATE resume_directory_entries SET view_count = view_count + 1, updated_at = NOW() WHERE id = $1`,
-    [normalizedId],
-  );
+  const db = await getMongoDb();
+  if (db) {
+    const now = new Date().toISOString();
+    await db.collection('resume_directory_entries').updateOne(
+      { _id: normalizedId as any },
+      { $inc: { viewCount: 1 }, $set: { updatedAt: now } },
+    );
+  }
 }
 
 export async function requestResumeContact(params: {
@@ -636,13 +551,20 @@ export async function requestResumeContact(params: {
   actorName?: string;
   message?: string;
 }) {
-  const pool = getDbPool();
   const normalizedId = normalize(params.id);
   if (!normalizedId) throw new Error('Missing resume id');
 
-  const entry = pool
-    ? await pool.query(`SELECT * FROM resume_directory_entries WHERE id = $1 LIMIT 1`, [normalizedId]).then((r) => r.rows[0] ? mapRow(r.rows[0]) : null)
-    : await readJsonFile<ResumeDirectoryEntry[]>(resumeDirectoryPath, []).then((raw) => raw.find((item) => item.id === normalizedId) || null);
+  let entry: ResumeDirectoryEntry | null = null;
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const doc = await db.collection<EntryDoc>('resume_directory_entries').findOne({ _id: normalizedId });
+      entry = doc ? strip(doc) : null;
+    }
+  } else {
+    const raw = await readJsonFile<ResumeDirectoryEntry[]>(resumeDirectoryPath, []);
+    entry = raw.find((item) => item.id === normalizedId) || null;
+  }
 
   if (!entry || entry.visibility !== 'public') throw new Error('Resume not found');
 
@@ -664,17 +586,21 @@ export async function requestResumeContact(params: {
       }
     : {};
 
-  if (pool) {
-    await pool.query(
-      `UPDATE resume_directory_entries SET contact_count = contact_count + 1, updated_at = NOW() WHERE id = $1`,
-      [normalizedId],
-    );
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const now = new Date().toISOString();
+      await db.collection('resume_directory_entries').updateOne(
+        { _id: normalizedId as any },
+        { $inc: { contactCount: 1 }, $set: { updatedAt: now } },
+      );
+    }
   } else {
     const raw = await readJsonFile<ResumeDirectoryEntry[]>(resumeDirectoryPath, []);
     const index = raw.findIndex((item) => item.id === normalizedId);
     if (index !== -1) {
       const now = new Date().toISOString();
-      raw[index] = { ...raw[index], contactCount: (raw[index].contactCount || 0) + 1, updatedAt: now };
+      raw[index] = { ...raw[index]!, contactCount: (raw[index]!.contactCount || 0) + 1, updatedAt: now };
       await writeJsonFile(resumeDirectoryPath, raw.slice(0, 4000));
     }
   }
@@ -710,8 +636,7 @@ export async function publishResume(params: {
   };
   visibility?: 'public' | 'private';
 }) {
-  const pool = getDbPool();
-  const useFileStore = !pool;
+  const useFileStore = !getDbPool();
 
   const category = normalize(params.category).slice(0, 48);
   if (!category) throw new Error('Category is required.');
@@ -831,48 +756,10 @@ export async function publishResume(params: {
     return record;
   }
 
-  await pool!.query(
-    `
-      INSERT INTO resume_directory_entries (
-        id, slug, owner_user_id, display_name, avatar_file_name, avatar_mime_type, avatar_data_url,
-        headline, location, category, skills, tags, summary,
-        resume_text, resume_file_name, resume_mime_type, resume_data_url,
-        contact_email, contact_phone, contact_linkedin, contact_website, contact_visibility,
-        visibility, view_count, contact_count, created_at, updated_at
-      ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::jsonb,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27
-      )
-    `,
-    [
-      record.id,
-      record.slug,
-      record.ownerUserId,
-      record.displayName,
-      record.avatarFileName || null,
-      record.avatarMimeType || null,
-      record.avatarDataUrl || null,
-      record.headline || null,
-      record.location || null,
-      record.category,
-      JSON.stringify(record.skills),
-      JSON.stringify(record.tags),
-      record.summary || null,
-      record.resumeText,
-      record.resumeFileName || null,
-      record.resumeMimeType || null,
-      record.resumeDataUrl || null,
-      record.contact.email || null,
-      record.contact.phone || null,
-      record.contact.linkedin || null,
-      record.contact.website || null,
-      record.contact.visibility,
-      record.visibility,
-      0,
-      0,
-      now,
-      now,
-    ],
-  );
+  const db = await getMongoDb();
+  if (db) {
+    await db.collection<EntryDoc>('resume_directory_entries').insertOne({ ...record, _id: record.id });
+  }
 
   return record;
 }

@@ -419,7 +419,7 @@ export async function addComment(
   };
   if (parentId) entry.parentId = parentId;
   comments.push(entry);
-  const next = { ...current, comments, commentsCount: comments.filter((c) => !c.parentId).length, updatedAt: new Date().toISOString() };
+  const next = { ...current, comments, commentsCount: comments.length, updatedAt: new Date().toISOString() };
   if (usingDb) {
     await upsertFileTransferRow(next);
   } else {

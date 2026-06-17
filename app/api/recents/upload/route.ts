@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import fs from 'fs';
+import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
+import { promises as fs } from 'fs';
 import path from 'path';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'recents');
 const MAX_MB = 20;
+
+const ALLOWED_TYPES = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'video/mp4', 'video/webm', 'video/quicktime',
+];
 
 export async function POST(req: Request) {
   const session = await getAuthSession();
@@ -18,17 +24,24 @@ export async function POST(req: Request) {
   if (file.size > MAX_MB * 1024 * 1024)
     return NextResponse.json({ error: `Max ${MAX_MB}MB` }, { status: 413 });
 
-  const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/webm', 'video/quicktime'];
-  if (!allowed.includes(file.type))
+  if (!ALLOWED_TYPES.includes(file.type))
     return NextResponse.json({ error: 'File type not allowed' }, { status: 415 });
-
-  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
   const ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
   const filename = `${userId}_${Date.now()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buffer);
-
   const isVideo = file.type.startsWith('video/');
+
+  if (isR2Configured()) {
+    try {
+      const url = await uploadToR2(`recents/${filename}`, buffer, file.type);
+      return NextResponse.json({ url, type: isVideo ? 'video' : 'image' });
+    } catch (err) {
+      console.error('[recents/upload] R2 upload failed, falling back to local disk:', err);
+    }
+  }
+
+  await fs.mkdir(UPLOAD_DIR, { recursive: true });
+  await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
   return NextResponse.json({ url: `/recents/${filename}`, type: isVideo ? 'video' : 'image' });
 }

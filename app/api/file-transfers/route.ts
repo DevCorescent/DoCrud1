@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/server/auth';
 import { appendFileTransfer, deleteFileTransferRow, getFileTransfers, saveFileTransfers, updateFileTransfer } from '@/lib/server/file-transfers';
 import { getDbPool } from '@/lib/server/database';
 import { selectFileTransferRowById } from '@/lib/server/db/file-transfers-rows';
+import { getProfileData } from '@/lib/server/user-profiles';
 import { attachFileToLocker, createFileLocker, ensureLockerRotation, getVisibleLockersForUser } from '@/lib/server/file-lockers';
 import { checkDriveQuota } from '@/lib/server/drive-storage';
 import { SecureFileTransfer } from '@/types/document';
@@ -107,6 +108,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fetch uploader's avatar from their profile for feed display
+    const uploaderProfile = await getProfileData(session.user.id).catch(() => null);
+    const avatarUrl = uploaderProfile?.avatarUrl || undefined;
+
     // Upload file content to R2 for unencrypted transfers.
     // Encrypted transfers keep the base64 payload in MongoDB (encryption is local).
     let resolvedDataUrl = payload.dataUrl.trim();
@@ -151,6 +156,7 @@ export async function POST(request: NextRequest) {
       uploadedBy: session.user.email || session.user.name || 'docrud user',
       uploadedByName: session.user.name || session.user.email?.split('@')[0] || 'Docrud User',
       uploadedByUserId: session.user.id,
+      avatarUrl,
       organizationId: session.user.role === 'client' ? session.user.id : undefined,
       organizationName: session.user.role === 'client' ? (session.user.organizationName || session.user.name || 'Business Workspace') : undefined,
     });

@@ -227,51 +227,55 @@ export function buildAuthOptions(): NextAuthOptions {
       return true;
     },
     async jwt({ token, user }) {
-      const lookupEmail = normalizeEmail(String(user?.email || token.email || ''));
-      if (lookupEmail) {
-        const storedUser = await getStoredUserByEmail(lookupEmail);
-        if (storedUser) {
-          const [plan, profile] = await Promise.all([
-            getEffectiveSaasPlanForUser(storedUser),
-            getProfileData(storedUser.id).catch(() => null),
-          ]);
-          const expired = isSubscriptionPeriodExpired(storedUser.subscription);
-          const suspended = Boolean(storedUser.safety?.suspendedUntil && new Date(storedUser.safety.suspendedUntil).getTime() > Date.now());
-          const disabled = storedUser.isActive === false;
-          token.id = storedUser.id;
-          token.role = suspended || disabled ? 'suspended' : storedUser.role;
-          token.permissions = suspended || disabled ? [] : storedUser.permissions;
-          token.organizationName = storedUser.organizationName;
-          token.subscription = storedUser.subscription
-            ? { ...storedUser.subscription, status: expired ? 'upgrade_required' : storedUser.subscription.status }
-            : storedUser.subscription;
+      try {
+        const lookupEmail = normalizeEmail(String(user?.email || token.email || ''));
+        if (lookupEmail) {
+          const storedUser = await getStoredUserByEmail(lookupEmail);
+          if (storedUser) {
+            const [plan, profile] = await Promise.all([
+              getEffectiveSaasPlanForUser(storedUser).catch(() => null),
+              getProfileData(storedUser.id).catch(() => null),
+            ]);
+            const expired = isSubscriptionPeriodExpired(storedUser.subscription);
+            const suspended = Boolean(storedUser.safety?.suspendedUntil && new Date(storedUser.safety.suspendedUntil).getTime() > Date.now());
+            const disabled = storedUser.isActive === false;
+            token.id = storedUser.id;
+            token.role = suspended || disabled ? 'suspended' : storedUser.role;
+            token.permissions = suspended || disabled ? [] : storedUser.permissions;
+            token.organizationName = storedUser.organizationName;
+            token.subscription = storedUser.subscription
+              ? { ...storedUser.subscription, status: expired ? 'upgrade_required' : storedUser.subscription.status }
+              : storedUser.subscription;
+            token.planFeatures = suspended || disabled ? [] : (expired ? ['dashboard', 'tutorials'] : (plan?.includedFeatures || []));
+            token.accountType = storedUser.accountType;
+            token.workspaceAccessMode = storedUser.workspaceAccessMode;
+            token.boardRoomIds = storedUser.boardRoomIds || [];
+            token.emailVerified = storedUser.accountType !== 'individual'
+              ? true
+              : profile?.emailVerified === true;
+          }
+        } else if (user) {
+          const plan = await getEffectiveSaasPlanForUser(user).catch(() => null);
+          const expired = isSubscriptionPeriodExpired(user.subscription);
+          const suspended = Boolean((user as any).safety?.suspendedUntil && new Date((user as any).safety.suspendedUntil).getTime() > Date.now());
+          const disabled = (user as any).isActive === false;
+          token.id = user.id;
+          token.role = suspended || disabled ? 'suspended' : user.role;
+          token.permissions = suspended || disabled ? [] : user.permissions;
+          token.organizationName = user.organizationName;
+          token.subscription = user.subscription
+            ? { ...user.subscription, status: expired ? 'upgrade_required' : user.subscription.status }
+            : user.subscription;
           token.planFeatures = suspended || disabled ? [] : (expired ? ['dashboard', 'tutorials'] : (plan?.includedFeatures || []));
-          token.accountType = storedUser.accountType;
-          token.workspaceAccessMode = storedUser.workspaceAccessMode;
-          token.boardRoomIds = storedUser.boardRoomIds || [];
-          // Non-individual accounts (admin, client, employee) are always considered verified
-          token.emailVerified = storedUser.accountType !== 'individual'
-            ? true
-            : profile?.emailVerified === true;
+          token.accountType = user.accountType;
+          token.workspaceAccessMode = user.workspaceAccessMode;
+          token.boardRoomIds = user.boardRoomIds || [];
+          token.emailVerified = user.accountType !== 'individual' ? true : false;
         }
-      } else if (user) {
-        const plan = await getEffectiveSaasPlanForUser(user);
-        const expired = isSubscriptionPeriodExpired(user.subscription);
-        const suspended = Boolean((user as any).safety?.suspendedUntil && new Date((user as any).safety.suspendedUntil).getTime() > Date.now());
-        const disabled = (user as any).isActive === false;
-        token.id = user.id;
-        token.role = suspended || disabled ? 'suspended' : user.role;
-        token.permissions = suspended || disabled ? [] : user.permissions;
-        token.organizationName = user.organizationName;
-        token.subscription = user.subscription
-          ? { ...user.subscription, status: expired ? 'upgrade_required' : user.subscription.status }
-          : user.subscription;
-        token.planFeatures = suspended || disabled ? [] : (expired ? ['dashboard', 'tutorials'] : (plan?.includedFeatures || []));
-        token.accountType = user.accountType;
-        token.workspaceAccessMode = user.workspaceAccessMode;
-        token.boardRoomIds = user.boardRoomIds || [];
-        // emailVerified will be populated on next token refresh from profile
-        token.emailVerified = user.accountType !== 'individual' ? true : false;
+      } catch (err) {
+        // DB unavailable during token refresh — return the existing token as-is so the
+        // page still renders instead of throwing to the error boundary.
+        console.error('[jwt] token refresh failed, returning cached token:', err);
       }
 
       return token;

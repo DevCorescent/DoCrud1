@@ -125,9 +125,20 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
 
   if (normalizedMime === 'application/pdf' || extension === 'pdf') {
     try {
-      const pdfParse = require('pdf-parse') as (buf: Buffer) => Promise<{ text: string }>;
-      const parsed = await pdfParse(buffer);
-      const text = preserveDocumentStructure(parsed.text || '');
+      // pdf-parse v2 exports { PDFParse } as a class, not a default function
+      const pdfParseModule = require('pdf-parse') as { PDFParse?: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> }; default?: (buf: Buffer) => Promise<{ text: string }> };
+      let text = '';
+      if (typeof pdfParseModule.PDFParse === 'function') {
+        // v2 API: class-based
+        const parser = new pdfParseModule.PDFParse({ data: new Uint8Array(buffer) });
+        const result = await parser.getText();
+        text = preserveDocumentStructure(result.text || '');
+      } else {
+        // v1 API: callable function (default or module itself)
+        const fn = (typeof pdfParseModule === 'function' ? pdfParseModule : pdfParseModule.default) as unknown as (buf: Buffer) => Promise<{ text: string }>;
+        const parsed = await fn(buffer);
+        text = preserveDocumentStructure(parsed.text || '');
+      }
       if (text) {
         return text;
       }

@@ -26,8 +26,8 @@ export default async function Home() {
   const isGuest = cookieStore.get('guestMode')?.value === '1';
 
   const [session, themeSettings] = await Promise.all([
-    getAuthSession(),
-    getThemeSettings(),
+    getAuthSession().catch(() => null),
+    getThemeSettings().catch(() => ({ softwareName: 'Docrud', accentLabel: 'Platform' })),
   ]);
 
   if (!session && !isGuest) {

@@ -740,13 +740,9 @@ function Creator({ onClose, onCreated }: { onClose(): void; onCreated(r: Recent)
       <div className="rc-modal" onClick={e=>e.stopPropagation()} style={{
         width:'100%',
         display:'flex', flexDirection:'column',
-        /* Glassy purple-tinted background — visible even on dark backgrounds */
-        background:'linear-gradient(160deg,rgba(30,22,56,0.68) 0%,rgba(10,8,22,0.80) 100%)',
-        backdropFilter:'blur(72px) saturate(240%) brightness(1.05)',
-        WebkitBackdropFilter:'blur(72px) saturate(240%) brightness(1.05)',
-        border:'1px solid rgba(255,255,255,0.11)',
-        /* Top highlight for glass edge + outer shadow */
-        boxShadow:'inset 0 1px 0 rgba(255,255,255,0.14), inset 1px 0 0 rgba(255,255,255,0.04), 0 -24px 60px rgba(0,0,0,0.35), 0 40px 100px rgba(0,0,0,0.80)',
+        background:'#0D0D0F',
+        border:'1px solid rgba(255,255,255,0.09)',
+        boxShadow:'0 -24px 60px rgba(0,0,0,0.5), 0 40px 100px rgba(0,0,0,0.90)',
         animation:'rcSheet 0.32s cubic-bezier(0.22,1,0.36,1) both',
         overflow:'hidden',
       }}>
@@ -1347,9 +1343,10 @@ export default function RecentsBar() {
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/recents');
+      if (!res.ok) return;
       const d   = await res.json() as { recents?: Recent[] };
       if (Array.isArray(d.recents)) setRecents(d.recents);
-    } finally { setLoading(false); }
+    } catch { /* non-fatal */ } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { void load(); }, [load]);

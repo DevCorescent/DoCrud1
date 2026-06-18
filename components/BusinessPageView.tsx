@@ -136,8 +136,8 @@ function useImageUpload(pageId: string, type: 'logo' | 'cover') {
       const res  = await fetch('/api/business-pages/upload-image', { method: 'POST', body: fd });
       const data = await res.json() as { url?: string; error?: string };
       if (data.url) { onDone(data.url); toast(`${type === 'logo' ? 'Logo' : 'Cover'} updated`); }
-      else throw new Error(data.error ?? 'Upload failed');
-    } catch { toast('Upload failed', 'error'); }
+      else { console.error('[biz-upload] server error:', data.error); toast(data.error ?? 'Upload failed', 'error'); }
+    } catch (err) { console.error('[biz-upload] fetch error:', err); toast('Upload failed — check console', 'error'); }
     finally { setUploading(false); if (ref.current) ref.current.value = ''; }
   }
 

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
     return NextResponse.json({ url: `/uploads/businesses/${filename}` });
   } catch (err) {
-    console.error('[business/upload-image]', err);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    console.error('[business/upload-image]', err instanceof Error ? `${err.message}\n${err.stack}` : err);
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Upload failed' }, { status: 500 });
   }
 }

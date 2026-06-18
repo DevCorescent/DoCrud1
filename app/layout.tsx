@@ -371,7 +371,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className={`${manrope.className} bg-slate-100 text-slate-950 antialiased`}>
+      <body className={`${manrope.className} bg-[#0D0D0F] text-slate-950 antialiased`}>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}

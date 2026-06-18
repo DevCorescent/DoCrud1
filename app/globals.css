@@ -621,7 +621,6 @@
     background-image:
       radial-gradient(circle at 14% 16%, rgba(44, 93, 169, 0.20), transparent 22%),
       radial-gradient(circle at 78% 18%, rgba(200, 218, 249, 0.85), transparent 26%),
-      radial-gradient(circle at 56% 84%, rgba(245, 158, 11, 0.06), transparent 28%),
       linear-gradient(180deg, rgba(250,252,255,0.995) 0%, rgba(238,245,255,0.995) 100%);
   }
 
@@ -636,7 +635,6 @@
     background-image:
       radial-gradient(circle at 12% 18%, rgba(44, 93, 169, 0.18), transparent 24%),
       radial-gradient(circle at 86% 16%, rgba(200, 218, 249, 0.92), transparent 28%),
-      radial-gradient(circle at 66% 84%, rgba(245, 158, 11, 0.06), transparent 30%),
       linear-gradient(180deg, rgba(252,253,255,0.992) 0%, rgba(242,248,255,0.995) 60%, rgba(238,245,255,0.995) 100%);
   }
 

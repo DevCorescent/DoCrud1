@@ -2473,10 +2473,10 @@ function HomepageLiveFeed() {
                     key={s}
                     type="button"
                     onClick={() => setSort(s)}
-                    className={`rounded-lg px-2.5 py-1 text-[10.5px] font-semibold transition ${
+                    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10.5px] font-semibold whitespace-nowrap transition ${
                       sort === s
-                        ? 'bg-white/[0.14] text-white'
-                        : 'text-white/45 hover:bg-white/[0.07] hover:text-white/75'
+                        ? 'border-white/[0.18] bg-white/[0.09] text-white/90'
+                        : 'border-white/[0.07] bg-white/[0.03] text-white/40 hover:border-white/[0.12] hover:text-white/70'
                     }`}
                   >{s}</button>
                 ))}
@@ -2486,7 +2486,7 @@ function HomepageLiveFeed() {
                   onClick={applyRefresh}
                   disabled={refreshing}
                   title="Refresh feed"
-                  className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg text-white/30 transition hover:bg-white/[0.07] hover:text-white/65 disabled:opacity-40"
+                  className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.03] text-white/30 transition hover:bg-white/[0.07] hover:text-white/65 disabled:opacity-40"
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
                 </button>
@@ -2513,24 +2513,6 @@ function HomepageLiveFeed() {
               </div>
             )}
 
-            {/* row 2: tab pill filters (mobile only) */}
-            <div className="lg:hidden flex gap-2 overflow-x-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {HP_TABS.map(tab => {
-                const isActive = activecat === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
-                    className={`shrink-0 rounded-full px-3.5 py-1.5 text-[11.5px] font-semibold transition ${
-                      isActive
-                        ? 'bg-white/[0.18] text-white border border-white/[0.22]'
-                        : 'border border-white/[0.12] text-white/55 hover:border-white/[0.20] hover:text-white/80'
-                    }`}
-                  >{tab.label}</button>
-                );
-              })}
-            </div>
           </div>
 
           {/* feed cards */}
@@ -7565,7 +7547,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
 
   return (
     <>
-    <main className="h-[100dvh] overflow-hidden bg-background text-foreground flex flex-col">
+    <main className="h-[100dvh] overflow-hidden bg-[#0D0D0F] text-white flex flex-col">
       {quickEditorOpen && (
         <QuickFileEditorDialog
           open={quickEditorOpen}

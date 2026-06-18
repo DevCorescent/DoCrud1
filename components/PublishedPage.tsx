@@ -1281,8 +1281,6 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
   const cat     = item.category;
 
   const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
-  const bylineParts = item.byline.split(' · ').map(s => s.trim());
-  const authorMeta  = bylineParts.slice(1).join(' · ');
   const initials    = displayName.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
   // Route to company page if published by a business, else to user profile
   const profileHref = item.businessPageSlug
@@ -1327,7 +1325,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
               {item.isReal && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
             </div>
             <p className="text-[11px] text-white/35 mt-0.5 truncate">
-              {item.badge}{authorMeta ? ` · ${authorMeta}` : ''} · {timeAgo(item.postedAt)}
+              {item.badge} · {timeAgo(item.postedAt)}
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
@@ -1357,21 +1355,6 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
           <BodyDisplay body={item.body} searchQuery={searchQuery} />
         </Link>
 
-        {/* ── chips ── */}
-        {item.chips && (
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {item.chips.slice(0, 5).map(c => (
-              <span key={c} className={`rounded-full px-2.5 py-0.5 text-[11px] ${
-                searchQuery && c.toLowerCase().includes(searchQuery.toLowerCase())
-                  ? 'bg-white/[0.12] text-white/80'
-                  : 'bg-white/[0.06] text-white/40'
-              }`}>{c}</span>
-            ))}
-            {(item.chips.length ?? 0) > 5 && (
-              <span className="rounded-full bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-white/20">+{item.chips.length - 5}</span>
-            )}
-          </div>
-        )}
 
         {/* ── stats ── */}
         {item.stats && (
@@ -1538,6 +1521,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
 
 /* ─── gig card ──────────────────────────────────────────────────── */
 function GigCard({ item }: { item: PublishedItem }) {
+  const [saved, toggleSaved] = useBookmark(item.id, item.category);
   const [bidStage, setBidStage] = useState<'idle' | 'form' | 'success'>('idle');
   const [bidAmt, setBidAmt] = useState('');
   const [bidTimeline, setBidTimeline] = useState('');
@@ -1549,6 +1533,12 @@ function GigCard({ item }: { item: PublishedItem }) {
   if (!g) return null;
 
   const engLabel = (e: string) => ({ one_time: 'One-time', ongoing: 'Ongoing', retainer: 'Retainer' }[e] ?? e);
+
+  const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
+  const initials    = displayName.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+  const profileHref = item.businessPageSlug
+    ? `/businesses/${item.businessPageSlug}`
+    : item.uploadedByUserId ? `/u/${item.uploadedByUserId}` : null;
 
   const submitBid = async () => {
     if (!bidAmt || !bidPitch.trim()) { setErr('Amount and pitch are required.'); return; }
@@ -1570,54 +1560,83 @@ function GigCard({ item }: { item: PublishedItem }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-[20px] border border-white/[0.07] bg-white/[0.03] transition hover:border-white/[0.11]">
-      {/* Header */}
-      <div className="p-5">
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          {g.urgent && <span className="rounded-md bg-white/[0.09] px-2 py-0.5 text-[10px] font-bold text-white/70">Urgent</span>}
-          <span className="rounded-md border border-white/[0.07] bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold text-white/45">{g.category}</span>
-          <span className="rounded-md border border-white/[0.07] bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold text-white/45">{engLabel(g.engagementType)}</span>
-          <span className="ml-auto text-[10px] text-white/25">{timeAgo(g.createdAt)}</span>
+    <article className="group py-5">
+      {/* Author header */}
+      <div className="flex items-center gap-3 mb-3.5">
+        {profileHref ? (
+          <Link href={profileHref} onClick={e => e.stopPropagation()} className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold ${AVATAR_CLS} hover:opacity-80 transition`}>
+            {item.avatarUrl ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" /> : initials}
+          </Link>
+        ) : (
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold ${AVATAR_CLS}`}>
+            {item.avatarUrl ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" /> : initials}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            {profileHref ? (
+              <Link href={profileHref} onClick={e => e.stopPropagation()} className="text-[13.5px] font-semibold text-white leading-tight truncate hover:text-white/80 transition">{displayName}</Link>
+            ) : (
+              <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
+            )}
+            {g.urgent && <span className="rounded-md bg-rose-500/15 px-2 py-0.5 text-[9px] font-bold text-rose-400 shrink-0">Urgent</span>}
+          </div>
+          <p className="text-[11px] text-white/35 mt-0.5 truncate">
+            {g.category} · {engLabel(g.engagementType)} · {timeAgo(g.createdAt)}
+          </p>
         </div>
-
-        <h3 className="text-[15px] font-bold leading-snug tracking-[-0.025em] text-white line-clamp-2">{g.summary}</h3>
-        <Link href={`/u/${g.ownerUserId}`} className="mt-1.5 inline-block text-[11.5px] text-white/40 hover:text-white/65 transition-colors">{item.byline}</Link>
-
-        <div className="mt-3 flex flex-wrap gap-3 text-[11.5px] text-white/40">
-          {g.budgetLabel && <span className="font-semibold text-white/65">₹ {g.budgetLabel}</span>}
-          {g.locationPreference && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{g.locationPreference}</span>}
-          {g.timelineLabel && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{g.timelineLabel}</span>}
-          {g.connectCount > 0 && <span>{g.connectCount} bids</span>}
-        </div>
-
-        {g.skills.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {g.skills.slice(0, 5).map(s => (
-              <span key={s} className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-0.5 text-[10.5px] text-white/40">{s}</span>
-            ))}
-          </div>
-        )}
-
-        {g.deliverables.length > 0 && (
-          <div className="mt-3 space-y-1">
-            {g.deliverables.slice(0, 3).map((d, i) => (
-              <div key={i} className="flex items-start gap-2 text-[11.5px] text-white/35">
-                <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-white/20" />{d}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {g.bidMode === 'bidding' && g.bidRules && (
-          <div className="mt-3 rounded-[12px] border border-white/[0.05] bg-white/[0.025] px-3 py-2 text-[11px] text-white/35">
-            Open bidding{g.bidRules.minBidInRupees ? ` · Min ₹${g.bidRules.minBidInRupees.toLocaleString('en-IN')}` : ''}
-            {g.bidRules.bidDeadlineAt ? ` · Deadline ${new Date(g.bidRules.bidDeadlineAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); toggleSaved(); }}
+          className={`transition shrink-0 ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
+        >
+          {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+        </button>
       </div>
 
-      {/* Action area */}
-      <div className="border-t border-white/[0.05] px-5 py-4">
+      {/* Title */}
+      <Link href={`/gigs/${g.slug}`} className="block mb-2.5">
+        <h3 className="text-[15px] font-bold leading-snug tracking-[-0.025em] text-white line-clamp-2 group-hover:text-white/85 transition-colors">{g.summary}</h3>
+      </Link>
+
+      {/* Meta */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-white/40 mb-3">
+        {g.budgetLabel && <span className="font-semibold text-white/65">₹ {g.budgetLabel}</span>}
+        {g.locationPreference && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{g.locationPreference}</span>}
+        {g.timelineLabel && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{g.timelineLabel}</span>}
+        {g.connectCount > 0 && <span>{g.connectCount} bids</span>}
+      </div>
+
+      {/* Skills */}
+      {g.skills.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {g.skills.slice(0, 5).map(s => (
+            <span key={s} className="rounded-full border border-white/[0.06] bg-white/[0.03] px-2.5 py-0.5 text-[10.5px] text-white/40">{s}</span>
+          ))}
+        </div>
+      )}
+
+      {/* Deliverables */}
+      {g.deliverables.length > 0 && (
+        <div className="space-y-1 mb-3">
+          {g.deliverables.slice(0, 2).map((d, i) => (
+            <div key={i} className="flex items-start gap-2 text-[11.5px] text-white/35">
+              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-white/20" />{d}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bid rules */}
+      {g.bidMode === 'bidding' && g.bidRules && (
+        <div className="mb-3 rounded-[12px] border border-white/[0.05] bg-white/[0.025] px-3 py-2 text-[11px] text-white/35">
+          Open bidding{g.bidRules.minBidInRupees ? ` · Min ₹${g.bidRules.minBidInRupees.toLocaleString('en-IN')}` : ''}
+          {g.bidRules.bidDeadlineAt ? ` · Deadline ${new Date(g.bidRules.bidDeadlineAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="mt-3.5 pt-3.5 border-t border-white/[0.05]">
         {bidStage === 'idle' && (
           <div className="flex gap-2">
             <button
@@ -1699,7 +1718,7 @@ function GigCard({ item }: { item: PublishedItem }) {
           </div>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -2668,6 +2687,8 @@ export default function PublishedPage() {
   const [gigItems, setGigItems]         = useState<PublishedItem[]>([]);
   const [visibleCount, setVisibleCount] = useState(10);
   const loadMoreSentinelRef             = useRef<HTMLDivElement>(null);
+  const feedScrollRef                   = useRef<HTMLDivElement>(null);
+  const [tabBarVisible, setTabBarVisible] = useState(true);
 
   /* gig-specific filters */
   const [gigCat, setGigCat]           = useState('');
@@ -2676,6 +2697,26 @@ export default function PublishedPage() {
   const [gigBidMode, setGigBidMode]   = useState('');
   const [gigUrgent, setGigUrgent]     = useState(false);
   const [gigSort, setGigSort]         = useState<'recent' | 'bids'>('recent');
+
+  // force pure matte black on html + body while on this page (overscroll areas included)
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlBgColor = html.style.backgroundColor;
+    const prevHtmlBgImage = html.style.backgroundImage;
+    const prevBodyBgColor = body.style.backgroundColor;
+    const prevBodyBgImage = body.style.backgroundImage;
+    html.style.backgroundColor = '#0D0D0F';
+    html.style.backgroundImage = 'none';
+    body.style.backgroundColor = '#0D0D0F';
+    body.style.backgroundImage = 'none';
+    return () => {
+      html.style.backgroundColor = prevHtmlBgColor;
+      html.style.backgroundImage = prevHtmlBgImage;
+      body.style.backgroundColor = prevBodyBgColor;
+      body.style.backgroundImage = prevBodyBgImage;
+    };
+  }, []);
 
   // default to Gigs tab when navigated with ?tab=gig
   useEffect(() => {
@@ -3043,6 +3084,29 @@ export default function PublishedPage() {
     return () => obs.disconnect();
   }, [mixedFeed]);
 
+  /* Tab bar hide-on-scroll-down / show-on-scroll-up */
+  useEffect(() => {
+    const el = feedScrollRef.current;
+    if (!el) return;
+    let lastY = 0;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = el.scrollTop;
+        const diff = y - lastY;
+        if (Math.abs(diff) > 4) {
+          setTabBarVisible(diff < 0 || y < 60);
+          lastY = y;
+        }
+        ticking = false;
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
   /* Track search queries with result counts */
   useEffect(() => {
     if (!search.trim()) return;
@@ -3083,20 +3147,20 @@ export default function PublishedPage() {
 
   return (
     /* full-viewport flex container */
-    <div className="flex h-[100dvh] overflow-hidden bg-[#0A0A0C] text-white">
+    <div className="flex h-[100dvh] overflow-hidden text-white" style={{ background: '#0D0D0F' }}>
       <ToastContainer />
       <PublishAnythingDialog open={publishOpen} onOpenChange={setPublishOpen} isAuthenticated={true} />
 
-      {/* ── ambient glows ── */}
+      {/* ── ambient glows (cool) ── */}
       <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
-        <div className="absolute left-1/3 top-1/4 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-500/[0.05] blur-[160px]" />
-        <div className="absolute right-0 bottom-0 h-[400px] w-[400px] rounded-full bg-amber-500/[0.04] blur-[130px]" />
+        <div className="absolute left-1/4 top-1/4 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500/[0.04] blur-[160px]" />
+        <div className="absolute right-0 bottom-0 h-[350px] w-[350px] rounded-full bg-violet-500/[0.03] blur-[130px]" />
       </div>
 
       {/* ══════════════════════════════════════
           DESKTOP SIDEBAR
       ══════════════════════════════════════ */}
-      <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col border-r border-white/[0.06] bg-[#0A0A0C]">
+      <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col border-r border-white/[0.06] bg-[#0D0D0F]">
 
         {/* logo / title area */}
         <div className="px-4 py-5 border-b border-white/[0.05]">
@@ -3195,7 +3259,7 @@ export default function PublishedPage() {
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
 
         {/* ── Desktop top bar ── */}
-        <header className="hidden lg:flex shrink-0 items-center gap-4 border-b border-white/[0.06] bg-[#0A0A0C]/80 px-5 py-3 backdrop-blur-xl">
+        <header className="hidden lg:flex shrink-0 items-center gap-4 border-b border-white/[0.06] bg-[#0D0D0F]/85 px-5 py-3 backdrop-blur-xl">
           {/* breadcrumb */}
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {(() => {
@@ -3273,7 +3337,7 @@ export default function PublishedPage() {
         </header>
 
         {/* ── Mobile header ── */}
-        <header className="lg:hidden shrink-0 border-b border-white/[0.06] bg-[#0A0A0C]/90 backdrop-blur-xl">
+        <header className="lg:hidden shrink-0 border-b border-white/[0.06] bg-[#0D0D0F]/90 backdrop-blur-xl">
           <div className="flex items-center gap-3 px-4 py-3">
             <Link
               href="/"
@@ -3346,8 +3410,16 @@ export default function PublishedPage() {
             </button>
           </div>
 
-          {/* mobile horizontal tab chips */}
-          {!isSearching && (
+          {/* mobile horizontal tab chips — hides on scroll-down, reveals on scroll-up */}
+          <div
+            style={{
+              maxHeight: !isSearching && tabBarVisible ? '52px' : '0px',
+              opacity:   !isSearching && tabBarVisible ? 1 : 0,
+              overflow:  'hidden',
+              transition: 'max-height 0.32s cubic-bezier(0.22,1,0.36,1), opacity 0.22s ease',
+              willChange: 'max-height, opacity',
+            }}
+          >
             <div className="overflow-x-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="flex min-w-max gap-2">
                 {TABS.map(tab => {
@@ -3376,7 +3448,7 @@ export default function PublishedPage() {
                 })}
               </div>
             </div>
-          )}
+          </div>
         </header>
 
         {/* ── Comprehensive filter panel (all tabs) ── */}
@@ -3618,7 +3690,7 @@ export default function PublishedPage() {
 
         {/* ── Active filter chip strip ── */}
         {totalFilterCount > 0 && !isSearching && (
-          <div className="shrink-0 border-b border-white/[0.04] bg-[#0A0A0C] px-4 lg:px-5 py-2 overflow-x-auto scrollbar-hide">
+          <div className="shrink-0 border-b border-white/[0.04] bg-[#0D0D0F] px-4 lg:px-5 py-2 overflow-x-auto scrollbar-hide">
             <div className="flex items-center gap-1.5 min-w-max">
               <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.18em] text-white/20 pr-1">Active</span>
               {sortBy !== 'recent' && <ActiveChip label={`Sort: ${sortBy === 'popular' ? 'Popular' : sortBy === 'oldest' ? 'Oldest' : sortBy === 'trending' ? '🔥 Trending' : 'A–Z'}`} onRemove={() => setSortBy('recent')} />}
@@ -3653,7 +3725,7 @@ export default function PublishedPage() {
         )}
 
         {/* ── Scrollable content area ── */}
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div ref={feedScrollRef} className="flex-1 overflow-y-auto min-h-0 bg-[#0D0D0F]">
           <div className="p-4 lg:py-6 lg:px-8 pb-24 lg:pb-10 space-y-10 max-w-3xl mx-auto w-full">
 
             {isSearching ? (
@@ -3720,7 +3792,7 @@ export default function PublishedPage() {
       </div>
 
       {/* ── Right Trending Panel (xl+) ── */}
-      <aside className="hidden xl:flex w-72 2xl:w-80 shrink-0 flex-col border-l border-white/[0.06] bg-[#0A0A0C] overflow-hidden">
+      <aside className="hidden xl:flex w-72 2xl:w-80 shrink-0 flex-col border-l border-white/[0.06] bg-[#0D0D0F] overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.05] shrink-0">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-3.5 w-3.5 text-orange-400/60" />
@@ -3798,7 +3870,7 @@ export default function PublishedPage() {
       {/* ══════════════════════════════════════
           MOBILE BOTTOM NAV
       ══════════════════════════════════════ */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-white/[0.07] bg-[#0A0A0C]/95 backdrop-blur-2xl">
+      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-white/[0.07] bg-[#0D0D0F]/95 backdrop-blur-2xl">
         <div className="flex">
           {MOBILE_NAV.map(tab => {
             const isActive = activeTab === tab.id;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -184,6 +184,7 @@ export default function HomepageNav({
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
   const pathname = usePathname();
+  const router = useRouter();
 
   const [isMounted, setIsMounted] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -745,9 +746,15 @@ export default function HomepageNav({
                               const tone = notif.tone || 'default';
                               const IconComp = typeIcon(notif.type);
                               const isSocial = notif.type && SOCIAL_TYPES.has(notif.type);
-                              const inner = (
-                                <div className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
-                                  onClick={() => { if (!notif.read) markOneRead(notif.id); if (notif.href) setNotifOpen(false); }}>
+                              return (
+                                <div key={notif.id}
+                                  className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
+                                  onClick={() => {
+                                    if (!notif.read) markOneRead(notif.id);
+                                    setNotifOpen(false);
+                                    const dest = notif.href || (notif.actorId ? `/u/${notif.actorId}` : null);
+                                    if (dest) router.push(dest);
+                                  }}>
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (
                                     <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 overflow-hidden ${TONE_RING[tone]}`}>
@@ -769,9 +776,6 @@ export default function HomepageNav({
                                   </div>
                                 </div>
                               );
-                              return notif.href
-                                ? <Link key={notif.id} href={notif.href} onClick={() => { setNotifOpen(false); if (!notif.read) markOneRead(notif.id); }}>{inner}</Link>
-                                : <div key={notif.id}>{inner}</div>;
                             })}
                           </>
                         )}
@@ -785,9 +789,15 @@ export default function HomepageNav({
                               const tone = notif.tone || 'default';
                               const IconComp = typeIcon(notif.type);
                               const isSocial = notif.type && SOCIAL_TYPES.has(notif.type);
-                              const inner = (
-                                <div className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
-                                  onClick={() => { if (!notif.read) markOneRead(notif.id); if (notif.href) setNotifOpen(false); }}>
+                              return (
+                                <div key={notif.id}
+                                  className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
+                                  onClick={() => {
+                                    if (!notif.read) markOneRead(notif.id);
+                                    setNotifOpen(false);
+                                    const dest = notif.href || (notif.actorId ? `/u/${notif.actorId}` : null);
+                                    if (dest) router.push(dest);
+                                  }}>
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (
                                     <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 overflow-hidden ${TONE_RING[tone]}`}>
@@ -809,9 +819,6 @@ export default function HomepageNav({
                                   </div>
                                 </div>
                               );
-                              return notif.href
-                                ? <Link key={notif.id} href={notif.href} onClick={() => { setNotifOpen(false); if (!notif.read) markOneRead(notif.id); }}>{inner}</Link>
-                                : <div key={notif.id}>{inner}</div>;
                             })}
                           </>
                         )}

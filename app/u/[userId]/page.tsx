@@ -1184,7 +1184,7 @@ function ImageAdjustModal({
   const positionStr = `${pos.x}% ${pos.y}%`;
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[20000] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative z-10 w-full max-w-md bg-[#111113] border border-white/[0.09] rounded-[24px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
@@ -1317,19 +1317,56 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
   const [rollingBack, setRollingBack] = useState<string | null>(null);
 
   function handleImageFile(file: File, field: 'avatarUrl' | 'coverGradient') {
-    if (file.size > 5 * 1024 * 1024) { setError('Image must be under 5 MB'); return; }
+    console.log('[ProfileUpload] file selected:', { field, name: file.name, size: file.size, type: file.type });
+    if (file.size > 5 * 1024 * 1024) {
+      console.warn('[ProfileUpload] file too large, rejected:', file.size);
+      setError('Image must be under 5 MB');
+      return;
+    }
     const reader = new FileReader();
+    reader.onerror = (e) => console.error('[ProfileUpload] FileReader error:', e);
     reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      const type: 'avatar' | 'banner' = field === 'avatarUrl' ? 'avatar' : 'banner';
-      const initialPosition = field === 'avatarUrl' ? (form.avatarPosition ?? '50% 50%') : (form.coverPosition ?? '50% 50%');
-      setAdjustTarget({ dataUrl, type, initialPosition });
+      const rawDataUrl = e.target?.result as string;
+      console.log('[ProfileUpload] FileReader done, compressing…', { field, rawLength: rawDataUrl?.length });
+      // Compress via canvas: resize to max 1200px, JPEG quality 0.82
+      const img = new Image();
+      img.onerror = () => {
+        console.error('[ProfileUpload] Image decode failed — using raw dataUrl');
+        finishWithDataUrl(rawDataUrl);
+      };
+      img.onload = () => {
+        try {
+          const maxDim = field === 'avatarUrl' ? 600 : 1400;
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { finishWithDataUrl(rawDataUrl); return; }
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', 0.82);
+          console.log('[ProfileUpload] compressed:', { field, originalLength: rawDataUrl.length, compressedLength: compressed.length, w, h });
+          finishWithDataUrl(compressed);
+        } catch (canvasErr) {
+          console.error('[ProfileUpload] canvas compression failed, falling back:', canvasErr);
+          finishWithDataUrl(rawDataUrl);
+        }
+      };
+      img.src = rawDataUrl;
+      function finishWithDataUrl(dataUrl: string) {
+        const type: 'avatar' | 'banner' = field === 'avatarUrl' ? 'avatar' : 'banner';
+        const initialPosition = field === 'avatarUrl' ? (form.avatarPosition ?? '50% 50%') : (form.coverPosition ?? '50% 50%');
+        setAdjustTarget({ dataUrl, type, initialPosition });
+      }
     };
     reader.readAsDataURL(file);
   }
 
   function handleAdjustSave(dataUrl: string, position: string) {
     if (!adjustTarget) return;
+    console.log('[ProfileUpload] adjust saved:', { type: adjustTarget.type, position, dataUrlLength: dataUrl?.length });
     if (adjustTarget.type === 'avatar') {
       setForm((prev) => ({ ...prev, avatarUrl: dataUrl, avatarPosition: position }));
     } else {
@@ -1502,16 +1539,44 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
         experience: expEntries.map(({ _key: _k, ...rest }) => rest),
         education: eduEntries.map(({ _key: _k, ...rest }) => rest),
       };
+      const bodyStr = JSON.stringify(payload);
+      const payloadMB = (bodyStr.length / (1024 * 1024)).toFixed(2);
+      console.log('[ProfileSave] sending PATCH /api/profile/me', {
+        payloadSizeBytes: bodyStr.length,
+        payloadMB,
+        avatarUrlType: payload.avatarUrl?.startsWith('data:') ? 'dataUrl' : payload.avatarUrl?.startsWith('http') ? 'httpUrl' : payload.avatarUrl ? 'other' : 'empty',
+        avatarUrlLength: payload.avatarUrl?.length ?? 0,
+        coverGradientType: payload.coverGradient?.startsWith('data:') ? 'dataUrl' : payload.coverGradient?.startsWith('http') ? 'httpUrl' : payload.coverGradient ? 'cssGradient' : 'empty',
+        coverGradientLength: payload.coverGradient?.length ?? 0,
+      });
+      if (bodyStr.length > 9 * 1024 * 1024) {
+        console.warn('[ProfileSave] payload exceeds 9MB — images may be too large');
+        throw new Error('Images are too large to save. Please use smaller images (under 2 MB each).');
+      }
       const res = await fetch('/api/profile/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: bodyStr,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Save failed');
+      console.log('[ProfileSave] response status:', res.status, res.statusText);
+      let json: Record<string, unknown> = {};
+      try {
+        json = await res.json();
+      } catch (parseErr) {
+        console.error('[ProfileSave] response body was not JSON (server may have returned 413 or HTML error):', parseErr);
+        throw new Error(`Server error ${res.status} — images may be too large for the server. Try a smaller image.`);
+      }
+      console.log('[ProfileSave] response json:', { ok: res.ok, json });
+      if (!res.ok) throw new Error((json as {error?: string}).error || 'Save failed');
+      console.log('[ProfileSave] success — saved profile:', {
+        avatarUrl: (json.profile as UserProfileData)?.avatarUrl?.slice(0, 80),
+        bannerUrl: (json.profile as UserProfileData)?.bannerUrl?.slice(0, 80),
+        coverGradient: (json.profile as UserProfileData)?.coverGradient?.slice(0, 80),
+      });
       onSaved(json.profile as UserProfileData);
       onClose();
     } catch (err) {
+      console.error('[ProfileSave] error:', err);
       setError((err as Error).message);
     } finally {
       setSaving(false);
@@ -2761,6 +2826,8 @@ export default function UserProfilePage() {
   }
 
   const { user, profile, stats, isOwnProfile, recentGigs } = data;
+  // infinityStatus is always freshly fetched for own profile; profile.docrudGo can be stale from the profile API
+  const isEffectivelyGo = profile.docrudGo || (isOwnProfile && infinityStatus?.active === true);
   // bannerUrl = permanent uploaded image (from onboarding or profile upload API)
   // coverGradient = legacy: either a CSS gradient string or a data: URL (from profile editor)
   // Ignore stale blob: URLs (they only live in the uploading browser tab)
@@ -2802,7 +2869,7 @@ export default function UserProfilePage() {
   return (
     <div className="min-h-screen bg-[#0D0D0F] text-white">
       {/* Razorpay — only loaded when this profile is own + not Go */}
-      {isOwnProfile && !profile.docrudGo && (
+      {isOwnProfile && !isEffectivelyGo && (
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       )}
       {/* ─── sticky header ─── */}
@@ -2821,7 +2888,7 @@ export default function UserProfilePage() {
         </div>
         <div className="shrink-0 flex items-center gap-2">
           {/* ── Docrud Go header pill — own non-Go profiles only ── */}
-          {isOwnProfile && !profile.docrudGo && (
+          {isOwnProfile && !isEffectivelyGo && (
             <div className="flex items-center gap-1.5">
               {/* Earn Free ghost link */}
               <button
@@ -2915,7 +2982,7 @@ export default function UserProfilePage() {
       </header>
 
       {/* ── Go payment error toast ── */}
-      {goUpgradeErr && isOwnProfile && !profile.docrudGo && (
+      {goUpgradeErr && isOwnProfile && !isEffectivelyGo && (
         <div className="sticky top-14 z-30 flex items-center justify-between gap-3 px-4 py-2.5 bg-rose-950/90 backdrop-blur border-b border-rose-500/20">
           <p className="text-[12px] text-rose-300">{goUpgradeErr}</p>
           <button onClick={() => setGoUpgradeErr('')} className="shrink-0 text-rose-400/60 hover:text-rose-300 transition">
@@ -2928,7 +2995,7 @@ export default function UserProfilePage() {
       <style>{`@keyframes goShimmer{0%{transform:translateX(-100%)}60%,100%{transform:translateX(200%)}}`}</style>
 
       {/* ── Referral modal (shown when goUpgradePhase === 'refer') ── */}
-      {isOwnProfile && !profile.docrudGo && goUpgradePhase === 'refer' && (
+      {isOwnProfile && !isEffectivelyGo && goUpgradePhase === 'refer' && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
           style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
@@ -3333,7 +3400,7 @@ export default function UserProfilePage() {
               style={{
                 boxShadow: profile.publicFace
                   ? '0 0 0 2px rgba(180,140,55,0.50), 0 0 0 3.5px rgba(200,165,70,0.18), 0 8px 32px rgba(0,0,0,0.65)'
-                  : profile.docrudGo
+                  : isEffectivelyGo
                     ? '0 0 0 2.5px rgba(201,168,76,0.55), 0 8px 32px rgba(201,168,76,0.18)'
                     : '0 8px 32px rgba(0,0,0,0.6)',
               }}
@@ -3344,7 +3411,7 @@ export default function UserProfilePage() {
                 getInitials(user.name)
               )}
             </div>
-            {profile.docrudGo && !profile.publicFace && (
+            {isEffectivelyGo && !profile.publicFace && (
               <div className="absolute -bottom-1.5 -right-1.5 z-10">
                 <DocrudGoBadge size="sm" />
               </div>
@@ -3362,7 +3429,7 @@ export default function UserProfilePage() {
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <h1 className="text-[24px] md:text-[32px] font-extrabold tracking-tight leading-none text-white">{user.name}</h1>
               {credits?.verified && <VerifiedBadge size="lg" />}
-              {profile.docrudGo && <DocrudGoBadge size="md" />}
+              {isEffectivelyGo && <DocrudGoBadge size="md" />}
               {profile.publicFace && (
                 <PublicFaceBadge category={profile.publicFace.category as import('@/types/document').PublicFaceCategory} size="md" />
               )}

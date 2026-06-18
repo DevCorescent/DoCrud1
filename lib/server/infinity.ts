@@ -95,6 +95,7 @@ export async function activateInfinity(userId: string, opts: ActivateOpts = {}):
 
   await updateProfileData(userId, {
     docrudInfinity:              true,
+    docrudGo:                    true,   // ensures badge shows in nav immediately
     docrudInfinityPurchasedAt:   profile.docrudInfinityPurchasedAt ?? now.toISOString(),
     docrudInfinityPeriod:        period,
     docrudInfinityExpiresAt:     expiresAt,

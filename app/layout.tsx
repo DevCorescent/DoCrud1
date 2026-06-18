@@ -263,7 +263,7 @@ export default function RootLayout({
           {
             '@type': 'Offer',
             name: 'Docrud Infinity',
-            price: '99',
+            price: '299',
             priceCurrency: 'INR',
             availability: 'https://schema.org/InStock',
             billingIncrement: 'P1M',

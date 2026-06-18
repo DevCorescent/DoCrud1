@@ -2878,7 +2878,7 @@ export default function UserProfilePage() {
                 <span className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(105deg,transparent 30%,rgba(255,255,255,0.18) 50%,transparent 70%)', animation: 'goShimmer 2.8s ease-in-out infinite' }} />
                 {goUpgradePhase === 'paying'
                   ? <><div className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" /><span className="relative">Processing…</span></>
-                  : <><span className="relative">∞ Infinity</span><span className="relative hidden sm:inline"> — ₹99</span></>
+                  : <><span className="relative">∞ Infinity</span><span className="relative hidden sm:inline"> — ₹299/mo</span></>
                 }
               </button>
             </div>

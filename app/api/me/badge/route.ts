@@ -10,8 +10,16 @@ export async function GET() {
     return NextResponse.json({ docrudGo: false, avatarUrl: null });
   }
   const profile = await getProfileData(session.user.id);
+
+  // Infinity badge: granted via docrudGo (legacy) OR active docrudInfinity subscription
+  const hasInfinityActive = !!profile?.docrudInfinity && (
+    !profile.docrudInfinityExpiresAt ||
+    new Date(profile.docrudInfinityExpiresAt).getTime() > Date.now()
+  );
+  const docrudGo = !!(profile?.docrudGo || hasInfinityActive);
+
   return NextResponse.json(
-    { docrudGo: profile?.docrudGo ?? false, avatarUrl: profile?.avatarUrl ?? null },
-    { headers: { 'Cache-Control': 'private, max-age=60' } }
+    { docrudGo, avatarUrl: profile?.avatarUrl ?? null },
+    { headers: { 'Cache-Control': 'no-store' } }
   );
 }

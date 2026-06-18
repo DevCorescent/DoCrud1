@@ -836,7 +836,7 @@ export default function BusinessSignupForm({
                       </div>
                     </div>
 
-                    {/* ── ₹99 Docrud Infinity upgrade card ── */}
+                    {/* ── ₹299/mo Docrud Infinity upgrade card ── */}
                     <div
                       className="relative overflow-hidden rounded-2xl p-[1.5px]"
                       style={{ background: 'linear-gradient(135deg,#4f46e5,#818cf8 40%,#4f46e5 70%,#3730a3)', animation: 'obCardGlow 4s ease-in-out infinite' }}
@@ -854,8 +854,8 @@ export default function BusinessSignupForm({
                             <p className="text-[10.5px] text-white/35">Infinity badge + all features unlocked</p>
                           </div>
                           <div className="shrink-0 text-right">
-                            <div className="text-[20px] font-black leading-none" style={{ color: '#a5b4fc' }}>₹99</div>
-                            <div className="text-[9px] text-white/30">one-time</div>
+                            <div className="text-[20px] font-black leading-none" style={{ color: '#a5b4fc' }}>₹299</div>
+                            <div className="text-[9px] text-white/30">/month</div>
                           </div>
                         </div>
                         <div className="relative grid grid-cols-3 gap-1 mb-2">

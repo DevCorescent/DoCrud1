@@ -8,6 +8,40 @@ export const dynamic = 'force-dynamic';
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
 
+type ParsedResume = {
+  name?: string | null;
+  headline?: string | null;
+  bio?: string | null;
+  location?: string | null;
+  website?: string | null;
+  email?: string | null;
+  skills?: unknown;
+  experience?: unknown;
+  education?: unknown;
+};
+
+function extractJsonFromAiResponse(raw: string): ParsedResume | null {
+  // Strip markdown code fences anywhere in the string
+  const s = raw.replace(/```[a-z]*\s*/gi, '').replace(/```/g, '').trim();
+
+  // Direct parse
+  try { return JSON.parse(s) as ParsedResume; } catch { /* try next */ }
+
+  // Find outermost { ... } using indexOf/lastIndexOf to avoid greedy-regex issues
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    const slice = s.slice(start, end + 1);
+    try { return JSON.parse(slice) as ParsedResume; } catch { /* try next */ }
+
+    // Remove trailing commas before } or ] (common AI mistake)
+    const fixed = slice.replace(/,\s*([}\]])/g, '$1');
+    try { return JSON.parse(fixed) as ParsedResume; } catch { /* give up */ }
+  }
+
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getAuthSession();
@@ -130,44 +164,18 @@ Rules:
       return NextResponse.json({ error: 'AI returned an empty response. Please try again.' }, { status: 500 });
     }
 
-    let parsed: {
-      name?: string | null;
-      headline?: string | null;
-      bio?: string | null;
-      location?: string | null;
-      website?: string | null;
-      email?: string | null;
-      skills?: unknown;
-      experience?: unknown;
-      education?: unknown;
-    } = {};
+    let parsed: ParsedResume = {};
 
-    try {
-      const clean = aiResponse
-        .replace(/^```[a-z]*\s*/i, '')
-        .replace(/\s*```\s*$/, '')
-        .trim();
-      parsed = JSON.parse(clean) as typeof parsed;
+    const extracted = extractJsonFromAiResponse(aiResponse);
+    if (extracted && Object.keys(extracted).length > 0) {
+      parsed = extracted;
       console.log(`[parse-resume] JSON parsed OK — keys: ${Object.keys(parsed).join(', ')}`);
-    } catch (parseErr) {
-      console.warn('[parse-resume] direct JSON.parse failed:', parseErr instanceof Error ? parseErr.message : parseErr);
-      const match = aiResponse.match(/\{[\s\S]*\}/);
-      if (match) {
-        try {
-          parsed = JSON.parse(match[0]) as typeof parsed;
-          console.log(`[parse-resume] regex JSON.parse OK — keys: ${Object.keys(parsed).join(', ')}`);
-        } catch (regexParseErr) {
-          console.error('[parse-resume] regex JSON.parse also failed:', regexParseErr);
-        }
-      } else {
-        console.error('[parse-resume] no JSON object found in AI response — raw response:', aiResponse);
-      }
-      if (!parsed || Object.keys(parsed).length === 0) {
-        return NextResponse.json(
-          { error: 'AI returned an unexpected format. Please try again.' },
-          { status: 500 },
-        );
-      }
+    } else {
+      console.error('[parse-resume] ALL JSON extraction failed. Full AI response:\n', aiResponse);
+      return NextResponse.json(
+        { error: 'AI returned an unexpected format. Please try again.' },
+        { status: 500 },
+      );
     }
 
     const skills = Array.isArray(parsed.skills)

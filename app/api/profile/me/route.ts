@@ -29,24 +29,7 @@ export async function PATCH(req: NextRequest) {
     const actor = await getActor();
     if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    let body: Partial<UserProfileData>;
-    try {
-      body = (await req.json()) as Partial<UserProfileData>;
-    } catch (parseErr) {
-      console.error('[profile/me] PATCH body parse error — payload may be too large:', parseErr);
-      return NextResponse.json({ error: 'Request body could not be parsed. Image may be too large.' }, { status: 400 });
-    }
-
-    const avatarType = body.avatarUrl?.startsWith('data:') ? 'dataUrl' : body.avatarUrl?.startsWith('http') ? 'httpUrl' : body.avatarUrl ? 'other' : 'empty';
-    const coverType  = body.coverGradient?.startsWith('data:') ? 'dataUrl' : body.coverGradient?.startsWith('http') ? 'httpUrl' : body.coverGradient ? 'cssGradient' : 'empty';
-    console.log('[profile/me] PATCH received:', {
-      userId: actor.id,
-      avatarUrlType: avatarType,
-      avatarUrlLength: body.avatarUrl?.length ?? 0,
-      coverGradientType: coverType,
-      coverGradientLength: body.coverGradient?.length ?? 0,
-      bannerUrl: body.bannerUrl?.slice(0, 80),
-    });
+    const body = (await req.json()) as Partial<UserProfileData>;
 
     if (body.bio && body.bio.length > 500) {
       return NextResponse.json({ error: 'Bio must be 500 characters or fewer.' }, { status: 400 });
@@ -67,19 +50,8 @@ export async function PATCH(req: NextRequest) {
     // Strip fields that should not be directly set via this endpoint
     const { updatedAt: _updatedAt, ...safeBody } = body as UserProfileData & { updatedAt?: string };
 
-    try {
-      await updateProfileData(actor.id, safeBody);
-    } catch (dbErr) {
-      console.error('[profile/me] PATCH DB upsert error:', dbErr);
-      return NextResponse.json({ error: 'Failed to save profile to database.' }, { status: 500 });
-    }
-
+    await updateProfileData(actor.id, safeBody);
     const updated = await getProfileData(actor.id);
-    console.log('[profile/me] PATCH success:', {
-      avatarUrl: updated?.avatarUrl?.slice(0, 80),
-      bannerUrl: updated?.bannerUrl?.slice(0, 80),
-      coverGradient: updated?.coverGradient?.slice(0, 80),
-    });
     return NextResponse.json({ profile: updated });
   } catch (error) {
     console.error('[profile/me] PATCH error', error);

@@ -1551,40 +1551,13 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
         experience: expEntries.map(({ _key: _k, ...rest }) => rest),
         education: eduEntries.map(({ _key: _k, ...rest }) => rest),
       };
-      const bodyStr = JSON.stringify(payload);
-      const payloadMB = (bodyStr.length / (1024 * 1024)).toFixed(2);
-      console.log('[ProfileSave] sending PATCH /api/profile/me', {
-        payloadSizeBytes: bodyStr.length,
-        payloadMB,
-        avatarUrlType: payload.avatarUrl?.startsWith('data:') ? 'dataUrl' : payload.avatarUrl?.startsWith('http') ? 'httpUrl' : payload.avatarUrl ? 'other' : 'empty',
-        avatarUrlLength: payload.avatarUrl?.length ?? 0,
-        coverGradientType: payload.coverGradient?.startsWith('data:') ? 'dataUrl' : payload.coverGradient?.startsWith('http') ? 'httpUrl' : payload.coverGradient ? 'cssGradient' : 'empty',
-        coverGradientLength: payload.coverGradient?.length ?? 0,
-      });
-      if (bodyStr.length > 9 * 1024 * 1024) {
-        console.warn('[ProfileSave] payload exceeds 9MB — images may be too large');
-        throw new Error('Images are too large to save. Please use smaller images (under 2 MB each).');
-      }
       const res = await fetch('/api/profile/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: bodyStr,
+        body: JSON.stringify(payload),
       });
-      console.log('[ProfileSave] response status:', res.status, res.statusText);
-      let json: Record<string, unknown> = {};
-      try {
-        json = await res.json();
-      } catch (parseErr) {
-        console.error('[ProfileSave] response body was not JSON (server may have returned 413 or HTML error):', parseErr);
-        throw new Error(`Server error ${res.status} — images may be too large for the server. Try a smaller image.`);
-      }
-      console.log('[ProfileSave] response json:', { ok: res.ok, json });
-      if (!res.ok) throw new Error((json as {error?: string}).error || 'Save failed');
-      console.log('[ProfileSave] success — saved profile:', {
-        avatarUrl: (json.profile as UserProfileData)?.avatarUrl?.slice(0, 80),
-        bannerUrl: (json.profile as UserProfileData)?.bannerUrl?.slice(0, 80),
-        coverGradient: (json.profile as UserProfileData)?.coverGradient?.slice(0, 80),
-      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Save failed');
       onSaved(json.profile as UserProfileData);
       onClose();
     } catch (err) {
@@ -1622,28 +1595,49 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
           <section>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Photos</p>
             {/* Banner */}
-            <div className="relative mb-1 h-24 w-full rounded-[14px] overflow-hidden border border-white/[0.08] cursor-pointer group" onClick={() => bannerInputRef.current?.click()}>
-              {form.coverGradient?.startsWith('data:') ? (
+            <div
+              className={`relative mb-1 h-24 w-full rounded-[14px] overflow-hidden border border-white/[0.08] ${imgUploading === 'banner' ? 'cursor-wait' : 'cursor-pointer group'}`}
+              onClick={() => !imgUploading && bannerInputRef.current?.click()}
+            >
+              {form.bannerUrl ? (
+                <img src={form.bannerUrl} alt="Banner" className="w-full h-full object-cover" style={{ objectPosition: form.coverPosition ?? '50% 50%' }} />
+              ) : form.coverGradient?.startsWith('data:') ? (
                 <img src={form.coverGradient} alt="Banner" className="w-full h-full object-cover" style={{ objectPosition: form.coverPosition ?? '50% 50%' }} />
               ) : (
                 <div className="absolute inset-0" style={{ background: form.coverGradient ?? 'linear-gradient(135deg,#0f0c29,#302b63,#24243e)' }} />
               )}
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                <div className="flex items-center gap-1.5 text-white text-xs font-semibold">
-                  <Plus className="h-3.5 w-3.5" /> Change banner
+              {imgUploading === 'banner' ? (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                  <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                 </div>
-              </div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1.5 text-white text-xs font-semibold">
+                    <Plus className="h-3.5 w-3.5" /> Change banner
+                  </div>
+                </div>
+              )}
             </div>
-            {form.coverGradient?.startsWith('data:') && (
-              <button type="button" onClick={() => setAdjustTarget({ dataUrl: form.coverGradient!, type: 'banner', initialPosition: form.coverPosition })} className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/65 mb-3 transition-colors">
+            {(form.bannerUrl || form.coverGradient?.startsWith('data:')) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const src = form.bannerUrl || form.coverGradient!;
+                  setAdjustTarget({ dataUrl: src, type: 'banner', initialPosition: form.coverPosition });
+                }}
+                className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/65 mb-3 transition-colors"
+              >
                 <Move className="h-3 w-3" /> Reposition banner
               </button>
             )}
-            <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImageFile(f, 'coverGradient'); e.target.value = ''; } }} />
+            <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleImageFile(f, 'coverGradient'); e.target.value = ''; } }} />
 
             {/* Avatar */}
             <div className="flex items-center gap-4">
-              <div className="relative h-16 w-16 rounded-[18px] overflow-hidden border-2 border-white/[0.12] cursor-pointer group flex-shrink-0" onClick={() => avatarInputRef.current?.click()}>
+              <div
+                className={`relative h-16 w-16 rounded-[18px] overflow-hidden border-2 border-white/[0.12] flex-shrink-0 ${imgUploading === 'avatar' ? 'cursor-wait' : 'cursor-pointer group'}`}
+                onClick={() => !imgUploading && avatarInputRef.current?.click()}
+              >
                 {form.avatarUrl ? (
                   <img src={form.avatarUrl} alt="Avatar" className="h-full w-full object-cover" style={{ objectPosition: form.avatarPosition ?? '50% 50%' }} />
                 ) : (
@@ -1651,15 +1645,23 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
                     {getInitials(userName)}
                   </div>
                 )}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Plus className="h-4 w-4 text-white" />
-                </div>
+                {imgUploading === 'avatar' ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                    <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Plus className="h-4 w-4 text-white" />
+                  </div>
+                )}
               </div>
               <div>
-                <button type="button" onClick={() => avatarInputRef.current?.click()} className="text-sm font-semibold text-white/70 hover:text-white transition-colors">Upload profile photo</button>
+                <button type="button" onClick={() => !imgUploading && avatarInputRef.current?.click()} className="text-sm font-semibold text-white/70 hover:text-white transition-colors disabled:opacity-40">
+                  {imgUploading === 'avatar' ? 'Uploading…' : 'Upload profile photo'}
+                </button>
                 <p className="text-xs text-white/30 mt-0.5">JPG, PNG · Max 5 MB</p>
                 <div className="flex items-center gap-3 mt-1">
-                  {form.avatarUrl?.startsWith('data:') && (
+                  {form.avatarUrl && !imgUploading && (
                     <button type="button" onClick={() => setAdjustTarget({ dataUrl: form.avatarUrl!, type: 'avatar', initialPosition: form.avatarPosition })} className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/65 transition-colors">
                       <Move className="h-3 w-3" /> Reposition
                     </button>
@@ -1669,7 +1671,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
                   )}
                 </div>
               </div>
-              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleImageFile(f, 'avatarUrl'); e.target.value = ''; } }} />
+              <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleImageFile(f, 'avatarUrl'); e.target.value = ''; } }} />
             </div>
           </section>
 

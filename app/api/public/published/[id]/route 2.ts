@@ -4,6 +4,37 @@ import { getAuthSession } from '@/lib/server/auth';
 
 export const dynamic = 'force-dynamic';
 
+const CATEGORY_LABELS: Record<string, string> = {
+  post: 'Post', poll: 'Poll', survey: 'Survey', article: 'Article',
+  document: 'Document', job: 'Job', resume: 'Resume', product: 'Product',
+  event: 'Event', hackathon: 'Hackathon', portfolio: 'Portfolio',
+  news: 'News', video: 'Video', thread: 'Thread', milestone: 'Milestone',
+  tutorial: 'Tutorial', announcement: 'Announcement', chart: 'Chart', gig: 'Gig',
+};
+
+const FILENAME_EXT_RE = /\.\w{2,5}$/;
+const NOISE_WORD_RE = /^[a-z]{12,}$/;
+const USERNAME_LIKE_RE = /^[a-z]+\d{5,}\w*$/i;
+
+function isNoisyTag(tag: string): boolean {
+  const t = tag.trim();
+  return FILENAME_EXT_RE.test(t) || NOISE_WORD_RE.test(t) || USERNAME_LIKE_RE.test(t);
+}
+
+function cleanBadge(tags: string[] | undefined, cat: string): string {
+  const first = (tags?.[0] ?? '').trim();
+  if (first && !isNoisyTag(first) && first.length < 40) {
+    return first;
+  }
+  return CATEGORY_LABELS[cat] ?? 'Published';
+}
+
+function cleanChips(tags: string[] | undefined): string[] | undefined {
+  const rest = (tags ?? []).slice(1);
+  const filtered = rest.filter(tag => tag.trim().length > 0 && !isNoisyTag(tag));
+  return filtered.length > 0 ? filtered : undefined;
+}
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -19,15 +50,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     );
     if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+    const cat = t.directoryCategory?.toLowerCase() || 'document';
+    const authorName = t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
     return NextResponse.json({
       id: t.id,
       shareId: t.shareId,
-      category: t.directoryCategory?.toLowerCase() || 'document',
-      badge: t.directoryTags?.[0] || 'Published',
+      category: cat,
+      badge: cleanBadge(t.directoryTags, cat),
       title: t.title || t.fileName,
-      byline: `${t.uploadedBy} · ${t.fileName}`,
+      byline: authorName,
       body: t.notes || '',
-      chips: (t.directoryTags ?? []).slice(1).length > 0 ? (t.directoryTags ?? []).slice(1) : undefined,
+      chips: cleanChips(t.directoryTags),
       postedAt: t.createdAt,
       featured: !!t.featured,
       isReal: true,

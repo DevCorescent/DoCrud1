@@ -225,11 +225,16 @@ export async function POST(req: NextRequest) {
     const buf = Buffer.from(await file.arrayBuffer());
     const fileType = detectType(buf, file.name);
 
+    console.log(`[upload-resume] userId=${userId} file="${file.name}" size=${file.size}B detectedType=${fileType}`);
+
     /* ── extract text ── */
     const { text: rawText, warning: extractWarning } = await extractText(buf, fileType);
     const cleaned = rawText.trim().replace(/\s{3,}/g, '\n\n');
 
+    console.log(`[upload-resume] text extracted: ${cleaned.length} chars${extractWarning ? ` WARNING: ${extractWarning}` : ''}`);
+
     if (cleaned.length < 30) {
+      console.error(`[upload-resume] insufficient text (${cleaned.length} chars) — snippet: "${cleaned.slice(0, 80)}"`);
       return NextResponse.json(
         { error: "Not enough readable text found. Make sure the file isn't a scanned image, password-protected, or empty. Try a Word .docx file for best results." },
         { status: 422 },
@@ -263,9 +268,11 @@ export async function POST(req: NextRequest) {
     };
 
     const aiAvailable = isAiConfigured();
+    console.log(`[upload-resume] AI configured: ${aiAvailable}`);
 
     if (aiAvailable) {
       const trimmed = cleaned.slice(0, 12000); // ~3 dense pages
+      console.log(`[upload-resume] calling AI with ${trimmed.length} chars`);
       let aiRaw = '';
       try {
         aiRaw = await generateAiText([
@@ -305,24 +312,34 @@ Be thorough. Extract EVERYTHING. If a field is genuinely missing from the resume
           },
         ]);
       } catch (aiErr) {
-        console.error('[upload-resume] AI call failed:', aiErr);
+        console.error('[upload-resume] AI call failed:', aiErr instanceof Error ? `${aiErr.message}\n${aiErr.stack}` : aiErr);
         aiRaw = '';
       }
 
       if (aiRaw.trim()) {
+        console.log(`[upload-resume] AI response: ${aiRaw.length} chars — first 200: ${aiRaw.slice(0, 200)}`);
         try {
           const clean = aiRaw.replace(/^```[a-z]*\s*/i, '').replace(/\s*```\s*$/, '').trim();
           parsed = JSON.parse(clean) as ParsedResume;
-        } catch {
+          console.log(`[upload-resume] AI JSON parsed OK — skills=${parsed.skills?.length ?? 0} exp=${parsed.experience?.length ?? 0} edu=${parsed.education?.length ?? 0}`);
+        } catch (parseErr) {
+          console.warn('[upload-resume] direct JSON.parse failed:', parseErr instanceof Error ? parseErr.message : parseErr);
           const m = aiRaw.match(/\{[\s\S]*\}/);
           if (m) {
-            try { parsed = JSON.parse(m[0]) as ParsedResume; } catch { /* give up */ }
+            try {
+              parsed = JSON.parse(m[0]) as ParsedResume;
+              console.log('[upload-resume] regex JSON.parse OK');
+            } catch (regexErr) {
+              console.error('[upload-resume] regex JSON.parse also failed:', regexErr instanceof Error ? regexErr.message : regexErr);
+            }
           }
           console.error('[upload-resume] JSON parse failed on AI response. First 300 chars:', aiRaw.slice(0, 300));
         }
       } else {
         console.warn('[upload-resume] AI returned empty response');
       }
+    } else {
+      console.warn('[upload-resume] AI not configured — skipping AI parse, using empty parsed data');
     }
 
     /* ── sanitise ── */
@@ -435,6 +452,8 @@ Be thorough. Extract EVERYTHING. If a field is genuinely missing from the resume
       },
     };
     patch.resumeFiles = [newEntry, ...(existing.resumeFiles ?? [])].slice(0, MAX_HISTORY);
+
+    console.log(`[upload-resume] applying fields to profile: ${appliedFields.join(', ') || 'none'} | ATS score=${atsScore.score} grade=${atsScore.grade}`);
 
     try {
       await updateProfileData(userId, patch as Parameters<typeof updateProfileData>[1]);

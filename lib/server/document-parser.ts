@@ -116,14 +116,19 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
   const normalizedMime = mimeType.toLowerCase();
   const readableTextFallback = extractReadableTextFromBuffer(buffer);
 
+  console.log(`[doc-parser] start file="${fileName}" mime="${normalizedMime}" ext="${extension}" size=${buffer.length}B`);
+
   if (
     normalizedMime.startsWith('text/')
     || ['txt', 'md', 'html', 'htm', 'csv', 'json', 'xml', 'rtf'].includes(extension)
   ) {
-    return preserveDocumentStructure(buffer.toString('utf8'));
+    const text = preserveDocumentStructure(buffer.toString('utf8'));
+    console.log(`[doc-parser] plain-text path → ${text.length} chars`);
+    return text;
   }
 
   if (normalizedMime === 'application/pdf' || extension === 'pdf') {
+    console.log('[doc-parser] PDF path — trying pdf-parse');
     try {
       // pdf-parse v2 exports { PDFParse } as a class, not a default function
       const pdfParseModule = require('pdf-parse') as { PDFParse?: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> }; default?: (buf: Buffer) => Promise<{ text: string }> };
@@ -140,34 +145,44 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
         text = preserveDocumentStructure(parsed.text || '');
       }
       if (text) {
+        console.log(`[doc-parser] pdf-parse OK → ${text.length} chars`);
         return text;
       }
-    } catch {
-      // Fall through to the more descriptive error below.
+      console.warn('[doc-parser] pdf-parse returned empty text');
+    } catch (err) {
+      console.error('[doc-parser] pdf-parse failed:', err instanceof Error ? err.message : err);
     }
 
+    console.log('[doc-parser] trying pdftotext binary');
     try {
       const text = await extractPdfTextWithPdftotext(buffer);
       if (hasEnoughReadableText(text)) {
+        console.log(`[doc-parser] pdftotext OK → ${text.length} chars`);
         return text;
       }
-    } catch {
-      // Try OCR fallback next.
+      console.warn(`[doc-parser] pdftotext returned too little text: ${text.length} chars`);
+    } catch (err) {
+      console.error('[doc-parser] pdftotext failed (binary may not be installed on this server):', err instanceof Error ? err.message : err);
     }
 
+    console.log('[doc-parser] trying OCR (Swift/pdftoppm) fallback');
     try {
       const text = await extractPdfTextWithOcr(buffer);
       if (hasEnoughReadableText(text)) {
+        console.log(`[doc-parser] OCR OK → ${text.length} chars`);
         return text;
       }
-    } catch {
-      // Final fallthrough to descriptive error.
+      console.warn(`[doc-parser] OCR returned too little text: ${text.length} chars`);
+    } catch (err) {
+      console.error('[doc-parser] OCR failed (pdftoppm/swift not available on this server):', err instanceof Error ? err.message : err);
     }
 
     if (readableTextFallback) {
+      console.log(`[doc-parser] using raw-bytes UTF-8 fallback → ${readableTextFallback.length} chars`);
       return readableTextFallback;
     }
 
+    console.error('[doc-parser] all PDF extraction methods failed — throwing');
     throw new Error('This PDF could not be read clearly enough for analysis. Try a sharper PDF, or paste the resume text directly.');
   }
 
@@ -177,20 +192,25 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
     || extension === 'docx'
     || extension === 'docm'
   ) {
+    console.log('[doc-parser] DOCX path — trying mammoth');
     try {
       const parsed = await mammoth.extractRawText({ buffer });
       const text = preserveDocumentStructure(parsed.value || '');
       if (text) {
+        console.log(`[doc-parser] mammoth OK → ${text.length} chars`);
         return text;
       }
-    } catch {
-      // Try ZIP/XML fallback next.
+      console.warn('[doc-parser] mammoth returned empty text, trying ZIP/XML fallback');
+    } catch (err) {
+      console.error('[doc-parser] mammoth failed:', err instanceof Error ? err.message : err);
     }
 
     const zipText = await extractZipEntryText(buffer, [/^word\/.*\.xml$/i, /^docProps\/.*\.xml$/i]);
     if (zipText) {
+      console.log(`[doc-parser] DOCX ZIP/XML fallback OK → ${zipText.length} chars`);
       return zipText;
     }
+    console.error('[doc-parser] DOCX ZIP/XML fallback also returned empty');
   }
 
   if (
@@ -208,6 +228,7 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
       .join('\n\n');
     const text = preserveDocumentStructure(sheetText);
     if (text) {
+      console.log(`[doc-parser] XLSX OK → ${text.length} chars`);
       return text;
     }
   }
@@ -220,6 +241,7 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
   ) {
     const zipText = await extractZipEntryText(buffer, [/^ppt\/slides\/.*\.xml$/i, /^content\.xml$/i]);
     if (zipText) {
+      console.log(`[doc-parser] PPTX/ODP ZIP OK → ${zipText.length} chars`);
       return zipText;
     }
   }
@@ -232,6 +254,7 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
   ) {
     const zipText = await extractZipEntryText(buffer, [/^content\.xml$/i]);
     if (zipText) {
+      console.log(`[doc-parser] ODT/ODS ZIP OK → ${zipText.length} chars`);
       return zipText;
     }
   }
@@ -240,20 +263,25 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
     normalizedMime.startsWith('image/')
     || ['png', 'jpg', 'jpeg', 'webp', 'heic', 'gif', 'bmp', 'tiff', 'tif'].includes(extension)
   ) {
+    console.log('[doc-parser] image path — trying OCR');
     try {
       const text = await extractImageTextWithOcr(buffer, extension || 'png');
       if (hasEnoughReadableText(text)) {
+        console.log(`[doc-parser] image OCR OK → ${text.length} chars`);
         return text;
       }
-    } catch {
-      // Fall through to the more descriptive error below.
+      console.warn('[doc-parser] image OCR returned too little text');
+    } catch (err) {
+      console.error('[doc-parser] image OCR failed (swift not available):', err instanceof Error ? err.message : err);
     }
     throw new Error('This image could not be read clearly enough for analysis. Upload a sharper image or paste the extracted text.');
   }
 
   if (readableTextFallback) {
+    console.log(`[doc-parser] using generic raw-bytes fallback → ${readableTextFallback.length} chars`);
     return readableTextFallback;
   }
 
+  console.error(`[doc-parser] no extraction method matched for ext="${extension}" mime="${normalizedMime}"`);
   throw new Error(`Unable to extract readable text from this ${extension ? extension.toUpperCase() : 'file'} upload. Try PDF, DOCX, XLSX, PPTX, ODT, CSV, JSON, HTML, markdown, or paste the document text directly.`);
 }

@@ -190,6 +190,7 @@ export default function HomepageNav({
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
+  const notifPanelRef = useRef<HTMLDivElement>(null);
   const [badge, setBadge] = useState<{ docrudGo: boolean; avatarUrl: string | null } | null>(null);
   const [msgUnread, setMsgUnread] = useState(0);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -357,7 +358,10 @@ export default function HomepageNav({
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const inBell = notifRef.current?.contains(target);
+      const inPanel = notifPanelRef.current?.contains(target);
+      if (!inBell && !inPanel) {
         setNotifOpen(false);
       }
     }
@@ -673,6 +677,7 @@ export default function HomepageNav({
 
                 {/* Panel */}
                 <div
+                  ref={notifPanelRef}
                   className="notif-panel fixed flex flex-col
                     bottom-0 left-0 right-0 rounded-t-[26px]
                     border-t border-l border-r border-white/[0.12]
@@ -750,10 +755,13 @@ export default function HomepageNav({
                                 <div key={notif.id}
                                   className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
                                   onClick={() => {
+                                    console.log('[Notif:social] click', { id: notif.id, type: notif.type, href: notif.href, actorId: notif.actorId });
                                     if (!notif.read) markOneRead(notif.id);
                                     setNotifOpen(false);
                                     const dest = notif.href || (notif.actorId ? `/u/${notif.actorId}` : null);
+                                    console.log('[Notif:social] routing to', dest);
                                     if (dest) router.push(dest);
+                                    else console.warn('[Notif:social] no dest — href:', notif.href, 'actorId:', notif.actorId);
                                   }}>
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (
@@ -793,10 +801,13 @@ export default function HomepageNav({
                                 <div key={notif.id}
                                   className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
                                   onClick={() => {
+                                    console.log('[Notif:workspace] click', { id: notif.id, type: notif.type, href: notif.href, actorId: notif.actorId });
                                     if (!notif.read) markOneRead(notif.id);
                                     setNotifOpen(false);
                                     const dest = notif.href || (notif.actorId ? `/u/${notif.actorId}` : null);
+                                    console.log('[Notif:workspace] routing to', dest);
                                     if (dest) router.push(dest);
+                                    else console.warn('[Notif:workspace] no dest — href:', notif.href, 'actorId:', notif.actorId);
                                   }}>
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (

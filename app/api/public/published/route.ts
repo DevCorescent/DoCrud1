@@ -17,6 +17,37 @@ async function buildBusinessLookup(): Promise<Map<string, { slug: string; id: st
 
 export const dynamic = 'force-dynamic';
 
+const CATEGORY_LABELS: Record<string, string> = {
+  post: 'Post', poll: 'Poll', survey: 'Survey', article: 'Article',
+  document: 'Document', job: 'Job', resume: 'Resume', product: 'Product',
+  event: 'Event', hackathon: 'Hackathon', portfolio: 'Portfolio',
+  news: 'News', video: 'Video', thread: 'Thread', milestone: 'Milestone',
+  tutorial: 'Tutorial', announcement: 'Announcement', chart: 'Chart', gig: 'Gig',
+};
+
+const FILENAME_EXT_RE = /\.\w{2,5}$/;
+const NOISE_WORD_RE = /^[a-z]{12,}$/;      // long concatenated lowercase words
+const USERNAME_LIKE_RE = /^[a-z]+\d{5,}\w*$/i; // letters followed by 5+ digits
+
+function isNoisyTag(tag: string): boolean {
+  const t = tag.trim();
+  return FILENAME_EXT_RE.test(t) || NOISE_WORD_RE.test(t) || USERNAME_LIKE_RE.test(t);
+}
+
+function cleanBadge(tags: string[] | undefined, cat: string): string {
+  const first = (tags?.[0] ?? '').trim();
+  if (first && !isNoisyTag(first) && first.length < 40) {
+    return first;
+  }
+  return CATEGORY_LABELS[cat] ?? 'Published';
+}
+
+function cleanChips(tags: string[] | undefined): string[] | undefined {
+  const rest = (tags ?? []).slice(1);
+  const filtered = rest.filter(tag => tag.trim().length > 0 && !isNoisyTag(tag));
+  return filtered.length > 0 ? filtered : undefined;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getAuthSession();
@@ -53,16 +84,18 @@ export async function GET(request: NextRequest) {
       })
       .map((t) => {
         const isFeaturedActive = t.featured && t.featuredUntil && new Date(t.featuredUntil) > now;
+        const cat = t.directoryCategory?.toLowerCase() || 'document';
+        const authorName = t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
         return {
           id: t.id,
           shareId: t.shareId,
-          category: t.directoryCategory?.toLowerCase() || 'document',
-          badge: t.directoryTags?.[0] || 'Published',
+          category: cat,
+          badge: cleanBadge(t.directoryTags, cat),
           title: t.title || t.fileName,
-          byline: `${t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User'} · ${t.fileName}`,
-          uploadedByName: t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User',
+          byline: authorName,
+          uploadedByName: authorName,
           body: t.notes || '',
-          chips: (t.directoryTags ?? []).slice(1).length > 0 ? (t.directoryTags ?? []).slice(1) : undefined,
+          chips: cleanChips(t.directoryTags),
           postedAt: t.createdAt,
           featured: !!isFeaturedActive,
           featuredPlan: isFeaturedActive ? t.featuredPlan : undefined,

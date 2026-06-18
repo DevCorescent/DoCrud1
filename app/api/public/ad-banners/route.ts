@@ -15,15 +15,21 @@ type AdBanner = {
   createdAt: string;
 };
 
+type AdBannersData = {
+  heading?: string;
+  banners: AdBanner[];
+};
+
 export async function GET() {
   try {
-    const banners = await readJsonFile<AdBanner[]>(adBannersPath, []);
-    const active = banners
+    const raw = await readJsonFile<AdBanner[] | AdBannersData>(adBannersPath, []);
+    const data: AdBannersData = Array.isArray(raw) ? { banners: raw } : raw;
+    const active = data.banners
       .filter(b => b.active)
       .sort((a, b) => a.order - b.order);
-    return NextResponse.json({ banners: active });
+    return NextResponse.json({ banners: active, heading: data.heading ?? '' });
   } catch (err) {
     console.error('[public/ad-banners GET]', err);
-    return NextResponse.json({ banners: [] });
+    return NextResponse.json({ banners: [], heading: '' });
   }
 }

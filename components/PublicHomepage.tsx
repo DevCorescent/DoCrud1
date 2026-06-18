@@ -2450,8 +2450,41 @@ function HomepageLiveFeed() {
             className="sticky top-0 z-20 border-b border-white/[0.08] shrink-0"
             style={{ background: 'rgba(12,12,16,0.82)', backdropFilter: 'blur(32px) saturate(1.6)', WebkitBackdropFilter: 'blur(32px) saturate(1.6)' }}
           >
-            {/* row 1: title + tag pill + sort */}
-            <div className="flex items-center gap-2 px-4 sm:px-6 pt-3.5 pb-2">
+            {/* mobile-only: horizontal scrollable category tabs (lg+ uses sidebar) */}
+            <div className="lg:hidden overflow-x-auto px-3 pt-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex items-center gap-1.5 min-w-max">
+                {HP_TABS.map(tab => {
+                  const isActive = activecat === tab.id;
+                  const colorCls = HP_TAG_CLS[tab.id] ?? HP_TAG_CLS.all;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
+                      className={`inline-flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap transition border ${
+                        isActive
+                          ? `${colorCls} border-current/20`
+                          : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:text-white/65 hover:border-white/[0.12]'
+                      }`}
+                    >
+                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
+                        isActive ? colorCls : 'border-white/[0.06] bg-transparent text-white/25'
+                      }`}>
+                        <tab.icon className="h-2.5 w-2.5" />
+                      </span>
+                      {tab.label}
+                      {(() => {
+                        const cnt = tab.id === 'all' ? allItems.length : (catCounts[tab.id as string] ?? 0);
+                        return cnt > 0 ? <span className="text-[9px] font-bold opacity-60 tabular-nums">{cnt}</span> : null;
+                      })()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* desktop row: title + tag pill (no sort — sort stays non-sticky below) */}
+            <div className="hidden lg:flex items-center gap-2 px-4 sm:px-6 pt-3.5 pb-2">
               <span className="text-[13px] font-semibold text-white/85 tracking-tight shrink-0">
                 {HP_TABS.find(t => t.id === activecat)?.label ?? 'All Posts'}
               </span>
@@ -2480,7 +2513,6 @@ function HomepageLiveFeed() {
                     }`}
                   >{s}</button>
                 ))}
-                {/* manual refresh */}
                 <button
                   type="button"
                   onClick={applyRefresh}
@@ -2517,6 +2549,47 @@ function HomepageLiveFeed() {
 
           {/* feed cards */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {/* mobile-only: sort row — non-sticky, scrolls with content */}
+            <div className="lg:hidden flex items-center gap-2 py-3 max-w-[600px] mx-auto w-full">
+              <span className="text-[12px] font-semibold text-white/60 tracking-tight shrink-0">
+                {HP_TABS.find(t => t.id === activecat)?.label ?? 'All'}
+              </span>
+              {filtered.length > 0 && (
+                <span className="rounded-full bg-white/[0.09] px-2 py-px text-[9.5px] font-semibold text-white/45 tabular-nums">{filtered.length}</span>
+              )}
+              {tagSearch && (
+                <button
+                  type="button"
+                  onClick={() => setTagSearch('')}
+                  className="inline-flex items-center gap-1 rounded-full border border-orange-400/30 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-300 transition hover:bg-orange-500/20"
+                >
+                  #{tagSearch} <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+              <div className="ml-auto flex items-center gap-1.5">
+                {(['Recent', 'Popular', 'Oldest'] as const).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSort(s)}
+                    className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10.5px] font-semibold whitespace-nowrap transition ${
+                      sort === s
+                        ? 'border-white/[0.18] bg-white/[0.09] text-white/90'
+                        : 'border-white/[0.07] bg-white/[0.03] text-white/40 hover:border-white/[0.12] hover:text-white/70'
+                    }`}
+                  >{s}</button>
+                ))}
+                <button
+                  type="button"
+                  onClick={applyRefresh}
+                  disabled={refreshing}
+                  title="Refresh feed"
+                  className="ml-1 flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.03] text-white/30 transition hover:bg-white/[0.07] hover:text-white/65 disabled:opacity-40"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
             <div className="mx-auto w-full max-w-[600px] divide-y divide-white/[0.045]">
               {loading
                 ? Array.from({ length: 4 }).map((_, i) => (
@@ -5244,8 +5317,11 @@ type AdBanner = {
   createdAt: string;
 };
 
+const BANNER_HEADING_FALLBACK = 'Featured & Promotions';
+
 function AdBannerSlider() {
   const [banners, setBanners]     = useState<AdBanner[]>([]);
+  const [heading, setHeading]     = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const trackRef  = useRef<HTMLDivElement>(null);
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -5255,9 +5331,10 @@ function AdBannerSlider() {
   /* ── fetch ─────────────────────────────────────────────────────── */
   useEffect(() => {
     fetch('/api/public/ad-banners', { cache: 'no-store' })
-      .then(r => r.ok ? r.json() : { banners: [] })
-      .then((d: { banners?: AdBanner[] }) => {
+      .then(r => r.ok ? r.json() : { banners: [], heading: '' })
+      .then((d: { banners?: AdBanner[]; heading?: string }) => {
         if (Array.isArray(d.banners) && d.banners.length) setBanners(d.banners);
+        setHeading(d.heading ?? '');
       })
       .catch(() => {});
   }, []);
@@ -5328,7 +5405,29 @@ function AdBannerSlider() {
 
   if (!banners.length) return null;
 
+  const displayHeading = heading.trim() || BANNER_HEADING_FALLBACK;
+
   return (
+    <div>
+      {/* ── Section heading ── */}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[11px] font-semibold tracking-[0.10em] uppercase"
+            style={{ color: 'rgba(255,255,255,0.28)' }}
+          >
+            {displayHeading}
+          </span>
+          {!heading.trim() && (
+            <span
+              className="rounded-[5px] px-1.5 py-[2px] text-[8.5px] font-semibold"
+              style={{ background: 'rgba(99,102,241,0.08)', color: 'rgba(165,180,252,0.55)', border: '1px solid rgba(99,102,241,0.14)' }}
+            >
+              admin default
+            </span>
+          )}
+        </div>
+      </div>
     <div style={{
       position: 'relative',
       marginLeft:  'calc(-1 * (100vw - 100%) / 2)',
@@ -5495,6 +5594,7 @@ function AdBannerSlider() {
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 }
@@ -6055,14 +6155,14 @@ function NewHomepageContent({
           {/* Feature cards — mobile: hidden (strip at top handles mobile) */}
         </div>}
 
+        {/* ── Ad banner slider ── */}
+        {hpSections.adBanners && <AdBannerSlider />}
+
         {/* ── Publish heading + content discovery + feed cards + gig slider (grouped) ── */}
         <div className="flex flex-col" style={{ gap: 14 }}>
           <PublishHeading onPublish={() => onPublishClick()} />
           <ContentDiscoveryStrip />
         </div>
-
-        {/* ── Ad banner slider ── */}
-        {hpSections.adBanners && <AdBannerSlider />}
 
         {/* ── Gigs grid ── */}
         {hpSections.gigsGrid && <div>

@@ -1116,6 +1116,15 @@ function TrendingPanel({
   );
 }
 
+/* ─── title cleanliness check for real items ─────────────────────── */
+const JUNK_TITLE_RE = /\.\w{2,5}$/;
+const GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'video', 'survey', 'article', 'upload']);
+function isJunkTitle(item: PublishedItem): boolean {
+  if (!item.isReal) return false;
+  const t = item.title.trim().toLowerCase();
+  return JUNK_TITLE_RE.test(t) || GENERIC_TITLES.has(t);
+}
+
 /* ─── featured card — same structure as PublishedCard + featured badge ── */
 function FeaturedCard({ item }: { item: PublishedItem }) {
   const [saved, toggleSaved] = useBookmark(item.id, item.category);
@@ -1187,9 +1196,11 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
 
       {/* ── content ── */}
       <Link href={`/published/${item.id}`} className="block">
-        <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-          {item.title}
-        </h3>
+        {!isJunkTitle(item) && (
+          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+            {item.title}
+          </h3>
+        )}
         <BodyDisplay body={item.body} />
       </Link>
 
@@ -1349,9 +1360,11 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
 
         {/* ── content ── */}
         <Link href={`/published/${item.id}`} className="block">
-          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-            {searchQuery ? highlight(item.title, searchQuery) : item.title}
-          </h3>
+          {!isJunkTitle(item) && (
+            <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+              {searchQuery ? highlight(item.title, searchQuery) : item.title}
+            </h3>
+          )}
           <BodyDisplay body={item.body} searchQuery={searchQuery} />
         </Link>
 
@@ -2010,11 +2023,13 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
 
       {/* caption */}
       <Link href={`/published/${item.id}`} className="block">
-        <p className="text-[13.5px] font-semibold text-white leading-snug line-clamp-2 group-hover:text-white/85 transition-colors">
-          {searchQuery ? highlight(item.title, searchQuery) : item.title}
-        </p>
+        {!isJunkTitle(item) && (
+          <p className="text-[13.5px] font-semibold text-white leading-snug line-clamp-2 group-hover:text-white/85 transition-colors">
+            {searchQuery ? highlight(item.title, searchQuery) : item.title}
+          </p>
+        )}
         {item.body && (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">
+          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${!isJunkTitle(item) ? 'mt-1.5' : ''}`}>
             {searchQuery ? highlight(getBodySnippet(item.body), searchQuery) : getBodySnippet(item.body)}
           </p>
         )}
@@ -2259,10 +2274,12 @@ function ThreadCard({ item, searchQuery }: { item: PublishedItem; searchQuery: s
 
       {/* content */}
       <Link href={`/published/${item.id}`} className="block">
-        <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-          {searchQuery ? highlight(item.title, searchQuery) : item.title}
-        </h3>
-        <p className="mt-2 text-[13px] leading-relaxed text-white/50 line-clamp-3 border-l-2 border-white/[0.08] pl-3">
+        {!isJunkTitle(item) && (
+          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+            {searchQuery ? highlight(item.title, searchQuery) : item.title}
+          </h3>
+        )}
+        <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-3 border-l-2 border-white/[0.08] pl-3 ${!isJunkTitle(item) ? 'mt-2' : ''}`}>
           {firstPoint}
         </p>
       </Link>
@@ -3375,8 +3392,8 @@ export default function PublishedPage() {
               <Plus className="h-4 w-4 transition-transform duration-200 group-hover:rotate-90" />
             </button>
 
-            {/* trending drawer button */}
-            <button
+            {/* trending drawer button — commented out for now */}
+            {/* <button
               type="button"
               onClick={() => setTrendDrawerOpen(true)}
               className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${
@@ -3389,10 +3406,10 @@ export default function PublishedPage() {
               {Object.keys(trendCounts).length > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-orange-500 text-[7px] font-bold text-white">🔥</span>
               )}
-            </button>
+            </button> */}
 
-            {/* filter button */}
-            <button
+            {/* filter button — commented out for now */}
+            {/* <button
               type="button"
               onClick={() => setFiltersOpen(o => !o)}
               className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${
@@ -3407,11 +3424,11 @@ export default function PublishedPage() {
                   {totalFilterCount}
                 </span>
               )}
-            </button>
+            </button> */}
           </div>
 
-          {/* mobile horizontal tab chips — hides on scroll-down, reveals on scroll-up */}
-          <div
+          {/* mobile horizontal tab chips — commented out for now */}
+          {/* <div
             style={{
               maxHeight: !isSearching && tabBarVisible ? '52px' : '0px',
               opacity:   !isSearching && tabBarVisible ? 1 : 0,
@@ -3448,7 +3465,7 @@ export default function PublishedPage() {
                 })}
               </div>
             </div>
-          </div>
+          </div> */}
         </header>
 
         {/* ── Comprehensive filter panel (all tabs) ── */}
@@ -3868,9 +3885,9 @@ export default function PublishedPage() {
       )}
 
       {/* ══════════════════════════════════════
-          MOBILE BOTTOM NAV
+          MOBILE BOTTOM NAV — commented out (replaced by horizontal tab chips in header)
       ══════════════════════════════════════ */}
-      <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-white/[0.07] bg-[#0D0D0F]/95 backdrop-blur-2xl">
+      {/* <nav className="lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-white/[0.07] bg-[#0D0D0F]/95 backdrop-blur-2xl">
         <div className="flex">
           {MOBILE_NAV.map(tab => {
             const isActive = activeTab === tab.id;
@@ -3895,9 +3912,8 @@ export default function PublishedPage() {
             );
           })}
         </div>
-        {/* iOS safe area spacer */}
         <div className="h-safe-bottom" />
-      </nav>
+      </nav> */}
     </div>
   );
 }

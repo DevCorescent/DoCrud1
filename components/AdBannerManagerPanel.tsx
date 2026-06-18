@@ -43,17 +43,20 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 }
 
 export default function AdBannerManagerPanel() {
-  const [banners, setBanners]       = useState<AdBanner[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [saving, setSaving]         = useState(false);
-  const [uploading, setUploading]   = useState(false);
-  const [msg, setMsg]               = useState<{ ok: boolean; text: string } | null>(null);
-  const [editing, setEditing]       = useState<AdBanner | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [form, setForm]             = useState<typeof EMPTY>({ ...EMPTY });
-  const [imageMode, setImageMode]   = useState<'upload' | 'url'>('upload');
-  const [urlInput, setUrlInput]     = useState('');
-  const fileRef                     = useRef<HTMLInputElement>(null);
+  const [banners, setBanners]         = useState<AdBanner[]>([]);
+  const [heading, setHeading]         = useState('');
+  const [headingInput, setHeadingInput] = useState('');
+  const [headingSaving, setHeadingSaving] = useState(false);
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [uploading, setUploading]     = useState(false);
+  const [msg, setMsg]                 = useState<{ ok: boolean; text: string } | null>(null);
+  const [editing, setEditing]         = useState<AdBanner | null>(null);
+  const [isCreating, setIsCreating]   = useState(false);
+  const [form, setForm]               = useState<typeof EMPTY>({ ...EMPTY });
+  const [imageMode, setImageMode]     = useState<'upload' | 'url'>('upload');
+  const [urlInput, setUrlInput]       = useState('');
+  const fileRef                       = useRef<HTMLInputElement>(null);
 
   const flash = (ok: boolean, text: string) => {
     setMsg({ ok, text });
@@ -64,13 +67,32 @@ export default function AdBannerManagerPanel() {
     setLoading(true);
     try {
       const r = await fetch('/api/super-admin/ad-banners', { cache: 'no-store' });
-      const d = await r.json() as { banners?: AdBanner[] };
+      const d = await r.json() as { banners?: AdBanner[]; heading?: string };
       setBanners(Array.isArray(d.banners) ? d.banners : []);
+      const h = d.heading ?? '';
+      setHeading(h);
+      setHeadingInput(h);
     } catch { flash(false, 'Failed to load banners'); }
     setLoading(false);
   };
 
   useEffect(() => { void load(); }, []);
+
+  const saveHeading = async () => {
+    setHeadingSaving(true);
+    try {
+      const r = await fetch('/api/super-admin/ad-banners', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'set-heading', heading: headingInput }),
+      });
+      const d = await r.json() as { heading?: string; error?: string };
+      if (!r.ok) throw new Error(d.error ?? 'Save failed');
+      setHeading(d.heading ?? headingInput);
+      flash(true, 'Section heading saved');
+    } catch (e) { flash(false, e instanceof Error ? e.message : 'Save failed'); }
+    setHeadingSaving(false);
+  };
 
   const resetForm = () => {
     setEditing(null);
@@ -194,6 +216,45 @@ export default function AdBannerManagerPanel() {
           {msg.text}
         </div>
       )}
+
+      {/* ── section heading config ── */}
+      <div className={`${card} px-5 py-4`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white mb-0.5">Section Heading</p>
+            <p className="text-xs text-zinc-500 mb-3">
+              Displayed above the banner slider on the homepage.
+              Leave blank to show &ldquo;Featured &amp; Promotions&rdquo; (fallback).
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                className={`${inp} flex-1`}
+                value={headingInput}
+                onChange={e => setHeadingInput(e.target.value)}
+                placeholder="e.g. Deals & Promotions"
+                maxLength={60}
+              />
+              <button
+                className={btn('primary')}
+                disabled={headingSaving || headingInput === heading}
+                onClick={() => void saveHeading()}
+              >
+                {headingSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            {!heading && (
+              <p className="mt-2 text-[11px] text-zinc-600">
+                Currently showing fallback: <span className="text-zinc-400">Featured &amp; Promotions</span>
+              </p>
+            )}
+            {heading && (
+              <p className="mt-2 text-[11px] text-zinc-500">
+                Live heading: <span className="text-amber-400 font-medium">{heading}</span>
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* ── form ── */}
       {showForm && (

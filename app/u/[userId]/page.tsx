@@ -1315,62 +1315,74 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
     fileName: string;
   } | null>(null);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
+  const [imgUploading, setImgUploading] = useState<'avatar' | 'banner' | null>(null);
 
-  function handleImageFile(file: File, field: 'avatarUrl' | 'coverGradient') {
+  async function handleImageFile(file: File, field: 'avatarUrl' | 'coverGradient') {
     console.log('[ProfileUpload] file selected:', { field, name: file.name, size: file.size, type: file.type });
-    if (file.size > 5 * 1024 * 1024) {
-      console.warn('[ProfileUpload] file too large, rejected:', file.size);
-      setError('Image must be under 5 MB');
-      return;
+    if (file.size > 5 * 1024 * 1024) { setError('Image must be under 5 MB'); return; }
+    const kind: 'avatar' | 'banner' = field === 'avatarUrl' ? 'avatar' : 'banner';
+    setImgUploading(kind);
+    setError('');
+    try {
+      // Compress via canvas before upload
+      const compressedBlob = await new Promise<Blob>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = reject;
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onerror = () => resolve(file); // fallback: original file
+          img.onload = () => {
+            try {
+              const maxDim = kind === 'avatar' ? 600 : 1400;
+              const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+              const canvas = document.createElement('canvas');
+              canvas.width = Math.round(img.width * scale);
+              canvas.height = Math.round(img.height * scale);
+              const ctx = canvas.getContext('2d');
+              if (!ctx) { resolve(file); return; }
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob((blob) => blob ? resolve(blob) : resolve(file), 'image/jpeg', 0.82);
+            } catch { resolve(file); }
+          };
+          img.src = e.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+      });
+      console.log('[ProfileUpload] compressed blob size:', compressedBlob.size, 'original:', file.size);
+
+      // Upload directly to R2-backed endpoint
+      const fd = new FormData();
+      fd.append('file', compressedBlob, file.name.replace(/\.[^.]+$/, '.jpg'));
+      fd.append('type', kind);
+      const res = await fetch('/api/profile/upload-image', { method: 'POST', body: fd });
+      const json = await res.json() as { url?: string; error?: string };
+      console.log('[ProfileUpload] upload response:', { status: res.status, url: json.url, error: json.error });
+      if (!res.ok || !json.url) throw new Error(json.error || 'Upload failed');
+
+      // Show reposition modal with the server URL (works for both R2 + local)
+      const initialPosition = kind === 'avatar' ? (form.avatarPosition ?? '50% 50%') : (form.coverPosition ?? '50% 50%');
+      setAdjustTarget({ dataUrl: json.url, type: kind, initialPosition });
+    } catch (err) {
+      console.error('[ProfileUpload] error:', err);
+      setError((err as Error).message || 'Upload failed. Please try again.');
+    } finally {
+      setImgUploading(null);
     }
-    const reader = new FileReader();
-    reader.onerror = (e) => console.error('[ProfileUpload] FileReader error:', e);
-    reader.onload = (e) => {
-      const rawDataUrl = e.target?.result as string;
-      console.log('[ProfileUpload] FileReader done, compressing…', { field, rawLength: rawDataUrl?.length });
-      // Compress via canvas: resize to max 1200px, JPEG quality 0.82
-      const img = new Image();
-      img.onerror = () => {
-        console.error('[ProfileUpload] Image decode failed — using raw dataUrl');
-        finishWithDataUrl(rawDataUrl);
-      };
-      img.onload = () => {
-        try {
-          const maxDim = field === 'avatarUrl' ? 600 : 1400;
-          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-          const w = Math.round(img.width * scale);
-          const h = Math.round(img.height * scale);
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) { finishWithDataUrl(rawDataUrl); return; }
-          ctx.drawImage(img, 0, 0, w, h);
-          const compressed = canvas.toDataURL('image/jpeg', 0.82);
-          console.log('[ProfileUpload] compressed:', { field, originalLength: rawDataUrl.length, compressedLength: compressed.length, w, h });
-          finishWithDataUrl(compressed);
-        } catch (canvasErr) {
-          console.error('[ProfileUpload] canvas compression failed, falling back:', canvasErr);
-          finishWithDataUrl(rawDataUrl);
-        }
-      };
-      img.src = rawDataUrl;
-      function finishWithDataUrl(dataUrl: string) {
-        const type: 'avatar' | 'banner' = field === 'avatarUrl' ? 'avatar' : 'banner';
-        const initialPosition = field === 'avatarUrl' ? (form.avatarPosition ?? '50% 50%') : (form.coverPosition ?? '50% 50%');
-        setAdjustTarget({ dataUrl, type, initialPosition });
-      }
-    };
-    reader.readAsDataURL(file);
   }
 
-  function handleAdjustSave(dataUrl: string, position: string) {
+  function handleAdjustSave(url: string, position: string) {
     if (!adjustTarget) return;
-    console.log('[ProfileUpload] adjust saved:', { type: adjustTarget.type, position, dataUrlLength: dataUrl?.length });
+    console.log('[ProfileUpload] adjust saved:', { type: adjustTarget.type, position, url: url.slice(0, 80) });
     if (adjustTarget.type === 'avatar') {
-      setForm((prev) => ({ ...prev, avatarUrl: dataUrl, avatarPosition: position }));
+      setForm((prev) => ({ ...prev, avatarUrl: url, avatarPosition: position }));
     } else {
-      setForm((prev) => ({ ...prev, coverGradient: dataUrl, coverPosition: position }));
+      // Use bannerUrl for uploaded images; clear any stale base64 in coverGradient
+      setForm((prev) => ({
+        ...prev,
+        bannerUrl: url,
+        coverPosition: position,
+        coverGradient: prev.coverGradient?.startsWith('data:') ? undefined : prev.coverGradient,
+      }));
     }
     setAdjustTarget(null);
   }

@@ -204,7 +204,6 @@ function bylineChips(byline: string, category: string): MetaChip[] {
   const chips: MetaChip[] = [];
   const cat = category.toLowerCase();
   if (cat === 'news' || cat === 'article') {
-    if (parts[0]) chips.push({ icon: ic(Newspaper), label: 'SOURCE', value: parts[0] });
     const read = parts.find(p => /min read/i.test(p));
     if (read) chips.push({ icon: ic(Clock), label: 'READ TIME', value: read });
   } else if (cat === 'document') {
@@ -243,12 +242,6 @@ function bylineChips(byline: string, category: string): MetaChip[] {
     if (work) chips.push({ icon: ic(Sparkles), label: 'WORK TYPE', value: work });
     const year = parts.find(p => /^\d{4}$/.test(p.trim()));
     if (year) chips.push({ icon: ic(CalendarDays), label: 'YEAR', value: year });
-  } else {
-    parts.slice(0, 3).forEach((p, i) => {
-      const labels = ['SOURCE', 'CATEGORY', 'INFO'];
-      const icons  = [ic(Star), ic(Target), ic(CalendarDays)];
-      chips.push({ icon: icons[i], label: labels[i], value: p });
-    });
   }
   return chips;
 }

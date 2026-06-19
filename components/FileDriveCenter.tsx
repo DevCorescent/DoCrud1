@@ -500,7 +500,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
   const [unlockedFolders, setUnlockedFolders] = useState<Set<string>>(new Set());
 
   /* -- Upload state -- */
-  const [uploadPrivacy, setUploadPrivacy] = useState<Privacy>('public');
+  const [uploadPrivacy, setUploadPrivacy] = useState<Privacy>('private');
   const [dragging,      setDragging]      = useState(false);
   const [uploadedName,  setUploadedName]  = useState('');
   const [uploading,     setUploading]     = useState(false);
@@ -2667,16 +2667,12 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
             </div>
             <p style={{ margin:'0 0 8px', fontSize:10, fontWeight:700, color:'rgba(255,255,255,.35)', letterSpacing:'.08em', textTransform:'uppercase' }}>Visibility</p>
             <div style={{ display:'flex', gap:6, marginBottom:16 }}>
-              {([['public','Public',Globe,'#34d399',false],['private','Private',Lock,'rgba(255,255,255,.50)',true],['password','Password',Key,'#fbbf24',true]] as const).map(([val,label,Icon,color,needsPrivacy]) => {
-                const privacyLocked = needsPrivacy && !featureAvailable('filePrivacy');
-                return (
-                  <button key={val} onClick={() => { if (privacyLocked) { checkFeature('filePrivacy'); return; } setUploadPrivacy(val as Privacy); }} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:5, padding:'8px 4px', borderRadius:10, border:`1px solid ${uploadPrivacy===val?`${color}44`:'rgba(255,255,255,.08)'}`, background:uploadPrivacy===val?`${color}14`:'transparent', cursor: privacyLocked ? 'pointer' : 'pointer', opacity: privacyLocked ? 0.45 : 1, position:'relative' }}>
-                    <Icon style={{ width:11, height:11, color:uploadPrivacy===val?color:'rgba(255,255,255,.28)' }} />
-                    <span style={{ fontSize:11, fontWeight:600, color:uploadPrivacy===val?color:'rgba(255,255,255,.30)' }}>{label}</span>
-                    {privacyLocked && <Lock style={{ width:7, height:7, color:'rgba(255,255,255,.35)', position:'absolute', top:3, right:3 }} />}
-                  </button>
-                );
-              })}
+              {([['private','Private',Lock,'rgba(255,255,255,.50)'],['password','Password',Key,'#fbbf24']] as const).map(([val,label,Icon,color]) => (
+                <button key={val} onClick={() => setUploadPrivacy(val as Privacy)} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:5, padding:'8px 4px', borderRadius:10, border:`1px solid ${uploadPrivacy===val?`${color}44`:'rgba(255,255,255,.08)'}`, background:uploadPrivacy===val?`${color}14`:'transparent', cursor:'pointer' }}>
+                  <Icon style={{ width:11, height:11, color:uploadPrivacy===val?color:'rgba(255,255,255,.28)' }} />
+                  <span style={{ fontSize:11, fontWeight:600, color:uploadPrivacy===val?color:'rgba(255,255,255,.30)' }}>{label}</span>
+                </button>
+              ))}
             </div>
             <button onClick={doUpload} disabled={!uploadedName||uploading} style={{ width:'100%', height:40, borderRadius:12, border:'none', background:uploadDone?'rgba(52,211,153,.18)':uploadedName?'rgba(139,92,246,.22)':'rgba(255,255,255,.04)', cursor:uploadedName&&!uploading?'pointer':'default', display:'flex', alignItems:'center', justifyContent:'center', gap:8, transition:'background .22s' }}>
               {uploadDone ? <><Check style={{width:14,height:14,color:'#34d399'}}/><span style={{fontSize:13,fontWeight:700,color:'#34d399'}}>Uploaded!</span></> : uploading ? <><div style={{width:14,height:14,border:'2px solid rgba(167,139,250,.25)',borderTopColor:'#a78bfa',borderRadius:'50%',animation:'fd-spin .7s linear infinite'}}/><span style={{fontSize:13,fontWeight:700,color:'#a78bfa'}}>Uploading…</span></> : <><Upload style={{width:13,height:13,color:uploadedName?'#a78bfa':'rgba(255,255,255,.22)'}}/><span style={{fontSize:13,fontWeight:700,color:uploadedName?'#c4b5fd':'rgba(255,255,255,.24)'}}>Upload File</span></>}

@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/server/auth';
 import { appendFileTransfer, getFileTransfers, updateFileTransfer } from '@/lib/server/file-transfers';
 import { recordPost, checkAndGrantMilestones } from '@/lib/server/credits';
 import { readJsonFile } from '@/lib/server/storage';
+import { getProfileData } from '@/lib/server/user-profiles';
 import path from 'path';
 import fs from 'fs';
 import type { SecureFileTransfer } from '@/types/document';
@@ -89,8 +90,9 @@ export async function POST(request: NextRequest) {
     const avatarUrl         = extra.avatarUrl as string | undefined;
     const businessPageSlug  = extra.businessPageSlug as string | undefined;
 
-    // Resolve user avatar from session profile if not provided
-    const resolvedAvatarUrl = avatarUrl || (session?.user?.image as string | undefined) || undefined;
+    // Resolve user avatar: explicit > Docrud profile > OAuth session image
+    const uploaderProfile = userId ? await getProfileData(userId).catch(() => null) : null;
+    const resolvedAvatarUrl = avatarUrl || uploaderProfile?.avatarUrl || (session?.user?.image as string | undefined) || undefined;
 
     // Create the record first (without thumbnail) to get the ID
     const created = await appendFileTransfer({

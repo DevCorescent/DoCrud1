@@ -1856,7 +1856,6 @@ function hpBylineChips(byline: string, category: string): HpMetaChip[] {
   const cat = category.toLowerCase();
 
   if (cat === 'news' || cat === 'article') {
-    if (parts[0]) chips.push({ icon: ic(Newspaper), label: 'SOURCE', value: parts[0] });
     const read = parts.find(p => /min read/i.test(p));
     if (read) chips.push({ icon: ic(Clock), label: 'READ TIME', value: read });
     return chips;
@@ -1911,12 +1910,6 @@ function hpBylineChips(byline: string, category: string): HpMetaChip[] {
     if (year) chips.push({ icon: ic(CalendarDays), label: 'YEAR', value: year });
     return chips;
   }
-  /* generic fallback: first 3 byline parts */
-  const GENERIC_LABELS = ['SOURCE', 'CATEGORY', 'INFO'];
-  const GENERIC_ICONS  = [ic(Info), ic(Target), ic(CalendarDays)];
-  parts.slice(0, 3).forEach((p, i) => {
-    chips.push({ icon: GENERIC_ICONS[i], label: GENERIC_LABELS[i], value: p });
-  });
   return chips;
 }
 
@@ -2187,6 +2180,9 @@ function HomepageLiveFeed() {
   const [activecat,  setActivecat]  = React.useState<string>('all');
   const [tagSearch,  setTagSearch]  = React.useState<string>('');
   const [sort,       setSort]       = React.useState<'Recent' | 'Popular' | 'Oldest'>('Recent');
+  const [tabsVisible, setTabsVisible] = React.useState(true);
+  const tabsLastY  = React.useRef(0);
+  const tabsTicking = React.useRef(false);
 
   /* trend state — synced from localStorage every 2s like PublishedPage */
   const [trends,    setTrends]    = React.useState<Record<string, HpTrendEntry>>({});
@@ -2293,6 +2289,26 @@ function HomepageLiveFeed() {
     obs.observe(sentinelRef.current);
     return () => obs.disconnect();
   }, [hasMore, visible.length]);
+
+  /* scroll-hide tabs on mobile */
+  React.useEffect(() => {
+    const onScroll = () => {
+      if (tabsTicking.current) return;
+      tabsTicking.current = true;
+      requestAnimationFrame(() => {
+        if (window.innerWidth >= 768) { tabsTicking.current = false; return; }
+        const y    = window.scrollY;
+        const diff = y - tabsLastY.current;
+        if (Math.abs(diff) > 4) {
+          setTabsVisible(diff < 0 || y < 60);
+          tabsLastY.current = y;
+        }
+        tabsTicking.current = false;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   if (!loading && allItems.length === 0) return null;
 
@@ -2448,7 +2464,14 @@ function HomepageLiveFeed() {
           {/* sticky top bar */}
           <div
             className="sticky top-0 z-20 border-b border-white/[0.08] shrink-0"
-            style={{ background: 'rgba(12,12,16,0.82)', backdropFilter: 'blur(32px) saturate(1.6)', WebkitBackdropFilter: 'blur(32px) saturate(1.6)' }}
+            style={{
+              background: 'rgba(12,12,16,0.82)',
+              backdropFilter: 'blur(32px) saturate(1.6)',
+              WebkitBackdropFilter: 'blur(32px) saturate(1.6)',
+              transform: tabsVisible ? 'translateY(0)' : 'translateY(-100%)',
+              transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
+              willChange: 'transform',
+            }}
           >
             {/* mobile-only: horizontal scrollable category tabs (lg+ uses sidebar) */}
             <div className="lg:hidden overflow-x-auto px-3 pt-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -8122,7 +8145,6 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                 ...(isAuthenticated && !guestMode
                   ? [{ id: 'messages', label: 'Messages', Icon: MessageSquare, href: '/messages' }]
                   : [{ id: 'signup',   label: 'Sign Up',  Icon: UserPlus,     href: '/signup' }]),
-                { id: 'apps', label: 'All Tools', Icon: LayoutGrid, onClick: () => setMobileToolsDrawerOpen(true) },
               ];
               const ordered = dockItems;
 

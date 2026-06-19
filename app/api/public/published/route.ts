@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getFileTransfers } from '@/lib/server/file-transfers';
 import { getAuthSession } from '@/lib/server/auth';
 import { readJsonFile, businessPagesPath } from '@/lib/server/storage';
+import { getProfileData } from '@/lib/server/user-profiles';
 
 /* Build a lookup map: company name (lowercase) → { slug, id } */
 async function buildBusinessLookup(): Promise<Map<string, { slug: string; id: string }>> {
@@ -56,12 +57,15 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const filterSlug = searchParams.get('businessPageSlug') || '';
     const filterName = searchParams.get('businessPageName') || ''; // fallback for legacy items
+    const limit  = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10), 1), 100);
+    const page   = Math.max(parseInt(searchParams.get('page')  || '1',  10), 1);
+    const offset = (page - 1) * limit;
 
     // Build business name → slug lookup for resolving legacy items
     const bizLookup = await buildBusinessLookup();
 
     const transfers = await getFileTransfers();
-    const items = transfers
+    const filtered = transfers
       .filter(
         (t) =>
           t.directoryVisibility === 'public' &&
@@ -81,8 +85,18 @@ export async function GET(request: NextRequest) {
         if (aFeatured && !bFeatured) return -1;
         if (!aFeatured && bFeatured) return 1;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-      })
-      .map((t) => {
+      });
+
+    const total   = filtered.length;
+    const hasMore = offset + limit < total;
+    const slice   = filtered.slice(offset, offset + limit);
+
+    // Only enrich avatars for the items we're actually returning (not the full list)
+    const missingIds = [...new Set(slice.filter(t => !t.avatarUrl && t.uploadedByUserId).map(t => t.uploadedByUserId as string))];
+    const profiles = await Promise.all(missingIds.map(id => getProfileData(id).catch(() => null)));
+    const avatarMap = new Map(missingIds.map((id, i) => [id, profiles[i]?.avatarUrl ?? null]));
+
+    const items = slice.map((t) => {
         const isFeaturedActive = t.featured && t.featuredUntil && new Date(t.featuredUntil) > now;
         const cat = t.directoryCategory?.toLowerCase() || 'document';
         const authorName = t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
@@ -109,7 +123,7 @@ export async function GET(request: NextRequest) {
           interestedCount: t.interestedCount ?? 0,
           interestedByViewer: viewerIdentifier ? (t.interestedBy ?? []).includes(viewerIdentifier) : false,
           uploadedByUserId: t.uploadedByUserId,
-          avatarUrl: t.avatarUrl || undefined,
+          avatarUrl: t.avatarUrl || (t.uploadedByUserId ? avatarMap.get(t.uploadedByUserId) ?? undefined : undefined),
           // Resolve businessPageSlug: use stored value, or look up by company name for legacy items
           businessPageSlug: t.businessPageSlug ||
             (t.uploadedByName ? bizLookup.get(t.uploadedByName.toLowerCase())?.slug : undefined) ||
@@ -130,7 +144,7 @@ export async function GET(request: NextRequest) {
           reportCount: t.reports?.length ?? 0,
         };
       });
-    return NextResponse.json({ items });
+    return NextResponse.json({ items, total, hasMore, page });
   } catch (err) {
     console.error('[/api/public/published] error:', err);
     return NextResponse.json({ items: [] });

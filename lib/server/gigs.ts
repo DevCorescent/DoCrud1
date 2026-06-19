@@ -837,9 +837,7 @@ function gigOwnerName(user: User) {
 }
 
 export async function getGigListings() {
-  const stored = await readJsonFile<GigListing[]>(gigsPath, []);
-  const storedIds = new Set(stored.map((entry) => entry.id));
-  return [...stored, ...defaultGigs.filter((entry) => !storedIds.has(entry.id))];
+  return readJsonFile<GigListing[]>(gigsPath, []);
 }
 
 export async function saveGigListings(gigs: GigListing[]) {

@@ -187,6 +187,9 @@ export default function HomepageNav({
   const router = useRouter();
 
   const [isMounted, setIsMounted] = useState(false);
+  const [navVisible, setNavVisible] = useState(true);
+  const navLastY = useRef(0);
+  const navTicking = useRef(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -196,6 +199,26 @@ export default function HomepageNav({
   const [toolsOpen, setToolsOpen] = useState(false);
 
   useEffect(() => { setIsMounted(true); }, []);
+
+  /* scroll-hide on mobile only */
+  useEffect(() => {
+    const onScroll = () => {
+      if (navTicking.current) return;
+      navTicking.current = true;
+      requestAnimationFrame(() => {
+        if (window.innerWidth >= 768) { navTicking.current = false; return; }
+        const y    = window.scrollY;
+        const diff = y - navLastY.current;
+        if (Math.abs(diff) > 4) {
+          setNavVisible(diff < 0 || y < 60);
+          navLastY.current = y;
+        }
+        navTicking.current = false;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const searchBarRef = useRef<GlobalSearchBarHandle>(null);
 
@@ -404,12 +427,15 @@ export default function HomepageNav({
   }
 
   return (
-    <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12 z-30 relative" style={{
+    <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12 sticky top-0 z-40" style={{
       background: 'rgba(6,6,10,0.52)',
       backdropFilter: 'blur(56px) saturate(200%) brightness(0.90)',
       WebkitBackdropFilter: 'blur(56px) saturate(200%) brightness(0.90)',
       borderBottom: '1px solid rgba(255,255,255,0.07)',
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 0 rgba(255,255,255,0.03), 0 8px 32px rgba(0,0,0,0.28)',
+      transform: navVisible ? 'translateY(0)' : 'translateY(-100%)',
+      transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
+      willChange: 'transform',
     }}>
 
 
@@ -424,7 +450,7 @@ export default function HomepageNav({
             <Menu className="h-[15px] w-[15px]" />
           </button>
         )}
-        <Link href="/" className="flex items-center gap-2 shrink-0 group">
+        <Link href="/" className="hidden md:flex items-center gap-2 shrink-0 group">
           {/* Logo icon with animated golden ring */}
           <div className="relative shrink-0" style={{ width: 28, height: 28 }}>
             {/* Spinning golden sweep ring */}
@@ -461,6 +487,24 @@ export default function HomepageNav({
         getLocalResults={getLocalResults}
         className="mx-3"
       />
+
+      {/* Mobile publish + button — left of search pill, visible below md only */}
+      {onPublishClick && (
+        <button
+          type="button"
+          onClick={onPublishClick}
+          className="md:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] transition active:scale-95"
+          style={{
+            background: 'rgba(255,255,255,0.07)',
+            border: '1px solid rgba(255,255,255,0.11)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+          }}
+          aria-label="Publish"
+        >
+          <Plus className="h-[17px] w-[17px] text-white/70" />
+        </button>
+      )}
 
       {/* Mobile search pill — visible below md only, matches GlobalSearchBar's md:flex breakpoint */}
       <button
@@ -514,110 +558,6 @@ export default function HomepageNav({
           <span className="font-semibold">Ddrive</span>
         </button>
 
-        {/* ── Tools dropdown trigger (desktop only — mobile has it in the bottom dock as "Features") ── */}
-        <button
-          type="button"
-          onClick={() => setToolsOpen(o => !o)}
-          className={`hidden sm:flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 sm:px-3 text-[12px] font-medium transition active:scale-95 ${
-            toolsOpen
-              ? 'border-violet-500/[0.32] bg-violet-500/[0.12] text-violet-300'
-              : 'border-white/[0.08] bg-white/[0.04] text-white/55 hover:bg-white/[0.09] hover:text-white/80'
-          }`}
-        >
-          <Sparkles className="h-[13px] w-[13px] shrink-0" />
-          <span className="hidden sm:inline font-semibold">Tools</span>
-          <ChevronDown className={`hidden sm:block h-3 w-3 shrink-0 transition-transform duration-200 ${toolsOpen ? 'rotate-180' : ''}`} />
-        </button>
-
-        {/* ── Tools panel portal ── */}
-        {toolsOpen && typeof document !== 'undefined' && createPortal(
-          <>
-            <style>{`
-              @keyframes tn-bd    { from{opacity:0} to{opacity:1} }
-              @keyframes tn-sheet { from{transform:translateY(100%)} to{transform:translateY(0)} }
-              @keyframes tn-drop  { from{opacity:0;transform:translateY(-4px) scale(0.97)} to{opacity:1;transform:none} }
-              @keyframes tn-item  { from{opacity:0;transform:translateX(-4px)} to{opacity:1;transform:none} }
-              .tn-panel { animation: tn-sheet 0.34s cubic-bezier(0.22,1,0.36,1) both; }
-              @media(min-width:640px){ .tn-panel { animation: tn-drop 0.16s cubic-bezier(0.22,1,0.36,1) both; } }
-              .tn-row { transition: background 0.10s ease; }
-              .tn-row:hover  { background: rgba(255,255,255,0.048) !important; }
-              .tn-row:active { background: rgba(255,255,255,0.028) !important; transform: scale(0.985); transition-duration:0.06s; }
-              .tn-icon-box { transition: transform 0.14s cubic-bezier(0.34,1.56,0.64,1); }
-              .tn-row:hover .tn-icon-box { transform: scale(1.10); }
-            `}</style>
-
-            {/* Mobile backdrop */}
-            <div className="sm:hidden" onClick={() => setToolsOpen(false)}
-              style={{ position:'fixed', inset:0, zIndex:2147483646, background:'rgba(0,0,0,0.72)', backdropFilter:'blur(6px)', WebkitBackdropFilter:'blur(6px)', animation:'tn-bd 0.16s ease both' }} />
-            {/* Desktop transparent click-catcher */}
-            <div className="hidden sm:block" onClick={() => setToolsOpen(false)}
-              style={{ position:'fixed', inset:0, zIndex:2147483646 }} />
-
-            {/* Panel */}
-            <div
-              className="tn-panel fixed bottom-0 left-0 right-0 rounded-t-[24px]
-                sm:bottom-auto sm:left-auto sm:top-[57px] sm:right-4 sm:w-[248px] sm:rounded-[14px]"
-              style={{
-                zIndex: 2147483647,
-                background: 'rgba(4,4,8,0.94)',
-                backdropFilter: 'blur(48px) saturate(2.6)',
-                WebkitBackdropFilter: 'blur(48px) saturate(2.6)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                boxShadow: '0 12px 48px rgba(0,0,0,0.80), 0 0 0 1px rgba(255,255,255,0.03) inset',
-                paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 8px)',
-              }}
-            >
-              {/* Drag handle — mobile only */}
-              <div className="flex justify-center pt-2.5 pb-0 sm:hidden">
-                <div style={{ width: 32, height: 3.5, borderRadius: 99, background: 'rgba(255,255,255,0.10)' }} />
-              </div>
-
-              {/* Header */}
-              <div style={{ display:'flex', alignItems:'center', gap:9, padding:'12px 13px 10px', borderBottom:'1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ width:26, height:26, borderRadius:7, background:'rgba(139,92,246,0.14)', border:'1px solid rgba(139,92,246,0.20)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  <Sparkles style={{ width:12, height:12, color:'#a78bfa' }} />
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:'rgba(255,255,255,0.90)', letterSpacing:'-0.01em' }}>Tools</p>
-                  <p style={{ margin:0, fontSize:9.5, color:'rgba(255,255,255,0.26)' }}>Workspace toolkit</p>
-                </div>
-                <button type="button" onClick={() => setToolsOpen(false)}
-                  style={{ width:24, height:24, borderRadius:'50%', border:'1px solid rgba(255,255,255,0.07)', background:'rgba(255,255,255,0.04)', display:'flex', alignItems:'center', justifyContent:'center', color:'rgba(255,255,255,0.30)', cursor:'pointer', flexShrink:0 }}>
-                  <X style={{ width:11, height:11 }} />
-                </button>
-              </div>
-
-              {/* Single-column tool list */}
-              <div style={{ padding:'5px 6px 4px' }}>
-                {TOOLS_ITEMS.map((tool, idx) => (
-                  <button key={tool.id} type="button" className="tn-row"
-                    onClick={() => handleToolClick(tool.id)}
-                    style={{
-                      display:'flex', alignItems:'center', gap:10, width:'100%',
-                      borderRadius:10, border:'none', background:'transparent',
-                      padding:'8px 8px', textAlign:'left', cursor:'pointer',
-                      animation:`tn-item 0.22s ${0.03 + idx * 0.025}s cubic-bezier(0.22,1,0.36,1) both`,
-                    }}
-                  >
-                    {/* Icon */}
-                    <div className="tn-icon-box" style={{ width:30, height:30, borderRadius:8, flexShrink:0, background:tool.bg, border:`1px solid ${tool.bd}`, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                      <tool.Icon style={{ width:14, height:14, color:tool.color }} />
-                    </div>
-                    {/* Text */}
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ margin:0, fontSize:12, fontWeight:600, color:'rgba(255,255,255,0.84)', lineHeight:1.2 }}>{tool.label}</p>
-                      <p style={{ margin:'1.5px 0 0', fontSize:10, color:'rgba(255,255,255,0.28)', lineHeight:1.2 }}>{tool.desc}</p>
-                    </div>
-                    {/* Right accent dot */}
-                    <div style={{ width:4, height:4, borderRadius:'50%', background:tool.color, opacity:0.35, flexShrink:0 }} />
-                  </button>
-                ))}
-              </div>
-
-            </div>
-          </>,
-          document.body
-        )}
 
         {/* Messages icon (desktop only — mobile uses the bottom dock) */}
         {isAuthenticated && !guestMode && (

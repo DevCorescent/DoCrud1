@@ -7,6 +7,7 @@ import {
   Building2,
   Globe,
   Home,
+  Users,
 } from 'lucide-react';
 
 /* ── Recents icon ────────────────────────────────────────────────── */
@@ -190,24 +191,20 @@ export default function GlobalBottomNav() {
           );
         })()}
 
-        {/* Tools — hidden for now
+        {/* People */}
         {(() => {
-          const color = 'rgba(255,255,255,0.50)';
+          const active = pathname.startsWith('/people');
+          const color  = active ? '#4ade80' : 'rgba(255,255,255,0.50)';
           return (
-            <button
-              type="button"
-              className="gnb-item"
-              aria-label="Tools"
-              onClick={() => window.dispatchEvent(new CustomEvent('open-mobile-tools-drawer'))}
-            >
-              <span className="gnb-icon" style={{ color }}>
-                <Sparkles width={19} height={19} />
+            <a href="/people" className="gnb-item" aria-label="People" aria-current={active ? 'page' : undefined}>
+              <span className="gnb-icon" style={{ color, background: active ? 'rgba(74,222,128,0.16)' : 'transparent' }}>
+                <Users width={19} height={19} />
               </span>
-              <span className="gnb-label" style={{ color }}>Tools</span>
-              <span className="gnb-dot" style={{ opacity: 0, background: 'transparent' }} />
-            </button>
+              <span className="gnb-label" style={{ color }}>People</span>
+              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#4ade80' }} />
+            </a>
           );
-        })()} */}
+        })()}
 
         {/* Businesses */}
         {(() => {

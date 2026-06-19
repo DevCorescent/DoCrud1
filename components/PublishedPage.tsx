@@ -2701,6 +2701,10 @@ export default function PublishedPage() {
   const [publishOpen, setPublishOpen]   = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [realItems, setRealItems]       = useState<PublishedItem[]>([]);
+  const [feedLoading, setFeedLoading]   = useState(true);
+  const [serverPage, setServerPage]     = useState(1);
+  const [serverHasMore, setServerHasMore] = useState(false);
+  const [serverLoadingMore, setServerLoadingMore] = useState(false);
   const [gigItems, setGigItems]         = useState<PublishedItem[]>([]);
   const [visibleCount, setVisibleCount] = useState(10);
   const loadMoreSentinelRef             = useRef<HTMLDivElement>(null);
@@ -2768,26 +2772,21 @@ export default function PublishedPage() {
     return () => clearInterval(iv);
   }, []);
 
-  /* fetch real published items — initial + real-time polling every 30s */
+  /* fetch real published items — paginated */
   useEffect(() => {
     let alive = true;
-    const load = () =>
-      fetch('/api/public/published')
-        .then(r => r.ok ? r.json() : { items: [] })
-        .then((d: { items: PublishedItem[] }) => {
-          if (alive && Array.isArray(d.items)) {
-            setRealItems(prev => {
-              // only update state if content actually changed (avoid re-renders)
-              if (prev.length === d.items.length &&
-                  prev[0]?.id === d.items[0]?.id) return prev;
-              return d.items;
-            });
-          }
-        })
-        .catch(() => {});
-    load();
-    const iv = setInterval(load, 30_000);
-    return () => { alive = false; clearInterval(iv); };
+    fetch('/api/public/published?limit=20&page=1')
+      .then(r => r.ok ? r.json() : { items: [], hasMore: false })
+      .then((d: { items: PublishedItem[]; hasMore?: boolean }) => {
+        if (alive && Array.isArray(d.items)) {
+          setRealItems(d.items);
+          setServerHasMore(d.hasMore ?? false);
+          setServerPage(1);
+        }
+        if (alive) setFeedLoading(false);
+      })
+      .catch(() => { if (alive) setFeedLoading(false); });
+    return () => { alive = false; };
   }, []);
 
   /* fetch public gig listings */
@@ -3408,8 +3407,8 @@ export default function PublishedPage() {
               )}
             </button> */}
 
-            {/* filter button — commented out for now */}
-            {/* <button
+            {/* filter button */}
+            <button
               type="button"
               onClick={() => setFiltersOpen(o => !o)}
               className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition ${
@@ -3424,7 +3423,7 @@ export default function PublishedPage() {
                   {totalFilterCount}
                 </span>
               )}
-            </button> */}
+            </button>
           </div>
 
           {/* mobile horizontal tab chips — commented out for now */}
@@ -3747,6 +3746,39 @@ export default function PublishedPage() {
 
             {isSearching ? (
               <SearchResults items={allItems} query={search} />
+            ) : feedLoading ? (
+              <>
+                <style>{`
+                  @keyframes feed-shimmer {
+                    0%   { background-position: -600px 0; }
+                    100% { background-position: 600px 0; }
+                  }
+                  .feed-skel {
+                    background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.09) 50%, rgba(255,255,255,0.04) 75%);
+                    background-size: 600px 100%;
+                    animation: feed-shimmer 1.4s infinite linear;
+                    border-radius: 6px;
+                  }
+                `}</style>
+                <div className="divide-y divide-white/[0.05]">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="py-5 flex flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className="feed-skel h-5 w-16 rounded-full" />
+                        <div className="feed-skel h-3.5 w-24" />
+                      </div>
+                      <div className="feed-skel h-5 w-3/4" />
+                      <div className="feed-skel h-4 w-full" />
+                      <div className="feed-skel h-4 w-5/6" />
+                      <div className="flex items-center gap-4 mt-1">
+                        <div className="feed-skel h-3.5 w-10" />
+                        <div className="feed-skel h-3.5 w-10" />
+                        <div className="feed-skel h-3.5 w-10" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : mixedFeed.length === 0 ? (
               <div className="flex flex-col items-center gap-4 py-20 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-white/[0.08] bg-white/[0.04]">
@@ -3774,7 +3806,7 @@ export default function PublishedPage() {
                   )}
                 </div>
 
-                {/* ── Load more / sentinel ── */}
+                {/* ── Client-side show more (within loaded pages) ── */}
                 {visibleCount < mixedFeed.length && (
                   <div ref={loadMoreSentinelRef} className="flex flex-col items-center gap-3 pt-4 pb-2">
                     <button
@@ -3782,23 +3814,63 @@ export default function PublishedPage() {
                       onClick={() => setVisibleCount(c => c + 10)}
                       className="inline-flex items-center gap-2 rounded-2xl border border-white/[0.09] bg-white/[0.04] px-6 py-2.5 text-[12.5px] font-semibold text-white/55 transition-all hover:bg-white/[0.08] hover:text-white hover:border-white/[0.16] active:scale-[0.97]"
                     >
-                      Load more
+                      Show more
                       <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-bold text-white/40">
-                        {Math.min(10, mixedFeed.length - visibleCount)} more
+                        {Math.min(10, mixedFeed.length - visibleCount)}
                       </span>
                       <ChevronDown className="h-3.5 w-3.5 opacity-60" />
                     </button>
-                    <p className="text-[10.5px] text-white/20">
-                      Showing {Math.min(visibleCount, mixedFeed.length)} of {mixedFeed.length}
-                    </p>
+                  </div>
+                )}
+
+                {/* ── Load next page from server ── */}
+                {visibleCount >= mixedFeed.length && serverHasMore && (
+                  <div className="flex flex-col items-center gap-3 pt-4 pb-2">
+                    <button
+                      type="button"
+                      disabled={serverLoadingMore}
+                      onClick={() => {
+                        if (serverLoadingMore) return;
+                        setServerLoadingMore(true);
+                        const nextPage = serverPage + 1;
+                        fetch(`/api/public/published?limit=20&page=${nextPage}`)
+                          .then(r => r.ok ? r.json() : { items: [], hasMore: false })
+                          .then((d: { items: PublishedItem[]; hasMore?: boolean }) => {
+                            if (Array.isArray(d.items) && d.items.length > 0) {
+                              setRealItems(prev => [...prev, ...d.items]);
+                              setServerPage(nextPage);
+                              setServerHasMore(d.hasMore ?? false);
+                              setVisibleCount(c => c + d.items.length);
+                            }
+                          })
+                          .catch(() => {})
+                          .finally(() => setServerLoadingMore(false));
+                      }}
+                      className="inline-flex items-center gap-2 rounded-2xl border border-white/[0.09] bg-white/[0.04] px-6 py-2.5 text-[12.5px] font-semibold text-white/55 transition-all hover:bg-white/[0.08] hover:text-white hover:border-white/[0.16] active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {serverLoadingMore ? (
+                        <>
+                          <svg className="h-3.5 w-3.5 animate-spin opacity-60" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                          Loading…
+                        </>
+                      ) : (
+                        <>
+                          Load more posts
+                          <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
 
                 {/* All loaded indicator */}
-                {visibleCount >= mixedFeed.length && mixedFeed.length > 10 && (
+                {visibleCount >= mixedFeed.length && !serverHasMore && mixedFeed.length > 10 && (
                   <div className="flex items-center gap-3 pt-4 pb-2">
                     <div className="flex-1 h-px bg-white/[0.05]" />
-                    <p className="text-[10.5px] text-white/20 shrink-0">All {mixedFeed.length} posts loaded</p>
+                    <p className="text-[10.5px] text-white/20 shrink-0">All caught up</p>
                     <div className="flex-1 h-px bg-white/[0.05]" />
                   </div>
                 )}

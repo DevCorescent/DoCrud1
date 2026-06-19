@@ -799,7 +799,7 @@ export default function PublishAnythingDialog({
     )}
 
     <div
-      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 md:p-6 pb-[84px] sm:pb-0"
+      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 md:p-6 pb-[84px] sm:pb-0 px-0 sm:px-4"
       onClick={(e) => { if (e.target === e.currentTarget) onOpenChange(false); }}
     >
       {/* Backdrop */}
@@ -807,8 +807,8 @@ export default function PublishAnythingDialog({
 
       {/* Dialog */}
       <div className="relative flex w-full max-w-[880px] flex-col overflow-hidden
-        h-[calc(96dvh-84px)] rounded-t-[28px]
-        sm:h-[88dvh] sm:rounded-[28px]
+        h-auto max-h-[calc(96dvh-84px)] rounded-t-[28px]
+        sm:h-auto sm:max-h-[88dvh] sm:rounded-[28px]
         border border-white/[0.08] bg-[#0a0a0e]
         shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_-1px_0_0_rgba(255,255,255,0.06),0_32px_80px_rgba(0,0,0,0.98)]
         animate-in fade-in slide-in-from-bottom-8 duration-[300ms] ease-[cubic-bezier(0.25,0.75,0,1)]
@@ -866,8 +866,8 @@ export default function PublishAnythingDialog({
         {/* ── Body ── */}
         {step === 'pick' ? (
           <div className="flex flex-col flex-1 overflow-hidden">
-            {/* Search bar */}
-            <div className="shrink-0 px-5 sm:px-6 pt-4 pb-3.5">
+            {/* Search bar — hidden on all sizes */}
+            <div className="hidden shrink-0 px-5 sm:px-6 pt-4 pb-3.5">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
                 <input
@@ -891,7 +891,7 @@ export default function PublishAnythingDialog({
             </div>
 
             {/* Category grid */}
-            <div className="flex-1 overflow-y-auto px-5 pb-5 sm:px-6 sm:pb-6 scrollbar-minimal">
+            <div className="flex-1 overflow-y-auto px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2 scrollbar-minimal">
               {filteredCats.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.08]">
@@ -903,7 +903,7 @@ export default function PublishAnythingDialog({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 sm:gap-2">
                   {filteredCats.map(({ id, label, icon: Icon, desc, color }) => {
                     const c = CAT_COLORS[color] ?? CAT_COLORS['neutral'];
                     return (
@@ -911,21 +911,20 @@ export default function PublishAnythingDialog({
                         key={id}
                         type="button"
                         onClick={() => pickCategory(id)}
-                        className={`group relative flex flex-col gap-3 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0e0e12] p-4 text-left transition-all duration-200 hover:border-white/[0.14] hover:scale-[1.02] active:scale-[0.98] ${c.glow}`}
+                        className={`group relative flex flex-col gap-2 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0e0e12] p-2.5 sm:p-3 text-left transition-all duration-200 hover:border-white/[0.14] hover:scale-[1.02] active:scale-[0.98] ${c.glow}`}
                       >
                         {/* gradient wash */}
                         <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.grad} to-transparent opacity-100 transition-opacity duration-300 group-hover:opacity-100`} />
                         {/* icon */}
-                        <div className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${c.iconBg}`}>
-                          <Icon className={`h-4.5 w-4.5 ${c.icon}`} />
+                        <div className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${c.iconBg}`}>
+                          <Icon className={`h-3.5 w-3.5 ${c.icon}`} />
                         </div>
                         {/* text */}
                         <div className="relative min-w-0">
-                          <p className="text-[12.5px] font-bold text-white/85 leading-tight group-hover:text-white transition-colors">{label}</p>
-                          <p className="mt-0.5 text-[10.5px] text-white/35 leading-snug group-hover:text-white/50 transition-colors">{desc}</p>
+                          <p className="text-[11px] sm:text-[12px] font-bold text-white/85 leading-tight group-hover:text-white transition-colors">{label}</p>
                         </div>
                         {/* arrow */}
-                        <ArrowRight className={`absolute right-3 top-3 h-3 w-3 ${c.icon} opacity-0 group-hover:opacity-50 transition-opacity`} />
+                        <ArrowRight className={`absolute right-2.5 top-2.5 h-3 w-3 ${c.icon} opacity-0 group-hover:opacity-50 transition-opacity`} />
                       </button>
                     );
                   })}

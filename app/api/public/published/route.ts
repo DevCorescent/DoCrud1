@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     const slice   = filtered.slice(offset, offset + limit);
 
     // Only enrich avatars for the items we're actually returning (not the full list)
-    const missingIds = [...new Set(slice.filter(t => !t.avatarUrl && t.uploadedByUserId).map(t => t.uploadedByUserId as string))];
+    const missingIds = Array.from(new Set(slice.filter(t => !t.avatarUrl && t.uploadedByUserId).map(t => t.uploadedByUserId as string)));
     const profiles = await Promise.all(missingIds.map(id => getProfileData(id).catch(() => null)));
     const avatarMap = new Map(missingIds.map((id, i) => [id, profiles[i]?.avatarUrl ?? null]));
 

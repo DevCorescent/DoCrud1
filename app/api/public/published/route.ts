@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFileTransfers } from '@/lib/server/file-transfers';
+import { selectPublicFileTransfersForFeed } from '@/lib/server/db/file-transfers-rows';
+import { getMongoDb } from '@/lib/server/database';
 import { getAuthSession } from '@/lib/server/auth';
 import { readJsonFile, businessPagesPath } from '@/lib/server/storage';
 import { getProfileData } from '@/lib/server/user-profiles';
@@ -15,6 +17,18 @@ interface DataCache {
 let _cache: DataCache | null = null;
 const CACHE_TTL = 15_000; // 15 s — stale data acceptable for feed
 
+async function getTransfersLean() {
+  try {
+    const db = await getMongoDb();
+    if (db) {
+      console.log('[published] using lean MongoDB query (no dataUrl)');
+      return selectPublicFileTransfersForFeed();
+    }
+  } catch { /* fall through */ }
+  console.log('[published] MongoDB unavailable — falling back to getFileTransfers()');
+  return getFileTransfers();
+}
+
 async function getCachedData(): Promise<Pick<DataCache, 'transfers' | 'bizLookup'>> {
   if (_cache && Date.now() - _cache.ts < CACHE_TTL) {
     console.log('[published] cache HIT');
@@ -23,7 +37,7 @@ async function getCachedData(): Promise<Pick<DataCache, 'transfers' | 'bizLookup
   console.log('[published] cache MISS — reading files');
   const ct = Date.now();
   const [transfers, bizStore] = await Promise.all([
-    getFileTransfers(),
+    getTransfersLean(),
     readJsonFile<{ pages?: Array<{ id: string; slug: string; name: string; ownerUserId: string }> }>(businessPagesPath, {}).catch(() => ({})),
   ]);
   console.log(`[published] files read in ${Date.now() - ct}ms — transfers: ${transfers.length}`);
@@ -83,6 +97,7 @@ export async function GET(request: NextRequest) {
     const viewerIdentifier = session?.user?.id || session?.user?.email || '';
     const now = new Date();
 
+    // lean query already pre-filters public/authMode/revokedAt/moderationStatus at DB level
     const filtered = transfers
       .filter(t =>
         t.directoryVisibility === 'public' &&

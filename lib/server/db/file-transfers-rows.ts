@@ -16,6 +16,34 @@ export async function selectAllFileTransferRows(): Promise<SecureFileTransfer[]>
   return docs.map(strip);
 }
 
+/**
+ * Lean query for the public feed — filters public-only transfers at the DB level
+ * and excludes the large dataUrl / encryptedDataUrl fields (can be MB each).
+ * Orders of magnitude faster than selectAllFileTransferRows for feed use-cases.
+ */
+export async function selectPublicFileTransfersForFeed(): Promise<SecureFileTransfer[]> {
+  const db = await getMongoDb();
+  if (!db) return [];
+  const docs = await db.collection<SecureFileTransfer & { _id: string }>(COL)
+    .find(
+      {
+        directoryVisibility: 'public',
+        authMode: 'public',
+        revokedAt: { $exists: false },
+        moderationStatus: { $nin: ['suspended', 'removed'] },
+      },
+      {
+        projection: {
+          dataUrl: 0,
+          encryptedDataUrl: 0,
+        },
+      },
+    )
+    .sort({ createdAt: -1, _id: -1 })
+    .toArray();
+  return docs.map(strip);
+}
+
 export async function selectFileTransferRowById(idOrShareId: string): Promise<SecureFileTransfer | null> {
   const db = await getMongoDb();
   if (!db) return null;

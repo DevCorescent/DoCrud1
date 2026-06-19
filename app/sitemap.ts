@@ -1,4 +1,8 @@
 import type { MetadataRoute } from 'next';
+
+export const dynamic   = 'force-dynamic';
+export const revalidate = 3600; // re-generate at most once per hour
+
 import { getCertificates } from '@/lib/server/certificates';
 import { getPublicBlogPosts } from '@/lib/server/blog';
 import { getPublicDocrudiansData } from '@/lib/server/docrudians';
@@ -38,7 +42,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     listBusinessPages({ limit: 2000 }).then((r) => r.pages).catch(() => []),
     listResumeDirectory({ limit: 2000 }).then((r) => r.entries).catch(() => []),
     listMarketplaceItems({ limit: 2000, sort: 'popular' }).then((r) => r.items).catch(() => []),
-    getFileTransfers().catch(() => []),
+    Promise.race([
+      getFileTransfers(),
+      new Promise<[]>(r => setTimeout(() => r([]), 8000)),
+    ]).catch(() => []),
   ]);
 
   /* ── Core platform pages ─────────────────────────────────────── */

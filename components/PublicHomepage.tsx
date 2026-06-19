@@ -2197,42 +2197,30 @@ function HomepageLiveFeed() {
 
   /* initial load */
   React.useEffect(() => {
-    console.log('[hp-feed] starting initial fetch');
-    fetch('/api/public/published')
-      .then(r => {
-        console.log('[hp-feed] response status:', r.status, r.ok);
-        return r.json();
-      })
+    fetch('/api/public/published?limit=20&noAvatar=1')
+      .then(r => r.json())
       .then((d: { items?: HpFeedItem[] }) => {
-        console.log('[hp-feed] items received:', Array.isArray(d.items) ? d.items.length : 'not array', typeof d);
-        if (!Array.isArray(d.items)) {
-          console.warn('[hp-feed] d.items is not array — raw response:', JSON.stringify(d).slice(0, 200));
-          return;
-        }
+        if (!Array.isArray(d.items)) return;
         setAllItems(d.items);
         d.items.forEach(i => knownIds.current.add(i.id));
       })
-      .catch((err) => {
-        console.error('[hp-feed] fetch error:', err);
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  /* poll every 30s for new posts */
+  /* poll every 60s for new posts */
   React.useEffect(() => {
     const poll = async () => {
       try {
-        const r = await fetch('/api/public/published');
-        if (!r.ok) { console.warn('[hp-feed] poll non-ok:', r.status); return; }
+        const r = await fetch('/api/public/published?limit=20&noAvatar=1');
+        if (!r.ok) return;
         const d = await r.json() as { items?: HpFeedItem[] };
         if (!Array.isArray(d.items)) return;
         const fresh = d.items.filter(i => !knownIds.current.has(i.id));
         if (fresh.length > 0) setNewItems(fresh);
-      } catch (err) {
-        console.error('[hp-feed] poll error:', err);
-      }
+      } catch { /* ignore */ }
     };
-    const iv = setInterval(poll, 30_000);
+    const iv = setInterval(poll, 60_000);
     return () => clearInterval(iv);
   }, []);
 
@@ -2322,11 +2310,7 @@ function HomepageLiveFeed() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  console.log('[hp-feed] render — loading:', loading, 'items:', allItems.length);
-  if (!loading && allItems.length === 0) {
-    console.warn('[hp-feed] returning null — no items after load finished');
-    return null;
-  }
+  if (!loading && allItems.length === 0) return null;
 
   /* category counts keyed by tab id (lowercase) */
   const catCounts: Record<string, number> = {};

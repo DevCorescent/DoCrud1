@@ -2197,14 +2197,24 @@ function HomepageLiveFeed() {
 
   /* initial load */
   React.useEffect(() => {
+    console.log('[hp-feed] starting initial fetch');
     fetch('/api/public/published')
-      .then(r => r.json())
+      .then(r => {
+        console.log('[hp-feed] response status:', r.status, r.ok);
+        return r.json();
+      })
       .then((d: { items?: HpFeedItem[] }) => {
-        if (!Array.isArray(d.items)) return;
+        console.log('[hp-feed] items received:', Array.isArray(d.items) ? d.items.length : 'not array', typeof d);
+        if (!Array.isArray(d.items)) {
+          console.warn('[hp-feed] d.items is not array — raw response:', JSON.stringify(d).slice(0, 200));
+          return;
+        }
         setAllItems(d.items);
         d.items.forEach(i => knownIds.current.add(i.id));
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error('[hp-feed] fetch error:', err);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -2213,12 +2223,14 @@ function HomepageLiveFeed() {
     const poll = async () => {
       try {
         const r = await fetch('/api/public/published');
-        if (!r.ok) return;
+        if (!r.ok) { console.warn('[hp-feed] poll non-ok:', r.status); return; }
         const d = await r.json() as { items?: HpFeedItem[] };
         if (!Array.isArray(d.items)) return;
         const fresh = d.items.filter(i => !knownIds.current.has(i.id));
         if (fresh.length > 0) setNewItems(fresh);
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.error('[hp-feed] poll error:', err);
+      }
     };
     const iv = setInterval(poll, 30_000);
     return () => clearInterval(iv);
@@ -2310,7 +2322,11 @@ function HomepageLiveFeed() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  if (!loading && allItems.length === 0) return null;
+  console.log('[hp-feed] render — loading:', loading, 'items:', allItems.length);
+  if (!loading && allItems.length === 0) {
+    console.warn('[hp-feed] returning null — no items after load finished');
+    return null;
+  }
 
   /* category counts keyed by tab id (lowercase) */
   const catCounts: Record<string, number> = {};
@@ -2461,51 +2477,15 @@ function HomepageLiveFeed() {
 
         {/* ══ MAIN FEED ══ */}
         <div className="flex flex-1 flex-col min-w-0">
-          {/* sticky top bar */}
+          {/* sticky top bar — desktop only */}
           <div
-            className="sticky top-0 z-20 border-b border-white/[0.08] shrink-0"
+            className="hidden lg:block sticky top-0 z-20 border-b border-white/[0.08] shrink-0"
             style={{
               background: 'rgba(12,12,16,0.82)',
               backdropFilter: 'blur(32px) saturate(1.6)',
               WebkitBackdropFilter: 'blur(32px) saturate(1.6)',
-              transform: tabsVisible ? 'translateY(0)' : 'translateY(-100%)',
-              transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
-              willChange: 'transform',
             }}
           >
-            {/* mobile-only: horizontal scrollable category tabs (lg+ uses sidebar) */}
-            <div className="lg:hidden overflow-x-auto px-3 pt-3 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex items-center gap-1.5 min-w-max">
-                {HP_TABS.map(tab => {
-                  const isActive = activecat === tab.id;
-                  const colorCls = HP_TAG_CLS[tab.id] ?? HP_TAG_CLS.all;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
-                      className={`inline-flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5 text-[11px] font-semibold whitespace-nowrap transition border ${
-                        isActive
-                          ? `${colorCls} border-current/20`
-                          : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:text-white/65 hover:border-white/[0.12]'
-                      }`}
-                    >
-                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors ${
-                        isActive ? colorCls : 'border-white/[0.06] bg-transparent text-white/25'
-                      }`}>
-                        <tab.icon className="h-2.5 w-2.5" />
-                      </span>
-                      {tab.label}
-                      {(() => {
-                        const cnt = tab.id === 'all' ? allItems.length : (catCounts[tab.id as string] ?? 0);
-                        return cnt > 0 ? <span className="text-[9px] font-bold opacity-60 tabular-nums">{cnt}</span> : null;
-                      })()}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* desktop row: title + tag pill (no sort — sort stays non-sticky below) */}
             <div className="hidden lg:flex items-center gap-2 px-4 sm:px-6 pt-3.5 pb-2">
               <span className="text-[13px] font-semibold text-white/85 tracking-tight shrink-0">

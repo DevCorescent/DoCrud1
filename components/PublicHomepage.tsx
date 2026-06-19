@@ -2197,14 +2197,26 @@ function HomepageLiveFeed() {
 
   /* initial load */
   React.useEffect(() => {
+    const t0 = Date.now();
+    console.log('[hp-feed] fetch START');
     fetch('/api/public/published?limit=20&noAvatar=1')
-      .then(r => r.json())
-      .then((d: { items?: HpFeedItem[] }) => {
-        if (!Array.isArray(d.items)) return;
+      .then(r => {
+        console.log(`[hp-feed] response received in ${Date.now() - t0}ms — status: ${r.status}`);
+        return r.json();
+      })
+      .then((d: { items?: HpFeedItem[]; total?: number; hasMore?: boolean }) => {
+        console.log(`[hp-feed] JSON parsed in ${Date.now() - t0}ms — items: ${Array.isArray(d.items) ? d.items.length : 'NOT ARRAY'} total: ${d.total}`);
+        if (!Array.isArray(d.items)) {
+          console.error('[hp-feed] unexpected shape:', JSON.stringify(d).slice(0, 300));
+          return;
+        }
         setAllItems(d.items);
         d.items.forEach(i => knownIds.current.add(i.id));
+        console.log(`[hp-feed] state set in ${Date.now() - t0}ms`);
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error(`[hp-feed] FETCH ERROR after ${Date.now() - t0}ms:`, err);
+      })
       .finally(() => setLoading(false));
   }, []);
 

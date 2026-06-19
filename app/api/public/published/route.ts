@@ -17,12 +17,16 @@ const CACHE_TTL = 15_000; // 15 s — stale data acceptable for feed
 
 async function getCachedData(): Promise<Pick<DataCache, 'transfers' | 'bizLookup'>> {
   if (_cache && Date.now() - _cache.ts < CACHE_TTL) {
+    console.log('[published] cache HIT');
     return _cache;
   }
+  console.log('[published] cache MISS — reading files');
+  const ct = Date.now();
   const [transfers, bizStore] = await Promise.all([
     getFileTransfers(),
     readJsonFile<{ pages?: Array<{ id: string; slug: string; name: string; ownerUserId: string }> }>(businessPagesPath, {}).catch(() => ({})),
   ]);
+  console.log(`[published] files read in ${Date.now() - ct}ms — transfers: ${transfers.length}`);
   const bizLookup = new Map<string, { slug: string; id: string }>();
   for (const p of (bizStore as { pages?: Array<{ id: string; slug: string; name: string }> }).pages ?? []) {
     if (p.name && p.slug) bizLookup.set(p.name.toLowerCase(), { slug: p.slug, id: p.id });
@@ -57,6 +61,7 @@ function cleanChips(tags: string[] | undefined) {
 }
 
 export async function GET(request: NextRequest) {
+  const t0 = Date.now();
   try {
     const { searchParams } = new URL(request.url);
     const filterSlug = searchParams.get('businessPageSlug') || '';
@@ -65,12 +70,15 @@ export async function GET(request: NextRequest) {
     const page     = Math.max(parseInt(searchParams.get('page')  || '1', 10), 1);
     const offset   = (page - 1) * limit;
     const noAvatar = searchParams.get('noAvatar') === '1';
+    const cacheHit = _cache && Date.now() - _cache.ts < CACHE_TTL;
+    console.log(`[published] GET limit=${limit} page=${page} noAvatar=${noAvatar} cacheHit=${!!cacheHit}`);
 
     /* run auth + file reads in parallel */
     const [session, { transfers, bizLookup }] = await Promise.all([
       getAuthSession(),
       getCachedData(),
     ]);
+    console.log(`[published] data loaded in ${Date.now() - t0}ms — transfers: ${transfers.length}`);
 
     const viewerIdentifier = session?.user?.id || session?.user?.email || '';
     const now = new Date();
@@ -98,6 +106,7 @@ export async function GET(request: NextRequest) {
     const total   = filtered.length;
     const hasMore = offset + limit < total;
     const slice   = filtered.slice(offset, offset + limit);
+    console.log(`[published] filtered ${total} → slice ${slice.length} in ${Date.now() - t0}ms`);
 
     /* avatar enrichment — skip when caller passes ?noAvatar=1 (e.g. home feed) */
     let avatarMap = new Map<string, string | null>();
@@ -105,8 +114,10 @@ export async function GET(request: NextRequest) {
       const missingIds = Array.from(new Set(
         slice.filter(t => !t.avatarUrl && t.uploadedByUserId).map(t => t.uploadedByUserId as string)
       ));
+      console.log(`[published] enriching ${missingIds.length} avatars`);
       const profiles = await Promise.all(missingIds.map(id => getProfileData(id).catch(() => null)));
       avatarMap = new Map(missingIds.map((id, i) => [id, profiles[i]?.avatarUrl ?? null]));
+      console.log(`[published] avatars done in ${Date.now() - t0}ms`);
     }
 
     const items = slice.map(t => {
@@ -157,9 +168,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    console.log(`[published] DONE in ${Date.now() - t0}ms — returning ${items.length} items`);
     return NextResponse.json({ items, total, hasMore, page });
   } catch (err) {
-    console.error('[/api/public/published] error:', err);
+    console.error(`[/api/public/published] ERROR after ${Date.now() - t0}ms:`, err);
     return NextResponse.json({ items: [] });
   }
 }

@@ -1789,6 +1789,7 @@ type HpFeedItem = {
   trendCount?: number;
   trendedByViewer?: boolean;
   thumbnailUrl?: string;
+  avatarUrl?: string;
   uploadedByUserId?: string;
   uploadedByName?: string;
 };
@@ -1980,12 +1981,16 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
       <div className="flex items-center gap-3 mb-3.5">
         {profileHref ? (
           <Link href={profileHref} onClick={e => e.stopPropagation()}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${HP_AVATAR_CLS} hover:opacity-80 transition`}>
-            {initials.slice(0, 2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold overflow-hidden ${HP_AVATAR_CLS} hover:opacity-80 transition`}>
+            {item.avatarUrl
+              ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+              : (initials.slice(0, 2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />)}
           </Link>
         ) : (
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${HP_AVATAR_CLS}`}>
-            {initials.slice(0, 2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />}
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold overflow-hidden ${HP_AVATAR_CLS}`}>
+            {item.avatarUrl
+              ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full object-cover" />
+              : (initials.slice(0, 2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />)}
           </div>
         )}
         <div className="min-w-0 flex-1">
@@ -2027,20 +2032,12 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
         <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
           {item.title}
         </h3>
-        <HpMetaChips body={item.body || ''} byline={item.byline} category={item.category} />
+        {item.body && (
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">
+            {hpGetBodySnippet(item.body)}
+          </p>
+        )}
       </Link>
-
-      {/* chips */}
-      {item.chips && item.chips.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {item.chips.slice(0, 5).map((c: string) => (
-            <span key={c} className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[11px] text-white/40">{c}</span>
-          ))}
-          {item.chips.length > 5 && (
-            <span className="rounded-full bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-white/20">+{item.chips.length - 5}</span>
-          )}
-        </div>
-      )}
 
       {/* stats */}
       {item.stats && (
@@ -2210,6 +2207,15 @@ function HomepageLiveFeed() {
           console.error('[hp-feed] unexpected shape:', JSON.stringify(d).slice(0, 300));
           return;
         }
+        /* log image sources */
+        const thumbMongo   = d.items.filter(i => i.thumbnailUrl?.startsWith('/api/')).length;
+        const thumbCloud   = d.items.filter(i => i.thumbnailUrl && !i.thumbnailUrl.startsWith('/api/') && !i.thumbnailUrl.startsWith('data:')).length;
+        const thumbNone    = d.items.filter(i => !i.thumbnailUrl).length;
+        const avatarSet    = d.items.filter(i => i.avatarUrl).length;
+        const avatarMongo  = d.items.filter(i => i.avatarUrl?.startsWith('/api/')).length;
+        const avatarCloud  = d.items.filter(i => i.avatarUrl && !i.avatarUrl.startsWith('/api/')).length;
+        console.log(`[hp-feed] thumbnails — mongodb: ${thumbMongo}, cloud: ${thumbCloud}, none: ${thumbNone}`);
+        console.log(`[hp-feed] avatars — total set: ${avatarSet}, mongodb: ${avatarMongo}, cloud: ${avatarCloud}, missing: ${d.items.length - avatarSet}`);
         setAllItems(d.items);
         d.items.forEach(i => knownIds.current.add(i.id));
         console.log(`[hp-feed] state set in ${Date.now() - t0}ms`);
@@ -2548,8 +2554,8 @@ function HomepageLiveFeed() {
 
           {/* feed cards */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {/* mobile-only: sort row — non-sticky, scrolls with content */}
-            <div className="lg:hidden flex items-center gap-2 py-3 max-w-[600px] mx-auto w-full">
+            {/* mobile-only: sort row — hidden */}
+            <div className="hidden flex items-center gap-2 py-3 max-w-[600px] mx-auto w-full">
               <span className="text-[12px] font-semibold text-white/60 tracking-tight shrink-0">
                 {HP_TABS.find(t => t.id === activecat)?.label ?? 'All'}
               </span>

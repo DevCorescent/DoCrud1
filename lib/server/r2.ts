@@ -69,3 +69,20 @@ export function r2KeyFromUrl(url: string): string | null {
 export function isStorageUrl(value: string): boolean {
   return value.startsWith('https://') || value.startsWith('http://');
 }
+
+/**
+ * Compress an image buffer with sharp (resize to max 800×600, JPEG 80%),
+ * upload to R2 at thumbnails/{id}.jpg, and return the public R2 URL.
+ */
+export async function compressAndUploadThumbnail(
+  id: string,
+  buffer: Buffer,
+): Promise<string> {
+  const sharp = (await import('sharp')).default;
+  const compressed = await sharp(buffer)
+    .resize(800, 600, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 80, mozjpeg: true })
+    .toBuffer();
+  const key = `thumbnails/${id}.jpg`;
+  return uploadToR2(key, compressed, 'image/jpeg');
+}

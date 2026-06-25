@@ -17,31 +17,41 @@ export async function selectAllFileTransferRows(): Promise<SecureFileTransfer[]>
 }
 
 /**
- * Lean query for the public feed — filters public-only transfers at the DB level
- * and excludes the large dataUrl / encryptedDataUrl fields (can be MB each).
+ * Lean query for the public feed — filters public-only transfers at the DB level,
+ * excludes the large dataUrl/encryptedDataUrl fields (can be MB each), but adds a
+ * computed boolean `hasDataUrl` so thumbnail URL logic can still work correctly.
  * Orders of magnitude faster than selectAllFileTransferRows for feed use-cases.
  */
-export async function selectPublicFileTransfersForFeed(): Promise<SecureFileTransfer[]> {
+export async function selectPublicFileTransfersForFeed(): Promise<(SecureFileTransfer & { hasDataUrl?: boolean })[]> {
   const db = await getMongoDb();
   if (!db) return [];
-  const docs = await db.collection<SecureFileTransfer & { _id: string }>(COL)
-    .find(
-      {
+  const docs = await db.collection(COL).aggregate([
+    {
+      $match: {
         directoryVisibility: 'public',
         authMode: 'public',
         revokedAt: { $exists: false },
         moderationStatus: { $nin: ['suspended', 'removed'] },
       },
-      {
-        projection: {
-          dataUrl: 0,
-          encryptedDataUrl: 0,
+    },
+    {
+      $addFields: {
+        hasDataUrl: {
+          $cond: {
+            if: { $and: [{ $ifNull: ['$dataUrl', false] }, { $ne: ['$dataUrl', ''] }] },
+            then: true,
+            else: false,
+          },
         },
       },
-    )
-    .sort({ createdAt: -1, _id: -1 })
-    .toArray();
-  return docs.map(strip);
+    },
+    { $project: { dataUrl: 0, encryptedDataUrl: 0 } },
+    { $sort: { createdAt: -1, _id: -1 } },
+  ]).toArray();
+  return docs.map(d => {
+    const { _id: _unused, ...rest } = d as { _id?: unknown } & SecureFileTransfer & { hasDataUrl?: boolean };
+    return rest;
+  });
 }
 
 export async function selectFileTransferRowById(idOrShareId: string): Promise<SecureFileTransfer | null> {

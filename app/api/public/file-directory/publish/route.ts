@@ -4,6 +4,7 @@ import { appendFileTransfer, getFileTransfers, updateFileTransfer } from '@/lib/
 import { recordPost, checkAndGrantMilestones } from '@/lib/server/credits';
 import { readJsonFile } from '@/lib/server/storage';
 import { getProfileData } from '@/lib/server/user-profiles';
+import { isR2Configured, compressAndUploadThumbnail } from '@/lib/server/r2';
 import path from 'path';
 import fs from 'fs';
 import type { SecureFileTransfer } from '@/types/document';
@@ -20,32 +21,39 @@ function isImageMime(mimeType: string) {
 }
 
 /**
- * Save a data:... thumbnail to disk and return the public URL path.
- * Returns null if the dataUrl is empty or invalid.
+ * Compress and upload a data:image/... thumbnail.
+ * Tries R2 first (compressed JPEG); falls back to local disk.
+ * Returns the public URL or null on failure.
  */
-function saveThumbnail(transferId: string, dataUrl: string): string | null {
+async function saveThumbnail(transferId: string, dataUrl: string): Promise<string | null> {
   try {
     if (!dataUrl?.startsWith('data:image/')) return null;
     const [header, base64] = dataUrl.split(',');
     if (!header || !base64) return null;
 
-    // Derive extension from mime type
+    const buffer = Buffer.from(base64, 'base64');
+    if (buffer.length > MAX_THUMBNAIL_BYTES) return null;
+
+    // ── R2 path (compressed) ────────────────────────────────────────────────
+    if (isR2Configured()) {
+      try {
+        const r2Url = await compressAndUploadThumbnail(transferId, buffer);
+        console.log(`[publish] thumbnail → R2: ${r2Url}`);
+        return r2Url;
+      } catch (e) {
+        console.warn('[publish] R2 thumbnail upload failed, falling back to disk:', e);
+      }
+    }
+
+    // ── Local disk fallback ─────────────────────────────────────────────────
     const mime = header.replace('data:', '').replace(';base64', '').toLowerCase();
     const extMap: Record<string, string> = {
       'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png',
       'image/webp': 'webp', 'image/gif': 'gif',
     };
     const ext = extMap[mime] ?? 'jpg';
-
-    const buffer = Buffer.from(base64, 'base64');
-    if (buffer.length > MAX_THUMBNAIL_BYTES) return null; // silently drop oversized
-
-    if (!fs.existsSync(THUMBNAILS_DIR)) {
-      fs.mkdirSync(THUMBNAILS_DIR, { recursive: true });
-    }
-
-    const fileName = `${transferId}.${ext}`;
-    fs.writeFileSync(path.join(THUMBNAILS_DIR, fileName), buffer);
+    if (!fs.existsSync(THUMBNAILS_DIR)) fs.mkdirSync(THUMBNAILS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(THUMBNAILS_DIR, `${transferId}.${ext}`), buffer);
     return `/api/public/thumbnail/${transferId}`;
   } catch {
     return null;
@@ -127,9 +135,9 @@ export async function POST(request: NextRequest) {
     const mainIsImage = isImageMime(payload.mimeType.trim()) && payload.dataUrl.trim().startsWith('data:image/');
     const rawThumb = payload.thumbnailUrl?.trim() || (mainIsImage ? payload.dataUrl.trim() : undefined);
 
-    // Save thumbnail to disk and patch the record with the API URL
+    // Save thumbnail (R2 or disk) and patch the record with the URL
     if (rawThumb && rawThumb.startsWith('data:image/')) {
-      const thumbApiUrl = saveThumbnail(created.id, rawThumb);
+      const thumbApiUrl = await saveThumbnail(created.id, rawThumb);
       if (thumbApiUrl) {
         // Replace the huge base64 thumbnailUrl with the lightweight API path
         try {

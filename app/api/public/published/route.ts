@@ -17,7 +17,7 @@ interface DataCache {
 let _cache: DataCache | null = null;
 const CACHE_TTL = 15_000; // 15 s — stale data acceptable for feed
 
-async function getTransfersLean() {
+async function getTransfersLean(): Promise<(Awaited<ReturnType<typeof getFileTransfers>>[number] & { hasDataUrl?: boolean })[]> {
   try {
     const db = await getMongoDb();
     if (db) {
@@ -172,8 +172,10 @@ export async function GET(request: NextRequest) {
         thumbnailUrl: (() => {
           const u = t.thumbnailUrl;
           if (u && !u.startsWith('data:')) return u;
-          if (t.mimeType?.startsWith('image/') && t.dataUrl?.startsWith('data:image/')) return `/api/public/thumbnail/${t.id}`;
-          if (t.mimeType === 'text/html' && (t.directoryCategory === 'post' || t.directoryCategory === 'product') && t.dataUrl?.startsWith('data:text/html')) return `/api/public/thumbnail/${t.id}`;
+          // hasDataUrl is set by the lean aggregation query (dataUrl field is excluded for perf)
+          const canThumb = (t as { hasDataUrl?: boolean }).hasDataUrl ?? !!t.dataUrl;
+          if (canThumb && t.mimeType?.startsWith('image/')) return `/api/public/thumbnail/${t.id}`;
+          if (canThumb && t.mimeType === 'text/html' && (t.directoryCategory === 'post' || t.directoryCategory === 'product')) return `/api/public/thumbnail/${t.id}`;
           return undefined;
         })(),
         applicationUrl: t.applicationUrl || undefined,
@@ -183,6 +185,11 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    const thumbMongo = items.filter(i => i.thumbnailUrl?.startsWith('/api/')).length;
+    const thumbCloud = items.filter(i => i.thumbnailUrl && !i.thumbnailUrl.startsWith('/api/')).length;
+    const thumbNone  = items.filter(i => !i.thumbnailUrl).length;
+    const avatarSet  = items.filter(i => i.avatarUrl).length;
+    console.log(`[published] images — thumb:mongo=${thumbMongo} cloud=${thumbCloud} none=${thumbNone} | avatars:set=${avatarSet}/${items.length}`);
     console.log(`[published] DONE in ${Date.now() - t0}ms — returning ${items.length} items`);
     return NextResponse.json({ items, total, hasMore, page });
   } catch (err) {

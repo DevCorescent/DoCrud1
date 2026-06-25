@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { isR2Configured, compressAndUploadThumbnail } from '@/lib/server/r2';
+import { updateFileTransfer } from '@/lib/server/file-transfers';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,13 +29,21 @@ function saveToDisk(id: string, buffer: Buffer, mimeType: string) {
   void (async () => {
     try {
       const ext = EXT_FROM_MIME[mimeType] ?? 'jpg';
-      if (!fs.existsSync(THUMBNAILS_DIR)) {
-        fs.mkdirSync(THUMBNAILS_DIR, { recursive: true });
-      }
+      if (!fs.existsSync(THUMBNAILS_DIR)) fs.mkdirSync(THUMBNAILS_DIR, { recursive: true });
       const dest = path.join(THUMBNAILS_DIR, `${id}.${ext}`);
-      if (!fs.existsSync(dest)) {
-        fs.writeFileSync(dest, buffer);
-      }
+      if (!fs.existsSync(dest)) fs.writeFileSync(dest, buffer);
+    } catch { /* non-fatal */ }
+  })();
+}
+
+/** Fire-and-forget: compress → upload to R2 → patch thumbnailUrl in DB. */
+function migrateToR2(id: string, buffer: Buffer) {
+  if (!isR2Configured()) return;
+  void (async () => {
+    try {
+      const r2Url = await compressAndUploadThumbnail(id, buffer);
+      await updateFileTransfer(id, { thumbnailUrl: r2Url });
+      console.log(`[thumbnail] migrated ${id} → ${r2Url}`);
     } catch { /* non-fatal */ }
   })();
 }
@@ -74,10 +84,9 @@ export async function GET(
       }
     }
 
-    // ── 2 & 3. Read transfer record for fallback ────────────────────────────
-    const { getFileTransfers } = await import('@/lib/server/file-transfers');
-    const transfers = await getFileTransfers();
-    const t = transfers.find((x) => x.id === id);
+    // ── 2 & 3. Read transfer record for fallback (single-row lookup, not full scan) ──
+    const { selectFileTransferRowById } = await import('@/lib/server/db/file-transfers-rows');
+    const t = await selectFileTransferRowById(id);
     if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // ── 1.5a. thumbnailUrl is an external R2/CDN URL — redirect directly ────
@@ -92,6 +101,7 @@ export async function GET(
         const mimeType = t.thumbnailUrl.split(';')[0].replace('data:', '').toLowerCase();
         const buffer = Buffer.from(parts[1], 'base64');
         saveToDisk(id, buffer, mimeType);
+        migrateToR2(id, buffer);
         return new NextResponse(buffer, {
           status: 200,
           headers: {
@@ -110,6 +120,7 @@ export async function GET(
         const mimeType = t.mimeType.toLowerCase();
         const buffer = Buffer.from(parts[1], 'base64');
         saveToDisk(id, buffer, mimeType);
+        migrateToR2(id, buffer);
         return new NextResponse(buffer, {
           status: 200,
           headers: {
@@ -127,19 +138,17 @@ export async function GET(
       t.dataUrl?.startsWith('data:text/html') &&
       (t.directoryCategory === 'post' || t.directoryCategory === 'product')
     ) {
-      // Decode the HTML
       const htmlBase64 = t.dataUrl.split(',')[1];
       if (htmlBase64) {
         const html = Buffer.from(htmlBase64, 'base64').toString('utf-8');
-        // Find the first embedded base64 image
         const match = html.match(/src="(data:image\/([^;]+);base64,([^"]+))"/);
         if (match) {
-          const fullDataUrl = match[1];
           const mimeType = `image/${match[2].toLowerCase()}`;
           const imgB64 = match[3];
           if (imgB64) {
             const buffer = Buffer.from(imgB64, 'base64');
             saveToDisk(id, buffer, mimeType);
+            migrateToR2(id, buffer);
             return new NextResponse(buffer, {
               status: 200,
               headers: {

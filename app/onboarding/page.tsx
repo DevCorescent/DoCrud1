@@ -1994,7 +1994,7 @@ function OnboardingPageInner() {
   async function verifyOtp() {
     setVerifying(true); setOtpError('');
     try {
-      const res = await fetch('/api/onboarding/verify-otp', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ otp: otpDigits.join('') }) });
+      const res = await fetch('/api/onboarding/verify-otp', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ otp: otpDigits.join(''), email: sEmail || session?.user?.email }) });
       const d = await res.json() as { verified?: boolean; error?: string };
       if (d.verified) {
         otpVerifiedRef.current = true; // set ref synchronously so next() gate passes
@@ -2024,9 +2024,17 @@ function OnboardingPageInner() {
       const res = await fetch('/api/individual/signup', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ name:sName.trim(), email:sEmail.trim(), password:sPass, policyAccepted:true, referralCode: referralCode || undefined }) });
       const d = await res.json() as { error?: string };
       if (!res.ok) { setSError(d.error ?? 'Signup failed.'); return; }
-      const si = await signIn('credentials', { email:sEmail.trim(), password:sPass, policyAccepted:'accepted', redirect:false });
-      if (si?.error) { setSError('Account created. Please log in.'); router.push('/login'); return; }
-      hasSignedUpInSession.current = true;
+
+      // Attempt signIn — retry once after a short delay (handles cases where the
+      // new account hasn't fully propagated before the auth handler runs)
+      let si = await signIn('credentials', { email:sEmail.trim(), password:sPass, policyAccepted:'accepted', redirect:false });
+      if (si?.error) {
+        await new Promise(r => setTimeout(r, 800));
+        si = await signIn('credentials', { email:sEmail.trim(), password:sPass, policyAccepted:'accepted', redirect:false });
+      }
+      // Even if signIn failed both times, account exists — advance to OTP.
+      // verify-otp falls back to email-based lookup when no session is present.
+      if (!si?.error) hasSignedUpInSession.current = true;
       next();
     } catch { setSError('Something went wrong. Please try again.'); }
     finally { setSLoading(false); }

@@ -1386,8 +1386,35 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
     }
     setAdjustTarget(null);
   }
+  const EXP_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const EXP_YEARS  = Array.from({ length: new Date().getFullYear() - 1959 }, (_, i) => String(new Date().getFullYear() - i));
+
+  function parsePeriod(period: string) {
+    const isCurrent = /present/i.test(period);
+    const clean = period.replace(/present/gi, '').replace(/[–—]|-(?=\s)/g, '|');
+    const [startPart = '', endPart = ''] = clean.split('|').map(s => s.trim());
+    const extractMonthYear = (s: string) => {
+      const yearMatch = s.match(/\d{4}/);
+      const year = yearMatch ? yearMatch[0] : '';
+      const month = EXP_MONTHS.find(m => new RegExp(m, 'i').test(s)) ?? '';
+      return { month, year };
+    };
+    const { month: startMonth, year: startYear } = extractMonthYear(startPart);
+    const { month: endMonth, year: endYear } = extractMonthYear(endPart);
+    return { startMonth, startYear, endMonth, endYear, isCurrent };
+  }
+
+  function buildPeriod(startMonth: string, startYear: string, endMonth: string, endYear: string, isCurrent: boolean) {
+    const start = [startMonth, startYear].filter(Boolean).join(' ');
+    const end   = isCurrent ? 'Present' : [endMonth, endYear].filter(Boolean).join(' ');
+    if (!start && !end) return '';
+    if (!end) return start;
+    if (!start) return end;
+    return `${start} – ${end}`;
+  }
+
   const [expEntries, setExpEntries] = useState(
-    (profile.experience ?? []).map((e, i) => ({ ...e, _key: i })),
+    (profile.experience ?? []).map((e, i) => ({ ...e, _key: i, ...parsePeriod(e.period ?? '') })),
   );
   const [eduEntries, setEduEntries] = useState(
     (profile.education ?? []).map((e, i) => ({ ...e, _key: i })),
@@ -1459,7 +1486,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
 
       // Experience — replace entirely with AI-extracted entries
       if (Array.isArray(p.experience) && p.experience.length > 0) {
-        const entries = p.experience.map((e, i) => ({ ...e, _key: i }));
+        const entries = p.experience.map((e, i) => ({ ...e, _key: i, ...parsePeriod(e.period ?? '') }));
         setExpEntries(entries);
         nextExpKey.current = entries.length;
       }
@@ -1520,7 +1547,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
         return next;
       });
       if (Array.isArray(p.experience) && p.experience.length > 0) {
-        const entries = p.experience.map((e, i) => ({ ...e, _key: i }));
+        const entries = p.experience.map((e, i) => ({ ...e, _key: i, ...parsePeriod(e.period ?? '') }));
         setExpEntries(entries);
         nextExpKey.current = entries.length;
       }
@@ -1911,12 +1938,17 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-white/40 mb-1">Pronouns</label>
-                  <input
+                  <select
                     value={form.pronouns ?? ''}
                     onChange={(e) => set('pronouns', e.target.value)}
-                    placeholder="e.g. they/them"
-                    className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
-                  />
+                    className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-[#0d0d14] text-white px-3 text-sm focus:outline-none focus:border-white/[0.18] appearance-none"
+                  >
+                    <option value="">Select pronouns</option>
+                    <option value="He/Him">He/Him</option>
+                    <option value="She/Her">She/Her</option>
+                    <option value="They/Them">They/Them</option>
+                    <option value="Prefer Not to Say">Prefer Not to Say</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs text-white/40 mb-1">Location</label>
@@ -2032,7 +2064,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Experience</p>
               <button
                 onClick={() => {
-                  setExpEntries((prev) => [...prev, { title: '', company: '', period: '', desc: '', _key: nextExpKey.current++ }]);
+                  setExpEntries((prev) => [...prev, { title: '', company: '', period: '', desc: '', _key: nextExpKey.current++, startMonth: '', startYear: '', endMonth: '', endYear: '', isCurrent: false }]);
                 }}
                 className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
               >
@@ -2040,7 +2072,17 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
               </button>
             </div>
             <div className="space-y-4">
-              {expEntries.map((entry, idx) => (
+              {expEntries.map((entry, idx) => {
+                const updateExp = (patch: Partial<typeof entry>) => {
+                  setExpEntries((prev) => prev.map((x, i) => {
+                    if (i !== idx) return x;
+                    const next = { ...x, ...patch };
+                    next.period = buildPeriod(next.startMonth ?? '', next.startYear ?? '', next.endMonth ?? '', next.endYear ?? '', next.isCurrent ?? false);
+                    return next;
+                  }));
+                };
+                const selCls = "h-10 rounded-[11px] border border-white/[0.08] bg-[#0d0d14] text-white px-2 text-sm focus:outline-none focus:border-white/[0.18] w-full appearance-none";
+                return (
                 <div key={entry._key} className="rounded-[16px] border border-white/[0.07] bg-white/[0.03] p-4 space-y-3">
                   <div className="flex justify-end">
                     <button
@@ -2053,31 +2095,74 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
                   <div className="grid grid-cols-2 gap-3">
                     <input
                       value={entry.title}
-                      onChange={(e) => setExpEntries((prev) => prev.map((x, i) => i === idx ? { ...x, title: e.target.value } : x))}
+                      onChange={(e) => updateExp({ title: e.target.value })}
                       placeholder="Job title"
                       className="h-10 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
                     />
                     <input
                       value={entry.company}
-                      onChange={(e) => setExpEntries((prev) => prev.map((x, i) => i === idx ? { ...x, company: e.target.value } : x))}
+                      onChange={(e) => updateExp({ company: e.target.value })}
                       placeholder="Company"
                       className="h-10 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
                     />
                   </div>
-                  <input
-                    value={entry.period}
-                    onChange={(e) => setExpEntries((prev) => prev.map((x, i) => i === idx ? { ...x, period: e.target.value } : x))}
-                    placeholder="Period (e.g. Jan 2022 – Present)"
-                    className="h-10 w-full rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
-                  />
+
+                  {/* Start date */}
+                  <div>
+                    <p className="text-[10px] text-white/30 mb-1.5 uppercase tracking-wider">Start date</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select value={entry.startMonth ?? ''} onChange={(e) => updateExp({ startMonth: e.target.value })} className={selCls}>
+                        <option value="">Month</option>
+                        {EXP_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <select value={entry.startYear ?? ''} onChange={(e) => updateExp({ startYear: e.target.value })} className={selCls}>
+                        <option value="">Year</option>
+                        {EXP_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* End date / currently working */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-[10px] text-white/30 uppercase tracking-wider">End date</p>
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <div
+                          onClick={() => updateExp({ isCurrent: !entry.isCurrent })}
+                          className={`relative h-4 w-7 rounded-full transition-colors ${entry.isCurrent ? 'bg-emerald-500/70' : 'bg-white/[0.1]'}`}
+                        >
+                          <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${entry.isCurrent ? 'left-3.5' : 'left-0.5'}`} />
+                        </div>
+                        <span className="text-[11px] text-white/40">Currently working here</span>
+                      </label>
+                    </div>
+                    {entry.isCurrent ? (
+                      <div className="h-10 rounded-[11px] border border-white/[0.06] bg-white/[0.02] flex items-center px-3">
+                        <span className="text-sm text-emerald-400/70 font-medium">Present</span>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        <select value={entry.endMonth ?? ''} onChange={(e) => updateExp({ endMonth: e.target.value })} className={selCls}>
+                          <option value="">Month</option>
+                          {EXP_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                        <select value={entry.endYear ?? ''} onChange={(e) => updateExp({ endYear: e.target.value })} className={selCls}>
+                          <option value="">Year</option>
+                          {EXP_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
                   <input
                     value={entry.desc ?? ''}
-                    onChange={(e) => setExpEntries((prev) => prev.map((x, i) => i === idx ? { ...x, desc: e.target.value } : x))}
+                    onChange={(e) => updateExp({ desc: e.target.value })}
                     placeholder="Short description (optional)"
                     className="h-10 w-full rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
                   />
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 

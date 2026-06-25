@@ -35,19 +35,32 @@ function safeEq(a: string, b: string) {
   return crypto.timingSafeEqual(ab, bb);
 }
 
-async function getActor() {
+async function getActor(emailFallback?: string) {
+  // Primary: session-based lookup
   const session = await getAuthSession();
-  if (!session?.user?.email) return null;
-  const users = await getStoredUsers();
-  return users.find((u) => u.email.toLowerCase() === session.user!.email!.toLowerCase()) ?? null;
+  if (session?.user?.email) {
+    const users = await getStoredUsers();
+    const found = users.find((u) => u.email.toLowerCase() === session.user!.email!.toLowerCase());
+    if (found) return found;
+  }
+  // Fallback: email in request body — used immediately after signup when the
+  // NextAuth client session hasn't propagated yet. The OTP code itself is the
+  // security mechanism, so no session is required for this step.
+  if (emailFallback) {
+    const users = await getStoredUsers();
+    return users.find((u) => u.email.toLowerCase() === emailFallback.toLowerCase()) ?? null;
+  }
+  return null;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const actor = await getActor();
+    const body = (await req.json()) as { otp?: string; email?: string };
+    const emailFallback = String(body.email || '').toLowerCase().trim();
+
+    const actor = await getActor(emailFallback || undefined);
     if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = (await req.json()) as { otp?: string };
     const code = String(body.otp || '').trim();
     if (!/^\d{6}$/.test(code)) {
       return NextResponse.json({ error: 'Enter the 6-digit OTP.' }, { status: 400 });

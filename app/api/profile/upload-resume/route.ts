@@ -7,10 +7,73 @@ import crypto from 'node:crypto';
 import { getAuthSession } from '@/lib/server/auth';
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
 import { generateAiText, isAiConfigured } from '@/lib/server/ai';
+import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
 
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'resumes');
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_HISTORY = 5;
+
+const isVercel = Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+
+/**
+ * Store resume buffer.
+ * Priority: R2 (works everywhere) → /tmp (Vercel safe) → local public/uploads (dev only)
+ * Returns a public URL or null if storage is unavailable.
+ */
+async function storeResumeFile(
+  buf: Buffer,
+  userId: string,
+  fileType: string,
+  fileName: string,
+): Promise<{ url: string | null; storageMethod: string }> {
+  const uid  = userId.replace(/[^a-z0-9]/gi, '').slice(0, 12);
+  const rand = crypto.randomBytes(6).toString('hex');
+  const ext  = fileType;
+  const key  = `resumes/${uid}_${rand}.${ext}`;
+
+  // ── 1. R2 (production-safe, publicly accessible) ──────────────────────────
+  if (isR2Configured()) {
+    try {
+      const url = await uploadToR2(key, buf, ext === 'pdf' ? 'application/pdf' : 'application/octet-stream');
+      console.log(`[upload-resume] stored to R2: ${url}`);
+      return { url, storageMethod: 'r2' };
+    } catch (r2Err) {
+      console.error('[upload-resume] R2 upload failed:', r2Err instanceof Error ? `${r2Err.message}` : r2Err);
+    }
+  } else {
+    console.warn('[upload-resume] R2 not configured (ACCOUNT_ID/ACCESS_KEY/SECRET/BUCKET/PUBLIC_URL) — skipping R2');
+  }
+
+  // ── 2. /tmp fallback (Vercel has 512 MB ephemeral /tmp) ───────────────────
+  if (isVercel) {
+    try {
+      const tmpPath = path.join('/tmp', `resume_${uid}_${rand}.${ext}`);
+      await fs.writeFile(tmpPath, buf);
+      console.log(`[upload-resume] stored to /tmp: ${tmpPath} (ephemeral — not publicly accessible)`);
+      return { url: null, storageMethod: 'tmp' }; // /tmp is not publicly served
+    } catch (tmpErr) {
+      console.error('[upload-resume] /tmp write failed:', tmpErr instanceof Error ? tmpErr.message : tmpErr);
+    }
+  }
+
+  // ── 3. Local disk (dev only) ───────────────────────────────────────────────
+  if (!isVercel) {
+    try {
+      const dir = path.join(process.cwd(), 'public', 'uploads', 'resumes');
+      await fs.mkdir(dir, { recursive: true });
+      const filePath = path.join(dir, `${uid}_${rand}.${ext}`);
+      await fs.writeFile(filePath, buf);
+      const url = `/uploads/resumes/${uid}_${rand}.${ext}`;
+      console.log(`[upload-resume] stored locally: ${url}`);
+      return { url, storageMethod: 'local' };
+    } catch (localErr) {
+      console.error('[upload-resume] local write failed:', localErr instanceof Error ? localErr.message : localErr);
+    }
+  }
+
+  // ── No storage available — parse still proceeds, file URL will be null ────
+  console.warn('[upload-resume] all storage methods failed — resume will be parsed but file URL will not be stored');
+  return { url: null, storageMethod: 'none' };
+}
 
 /* ─── Magic-byte file detection ───────────────────────────────────────────── */
 type KnownType = 'pdf' | 'docx' | 'doc' | 'txt';
@@ -241,24 +304,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /* ── save file to disk ── */
-    try {
-      await fs.mkdir(UPLOAD_DIR, { recursive: true });
-    } catch (mkdirErr) {
-      console.error('[upload-resume] mkdir failed', UPLOAD_DIR, mkdirErr);
-      return NextResponse.json({ error: 'Server storage error — please try again.' }, { status: 500 });
-    }
-    const uid = userId.replace(/[^a-z0-9]/gi, '').slice(0, 12);
-    const rand = crypto.randomBytes(6).toString('hex');
+    /* ── store file (R2 → /tmp → local) — never block parse on storage failure ── */
     const extMap: Record<KnownType, string> = { pdf: 'pdf', docx: 'docx', doc: 'doc', txt: 'txt' };
-    const filename = `resume_${uid}_${rand}.${extMap[fileType]}`;
-    try {
-      await fs.writeFile(path.join(UPLOAD_DIR, filename), buf);
-    } catch (writeErr) {
-      console.error('[upload-resume] writeFile failed', path.join(UPLOAD_DIR, filename), writeErr);
-      return NextResponse.json({ error: 'Server storage error — please try again.' }, { status: 500 });
-    }
-    const fileUrl = `/uploads/resumes/${filename}`;
+    console.log(`[upload-resume] env=vercel:${isVercel} r2:${isR2Configured()} — storing file`);
+    const { url: fileUrl, storageMethod } = await storeResumeFile(buf, userId, extMap[fileType], file.name);
+    console.log(`[upload-resume] storage method=${storageMethod} url=${fileUrl ?? 'null'}`);
 
     /* ── AI parse ── */
     let parsed: ParsedResume = {

@@ -559,6 +559,22 @@ export default function HomepageNav({
         </button>
 
 
+        {/* Drive — mobile icon only (desktop shows the full Ddrive button above) */}
+        <button
+          type="button"
+          onClick={() => onFileDriveClick?.()}
+          className="md:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] transition active:scale-95"
+          style={{
+            background: 'rgba(167,139,250,0.10)',
+            border: '1px solid rgba(167,139,250,0.20)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+          }}
+          aria-label="Ddrive"
+        >
+          <DdriveIcon size={15} />
+        </button>
+
         {/* Messages icon (desktop only — mobile uses the bottom dock) */}
         {isAuthenticated && !guestMode && (
           <Link

@@ -140,37 +140,43 @@ function ensureDomMatrixPolyfill() {
 async function extractPdf(buf: Buffer): Promise<string> {
   ensureDomMatrixPolyfill();
 
-  type PdfjsLib = {
-    GlobalWorkerOptions: { workerSrc: string };
-    getDocument: (src: { data: Uint8Array; disableFontFace?: boolean; useSystemFonts?: boolean }) => {
-      promise: Promise<{
-        numPages: number;
-        getPage: (n: number) => Promise<{
-          getTextContent: () => Promise<{ items: Array<{ str?: string }> }>;
-        }>;
-      }>;
-    };
-  };
-  const pdfjs = (await import('pdfjs-dist')) as unknown as PdfjsLib;
-  pdfjs.GlobalWorkerOptions.workerSrc = '';
+  const nodePath   = await import('node:path');
+  const { Worker } = await import('node:worker_threads');
 
-  const pdf = await pdfjs.getDocument({
-    data: new Uint8Array(buf),
-    disableFontFace: true,
-    useSystemFonts: false,
-  }).promise;
+  // pdfjs-dist is in serverComponentsExternalPackages so it's never bundled —
+  // its files live in node_modules on disk and we can point a real Node.js
+  // worker thread at the compiled worker file.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfjsDir    = nodePath.dirname(require.resolve('pdfjs-dist/package.json'));
+  const workerPath  = nodePath.join(pdfjsDir, 'build', 'pdf.worker.mjs');
 
-  const pageTexts: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const line = content.items
-      .filter(item => item.str?.trim())
-      .map(item => item.str ?? '')
-      .join(' ');
-    if (line.trim()) pageTexts.push(line);
+  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
+  const nodeWorker  = new Worker(workerPath, { type: 'module' } as import('node:worker_threads').WorkerOptions);
+  // worker_threads.Worker implements the same postMessage/addEventListener interface
+  // that pdfjs expects from a browser Worker, so the cast is safe at runtime.
+  GlobalWorkerOptions.workerPort = nodeWorker as unknown as globalThis.Worker;
+
+  try {
+    const pdf = await getDocument({
+      data: new Uint8Array(buf),
+      disableFontFace: true,
+      useSystemFonts: false,
+    }).promise;
+
+    const pageTexts: string[] = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page    = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const line    = content.items
+        .filter((it): it is { str: string } => 'str' in it && Boolean((it as { str: string }).str.trim()))
+        .map((it) => (it as { str: string }).str)
+        .join(' ');
+      if (line.trim()) pageTexts.push(line);
+    }
+    return pageTexts.join('\n\n');
+  } finally {
+    await nodeWorker.terminate();
   }
-  return pageTexts.join('\n\n');
 }
 
 /* ─── DOCX/DOC extraction ─────────────────────────────────────────────────── */

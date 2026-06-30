@@ -1624,12 +1624,13 @@ function OnboardingPageInner() {
   const [referrer, setReferrer] = useState<{ name: string; headline?: string | null; avatarUrl?: string | null } | null>(null);
   const [referrerLoading, setReferrerLoading] = useState(!!incomingRef);
 
-  const [sName,    setSName]    = useState('');
-  const [sEmail,   setSEmail]   = useState('');
-  const [sPass,    setSPass]    = useState('');
-  const [showPass, setShowPass] = useState(false);
-  const [sLoading, setSLoading] = useState(false);
-  const [sError,   setSError]   = useState('');
+  const [sName,         setSName]         = useState('');
+  const [sEmail,        setSEmail]        = useState('');
+  const [sPass,         setSPass]         = useState('');
+  const [showPass,      setShowPass]      = useState(false);
+  const [sLoading,      setSLoading]      = useState(false);
+  const [sError,        setSError]        = useState('');
+  const [googleEnabled, setGoogleEnabled] = useState(false);
 
   const [otpDigits, setOtpDigits] = useState(['','','','','','']);
   const oRef0 = useRef<HTMLInputElement>(null);
@@ -1882,6 +1883,16 @@ function OnboardingPageInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, session?.user?.emailVerified]);
 
+  // Fetch Google auth availability
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/settings/auth')
+      .then(r => r.json().catch(() => null))
+      .then((p: { googleEnabled?: boolean } | null) => { if (alive) setGoogleEnabled(Boolean(p?.googleEnabled)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   // Fetch referrer info when a ref code is in the URL
   useEffect(() => {
     if (!incomingRef) return;
@@ -2038,6 +2049,11 @@ function OnboardingPageInner() {
       next();
     } catch { setSError('Something went wrong. Please try again.'); }
     finally { setSLoading(false); }
+  }
+
+  async function handleGoogleSignup() {
+    setSError('');
+    await signIn('google', { callbackUrl: '/home' });
   }
 
   async function blobToDataUrl(blobUrl: string): Promise<string> {
@@ -2487,6 +2503,22 @@ function OnboardingPageInner() {
                   ? <div className="h-4 w-4 rounded-full border-2 border-[#050508]/25 border-t-[#050508] animate-spin" />
                   : <><span>Create profile</span><ArrowRight className="h-3.5 w-3.5" /></>}
               </button>
+
+              {googleEnabled && (
+                <>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 border-t border-white/[0.06]" />
+                    <span className="text-[10px] text-white/20">or</span>
+                    <div className="flex-1 border-t border-white/[0.06]" />
+                  </div>
+                  <button type="button" onClick={() => void handleGoogleSignup()}
+                    className="flex h-10 w-full items-center justify-center gap-2.5 rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-[12.5px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/80 active:scale-[0.98]">
+                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[conic-gradient(from_180deg,#34a853_0deg,#4285f4_120deg,#fbbc05_220deg,#ea4335_320deg,#34a853_360deg)] text-[8px] font-black text-white">G</span>
+                    Continue with Google
+                  </button>
+                </>
+              )}
+
               <p className="text-center text-[10px] text-white/18">
                 By continuing you agree to our{' '}
                 <span className="text-white/38 underline underline-offset-2 cursor-pointer hover:text-white/60 transition-colors">Terms</span>

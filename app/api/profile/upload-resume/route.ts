@@ -94,50 +94,16 @@ function detectType(buf: Buffer, name: string): KnownType {
   return snippet.length > 0 && printable / snippet.length > 0.85 ? 'txt' : 'txt';
 }
 
-/* ─── PDF extraction (position-sorted text) ───────────────────────────────── */
+/* ─── PDF extraction ─────────────────────────────────────────────────────── */
 async function extractPdf(buf: Buffer): Promise<string> {
-  const pdfjsLib = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as {
-    getDocument: (src: { data: Uint8Array }) => {
-      promise: Promise<{
-        numPages: number;
-        getPage: (n: number) => Promise<{
-          getTextContent: () => Promise<{ items: Array<{ str?: string; transform?: number[] }> }>;
-        }>;
-      }>;
-    };
-    GlobalWorkerOptions: { workerSrc: string };
-  };
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  const pageTexts: string[] = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-
-    // Group items into lines by y-coordinate (3px tolerance), then sort lines top→bottom
-    const lineMap = new Map<number, Array<{ x: number; str: string }>>();
-    for (const item of content.items) {
-      const y = Math.round((item.transform?.[5] ?? 0) / 3) * 3; // snap to 3px grid
-      const x = item.transform?.[4] ?? 0;
-      const str = item.str ?? '';
-      if (!str.trim()) continue;
-      if (!lineMap.has(y)) lineMap.set(y, []);
-      lineMap.get(y)!.push({ x, str });
-    }
-
-    // Sort lines top→bottom (higher y = higher on page in PDF coords)
-    const sortedLines = Array.from(lineMap.entries())
-      .sort(([ya], [yb]) => yb - ya)
-      .map(([, lineItems]) =>
-        lineItems.sort((a: { x: number; str: string }, b: { x: number; str: string }) => a.x - b.x).map((it: { str: string }) => it.str).join(' ')
-      );
-
-    pageTexts.push(sortedLines.join('\n'));
-  }
-
-  return pageTexts.join('\n\n--- PAGE BREAK ---\n\n');
+  // pdf-parse works reliably across Node.js, Vercel serverless, and edge environments.
+  // pdfjs-dist/legacy paths changed in v5.x and break in bundled production builds.
+  const pdfParse = (await import('pdf-parse')).default as (
+    data: Buffer,
+    options?: Record<string, unknown>
+  ) => Promise<{ text: string; numpages: number }>;
+  const result = await pdfParse(buf, { max: 0 }); // max:0 = parse all pages
+  return result.text;
 }
 
 /* ─── DOCX/DOC extraction ─────────────────────────────────────────────────── */

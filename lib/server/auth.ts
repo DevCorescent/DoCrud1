@@ -25,6 +25,13 @@ function normalizeLoginId(value: string) {
 }
 
 function getGoogleProviderConfig() {
+  // Env vars take priority — set GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET in Vercel/local .env
+  const envId     = process.env.GOOGLE_CLIENT_ID?.trim();
+  const envSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  if (envId && envSecret) {
+    return { clientId: envId, clientSecret: envSecret };
+  }
+  // Fall back to admin-panel settings stored in DB
   const settings = getAuthSettingsSync();
   if (!settings.googleEnabled || !settings.googleClientId || !settings.googleClientSecret) {
     return null;

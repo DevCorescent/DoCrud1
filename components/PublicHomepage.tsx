@@ -2196,7 +2196,7 @@ function HomepageLiveFeed() {
   React.useEffect(() => {
     const t0 = Date.now();
     console.log('[hp-feed] fetch START');
-    fetch('/api/public/published?limit=20&noAvatar=1')
+    fetch('/api/public/published?limit=20')
       .then(r => {
         console.log(`[hp-feed] response received in ${Date.now() - t0}ms — status: ${r.status}`);
         return r.json();
@@ -2230,7 +2230,7 @@ function HomepageLiveFeed() {
   React.useEffect(() => {
     const poll = async () => {
       try {
-        const r = await fetch('/api/public/published?limit=20&noAvatar=1');
+        const r = await fetch('/api/public/published?limit=20');
         if (!r.ok) return;
         const d = await r.json() as { items?: HpFeedItem[] };
         if (!Array.isArray(d.items)) return;

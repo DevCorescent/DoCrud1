@@ -13,10 +13,12 @@ export async function GET() {
   try {
     const session = await getAuthSession();
     const settings = await getAuthSettings();
+    // Google is enabled if env vars are set OR admin settings enable it
+    const googleViaEnv = Boolean(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim());
     if (!isAdmin(session)) {
       return NextResponse.json({
-        googleEnabled: settings.googleEnabled && Boolean(settings.googleClientId) && Boolean(settings.googleClientSecret),
-        googleConfigured: Boolean(settings.googleClientId) && Boolean(settings.googleClientSecret),
+        googleEnabled: googleViaEnv || (settings.googleEnabled && Boolean(settings.googleClientId) && Boolean(settings.googleClientSecret)),
+        googleConfigured: googleViaEnv || (Boolean(settings.googleClientId) && Boolean(settings.googleClientSecret)),
         aadhaarVerificationEnabled: settings.aadhaarVerificationEnabled,
         aadhaarConfigured: Boolean(settings.aadhaarApiBaseUrl && settings.aadhaarOtpRequestPath && settings.aadhaarOtpVerifyPath),
         aadhaarProviderLabel: settings.aadhaarProviderLabel,

@@ -138,43 +138,81 @@ function ensureDomMatrixPolyfill() {
 
 /* ─── PDF extraction ─────────────────────────────────────────────────────── */
 async function extractPdf(buf: Buffer): Promise<string> {
+  const L = (msg: string) => console.log(`[pdf-extract] ${msg}`);
+
+  L(`START — buf.length=${buf.length} platform=${process.platform} cwd=${process.cwd()}`);
+  L(`Node.js version: ${process.version}`);
+  L(`DOMMatrix before polyfill: ${typeof (globalThis as Record<string,unknown>).DOMMatrix}`);
+
   ensureDomMatrixPolyfill();
+  L(`DOMMatrix after polyfill: ${typeof (globalThis as Record<string,unknown>).DOMMatrix}`);
 
-  const nodePath   = await import('node:path');
-  const { Worker } = await import('node:worker_threads');
-
-  // require.resolve() is transformed by webpack into a numeric module ID on Vercel,
-  // so we can't use it to find the physical file path. Instead, resolve relative to
-  // process.cwd() — on Vercel Lambda this is /var/task, and node_modules lives there
-  // because pdfjs-dist is in serverComponentsExternalPackages (never bundled).
+  // ── Step 1: resolve worker path ──────────────────────────────────────────
+  const nodePath = await import('node:path');
+  const nodeFs   = await import('node:fs');
   const workerPath = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.mjs');
+  const workerExists = nodeFs.existsSync(workerPath);
+  L(`worker path: ${workerPath} — exists: ${workerExists}`);
 
-  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
-  const nodeWorker  = new Worker(workerPath, { type: 'module' } as import('node:worker_threads').WorkerOptions);
-  // worker_threads.Worker implements the same postMessage/addEventListener interface
-  // that pdfjs expects from a browser Worker, so the cast is safe at runtime.
-  GlobalWorkerOptions.workerPort = nodeWorker as unknown as globalThis.Worker;
-
-  try {
-    const pdf = await getDocument({
-      data: new Uint8Array(buf),
-      disableFontFace: true,
-      useSystemFonts: false,
-    }).promise;
-
-    const pageTexts: string[] = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page    = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const line    = content.items
-        .filter(it => 'str' in it && Boolean((it as { str: string }).str.trim()))
-        .map(it => (it as { str: string }).str)
-        .join(' ');
-      if (line.trim()) pageTexts.push(line);
+  if (!workerExists) {
+    // Log what IS in pdfjs-dist/build to help diagnose
+    const buildDir = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'build');
+    const buildExists = nodeFs.existsSync(buildDir);
+    L(`pdfjs build dir (${buildDir}) exists: ${buildExists}`);
+    if (buildExists) {
+      const files = nodeFs.readdirSync(buildDir).slice(0, 20);
+      L(`pdfjs build dir contents: ${files.join(', ')}`);
     }
-    return pageTexts.join('\n\n');
-  } finally {
-    await nodeWorker.terminate();
+  }
+
+  // ── Step 2: import pdfjs ─────────────────────────────────────────────────
+  L('importing pdfjs-dist…');
+  const { getDocument, GlobalWorkerOptions, version: pdfjsVersion } = await import('pdfjs-dist') as typeof import('pdfjs-dist') & { version?: string };
+  L(`pdfjs-dist imported — version: ${pdfjsVersion ?? 'unknown'}`);
+  L(`GlobalWorkerOptions: ${JSON.stringify({ workerSrc: GlobalWorkerOptions.workerSrc, workerPort: typeof GlobalWorkerOptions.workerPort })}`);
+
+  // ── Step 3: set up worker ─────────────────────────────────────────────────
+  if (workerExists) {
+    L('creating node:worker_threads Worker…');
+    try {
+      const { Worker: NodeWorker } = await import('node:worker_threads');
+      L(`NodeWorker constructor type: ${typeof NodeWorker}`);
+      const nodeWorker = new NodeWorker(workerPath, { type: 'module' } as import('node:worker_threads').WorkerOptions);
+      L(`nodeWorker created — type: ${typeof nodeWorker}, keys: ${Object.keys(nodeWorker).slice(0,8).join(',')}`);
+      GlobalWorkerOptions.workerPort = nodeWorker as unknown as globalThis.Worker;
+      L('workerPort set');
+
+      try {
+        L('calling getDocument…');
+        const pdf = await getDocument({ data: new Uint8Array(buf), disableFontFace: true, useSystemFonts: false }).promise;
+        L(`getDocument resolved — numPages: ${pdf.numPages}`);
+
+        const pageTexts: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page    = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const line    = content.items
+            .filter(it => 'str' in it && Boolean((it as { str: string }).str.trim()))
+            .map(it => (it as { str: string }).str)
+            .join(' ');
+          if (line.trim()) pageTexts.push(line);
+        }
+        const result = pageTexts.join('\n\n');
+        L(`extraction done — ${result.length} chars across ${pageTexts.length} page blocks`);
+        await nodeWorker.terminate();
+        return result;
+      } catch (pdfjsErr) {
+        L(`getDocument/page error: ${pdfjsErr instanceof Error ? pdfjsErr.message : String(pdfjsErr)}`);
+        await nodeWorker.terminate().catch(() => {});
+        throw pdfjsErr;
+      }
+    } catch (workerErr) {
+      L(`worker_threads setup error: ${workerErr instanceof Error ? workerErr.message : String(workerErr)}`);
+      throw workerErr;
+    }
+  } else {
+    L('worker file not found — cannot proceed with pdfjs');
+    throw new Error(`pdfjs worker not found at ${workerPath}`);
   }
 }
 

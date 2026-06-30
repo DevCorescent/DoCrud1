@@ -168,8 +168,8 @@ async function extractPdf(buf: Buffer): Promise<string> {
       const page    = await pdf.getPage(i);
       const content = await page.getTextContent();
       const line    = content.items
-        .filter((it): it is { str: string } => 'str' in it && Boolean((it as { str: string }).str.trim()))
-        .map((it) => (it as { str: string }).str)
+        .filter(it => 'str' in it && Boolean((it as { str: string }).str.trim()))
+        .map(it => (it as { str: string }).str)
         .join(' ');
       if (line.trim()) pageTexts.push(line);
     }

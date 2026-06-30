@@ -98,12 +98,14 @@ function detectType(buf: Buffer, name: string): KnownType {
 async function extractPdf(buf: Buffer): Promise<string> {
   // pdf-parse works reliably across Node.js, Vercel serverless, and edge environments.
   // pdfjs-dist/legacy paths changed in v5.x and break in bundled production builds.
-  const pdfParse = (await import('pdf-parse')).default as (
-    data: Buffer,
-    options?: Record<string, unknown>
-  ) => Promise<{ text: string; numpages: number }>;
-  const result = await pdfParse(buf, { max: 0 }); // max:0 = parse all pages
-  return result.text;
+  const { PDFParse } = await import('pdf-parse');
+  const parser = new PDFParse({ data: new Uint8Array(buf) });
+  try {
+    const result = await parser.getText();
+    return result.text;
+  } finally {
+    await parser.destroy();
+  }
 }
 
 /* ─── DOCX/DOC extraction ─────────────────────────────────────────────────── */

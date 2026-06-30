@@ -71,8 +71,9 @@ export function useBehaviorTracker(featureId: string, opts?: { trackScroll?: boo
 
   // Record dwell time on unmount
   useEffect(() => {
+    const mountedAtMs = mountedAt.current;
     return () => {
-      const dwellMs = Date.now() - mountedAt.current;
+      const dwellMs = Date.now() - mountedAtMs;
       if (dwellMs > 2000) { // only record if user spent > 2s
         fire('feature_action', `dwell:${Math.round(dwellMs / 1000)}s`, dwellMs);
       }

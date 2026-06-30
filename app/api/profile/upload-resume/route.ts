@@ -96,16 +96,15 @@ function detectType(buf: Buffer, name: string): KnownType {
 
 /* ─── PDF extraction ─────────────────────────────────────────────────────── */
 async function extractPdf(buf: Buffer): Promise<string> {
-  // pdf-parse works reliably across Node.js, Vercel serverless, and edge environments.
-  // pdfjs-dist/legacy paths changed in v5.x and break in bundled production builds.
-  const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: new Uint8Array(buf) });
-  try {
-    const result = await parser.getText();
-    return result.text;
-  } finally {
-    await parser.destroy();
-  }
+  // Use the internal lib file directly to skip pdf-parse's test-file loader,
+  // which tries to read a fixture PDF from __dirname and fails in Vercel's
+  // bundled production filesystem.
+  const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default as (
+    data: Buffer,
+    options?: Record<string, unknown>,
+  ) => Promise<{ text: string; numpages: number }>;
+  const result = await pdfParse(buf, { max: 0 }); // max:0 = all pages
+  return result.text;
 }
 
 /* ─── DOCX/DOC extraction ─────────────────────────────────────────────────── */
@@ -137,10 +136,10 @@ async function extractText(buf: Buffer, type: KnownType): Promise<{ text: string
 
     return { text: raw };
   } catch (err) {
-    // Last-resort: raw bytes as UTF-8
-    console.error('[upload-resume] extraction error, falling back to raw utf8', err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[upload-resume] extraction error, falling back to raw utf8:', msg, err);
     const raw = buf.toString('utf8');
-    return { text: raw, warning: 'Text extraction used a raw fallback — results may vary.' };
+    return { text: raw, warning: `Text extraction failed (${msg}) — try uploading a .docx file instead.` };
   }
 }
 

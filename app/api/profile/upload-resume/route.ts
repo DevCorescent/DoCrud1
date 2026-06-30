@@ -94,11 +94,52 @@ function detectType(buf: Buffer, name: string): KnownType {
   return snippet.length > 0 && printable / snippet.length > 0.85 ? 'txt' : 'txt';
 }
 
+/* ─── DOMMatrix polyfill (pdfjs-dist uses it for text transforms; absent in Node.js) ── */
+function ensureDomMatrixPolyfill() {
+  if (typeof globalThis.DOMMatrix !== 'undefined') return;
+  // Minimal 2-D matrix — only the operations pdfjs-dist needs for text extraction
+  class DOMMatrixPolyfill {
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+    m11 = 1; m12 = 0; m13 = 0; m14 = 0;
+    m21 = 0; m22 = 1; m23 = 0; m24 = 0;
+    m31 = 0; m32 = 0; m33 = 1; m34 = 0;
+    m41 = 0; m42 = 0; m43 = 0; m44 = 1;
+    is2D = true; isIdentity = true;
+    constructor(init?: number[] | string) {
+      if (Array.isArray(init) && init.length >= 6) {
+        [this.a, this.b, this.c, this.d, this.e, this.f] = init as [number, number, number, number, number, number];
+        this.m11 = this.a; this.m12 = this.b;
+        this.m21 = this.c; this.m22 = this.d;
+        this.m41 = this.e; this.m42 = this.f;
+      }
+    }
+    transformPoint(p: { x: number; y: number; z?: number; w?: number }) {
+      return { x: this.a * p.x + this.c * p.y + this.e, y: this.b * p.x + this.d * p.y + this.f, z: 0, w: 1 };
+    }
+    multiply(o: DOMMatrixPolyfill) {
+      const r = new DOMMatrixPolyfill();
+      r.a = this.a * o.a + this.c * o.b;  r.b = this.b * o.a + this.d * o.b;
+      r.c = this.a * o.c + this.c * o.d;  r.d = this.b * o.c + this.d * o.d;
+      r.e = this.a * o.e + this.c * o.f + this.e;
+      r.f = this.b * o.e + this.d * o.f + this.f;
+      return r;
+    }
+    scale(sx = 1, sy = sx) { const r = new DOMMatrixPolyfill([this.a * sx, this.b * sx, this.c * sy, this.d * sy, this.e, this.f]); return r; }
+    translate(tx = 0, ty = 0) { const r = new DOMMatrixPolyfill([this.a, this.b, this.c, this.d, this.e + tx, this.f + ty]); return r; }
+    inverse() {
+      const det = this.a * this.d - this.b * this.c;
+      if (!det) return new DOMMatrixPolyfill();
+      return new DOMMatrixPolyfill([this.d / det, -this.b / det, -this.c / det, this.a / det, (this.c * this.f - this.d * this.e) / det, (this.b * this.e - this.a * this.f) / det]);
+    }
+    toString() { return `matrix(${this.a},${this.b},${this.c},${this.d},${this.e},${this.f})`; }
+  }
+  (globalThis as Record<string, unknown>).DOMMatrix = DOMMatrixPolyfill;
+}
+
 /* ─── PDF extraction ─────────────────────────────────────────────────────── */
 async function extractPdf(buf: Buffer): Promise<string> {
-  // Import pdfjs-dist root (not /legacy/build/pdf.mjs — that path doesn't exist in v5.x).
-  // It's in serverComponentsExternalPackages so webpack won't bundle it.
-  // disableFontFace + useSystemFonts prevent font-file lookups that fail in Vercel's FS.
+  ensureDomMatrixPolyfill();
+
   type PdfjsLib = {
     GlobalWorkerOptions: { workerSrc: string };
     getDocument: (src: { data: Uint8Array; disableFontFace?: boolean; useSystemFonts?: boolean }) => {

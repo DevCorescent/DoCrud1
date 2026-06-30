@@ -96,15 +96,40 @@ function detectType(buf: Buffer, name: string): KnownType {
 
 /* ─── PDF extraction ─────────────────────────────────────────────────────── */
 async function extractPdf(buf: Buffer): Promise<string> {
-  // Use the internal lib file directly to skip pdf-parse's test-file loader,
-  // which tries to read a fixture PDF from __dirname and fails in Vercel's
-  // bundled production filesystem.
-  const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default as (
-    data: Buffer,
-    options?: Record<string, unknown>,
-  ) => Promise<{ text: string; numpages: number }>;
-  const result = await pdfParse(buf, { max: 0 }); // max:0 = all pages
-  return result.text;
+  // Import pdfjs-dist root (not /legacy/build/pdf.mjs — that path doesn't exist in v5.x).
+  // It's in serverComponentsExternalPackages so webpack won't bundle it.
+  // disableFontFace + useSystemFonts prevent font-file lookups that fail in Vercel's FS.
+  type PdfjsLib = {
+    GlobalWorkerOptions: { workerSrc: string };
+    getDocument: (src: { data: Uint8Array; disableFontFace?: boolean; useSystemFonts?: boolean }) => {
+      promise: Promise<{
+        numPages: number;
+        getPage: (n: number) => Promise<{
+          getTextContent: () => Promise<{ items: Array<{ str?: string }> }>;
+        }>;
+      }>;
+    };
+  };
+  const pdfjs = (await import('pdfjs-dist')) as unknown as PdfjsLib;
+  pdfjs.GlobalWorkerOptions.workerSrc = '';
+
+  const pdf = await pdfjs.getDocument({
+    data: new Uint8Array(buf),
+    disableFontFace: true,
+    useSystemFonts: false,
+  }).promise;
+
+  const pageTexts: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const line = content.items
+      .filter(item => item.str?.trim())
+      .map(item => item.str ?? '')
+      .join(' ');
+    if (line.trim()) pageTexts.push(line);
+  }
+  return pageTexts.join('\n\n');
 }
 
 /* ─── DOCX/DOC extraction ─────────────────────────────────────────────────── */

@@ -22,6 +22,15 @@ const nextConfig = {
       'pg',
       '@xmldom/xmldom',
     ],
+    // Force Vercel's file tracer to include the pdfjs worker file.
+    // Without this, the tracer skips it because the path is computed at runtime
+    // (string concatenation), not a static import — so it never reaches the lambda.
+    outputFileTracingIncludes: {
+      '/api/profile/upload-resume': [
+        './node_modules/pdfjs-dist/build/pdf.worker.mjs',
+        './node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
+      ],
+    },
     optimizePackageImports: [
       '@supabase/ssr',
       '@supabase/supabase-js',

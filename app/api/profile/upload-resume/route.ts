@@ -143,12 +143,11 @@ async function extractPdf(buf: Buffer): Promise<string> {
   const nodePath   = await import('node:path');
   const { Worker } = await import('node:worker_threads');
 
-  // pdfjs-dist is in serverComponentsExternalPackages so it's never bundled —
-  // its files live in node_modules on disk and we can point a real Node.js
-  // worker thread at the compiled worker file.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfjsDir    = nodePath.dirname(require.resolve('pdfjs-dist/package.json'));
-  const workerPath  = nodePath.join(pdfjsDir, 'build', 'pdf.worker.mjs');
+  // require.resolve() is transformed by webpack into a numeric module ID on Vercel,
+  // so we can't use it to find the physical file path. Instead, resolve relative to
+  // process.cwd() — on Vercel Lambda this is /var/task, and node_modules lives there
+  // because pdfjs-dist is in serverComponentsExternalPackages (never bundled).
+  const workerPath = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.mjs');
 
   const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
   const nodeWorker  = new Worker(workerPath, { type: 'module' } as import('node:worker_threads').WorkerOptions);

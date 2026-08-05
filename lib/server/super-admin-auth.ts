@@ -50,8 +50,12 @@ export interface SuperAdminConfig {
   platformFlags: SuperAdminPlatformFlags;
 }
 
+/** Hardcoded local/dev credentials — prefer env overrides when set. */
+export const HARDCODED_SUPER_ADMIN_EMAIL = 'superadmin@company.com';
+export const HARDCODED_SUPER_ADMIN_PASSWORD = 'superadmin123';
+
 const DEFAULT_CONFIG: SuperAdminConfig = {
-  email: '',
+  email: HARDCODED_SUPER_ADMIN_EMAIL,
   otpSessions: [],
   activeSessions: [],
   auditLog: [],
@@ -90,7 +94,21 @@ export async function getSuperAdminEmail(): Promise<string> {
   const envEmail = process.env.SUPER_ADMIN_EMAIL;
   if (envEmail) return envEmail.trim().toLowerCase();
   const cfg = await readConfig();
-  return cfg.email?.trim().toLowerCase() || '';
+  return cfg.email?.trim().toLowerCase() || HARDCODED_SUPER_ADMIN_EMAIL;
+}
+
+export async function verifySuperAdminPassword(email: string, password: string): Promise<{ valid: boolean; email?: string; error?: string }> {
+  const saEmail = await getSuperAdminEmail();
+  const expectedPassword = process.env.SUPER_ADMIN_PASSWORD?.trim() || HARDCODED_SUPER_ADMIN_PASSWORD;
+  const normalized = email.trim().toLowerCase();
+
+  if (!normalized || !password) {
+    return { valid: false, error: 'Email and password are required' };
+  }
+  if (normalized !== saEmail || password !== expectedPassword) {
+    return { valid: false, error: 'Invalid email or password' };
+  }
+  return { valid: true, email: saEmail };
 }
 
 export async function setSuperAdminEmail(email: string): Promise<void> {

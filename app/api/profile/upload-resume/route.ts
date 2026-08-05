@@ -94,126 +94,67 @@ function detectType(buf: Buffer, name: string): KnownType {
   return snippet.length > 0 && printable / snippet.length > 0.85 ? 'txt' : 'txt';
 }
 
-/* ─── DOMMatrix polyfill (pdfjs-dist uses it for text transforms; absent in Node.js) ── */
-function ensureDomMatrixPolyfill() {
-  if (typeof globalThis.DOMMatrix !== 'undefined') return;
-  // Minimal 2-D matrix — only the operations pdfjs-dist needs for text extraction
-  class DOMMatrixPolyfill {
-    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-    m11 = 1; m12 = 0; m13 = 0; m14 = 0;
-    m21 = 0; m22 = 1; m23 = 0; m24 = 0;
-    m31 = 0; m32 = 0; m33 = 1; m34 = 0;
-    m41 = 0; m42 = 0; m43 = 0; m44 = 1;
-    is2D = true; isIdentity = true;
-    constructor(init?: number[] | string) {
-      if (Array.isArray(init) && init.length >= 6) {
-        [this.a, this.b, this.c, this.d, this.e, this.f] = init as [number, number, number, number, number, number];
-        this.m11 = this.a; this.m12 = this.b;
-        this.m21 = this.c; this.m22 = this.d;
-        this.m41 = this.e; this.m42 = this.f;
-      }
-    }
-    transformPoint(p: { x: number; y: number; z?: number; w?: number }) {
-      return { x: this.a * p.x + this.c * p.y + this.e, y: this.b * p.x + this.d * p.y + this.f, z: 0, w: 1 };
-    }
-    multiply(o: DOMMatrixPolyfill) {
-      const r = new DOMMatrixPolyfill();
-      r.a = this.a * o.a + this.c * o.b;  r.b = this.b * o.a + this.d * o.b;
-      r.c = this.a * o.c + this.c * o.d;  r.d = this.b * o.c + this.d * o.d;
-      r.e = this.a * o.e + this.c * o.f + this.e;
-      r.f = this.b * o.e + this.d * o.f + this.f;
-      return r;
-    }
-    scale(sx = 1, sy = sx) { const r = new DOMMatrixPolyfill([this.a * sx, this.b * sx, this.c * sy, this.d * sy, this.e, this.f]); return r; }
-    translate(tx = 0, ty = 0) { const r = new DOMMatrixPolyfill([this.a, this.b, this.c, this.d, this.e + tx, this.f + ty]); return r; }
-    inverse() {
-      const det = this.a * this.d - this.b * this.c;
-      if (!det) return new DOMMatrixPolyfill();
-      return new DOMMatrixPolyfill([this.d / det, -this.b / det, -this.c / det, this.a / det, (this.c * this.f - this.d * this.e) / det, (this.b * this.e - this.a * this.f) / det]);
-    }
-    toString() { return `matrix(${this.a},${this.b},${this.c},${this.d},${this.e},${this.f})`; }
-  }
-  (globalThis as Record<string, unknown>).DOMMatrix = DOMMatrixPolyfill;
+/* ─── PDF extraction — pure Node.js, no browser deps, no worker ──────────── */
+// Handles FlateDecode-compressed streams (virtually all modern resume PDFs).
+// Extracts both literal (text) and hex <AABB> string operands from BT/ET blocks.
+
+function pdfDecodeLiteral(s: string): string {
+  return s
+    .replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t')
+    .replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\')
+    .replace(/\\([0-7]{1,3})/g, (_, o: string) => String.fromCharCode(parseInt(o, 8)));
 }
 
-/* ─── PDF extraction ─────────────────────────────────────────────────────── */
+function pdfDecodeHex(hex: string): string {
+  const h = hex.replace(/\s/g, '');
+  let r = '';
+  for (let i = 0; i < h.length; i += 2) r += String.fromCharCode(parseInt(h.slice(i, i + 2) || '0', 16));
+  return r;
+}
+
 async function extractPdf(buf: Buffer): Promise<string> {
-  const L = (msg: string) => console.log(`[pdf-extract] ${msg}`);
+  console.log(`[pdf-extract] START size=${buf.length}`);
+  const { inflateSync } = await import('node:zlib');
 
-  L(`START — buf.length=${buf.length} platform=${process.platform} cwd=${process.cwd()}`);
-  L(`Node.js version: ${process.version}`);
-  L(`DOMMatrix before polyfill: ${typeof (globalThis as Record<string,unknown>).DOMMatrix}`);
+  const raw   = buf.toString('binary');
+  const texts: string[] = [];
 
-  ensureDomMatrixPolyfill();
-  L(`DOMMatrix after polyfill: ${typeof (globalThis as Record<string,unknown>).DOMMatrix}`);
+  // Walk every stream…endstream block in the file
+  for (const sm of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    let content = sm[1];
 
-  // ── Step 1: resolve worker path ──────────────────────────────────────────
-  const nodePath = await import('node:path');
-  const nodeFs   = await import('node:fs');
-  const workerPath = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'build', 'pdf.worker.mjs');
-  const workerExists = nodeFs.existsSync(workerPath);
-  L(`worker path: ${workerPath} — exists: ${workerExists}`);
+    // Attempt FlateDecode — covers virtually all modern text PDFs
+    try { content = inflateSync(Buffer.from(sm[1], 'binary')).toString('latin1'); }
+    catch { /* uncompressed or non-zlib stream — use as-is */ }
 
-  if (!workerExists) {
-    // Log what IS in pdfjs-dist/build to help diagnose
-    const buildDir = nodePath.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'build');
-    const buildExists = nodeFs.existsSync(buildDir);
-    L(`pdfjs build dir (${buildDir}) exists: ${buildExists}`);
-    if (buildExists) {
-      const files = nodeFs.readdirSync(buildDir).slice(0, 20);
-      L(`pdfjs build dir contents: ${files.join(', ')}`);
-    }
-  }
+    // Process BT…ET text objects
+    for (const bm of content.matchAll(/BT([\s\S]*?)ET/g)) {
+      const block = bm[1];
 
-  // ── Step 2: import pdfjs ─────────────────────────────────────────────────
-  L('importing pdfjs-dist…');
-  const { getDocument, GlobalWorkerOptions, version: pdfjsVersion } = await import('pdfjs-dist') as typeof import('pdfjs-dist') & { version?: string };
-  L(`pdfjs-dist imported — version: ${pdfjsVersion ?? 'unknown'}`);
-  L(`GlobalWorkerOptions: ${JSON.stringify({ workerSrc: GlobalWorkerOptions.workerSrc, workerPort: typeof GlobalWorkerOptions.workerPort })}`);
+      // Tj / ' / "  (single string operands — literal)
+      for (const m of block.matchAll(/\(((?:[^)(\\]|\\[\s\S])*)\)\s*(?:Tj|'|")/g))
+        { const t = pdfDecodeLiteral(m[1]); if (t.trim()) texts.push(t); }
 
-  // ── Step 3: set up worker ─────────────────────────────────────────────────
-  if (workerExists) {
-    L('creating node:worker_threads Worker…');
-    try {
-      const { Worker: NodeWorker } = await import('node:worker_threads');
-      L(`NodeWorker constructor type: ${typeof NodeWorker}`);
-      const nodeWorker = new NodeWorker(workerPath, { type: 'module' } as import('node:worker_threads').WorkerOptions);
-      L(`nodeWorker created — type: ${typeof nodeWorker}, keys: ${Object.keys(nodeWorker).slice(0,8).join(',')}`);
-      GlobalWorkerOptions.workerPort = nodeWorker as unknown as globalThis.Worker;
-      L('workerPort set');
+      // Tj  (single hex string)
+      for (const m of block.matchAll(/<([0-9A-Fa-f\s]*)>\s*Tj/g))
+        { const t = pdfDecodeHex(m[1]); if (t.trim()) texts.push(t); }
 
-      try {
-        L('calling getDocument…');
-        const pdf = await getDocument({ data: new Uint8Array(buf), disableFontFace: true, useSystemFonts: false }).promise;
-        L(`getDocument resolved — numPages: ${pdf.numPages}`);
-
-        const pageTexts: string[] = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page    = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          const line    = content.items
-            .filter(it => 'str' in it && Boolean((it as { str: string }).str.trim()))
-            .map(it => (it as { str: string }).str)
-            .join(' ');
-          if (line.trim()) pageTexts.push(line);
-        }
-        const result = pageTexts.join('\n\n');
-        L(`extraction done — ${result.length} chars across ${pageTexts.length} page blocks`);
-        await nodeWorker.terminate();
-        return result;
-      } catch (pdfjsErr) {
-        L(`getDocument/page error: ${pdfjsErr instanceof Error ? pdfjsErr.message : String(pdfjsErr)}`);
-        await nodeWorker.terminate().catch(() => {});
-        throw pdfjsErr;
+      // TJ  (array — mix of literal + hex + kerning numbers)
+      for (const am of block.matchAll(/\[([\s\S]*?)\]\s*TJ/g)) {
+        const parts: string[] = [];
+        for (const m of am[1].matchAll(/\(((?:[^)(\\]|\\[\s\S])*)\)/g)) parts.push(pdfDecodeLiteral(m[1]));
+        for (const m of am[1].matchAll(/<([0-9A-Fa-f\s]*)>/g))          parts.push(pdfDecodeHex(m[1]));
+        const combined = parts.join('');
+        if (combined.trim()) texts.push(combined);
       }
-    } catch (workerErr) {
-      L(`worker_threads setup error: ${workerErr instanceof Error ? workerErr.message : String(workerErr)}`);
-      throw workerErr;
     }
-  } else {
-    L('worker file not found — cannot proceed with pdfjs');
-    throw new Error(`pdfjs worker not found at ${workerPath}`);
   }
+
+  const result = texts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  console.log(`[pdf-extract] done — streams scanned, ${texts.length} text chunks, ${result.length} chars`);
+
+  if (!result) throw new Error('No readable text found in PDF — the file may be scanned/image-based');
+  return result;
 }
 
 /* ─── DOCX/DOC extraction ─────────────────────────────────────────────────── */

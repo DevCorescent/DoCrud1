@@ -2375,7 +2375,7 @@ export default function UserProfilePage() {
   const [credits, setCredits] = useState<{ balance: number; totalEarned: number; streak: { current: number; longest: number }; milestones: string[]; verified: boolean; transactions: Array<{ id: string; type: string; amount: number; reason: string; description: string; createdAt: string }> } | null>(null);
   const [analytics, setAnalytics] = useState<{ totalViews: number; totalLikes: number; totalComments: number; publishCount: number; featuredCount: number } | null>(null);
   const [billingHistory, setBillingHistory] = useState<Array<{ id: string; productLabel?: string; planName?: string; totalAmountInPaise: number; status: string; paidAt?: string; createdAt: string; invoiceNumber?: string; productType?: string }>>([]);
-  const [infinityStatus, setInfinityStatus] = useState<{ active: boolean; isExpired: boolean; purchasedAt?: string; expiresAt?: string; period?: 'monthly' | 'annual'; renewalCount?: number; grantedFree?: boolean } | null>(null);
+  const [infinityStatus, setInfinityStatus] = useState<{ active: boolean; isExpired: boolean; purchasedAt?: string; expiresAt?: string; period?: 'monthly' | '3m' | '6m' | 'annual'; renewalCount?: number; grantedFree?: boolean } | null>(null);
   const [infinityPayPhase, setInfinityPayPhase] = useState<'idle' | 'paying' | 'success'>('idle');
   const [infinityPayError, setInfinityPayError] = useState('');
   const [publishedPosts, setPublishedPosts] = useState<Array<{ id: string; shareId: string; title?: string; fileName: string; likesCount: number; commentsCount: number; viewCount: number; featured: boolean; featuredUntil?: string; featuredPlan?: string; createdAt: string }>>([]);
@@ -5499,7 +5499,7 @@ export default function UserProfilePage() {
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-[18px] font-black tracking-[-0.03em] text-white">Infinity <span style={{ color: '#a5b4fc' }}>∞</span></span>
                             <span className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ background: 'rgba(99,102,241,0.18)', color: '#a5b4fc' }}>
-                              {infinityStatus!.period === 'annual' ? 'Annual' : 'Monthly'}
+                              {({ monthly: '1 month', '3m': '3 months', '6m': '6 months', annual: 'Annual' } as Record<string, string>)[infinityStatus!.period || 'monthly'] || 'Monthly'}
                             </span>
                             {infinityStatus!.grantedFree && (
                               <span className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ background: 'rgba(52,211,153,0.15)', color: '#34d399' }}>Free</span>

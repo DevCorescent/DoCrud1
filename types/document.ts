@@ -818,7 +818,7 @@ export interface BillingOverview {
     isExpired: boolean;
     purchasedAt?: string;
     expiresAt?: string;
-    period?: 'monthly' | 'annual';
+    period?: 'monthly' | '3m' | '6m' | 'annual';
     renewalCount?: number;
     grantedFree?: boolean;
     orderId?: string;

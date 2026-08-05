@@ -148,7 +148,7 @@ export interface InfinitySubscriber {
   name?:        string;
   active:       boolean;
   isExpired:    boolean;
-  period?:      'monthly' | 'annual';
+  period?:      InfinityPeriod;
   purchasedAt?: string;
   expiresAt?:   string;
   renewalCount: number;

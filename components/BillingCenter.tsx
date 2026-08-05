@@ -331,7 +331,11 @@ export default function BillingCenter({ initialPlanId }: BillingCenterProps) {
                         <span className="rounded-full border border-emerald-200 bg-emerald-50/70 px-2.5 py-0.5 text-xs font-medium text-emerald-800">Active</span>
                       </div>
                       <p className="mt-1 text-sm text-slate-600">
-                        {billing.infinity.period === 'annual' ? '₹2,499 / year' : '₹299 / month'} · Renews{' '}
+                        {billing.infinity.period === 'annual'
+                          ? '₹2,499 / year'
+                          : billing.infinity.period === '3m' || billing.infinity.period === '6m'
+                            ? `Admin grant · ${billing.infinity.period === '3m' ? '3 months' : '6 months'}`
+                            : '₹299 / month'} · Renews{' '}
                         {billing.infinity.expiresAt
                           ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(billing.infinity.expiresAt))
                           : '—'}
@@ -340,7 +344,7 @@ export default function BillingCenter({ initialPlanId }: BillingCenterProps) {
                   </div>
                   <div className="mt-4 grid gap-2 text-sm">
                     {[
-                      { label: 'Period', value: billing.infinity.period === 'annual' ? 'Annual' : 'Monthly' },
+                      { label: 'Period', value: ({ monthly: '1 month', '3m': '3 months', '6m': '6 months', annual: 'Annual' } as Record<string, string>)[billing.infinity.period || 'monthly'] || 'Monthly' },
                       { label: 'Drive storage', value: '5 GB' },
                       { label: 'Renewals', value: String(billing.infinity.renewalCount ?? 0) },
                       { label: 'Purchased', value: billing.infinity.purchasedAt ? new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' }).format(new Date(billing.infinity.purchasedAt)) : '—' },

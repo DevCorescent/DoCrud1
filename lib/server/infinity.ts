@@ -7,11 +7,30 @@ export const INFINITY_MONTHLY_PAISE = 29900;    // ₹299
 export const INFINITY_ANNUAL_PAISE  = 249900;   // ₹2,499
 export const INFINITY_DRIVE_GB      = 5;
 
+/** Billing + admin grant periods */
+export type InfinityPeriod = 'monthly' | '3m' | '6m' | 'annual';
+
+export const INFINITY_PERIODS: InfinityPeriod[] = ['monthly', '3m', '6m', 'annual'];
+
 /** Days added per billing period */
-const PERIOD_DAYS: Record<'monthly' | 'annual', number> = {
-  monthly: 30,
-  annual:  365,
+export const PERIOD_DAYS: Record<InfinityPeriod, number> = {
+  monthly: 30,   // 1 month
+  '3m':    90,   // 3 months
+  '6m':    180,  // 6 months
+  annual:  365,  // 1 year
 };
+
+export const PERIOD_LABELS: Record<InfinityPeriod, string> = {
+  monthly: '1 month',
+  '3m':    '3 months',
+  '6m':    '6 months',
+  annual:  'Annual',
+};
+
+export function normalizeInfinityPeriod(value: unknown): InfinityPeriod {
+  if (value === '3m' || value === '6m' || value === 'annual' || value === 'monthly') return value;
+  return 'monthly';
+}
 
 function addDays(from: Date, days: number): string {
   const d = new Date(from);
@@ -26,7 +45,7 @@ export interface InfinityStatus {
   isExpired: boolean;
   purchasedAt?: string;
   expiresAt?: string;
-  period?: 'monthly' | 'annual';
+  period?: InfinityPeriod;
   renewalCount?: number;
   grantedFree?: boolean;
   orderId?: string;
@@ -63,7 +82,7 @@ export async function hasInfinity(userId: string): Promise<boolean> {
 /* ── Write ──────────────────────────────────────────────────────── */
 
 interface ActivateOpts {
-  period?:     'monthly' | 'annual';
+  period?:     InfinityPeriod;
   grantedFree?: boolean;
   orderId?:    string;
   paymentId?:  string;
@@ -77,7 +96,7 @@ interface ActivateOpts {
  */
 export async function activateInfinity(userId: string, opts: ActivateOpts = {}): Promise<void> {
   const profile = await getProfileData(userId);
-  const period  = opts.period ?? 'monthly';
+  const period  = normalizeInfinityPeriod(opts.period);
   const days    = PERIOD_DAYS[period];
   const now     = new Date();
 
@@ -163,7 +182,7 @@ export async function listInfinitySubscribers(): Promise<InfinitySubscriber[]> {
           name:         (u?.name) ?? undefined,
           active:       !isExpired,
           isExpired,
-          period:       p.docrudInfinityPeriod as 'monthly' | 'annual' | undefined,
+          period:       p.docrudInfinityPeriod as InfinityPeriod | undefined,
           purchasedAt:  p.docrudInfinityPurchasedAt as string | undefined,
           expiresAt,
           renewalCount: (p.docrudInfinityRenewalCount as number) ?? 0,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
 import { getAllProfiles } from '@/lib/server/user-profiles';
-import { activateInfinity, deactivateInfinity } from '@/lib/server/infinity';
+import { activateInfinity, deactivateInfinity, normalizeInfinityPeriod } from '@/lib/server/infinity';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   if (fail) return fail;
 
   try {
-    const body = await req.json() as { userId?: string; action?: 'grant' | 'revoke'; period?: 'monthly' | 'annual' };
+    const body = await req.json() as { userId?: string; action?: 'grant' | 'revoke'; period?: string };
     const { userId, action, period } = body;
 
     if (!userId || !['grant', 'revoke'].includes(action!)) {
@@ -46,15 +46,16 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'grant') {
+      const billingPeriod = normalizeInfinityPeriod(period);
       await activateInfinity(userId, {
-        period: period === 'annual' ? 'annual' : 'monthly',
+        period: billingPeriod,
         grantedFree: true,
       });
       await appendSuperAdminAudit({
         action: 'user_activate_premium',
         targetType: 'user',
         targetId: userId,
-        details: { period: period === 'annual' ? 'annual' : 'monthly', source: 'infinity_tab' },
+        details: { period: billingPeriod, source: 'infinity_tab' },
         ip: req.headers.get('x-forwarded-for') || undefined,
       });
       return NextResponse.json({ success: true, action: 'granted', userId });

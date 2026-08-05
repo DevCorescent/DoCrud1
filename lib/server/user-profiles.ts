@@ -38,7 +38,7 @@ export interface UserProfileData {
   docrudInfinity?: boolean;
   docrudInfinityPurchasedAt?: string;
   docrudInfinityGrantedFree?: boolean;
-  docrudInfinityPeriod?: 'monthly' | 'annual';
+  docrudInfinityPeriod?: 'monthly' | '3m' | '6m' | 'annual';
   docrudInfinityExpiresAt?: string;      // ISO — when current period ends
   docrudInfinityRenewedAt?: string;      // ISO — last renewal timestamp
   docrudInfinityOrderId?: string;        // Razorpay order ID of latest payment
@@ -48,7 +48,7 @@ export interface UserProfileData {
   docrudDrivePlanId?: string;           // kept for legacy; always 'infinity' for active users
   docrudDrivePlanGb?: number;
   docrudDrivePlanPurchasedAt?: string;
-  docrudDrivePlanPeriod?: 'monthly' | 'annual';
+  docrudDrivePlanPeriod?: 'monthly' | '3m' | '6m' | 'annual';
   publicFace?: {
     category: string;
     approvedAt: string;

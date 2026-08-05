@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
 import { listAdminUsers, adminSuspendUser, adminUnsuspendUser, adminDisableUser, adminEnableUser, adminDeleteUser } from '@/lib/server/admin-users';
 import { getStoredUsers, saveStoredUsers } from '@/lib/server/auth';
-import { activateInfinity, deactivateInfinity, getInfinityStatus } from '@/lib/server/infinity';
+import { activateInfinity, deactivateInfinity, getInfinityStatus, normalizeInfinityPeriod } from '@/lib/server/infinity';
 
 async function guard(req: NextRequest) {
   const s = await getSuperAdminSessionFromRequest(req);
@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
         const users = await getStoredUsers();
         const user = users.find((u) => u.id === userId);
         if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-        const billingPeriod = period === 'annual' ? 'annual' : 'monthly';
+        const billingPeriod = normalizeInfinityPeriod(period);
         await activateInfinity(userId, { period: billingPeriod, grantedFree: true });
         const status = await getInfinityStatus(userId);
         return NextResponse.json({ success: true, infinity: status });

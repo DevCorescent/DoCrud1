@@ -1282,7 +1282,7 @@ interface UserBehaviour {
     isExpired: boolean;
     purchasedAt?: string;
     expiresAt?: string;
-    period?: 'monthly' | 'annual';
+    period?: 'monthly' | '3m' | '6m' | 'annual';
     renewalCount?: number;
     grantedFree?: boolean;
   };
@@ -1462,7 +1462,7 @@ function UsersTab() {
                           ['Plan',         (selectedUser.subscription as Record<string, string>)?.planId || '—'],
                           ['Plan Status',  (selectedUser.subscription as Record<string, string>)?.status || '—'],
                           ['Premium ∞',    userBehaviour?.infinity?.active
-                            ? `Active${userBehaviour.infinity.period ? ` · ${userBehaviour.infinity.period}` : ''}${userBehaviour.infinity.expiresAt ? ` · exp ${ago(userBehaviour.infinity.expiresAt)}` : ''}${userBehaviour.infinity.grantedFree ? ' · free grant' : ''}`
+                            ? `Active · ${({ monthly: '1 month', '3m': '3 months', '6m': '6 months', annual: 'Annual' } as Record<string, string>)[userBehaviour.infinity.period || 'monthly'] || userBehaviour.infinity.period}${userBehaviour.infinity.expiresAt ? ` · exp ${ago(userBehaviour.infinity.expiresAt)}` : ''}${userBehaviour.infinity.grantedFree ? ' · free grant' : ''}`
                             : userBehaviour?.infinity?.isExpired ? 'Expired' : 'Not active'],
                           ['Joined',       ago(selectedUser.createdAt)],
                           ['Last Login',   ago(selectedUser.lastLogin)],
@@ -1815,20 +1815,21 @@ function UsersTab() {
             <div className="border-t border-zinc-800 px-6 py-3 flex-shrink-0 bg-zinc-950 space-y-2">
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider mr-1">Premium:</span>
-                <button
-                  disabled={actionLoading}
-                  onClick={() => doAction('activate_premium', selectedUser.id, { period: 'monthly' })}
-                  className="px-3 py-1.5 bg-violet-500/15 border border-violet-500/30 text-violet-300 rounded-lg text-xs hover:bg-violet-500/25 transition-all disabled:opacity-50 font-semibold"
-                >
-                  ∞ Activate 30d
-                </button>
-                <button
-                  disabled={actionLoading}
-                  onClick={() => doAction('activate_premium', selectedUser.id, { period: 'annual' })}
-                  className="px-3 py-1.5 bg-violet-500/15 border border-violet-500/30 text-violet-300 rounded-lg text-xs hover:bg-violet-500/25 transition-all disabled:opacity-50 font-semibold"
-                >
-                  ∞ Activate 1yr
-                </button>
+                {([
+                  { period: 'monthly', label: '1 month' },
+                  { period: '3m', label: '3 months' },
+                  { period: '6m', label: '6 months' },
+                  { period: 'annual', label: 'Annual' },
+                ] as const).map(({ period, label }) => (
+                  <button
+                    key={period}
+                    disabled={actionLoading}
+                    onClick={() => doAction('activate_premium', selectedUser.id, { period })}
+                    className="px-3 py-1.5 bg-violet-500/15 border border-violet-500/30 text-violet-300 rounded-lg text-xs hover:bg-violet-500/25 transition-all disabled:opacity-50 font-semibold"
+                  >
+                    ∞ {label}
+                  </button>
+                ))}
                 <button
                   disabled={actionLoading || !userBehaviour?.infinity?.active}
                   onClick={() => { if (confirm('Revoke Infinity premium for this user?')) doAction('revoke_premium', selectedUser.id); }}
@@ -6458,6 +6459,7 @@ function InfinityTab() {
   const [subscribers, setSubscribers] = useState<InfinitySubscriber[]>([]);
   const [subLoading, setSubLoading] = useState(true);
   const [grantUserId, setGrantUserId] = useState('');
+  const [grantPeriod, setGrantPeriod] = useState<'monthly' | '3m' | '6m' | 'annual'>('monthly');
   const [acting, setActing] = useState(false);
   const [actionMsg, setActionMsg] = useState('');
 
@@ -6480,7 +6482,7 @@ function InfinityTab() {
       const res = await fetch('/api/super-admin/infinity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, action }),
+        body: JSON.stringify({ userId, action, period: grantPeriod }),
       });
       const d = await res.json();
       if (!res.ok) { setActionMsg(d.error || 'Action failed'); return; }
@@ -6540,6 +6542,19 @@ function InfinityTab() {
               placeholder="usr_xxxxxxxx"
               className="w-full h-9 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white px-3 placeholder:text-zinc-600 focus:outline-none focus:border-violet-500/50"
             />
+          </div>
+          <div className="min-w-[140px]">
+            <label className="text-xs text-zinc-500 mb-1 block">Duration</label>
+            <select
+              value={grantPeriod}
+              onChange={(e) => setGrantPeriod(e.target.value as typeof grantPeriod)}
+              className="w-full h-9 rounded-lg bg-zinc-800 border border-zinc-700 text-sm text-white px-3 focus:outline-none focus:border-violet-500/50"
+            >
+              <option value="monthly">1 month</option>
+              <option value="3m">3 months</option>
+              <option value="6m">6 months</option>
+              <option value="annual">Annual</option>
+            </select>
           </div>
           <button onClick={() => handleAction(grantUserId.trim(), 'grant')} disabled={!grantUserId.trim() || acting}
             className="h-9 px-4 rounded-lg bg-violet-600 text-white text-xs font-bold hover:bg-violet-500 transition disabled:opacity-50">

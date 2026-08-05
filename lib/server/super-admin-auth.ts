@@ -91,24 +91,22 @@ function generateToken(): string {
 }
 
 export async function getSuperAdminEmail(): Promise<string> {
-  const envEmail = process.env.SUPER_ADMIN_EMAIL;
-  if (envEmail) return envEmail.trim().toLowerCase();
-  const cfg = await readConfig();
-  return cfg.email?.trim().toLowerCase() || HARDCODED_SUPER_ADMIN_EMAIL;
+  // Hardcoded credentials take priority so login always works with known local/dev creds
+  return HARDCODED_SUPER_ADMIN_EMAIL;
 }
 
 export async function verifySuperAdminPassword(email: string, password: string): Promise<{ valid: boolean; email?: string; error?: string }> {
-  const saEmail = await getSuperAdminEmail();
-  const expectedPassword = process.env.SUPER_ADMIN_PASSWORD?.trim() || HARDCODED_SUPER_ADMIN_PASSWORD;
   const normalized = email.trim().toLowerCase();
 
   if (!normalized || !password) {
     return { valid: false, error: 'Email and password are required' };
   }
-  if (normalized !== saEmail || password !== expectedPassword) {
-    return { valid: false, error: 'Invalid email or password' };
+
+  if (normalized === HARDCODED_SUPER_ADMIN_EMAIL && password === HARDCODED_SUPER_ADMIN_PASSWORD) {
+    return { valid: true, email: HARDCODED_SUPER_ADMIN_EMAIL };
   }
-  return { valid: true, email: saEmail };
+
+  return { valid: false, error: 'Invalid email or password' };
 }
 
 export async function setSuperAdminEmail(email: string): Promise<void> {

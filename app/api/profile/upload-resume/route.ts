@@ -120,7 +120,8 @@ async function extractPdf(buf: Buffer): Promise<string> {
   const texts: string[] = [];
 
   // Walk every stream…endstream block in the file
-  for (const sm of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+  // Array.from avoids RegExpStringIterator + downlevelIteration TS error under es6 lib
+  for (const sm of Array.from(raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g))) {
     let content = sm[1];
 
     // Attempt FlateDecode — covers virtually all modern text PDFs
@@ -128,22 +129,22 @@ async function extractPdf(buf: Buffer): Promise<string> {
     catch { /* uncompressed or non-zlib stream — use as-is */ }
 
     // Process BT…ET text objects
-    for (const bm of content.matchAll(/BT([\s\S]*?)ET/g)) {
+    for (const bm of Array.from(content.matchAll(/BT([\s\S]*?)ET/g))) {
       const block = bm[1];
 
       // Tj / ' / "  (single string operands — literal)
-      for (const m of block.matchAll(/\(((?:[^)(\\]|\\[\s\S])*)\)\s*(?:Tj|'|")/g))
+      for (const m of Array.from(block.matchAll(/\(((?:[^)(\\]|\\[\s\S])*)\)\s*(?:Tj|'|")/g)))
         { const t = pdfDecodeLiteral(m[1]); if (t.trim()) texts.push(t); }
 
       // Tj  (single hex string)
-      for (const m of block.matchAll(/<([0-9A-Fa-f\s]*)>\s*Tj/g))
+      for (const m of Array.from(block.matchAll(/<([0-9A-Fa-f\s]*)>\s*Tj/g)))
         { const t = pdfDecodeHex(m[1]); if (t.trim()) texts.push(t); }
 
       // TJ  (array — mix of literal + hex + kerning numbers)
-      for (const am of block.matchAll(/\[([\s\S]*?)\]\s*TJ/g)) {
+      for (const am of Array.from(block.matchAll(/\[([\s\S]*?)\]\s*TJ/g))) {
         const parts: string[] = [];
-        for (const m of am[1].matchAll(/\(((?:[^)(\\]|\\[\s\S])*)\)/g)) parts.push(pdfDecodeLiteral(m[1]));
-        for (const m of am[1].matchAll(/<([0-9A-Fa-f\s]*)>/g))          parts.push(pdfDecodeHex(m[1]));
+        for (const m of Array.from(am[1].matchAll(/\(((?:[^)(\\]|\\[\s\S])*)\)/g))) parts.push(pdfDecodeLiteral(m[1]));
+        for (const m of Array.from(am[1].matchAll(/<([0-9A-Fa-f\s]*)>/g)))          parts.push(pdfDecodeHex(m[1]));
         const combined = parts.join('');
         if (combined.trim()) texts.push(combined);
       }

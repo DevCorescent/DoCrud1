@@ -112,6 +112,15 @@ export async function activateInfinity(userId: string, opts: ActivateOpts = {}):
   });
 }
 
+/** Revokes Infinity access for a user (keeps purchase history fields for audit). */
+export async function deactivateInfinity(userId: string): Promise<void> {
+  await updateProfileData(userId, {
+    docrudInfinity: false,
+    docrudInfinityGrantedFree: false,
+    docrudInfinityExpiresAt: new Date().toISOString(),
+  });
+}
+
 /* ── Admin helpers ──────────────────────────────────────────────── */
 
 export interface InfinitySubscriber {

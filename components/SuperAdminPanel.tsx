@@ -1277,6 +1277,15 @@ interface UserBehaviour {
   transactions: { id: string; planName?: string; productLabel?: string; amountInPaise: number; status: string; createdAt: string; paidAt?: string }[];
   feedback: { id: string; rating: number; summary: string; painPoints: string; requestedImprovements: string; createdAt: string }[];
   audits: { id: string; action: string; reason?: string; createdAt: string; actorEmail?: string }[];
+  infinity?: {
+    active: boolean;
+    isExpired: boolean;
+    purchasedAt?: string;
+    expiresAt?: string;
+    period?: 'monthly' | 'annual';
+    renewalCount?: number;
+    grantedFree?: boolean;
+  };
 }
 
 function UsersTab() {
@@ -1303,8 +1312,27 @@ function UsersTab() {
     setActionLoading(true);
     try {
       const res = await fetch('/api/super-admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, userId, ...extra }) });
-      if (res.ok) { setMsg('Done'); load(); setSelectedUser(null); setTimeout(() => setMsg(''), 2000); }
-      else { const d = await res.json(); setMsg(d.error || 'Failed'); }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(d.error || 'Failed'); return; }
+
+      if (action === 'activate_premium' || action === 'revoke_premium') {
+        setMsg(action === 'activate_premium' ? 'Premium activated' : 'Premium revoked');
+        if (d.infinity) {
+          setUserBehaviour((prev) => (prev ? { ...prev, infinity: d.infinity } : prev));
+        } else {
+          fetch(`/api/super-admin/user-behavior/${userId}`)
+            .then((r) => r.json())
+            .then(setUserBehaviour)
+            .catch(() => null);
+        }
+        setTimeout(() => setMsg(''), 2500);
+        return;
+      }
+
+      setMsg('Done');
+      load();
+      setSelectedUser(null);
+      setTimeout(() => setMsg(''), 2000);
     } finally { setActionLoading(false); }
   }
 
@@ -1433,6 +1461,9 @@ function UsersTab() {
                           ['Organization', selectedUser.organizationName || '—'],
                           ['Plan',         (selectedUser.subscription as Record<string, string>)?.planId || '—'],
                           ['Plan Status',  (selectedUser.subscription as Record<string, string>)?.status || '—'],
+                          ['Premium ∞',    userBehaviour?.infinity?.active
+                            ? `Active${userBehaviour.infinity.period ? ` · ${userBehaviour.infinity.period}` : ''}${userBehaviour.infinity.expiresAt ? ` · exp ${ago(userBehaviour.infinity.expiresAt)}` : ''}${userBehaviour.infinity.grantedFree ? ' · free grant' : ''}`
+                            : userBehaviour?.infinity?.isExpired ? 'Expired' : 'Not active'],
                           ['Joined',       ago(selectedUser.createdAt)],
                           ['Last Login',   ago(selectedUser.lastLogin)],
                           ['User ID',      selectedUser.id.slice(0, 14) + '…'],
@@ -1781,7 +1812,31 @@ function UsersTab() {
             </div>
 
             {/* Actions footer */}
-            <div className="border-t border-zinc-800 px-6 py-3 flex-shrink-0 bg-zinc-950">
+            <div className="border-t border-zinc-800 px-6 py-3 flex-shrink-0 bg-zinc-950 space-y-2">
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider mr-1">Premium:</span>
+                <button
+                  disabled={actionLoading}
+                  onClick={() => doAction('activate_premium', selectedUser.id, { period: 'monthly' })}
+                  className="px-3 py-1.5 bg-violet-500/15 border border-violet-500/30 text-violet-300 rounded-lg text-xs hover:bg-violet-500/25 transition-all disabled:opacity-50 font-semibold"
+                >
+                  ∞ Activate 30d
+                </button>
+                <button
+                  disabled={actionLoading}
+                  onClick={() => doAction('activate_premium', selectedUser.id, { period: 'annual' })}
+                  className="px-3 py-1.5 bg-violet-500/15 border border-violet-500/30 text-violet-300 rounded-lg text-xs hover:bg-violet-500/25 transition-all disabled:opacity-50 font-semibold"
+                >
+                  ∞ Activate 1yr
+                </button>
+                <button
+                  disabled={actionLoading || !userBehaviour?.infinity?.active}
+                  onClick={() => { if (confirm('Revoke Infinity premium for this user?')) doAction('revoke_premium', selectedUser.id); }}
+                  className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded-lg text-xs hover:bg-zinc-700 hover:text-zinc-200 transition-all disabled:opacity-40"
+                >
+                  Revoke Premium
+                </button>
+              </div>
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-[10px] text-zinc-600 font-semibold uppercase tracking-wider mr-1">Actions:</span>
                 {selectedUser.status !== 'suspended' ? (
@@ -1802,7 +1857,7 @@ function UsersTab() {
                 <button disabled={actionLoading} onClick={() => doAction('suspend', selectedUser.id, { days: 30 })} className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg text-xs hover:bg-red-500/20 transition-all disabled:opacity-50">Suspend 30d</button>
                 <button disabled={actionLoading} onClick={() => { if (confirm('Permanently delete this user? This cannot be undone.')) doAction('delete', selectedUser.id); }} className="px-3 py-1.5 bg-red-900/30 border border-red-800/30 text-red-400 rounded-lg text-xs hover:bg-red-900/50 transition-all disabled:opacity-50 ml-auto">⚠ Delete</button>
               </div>
-              {msg && <div className="text-xs text-emerald-400 mt-2">{msg}</div>}
+              {msg && <div className="text-xs text-emerald-400 mt-1">{msg}</div>}
             </div>
           </div>
         </div>

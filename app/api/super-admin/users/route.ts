@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
 import { listAdminUsers, adminSuspendUser, adminUnsuspendUser, adminDisableUser, adminEnableUser, adminDeleteUser } from '@/lib/server/admin-users';
 import { getStoredUsers, saveStoredUsers } from '@/lib/server/auth';
+import { activateInfinity, deactivateInfinity, getInfinityStatus } from '@/lib/server/infinity';
 
 async function guard(req: NextRequest) {
   const s = await getSuperAdminSessionFromRequest(req);
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { action, userId, reason, days, field, value } = body;
+    const { action, userId, reason, days, field, value, period } = body;
 
     if (!action || !userId) {
       return NextResponse.json({ error: 'action and userId required' }, { status: 400 });
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
       action: `user_${action}`,
       targetType: 'user',
       targetId: userId,
-      details: { reason, days, field, value },
+      details: { reason, days, field, value, period },
       ip: req.headers.get('x-forwarded-for') || undefined,
     });
 
@@ -124,6 +125,23 @@ export async function POST(req: NextRequest) {
         user.safety = { ...user.safety, scamWarning: false, flaggedAt: undefined };
         await saveStoredUsers(users);
         return NextResponse.json({ success: true });
+      }
+      case 'activate_premium': {
+        const users = await getStoredUsers();
+        const user = users.find((u) => u.id === userId);
+        if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        const billingPeriod = period === 'annual' ? 'annual' : 'monthly';
+        await activateInfinity(userId, { period: billingPeriod, grantedFree: true });
+        const status = await getInfinityStatus(userId);
+        return NextResponse.json({ success: true, infinity: status });
+      }
+      case 'revoke_premium': {
+        const users = await getStoredUsers();
+        const user = users.find((u) => u.id === userId);
+        if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        await deactivateInfinity(userId);
+        const status = await getInfinityStatus(userId);
+        return NextResponse.json({ success: true, infinity: status });
       }
       default:
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

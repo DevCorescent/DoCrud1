@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
 
       <!-- CTA -->
       <div style="text-align:center;margin:0 0 28px;">
-        <a href="${process.env.NEXTAUTH_URL ?? 'https://docrud.com'}/home"
+        <a href="${process.env.NEXTAUTH_URL ?? 'https://docrud.com'}/"
           style="display:inline-block;background:#ffffff;color:#0a0a0c;text-decoration:none;font-weight:700;font-size:13.5px;padding:14px 34px;border-radius:100px;letter-spacing:-0.01em;">
           Go to my workspace →
         </a>

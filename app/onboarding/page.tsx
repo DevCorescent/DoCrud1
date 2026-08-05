@@ -2053,7 +2053,7 @@ function OnboardingPageInner() {
 
   async function handleGoogleSignup() {
     setSError('');
-    await signIn('google', { callbackUrl: '/home' });
+    await signIn('google', { callbackUrl: '/' });
   }
 
   async function blobToDataUrl(blobUrl: string): Promise<string> {

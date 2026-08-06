@@ -513,10 +513,18 @@ export default function BusinessPageView({ slug }: { slug: string }) {
       const res  = await fetch(`/api/business-pages/${slug}`);
       if (!res.ok) return;
       const data = await res.json() as { page: PageData; posts: Post[]; jobs: Job[]; products: Product[]; events: BizEvent[]; following: boolean; isOwner: boolean };
+      if (!data.page?.id) return;
+      // Ensure numeric fields always have a value so the render never crashes on .toLocaleString()
+      data.page.followerCount = data.page.followerCount ?? 0;
+      data.page.viewCount     = data.page.viewCount ?? 0;
+      data.page.postCount     = data.page.postCount ?? 0;
+      data.page.jobCount      = data.page.jobCount ?? 0;
       setPage(data.page); setPageId(data.page.id);
       setPosts(data.posts || []); setJobs(data.jobs || []);
       setProducts(data.products || []); setEvents(data.events || []);
-      setFollowing(data.following); setIsOwner(data.isOwner);
+      setFollowing(data.following ?? false); setIsOwner(data.isOwner ?? false);
+    } catch {
+      // Prevent unhandled rejection from crashing the error boundary
     } finally { setLoading(false); }
   }, [slug]);
 

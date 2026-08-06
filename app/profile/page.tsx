@@ -19,6 +19,9 @@ export default function ProfilePage() {
       const userId = (session?.user as any)?.id;
       if (userId) {
         router.replace(`/u/${userId}`);
+      } else {
+        // Authenticated but no user ID in session — force re-login to refresh token
+        router.replace('/login?next=/profile');
       }
     }
   }, [status, session, router]);

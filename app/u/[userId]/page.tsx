@@ -2634,13 +2634,13 @@ export default function UserProfilePage() {
     setLoading(true);
     Promise.all([
       fetch(`/api/public/profile/${userId}`).then((r) => {
-        if (r.status === 404) return null;
+        if (!r.ok) return null;
         return r.json();
       }),
       fetch(`/api/upraise/${userId}`).then((r) => r.ok ? r.json() : null),
     ])
       .then(([json, upraiseData]) => {
-        if (!json) { setNotFound(true); setLoading(false); return; }
+        if (!json || !json.user || !json.profile || !json.stats) { setNotFound(true); setLoading(false); return; }
         const resp = json as ProfileResponse;
         setData(resp);
         setFollowingState(resp.isFollowing);
@@ -2904,7 +2904,7 @@ export default function UserProfilePage() {
 
   if (loading) return <ProfileSkeleton />;
 
-  if (notFound || !data) {
+  if (notFound || !data || !data.user || !data.profile || !data.stats) {
     return (
       <div className="min-h-screen bg-[#0D0D0F] text-white flex flex-col items-center justify-center gap-6">
         <div className="h-16 w-16 rounded-[20px] border border-white/[0.08] bg-white/[0.04] flex items-center justify-center">

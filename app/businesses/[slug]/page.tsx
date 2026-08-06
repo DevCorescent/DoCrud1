@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 const BusinessPageView = nextDynamic(() => import('@/components/BusinessPageView'), { ssr: false });
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const business = await getBusinessPageBySlug(params.slug);
+  let business = null;
+  try { business = await getBusinessPageBySlug(params.slug); } catch {}
   const baseUrl = getPublicAppBaseUrl();
 
   if (!business) {
@@ -47,7 +48,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 
 export default async function BusinessPageRoute({ params }: { params: { slug: string } }) {
   const baseUrl = getPublicAppBaseUrl();
-  const business = await getBusinessPageBySlug(params.slug);
+  let business = null;
+  try { business = await getBusinessPageBySlug(params.slug); } catch {}
 
   const orgSchema = business
     ? buildOrganizationSchema({

@@ -1,16 +1,17 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Script from 'next/script';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession, signOut } from 'next-auth/react';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import PublicFaceBadge, { PublicFaceStarIcon, PUBLIC_FACE_CATEGORY_LABELS } from '@/components/PublicFaceBadge';
-import PublicFaceApplicationForm from '@/components/PublicFaceApplicationForm';
-import FeaturePostPanel from '@/components/FeaturePostPanel';
-import ProfilePublishedFeed from '@/components/ProfilePublishedFeed';
 import { PresenceBadge } from '@/components/PresenceBadge';
+const PublicFaceApplicationForm = dynamic(() => import('@/components/PublicFaceApplicationForm'), { ssr: false });
+const FeaturePostPanel          = dynamic(() => import('@/components/FeaturePostPanel'), { ssr: false });
+const ProfilePublishedFeed      = dynamic(() => import('@/components/ProfilePublishedFeed'), { ssr: false });
 import {
   ArrowLeft,
   BarChart3,
@@ -778,6 +779,21 @@ function Shimmer({ className }: { className: string }) {
       className={`animate-pulse rounded-[10px] bg-white/[0.06] ${className}`}
     />
   );
+}
+
+/* ── SecondsAgo — isolated ticker so only this tiny component re-renders ── */
+function SecondsAgo({ since }: { since: Date | null }) {
+  const [secs, setSecs] = useState(since ? Math.floor((Date.now() - since.getTime()) / 1000) : 0);
+  useEffect(() => {
+    if (!since) return;
+    setSecs(Math.floor((Date.now() - since.getTime()) / 1000));
+    const id = setInterval(() => setSecs(Math.floor((Date.now() - since.getTime()) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  if (!since) return null;
+  if (secs < 5) return <>just now</>;
+  if (secs < 60) return <>{secs}s ago</>;
+  return <>{Math.floor(secs / 60)}m ago</>;
 }
 
 function ProfileSkeleton() {
@@ -2531,9 +2547,7 @@ export default function UserProfilePage() {
   const [analyticsData, setAnalyticsData] = useState<ProviderAnalyticsData | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsLastUpdated, setAnalyticsLastUpdated] = useState<Date | null>(null);
-  const [analyticsSecondsAgo, setAnalyticsSecondsAgo] = useState(0);
   const analyticsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const analyticsTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Catalogue editor state
   interface CatalogueSettingsLocal {
@@ -2599,9 +2613,11 @@ export default function UserProfilePage() {
       .finally(() => setPfLoading(false));
   }, [tab, data?.isOwnProfile, pfApplication]);
 
-  // Load email preferences when settings tab opens
+  const emailPrefsLoadedRef = useRef(false);
+  // Load email preferences when settings tab opens (once per session)
   useEffect(() => {
-    if (tab !== 'settings' || !data?.isOwnProfile) return;
+    if (tab !== 'settings' || !data?.isOwnProfile || emailPrefsLoadedRef.current) return;
+    emailPrefsLoadedRef.current = true;
     fetch('/api/account/email-preferences')
       .then((r) => r.ok ? r.json() : null)
       .then((d: { emailPreferences?: Record<string, boolean> } | null) => {
@@ -2681,7 +2697,7 @@ export default function UserProfilePage() {
         if (upraiseData) { setUpraisedCount(upraiseData.count ?? 0); }
       }).catch(() => {});
     };
-    statsPollingRef.current = setInterval(poll, 30_000);
+    statsPollingRef.current = setInterval(poll, 60_000);
     return () => { if (statsPollingRef.current) clearInterval(statsPollingRef.current); };
   }, [userId]);
 
@@ -2740,7 +2756,6 @@ export default function UserProfilePage() {
     const active = tab === 'services' && servicesSubTab === 'analytics' && !!data?.isOwnProfile;
     if (!active) {
       if (analyticsIntervalRef.current) { clearInterval(analyticsIntervalRef.current); analyticsIntervalRef.current = null; }
-      if (analyticsTickRef.current) { clearInterval(analyticsTickRef.current); analyticsTickRef.current = null; }
       return;
     }
     const doFetch = (showSpinner = false) => {
@@ -2748,17 +2763,15 @@ export default function UserProfilePage() {
       fetch('/api/services/analytics')
         .then(r => r.ok ? r.json() : null)
         .then((d: { analytics?: ProviderAnalyticsData } | null) => {
-          if (d?.analytics) { setAnalyticsData(d.analytics); setAnalyticsLastUpdated(new Date()); setAnalyticsSecondsAgo(0); }
+          if (d?.analytics) { setAnalyticsData(d.analytics); setAnalyticsLastUpdated(new Date()); }
         })
         .catch(() => {})
         .finally(() => { if (showSpinner) setAnalyticsLoading(false); });
     };
     doFetch(true);
     analyticsIntervalRef.current = setInterval(() => doFetch(false), 30000);
-    analyticsTickRef.current = setInterval(() => setAnalyticsSecondsAgo(s => s + 1), 1000);
     return () => {
       if (analyticsIntervalRef.current) { clearInterval(analyticsIntervalRef.current); analyticsIntervalRef.current = null; }
-      if (analyticsTickRef.current) { clearInterval(analyticsTickRef.current); analyticsTickRef.current = null; }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, servicesSubTab, data?.isOwnProfile]);
@@ -2777,30 +2790,39 @@ export default function UserProfilePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCatalogueEditor, userId]);
 
-  // Load services when services tab is active
+  const servicesLoadedForRef = useRef<string | null>(null);
+  // Load services when services tab is active (once per userId — re-fetch only if user changes)
   useEffect(() => {
     if (tab !== 'services' || !userId) return;
+    if (servicesLoadedForRef.current === userId) return;
+    servicesLoadedForRef.current = userId;
     setServicesLoading(true);
     fetch(`/api/services/public?userId=${userId}`)
       .then(r => r.ok ? r.json() : { services: [] })
-      .then((d: { services?: ServiceItem[] }) => {
+      .then(async (d: { services?: ServiceItem[] }) => {
         const svcs = d.services ?? [];
         setProfileServices(svcs);
-        // Fetch reviews + track profile views for visitors
+        if (svcs.length === 0) return;
+        // Fetch all reviews in parallel → single state update (was N sequential fetches)
         const vid = (() => { try { let v = sessionStorage.getItem('svc_vid'); if (!v) { v = `v_${Date.now()}_${Math.random().toString(36).slice(2,8)}`; sessionStorage.setItem('svc_vid', v); } return v; } catch { return `v_${Date.now()}`; } })();
-        svcs.forEach(svc => {
-          fetch(`/api/services/reviews?serviceId=${svc.id}`)
-            .then(r => r.ok ? r.json() : { reviews: [] })
-            .then((rd: { reviews?: ServiceReviewItem[] }) => {
-              setServiceReviews(prev => ({ ...prev, [svc.id]: rd.reviews ?? [] }));
-            }).catch(() => {});
-          if (!data?.isOwnProfile) {
+        const reviewResults = await Promise.all(
+          svcs.map(svc =>
+            fetch(`/api/services/reviews?serviceId=${svc.id}`)
+              .then(r => r.ok ? r.json() : { reviews: [] })
+              .then((rd: { reviews?: ServiceReviewItem[] }) => ({ id: svc.id, reviews: rd.reviews ?? [] }))
+              .catch(() => ({ id: svc.id, reviews: [] as ServiceReviewItem[] }))
+          )
+        );
+        setServiceReviews(Object.fromEntries(reviewResults.map(r => [r.id, r.reviews])));
+        // Fire-and-forget view tracking for visitors (non-blocking)
+        if (!data?.isOwnProfile) {
+          svcs.forEach(svc => {
             fetch('/api/services/analytics/track', {
               method: 'POST', headers: { 'content-type': 'application/json' },
               body: JSON.stringify({ serviceId: svc.id, type: 'view', visitorId: vid, source: 'profile' }),
             }).catch(() => {});
-          }
-        });
+          });
+        }
       })
       .catch(() => {})
       .finally(() => setServicesLoading(false));
@@ -4343,9 +4365,6 @@ export default function UserProfilePage() {
                 const maxTrend = Math.max(...a.trend30d, 1);
                 const fmtN = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
                 const totalSrc = (a.sourceBreakdown.profile + a.sourceBreakdown.catalogue + a.sourceBreakdown.direct) || 1;
-                const updatedLabel = analyticsLastUpdated
-                  ? analyticsSecondsAgo < 5 ? 'just now' : analyticsSecondsAgo < 60 ? `${analyticsSecondsAgo}s ago` : `${Math.floor(analyticsSecondsAgo/60)}m ago`
-                  : null;
                 return (
                   <div className="space-y-5">
                     {/* Live header */}
@@ -4356,7 +4375,7 @@ export default function UserProfilePage() {
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                         </span>
                         <span className="text-[11px] font-semibold text-emerald-400">Live</span>
-                        {updatedLabel && <span className="text-[10.5px] text-white/25">· Updated {updatedLabel}</span>}
+                        {analyticsLastUpdated && <span className="text-[10.5px] text-white/25">· Updated <SecondsAgo since={analyticsLastUpdated} /></span>}
                       </div>
                       <button type="button" onClick={() => {
                         setAnalyticsLoading(true);

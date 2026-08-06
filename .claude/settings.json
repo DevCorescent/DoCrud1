@@ -39,7 +39,8 @@
       "Bash(cat next.config.js)",
       "Bash(cat next.config.mjs)",
       "Bash(node -e \"const p=require\\('./package.json'\\); const deps={...p.dependencies,...p.devDependencies}; ['pdfjs-dist','mammoth','pdf-parse'].forEach\\(k=>console.log\\(k,deps[k]||'NOT FOUND'\\)\\)\")",
-      "Bash(node -e \"const p=require\\('./node_modules/pdfjs-dist/package.json'\\); console.log\\('pdfjs version:', p.version\\)\")"
+      "Bash(node -e \"const p=require\\('./node_modules/pdfjs-dist/package.json'\\); console.log\\('pdfjs version:', p.version\\)\")",
+      "Bash(powershell -Command \"\\(Get-Content 'd:\\\\docrud_kushagra\\\\app\\\\u\\\\[userId]\\\\page.tsx' | Measure-Object -Line\\).Lines\")"
     ]
   }
 }

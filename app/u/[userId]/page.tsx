@@ -2646,7 +2646,11 @@ export default function UserProfilePage() {
   const [publishSuccess, setPublishSuccess] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || userId === 'undefined' || userId === 'null') {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([
       fetch(`/api/public/profile/${userId}`).then((r) => {
@@ -4382,7 +4386,7 @@ export default function UserProfilePage() {
                         fetch('/api/services/analytics')
                           .then(r => r.ok ? r.json() : null)
                           .then((d: { analytics?: ProviderAnalyticsData } | null) => {
-                            if (d?.analytics) { setAnalyticsData(d.analytics); setAnalyticsLastUpdated(new Date()); setAnalyticsSecondsAgo(0); }
+                            if (d?.analytics) { setAnalyticsData(d.analytics); setAnalyticsLastUpdated(new Date()); }
                           })
                           .catch(() => {})
                           .finally(() => setAnalyticsLoading(false));

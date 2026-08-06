@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
+import { isR2Configured, uploadToR2, compressImageForR2 } from '@/lib/server/r2';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -27,15 +27,24 @@ export async function POST(req: Request) {
   if (!ALLOWED_TYPES.includes(file.type))
     return NextResponse.json({ error: 'File type not allowed' }, { status: 415 });
 
-  const ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
-  const filename = `${userId}_${Date.now()}.${ext}`;
-  const buffer = Buffer.from(await file.arrayBuffer());
   const isVideo = file.type.startsWith('video/');
+  let buffer = Buffer.from(await file.arrayBuffer());
+  let outType = file.type;
+  let ext = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
+
+  if (!isVideo) {
+    const compressed = await compressImageForR2(buffer, file.type);
+    buffer = Buffer.from(compressed.buffer);
+    outType = compressed.contentType;
+    if (outType === 'image/jpeg') ext = 'jpg';
+  }
+
+  const filename = `${userId}_${Date.now()}.${ext}`;
 
   if (isR2Configured()) {
     try {
-      const url = await uploadToR2(`recents/${filename}`, buffer, file.type);
-      return NextResponse.json({ url, type: isVideo ? 'video' : 'image' });
+      const url = await uploadToR2(`recents/${filename}`, buffer, outType, { skipCompress: true });
+      return NextResponse.json({ url, type: isVideo ? 'video' : 'image', size: buffer.length });
     } catch (err) {
       console.error('[recents/upload] R2 upload failed, falling back to local disk:', err);
     }
@@ -43,5 +52,5 @@ export async function POST(req: Request) {
 
   await fs.mkdir(UPLOAD_DIR, { recursive: true });
   await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
-  return NextResponse.json({ url: `/recents/${filename}`, type: isVideo ? 'video' : 'image' });
+  return NextResponse.json({ url: `/recents/${filename}`, type: isVideo ? 'video' : 'image', size: buffer.length });
 }

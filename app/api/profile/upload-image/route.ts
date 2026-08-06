@@ -5,7 +5,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getAuthSession } from '@/lib/server/auth';
-import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
+import { isR2Configured, uploadToR2, compressImageForR2 } from '@/lib/server/r2';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'profile');
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -43,18 +43,21 @@ export async function POST(request: NextRequest) {
 
     const uid = session.user.id.replace(/[^a-z0-9]/gi, '').slice(0, 12);
     const rand = crypto.randomBytes(6).toString('hex');
-    const ext = EXT_MAP[file.type] ?? 'jpg';
+    let buffer = Buffer.from(await file.arrayBuffer());
+    const compressed = await compressImageForR2(buffer, file.type);
+    buffer = Buffer.from(compressed.buffer);
+    const outType = compressed.contentType;
+    const ext = outType === 'image/jpeg' ? 'jpg' : (EXT_MAP[file.type] ?? 'jpg');
     const filename = `${type}_${uid}_${rand}.${ext}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
 
     if (isR2Configured()) {
-      const url = await uploadToR2(`profiles/${filename}`, buffer, file.type);
-      return NextResponse.json({ url });
+      const url = await uploadToR2(`profiles/${filename}`, buffer, outType, { skipCompress: true });
+      return NextResponse.json({ url, size: buffer.length });
     }
 
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
     await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
-    return NextResponse.json({ url: `/uploads/profile/${filename}` });
+    return NextResponse.json({ url: `/uploads/profile/${filename}`, size: buffer.length });
   } catch (err) {
     console.error('[profile/upload-image]', err);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

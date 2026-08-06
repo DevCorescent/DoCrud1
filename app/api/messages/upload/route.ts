@@ -5,7 +5,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getAuthSession } from '@/lib/server/auth';
-import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
+import { isR2Configured, uploadToR2, compressImageForR2 } from '@/lib/server/r2';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'chat');
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
@@ -33,15 +33,24 @@ export async function POST(request: NextRequest) {
     if (file.size > MAX_BYTES) return NextResponse.json({ error: 'File too large — maximum 20 MB' }, { status: 400 });
 
     const isImage  = IMAGE_TYPES.has(file.type);
-    const ext      = EXT_MAP[file.type] ?? 'bin';
     const rand     = crypto.randomBytes(8).toString('hex');
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
+    let buffer     = Buffer.from(await file.arrayBuffer());
+    let outType    = file.type || 'application/octet-stream';
+    let ext        = EXT_MAP[file.type] ?? 'bin';
+
+    if (isImage) {
+      const compressed = await compressImageForR2(buffer, file.type);
+      buffer = Buffer.from(compressed.buffer);
+      outType = compressed.contentType;
+      if (outType === 'image/jpeg') ext = 'jpg';
+    }
+
     const filename = `${rand}_${safeName}.${ext}`;
-    const buffer   = Buffer.from(await file.arrayBuffer());
 
     if (isR2Configured()) {
-      const url = await uploadToR2(`chat/${filename}`, buffer, file.type || 'application/octet-stream');
-      return NextResponse.json({ url, name: file.name, size: file.size, mimeType: file.type, type: isImage ? 'image' : 'file' });
+      const url = await uploadToR2(`chat/${filename}`, buffer, outType, { skipCompress: true });
+      return NextResponse.json({ url, name: file.name, size: buffer.length, mimeType: outType, type: isImage ? 'image' : 'file' });
     }
 
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
@@ -49,8 +58,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       url: `/uploads/chat/${filename}`,
       name: file.name,
-      size: file.size,
-      mimeType: file.type,
+      size: buffer.length,
+      mimeType: outType,
       type: isImage ? 'image' : 'file',
     });
   } catch (e) {

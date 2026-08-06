@@ -4,10 +4,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
+import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import {
   Activity,
   ArrowLeft,
@@ -1773,6 +1774,7 @@ const HP_TAG_CLS: Record<string, string> = {
 };
 type HpFeedItem = {
   id: string;
+  shareId?: string;
   category: string;
   badge: string;
   title: string;
@@ -1952,6 +1954,7 @@ function HpMetaChips({ body, byline, category }: { body: string; byline: string;
 
 
 function HomepageFeedCard({ item }: { item: HpFeedItem }) {
+  const router = useRouter();
   const [liked,      setLiked]      = React.useState(item.likedByViewer ?? false);
   const [likeCount,  setLikeCount]  = React.useState(item.likesCount ?? 0);
   const [trended,    setTrended]    = React.useState(() => {
@@ -1965,6 +1968,7 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
   const [saved,      setSaved]      = React.useState(false);
   const likeInFlight  = React.useRef(false);
   const trendInFlight = React.useRef(false);
+  const postHref = `/published/${item.shareId || item.id}`;
 
   React.useEffect(() => { setLiked(item.likedByViewer ?? false); }, [item.likedByViewer]);
   React.useEffect(() => { setLikeCount(item.likesCount ?? 0); }, [item.likesCount]);
@@ -1976,7 +1980,13 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
   const profileHref = item.uploadedByUserId ? `/u/${item.uploadedByUserId}` : null;
 
   return (
-    <article className="group py-5">
+    <article
+      className="group py-5 cursor-pointer"
+      role="link"
+      tabIndex={0}
+      onClick={() => router.push(postHref)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(postHref); } }}
+    >
       {/* header */}
       <div className="flex items-center gap-3 mb-3.5">
         {profileHref ? (
@@ -2020,15 +2030,15 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
 
       {/* thumbnail */}
       {item.thumbnailUrl && (
-        <Link href={`/published/${item.id}`} className="block mb-3.5 rounded-xl overflow-hidden">
+        <div className="mb-3.5 rounded-xl overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.thumbnailUrl} alt={item.title}
             className="w-full max-h-[380px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
-        </Link>
+        </div>
       )}
 
       {/* content */}
-      <Link href={`/published/${item.id}`} className="block">
+      <div>
         <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
           {item.title}
         </h3>
@@ -2037,7 +2047,7 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
             {hpGetBodySnippet(item.body)}
           </p>
         )}
-      </Link>
+      </div>
 
       {/* stats */}
       {item.stats && (
@@ -2052,7 +2062,7 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
       )}
 
       {/* engagement row */}
-      <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.preventDefault()}>
+      <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.stopPropagation()}>
         <button
           type="button"
           onClick={async e => {
@@ -2078,7 +2088,7 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
           <span>{likeCount > 0 ? (likeCount >= 1000 ? `${(likeCount/1000).toFixed(1)}k` : String(likeCount)) : (liked ? 'Liked' : 'Like')}</span>
         </button>
         <Link
-          href={`/published/${item.id}`}
+          href={postHref}
           className="flex items-center gap-1.5 text-[12px] font-semibold text-white/35 hover:text-white/70 transition"
           onClick={e => e.stopPropagation()}
         >
@@ -2124,7 +2134,7 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
           className="ml-auto flex items-center gap-1.5 text-[12px] font-semibold text-white/25 hover:text-white/55 transition"
           onClick={async e => {
             e.stopPropagation();
-            const url = `${window.location.origin}/published/${item.id}`;
+            const url = `${window.location.origin}${postHref}`;
             if (navigator.share) { try { await navigator.share({ title: item.title, url }); return; } catch {} }
             await navigator.clipboard.writeText(url).catch(() => {});
           }}
@@ -6551,7 +6561,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   useEffect(() => {
-    document.documentElement.classList.add('dark');
+    applyColorMode(getStoredColorMode());
   }, []);
 
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -7241,8 +7251,8 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
         const isVisualizer = item.label === 'Visualizer';
         const isForms = item.label === 'Forms';
         const isESign = item.label === 'E‑Sign';
-        const resolvedHref = item.label === 'My Profile' && isAuthenticated
-          ? `/u/${(session?.user as any)?.id ?? ''}` || item.href
+        const resolvedHref = item.label === 'My Profile'
+          ? '/profile'
           : item.href;
         const sharedCls = [
           'relative flex h-9 w-9 items-center justify-center rounded-[12px] transition-all duration-150',
@@ -7477,8 +7487,8 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                     const isVisualizer = item.label === 'Visualizer';
                     const isForms = item.label === 'Forms';
                     const isESign = item.label === 'E‑Sign';
-                    const resolvedHref = item.label === 'My Profile' && isAuthenticated
-                      ? `/u/${(session?.user as any)?.id ?? ''}` || item.href
+                    const resolvedHref = item.label === 'My Profile'
+                      ? '/profile'
                       : item.href;
                     const sharedCls = [
                       'group relative flex items-center gap-2.5 rounded-[10px] px-2.5 py-[8px] text-[12.5px] font-medium transition-all duration-150 w-full text-left',
@@ -7617,7 +7627,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
         ) : (
           <>
             <Link
-              href={isAuthenticated ? `/u/${(session?.user as any)?.id ?? ''}` || '/profile' : '/login'}
+              href={isAuthenticated ? '/profile' : '/login'}
               className="group flex items-center gap-3 rounded-[13px] px-3 py-2.5 transition-all hover:bg-white/[0.05]"
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-white/[0.18] to-white/[0.04] text-[12px] font-bold text-white/65 ring-1 ring-white/[0.12] shadow-[0_2px_8px_rgba(0,0,0,0.4)]">

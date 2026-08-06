@@ -267,22 +267,22 @@ export async function saveNotificationState(state: NotificationState) {
   await writeJsonFile(notificationStatePath, state);
 }
 
-function resolveSocialHref(e: { type: string; href?: string; actorId?: string; resourceId?: string }): string | undefined {
+function resolveSocialHref(e: { type: string; href?: string; actorId?: string; resourceId?: string }): string {
   if (e.href) return e.href;
   switch (e.type) {
     case 'follow':
     case 'profile_view':
-      return e.actorId ? `/u/${e.actorId}` : undefined;
+      return e.actorId ? `/u/${e.actorId}` : '/';
     case 'like':
     case 'comment':
     case 'mention':
-      return e.resourceId ? `/published/${e.resourceId}` : (e.actorId ? `/u/${e.actorId}` : undefined);
+      return e.resourceId ? `/published/${e.resourceId}` : (e.actorId ? `/u/${e.actorId}` : '/');
     case 'gig_applied':
       return e.resourceId ? `/published/gig/${e.resourceId}` : `/workspace?tab=gigs`;
     case 'document_viewed':
-      return e.resourceId ? `/documents/${e.resourceId}` : (e.actorId ? `/u/${e.actorId}` : undefined);
+      return e.resourceId ? `/documents/${e.resourceId}` : (e.actorId ? `/u/${e.actorId}` : '/');
     default:
-      return e.actorId ? `/u/${e.actorId}` : undefined;
+      return e.actorId ? `/u/${e.actorId}` : '/';
   }
 }
 

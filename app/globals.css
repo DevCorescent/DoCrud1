@@ -1702,3 +1702,17 @@
     contain-intrinsic-size: auto 600px;
   }
 }
+
+/* Light mode — invert dark-first homepage shell for readable light theme */
+html[data-ui-mode='light'] body {
+  background: #f4f4f5 !important;
+  color-scheme: light;
+}
+html[data-ui-mode='light'] main.h-\[100dvh\] {
+  filter: invert(1) hue-rotate(180deg);
+}
+html[data-ui-mode='light'] main.h-\[100dvh\] img,
+html[data-ui-mode='light'] main.h-\[100dvh\] video,
+html[data-ui-mode='light'] main.h-\[100dvh\] [data-no-invert] {
+  filter: invert(1) hue-rotate(180deg);
+}

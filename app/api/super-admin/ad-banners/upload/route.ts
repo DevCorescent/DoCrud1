@@ -3,7 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { getSuperAdminSessionFromRequest } from '@/lib/server/super-admin-auth';
-import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
+import { isR2Configured, uploadToR2, compressImageForR2 } from '@/lib/server/r2';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'ad-banners');
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB
@@ -42,18 +42,21 @@ export async function POST(request: NextRequest) {
     }
 
     const rand     = crypto.randomBytes(8).toString('hex');
-    const ext      = EXT_MAP[file.type] ?? 'jpg';
+    let buffer     = Buffer.from(await file.arrayBuffer());
+    const compressed = await compressImageForR2(buffer, file.type);
+    buffer = Buffer.from(compressed.buffer);
+    const outType  = compressed.contentType;
+    const ext      = outType === 'image/jpeg' ? 'jpg' : (EXT_MAP[file.type] ?? 'jpg');
     const filename = `banner_${rand}.${ext}`;
-    const buffer   = Buffer.from(await file.arrayBuffer());
 
     if (isR2Configured()) {
-      const url = await uploadToR2(`ad-banners/${filename}`, buffer, file.type);
-      return NextResponse.json({ url });
+      const url = await uploadToR2(`ad-banners/${filename}`, buffer, outType, { skipCompress: true });
+      return NextResponse.json({ url, size: buffer.length });
     }
 
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
     await fs.writeFile(path.join(UPLOAD_DIR, filename), buffer);
-    return NextResponse.json({ url: `/uploads/ad-banners/${filename}` });
+    return NextResponse.json({ url: `/uploads/ad-banners/${filename}`, size: buffer.length });
   } catch (err) {
     console.error('[super-admin/ad-banners/upload]', err);
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 });

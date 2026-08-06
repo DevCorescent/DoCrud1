@@ -6,10 +6,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const session = await getAuthSession();
-  if (!session?.user?.id) {
+  const { resolveSessionUserId } = await import('@/lib/server/auth');
+  const userId = await resolveSessionUserId(session);
+  if (!userId) {
     return NextResponse.json({ docrudGo: false, avatarUrl: null });
   }
-  const profile = await getProfileData(session.user.id);
+  const profile = await getProfileData(userId);
 
   // Infinity badge: granted via docrudGo (legacy) OR active docrudInfinity subscription
   const hasInfinityActive = !!profile?.docrudInfinity && (

@@ -11,7 +11,9 @@
     "lint": "next lint",
     "db:init": "node scripts/db-init.mjs",
     "db:seed": "node scripts/db-seed.mjs",
-    "db:migrate-blobs": "node --max-old-space-size=4096 scripts/db-migrate-blobs.mjs"
+    "db:migrate-blobs": "node --max-old-space-size=4096 scripts/db-migrate-blobs.mjs",
+    "compress-r2": "tsx scripts/compress-r2-images.ts",
+    "compress-r2:dry": "tsx scripts/compress-r2-images.ts --dry-run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",
@@ -57,6 +59,7 @@
     "eslint-config-next": "14.2.0",
     "postcss": "^8.4.14",
     "tailwindcss": "^3.3.0",
+    "tsx": "^4.23.9",
     "typescript": "^5"
   },
   "optionalDependencies": {

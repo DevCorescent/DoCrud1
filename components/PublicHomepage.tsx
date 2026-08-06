@@ -2032,8 +2032,13 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
       {item.thumbnailUrl && (
         <div className="mb-3.5 rounded-xl overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.thumbnailUrl} alt={item.title}
-            className="w-full max-h-[380px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
+          <img
+            src={item.thumbnailUrl}
+            alt={item.title}
+            className="w-full max-h-[380px] object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+            loading="lazy"
+            decoding="async"
+          />
         </div>
       )}
 

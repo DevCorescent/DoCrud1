@@ -118,11 +118,13 @@ export async function appendFileTransfer(
     encryptionEnabled?: boolean;
     passwords?: { accessPassword: string; securePassword: string; parserPassword: string };
     preferredAccessPassword?: string;
+    /** Optional pre-generated id (e.g. when uploading to R2 before the DB write). */
+    preferredId?: string;
   },
 ): Promise<SecureFileTransfer> {
   const transfers = await getFileTransfers();
   const now = new Date().toISOString();
-  const id = `transfer-${Date.now()}-${randomBytes(4).toString('hex')}`;
+  const id = input.preferredId?.trim() || `transfer-${Date.now()}-${randomBytes(4).toString('hex')}`;
 
   let encryptedPayload: string | undefined;
   let accessPassword: string | undefined;

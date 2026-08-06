@@ -4,7 +4,7 @@ import { appendFileTransfer, getFileTransfers, updateFileTransfer } from '@/lib/
 import { recordPost, checkAndGrantMilestones } from '@/lib/server/credits';
 import { readJsonFile } from '@/lib/server/storage';
 import { getProfileData } from '@/lib/server/user-profiles';
-import { isR2Configured, compressAndUploadThumbnail } from '@/lib/server/r2';
+import { isR2Configured, compressAndUploadThumbnail, uploadToR2, compressImageForR2 } from '@/lib/server/r2';
 import path from 'path';
 import fs from 'fs';
 import type { SecureFileTransfer } from '@/types/document';
@@ -18,6 +18,75 @@ const THUMBNAILS_DIR = path.join(process.cwd(), 'data', 'thumbnails');
 
 function isImageMime(mimeType: string) {
   return mimeType.toLowerCase().startsWith('image/');
+}
+
+/**
+ * Move image payload out of Mongo base64 into Cloudflare R2.
+ * - Single image → store public HTTPS URL in dataUrl
+ * - HTML gallery → rewrite embedded data:image srcs to R2 URLs
+ * Returns null when R2 is off or content has nothing to offload.
+ */
+async function offloadImagesToR2(
+  transferId: string,
+  mimeType: string,
+  dataUrl: string,
+): Promise<{ dataUrl: string; mimeType: string; sizeInBytes: number; firstImageUrl?: string } | null> {
+  if (!isR2Configured()) return null;
+
+  // ── Single image ──────────────────────────────────────────────────────────
+  if (isImageMime(mimeType) && dataUrl.startsWith('data:image/')) {
+    const [, b64] = dataUrl.split(',');
+    if (!b64) return null;
+    const raw = Buffer.from(b64, 'base64');
+    const { buffer, contentType } = await compressImageForR2(raw, mimeType);
+    const url = await uploadToR2(`posts/${transferId}.jpg`, buffer, contentType, { skipCompress: true });
+    console.log(`[publish] image → R2: ${url} (${buffer.length} bytes)`);
+    return {
+      dataUrl: url,
+      mimeType: contentType || 'image/jpeg',
+      sizeInBytes: buffer.length,
+      firstImageUrl: url,
+    };
+  }
+
+  // ── HTML gallery with embedded base64 images ──────────────────────────────
+  if (mimeType === 'text/html' && dataUrl.startsWith('data:text/html')) {
+    const htmlB64 = dataUrl.split(',')[1];
+    if (!htmlB64) return null;
+    let html = Buffer.from(htmlB64, 'base64').toString('utf-8');
+    const re = /src=(["'])(data:image\/[^;]+;base64,[^"']+)\1/gi;
+    const matches = Array.from(html.matchAll(re));
+    if (matches.length === 0) return null;
+
+    let firstImageUrl: string | undefined;
+    let i = 0;
+    for (const m of matches) {
+      const fullDataUrl = m[2];
+      if (!fullDataUrl) continue;
+      const [header, b64] = fullDataUrl.split(',');
+      if (!header || !b64) continue;
+      const imgMime = header.replace(/^data:/i, '').replace(/;base64$/i, '').toLowerCase();
+      const raw = Buffer.from(b64, 'base64');
+      const { buffer, contentType } = await compressImageForR2(raw, imgMime || 'image/jpeg');
+      const url = await uploadToR2(`posts/${transferId}/${i}.jpg`, buffer, contentType, { skipCompress: true });
+      if (!firstImageUrl) firstImageUrl = url;
+      html = html.split(fullDataUrl).join(url);
+      i += 1;
+    }
+
+    if (i === 0) return null;
+    const out = Buffer.from(html, 'utf-8');
+    const newDataUrl = `data:text/html;base64,${out.toString('base64')}`;
+    console.log(`[publish] gallery → R2: ${i} image(s), html ${out.length} bytes`);
+    return {
+      dataUrl: newDataUrl,
+      mimeType: 'text/html',
+      sizeInBytes: out.length,
+      firstImageUrl,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -102,13 +171,52 @@ export async function POST(request: NextRequest) {
     const uploaderProfile = userId ? await getProfileData(userId).catch(() => null) : null;
     const resolvedAvatarUrl = avatarUrl || uploaderProfile?.avatarUrl || (session?.user?.image as string | undefined) || undefined;
 
-    // Create the record first (without thumbnail) to get the ID
+    let mimeType = payload.mimeType.trim();
+    let dataUrl = payload.dataUrl.trim();
+    let finalSize = sizeInBytes;
+    let contentFirstImage: string | undefined;
+
+    // Pre-generate transfer id so we can upload to R2 *before* writing Mongo
+    // (avoids ever persisting multi-MB base64 blobs when R2 is configured).
+    const { randomBytes } = await import('crypto');
+    const transferId = `transfer-${Date.now()}-${randomBytes(4).toString('hex')}`;
+
+    try {
+      const offloaded = await offloadImagesToR2(transferId, mimeType, dataUrl);
+      if (offloaded) {
+        mimeType = offloaded.mimeType;
+        dataUrl = offloaded.dataUrl;
+        finalSize = offloaded.sizeInBytes;
+        contentFirstImage = offloaded.firstImageUrl;
+      }
+    } catch (e) {
+      console.warn('[publish] R2 content offload failed; will store payload in Mongo:', e);
+    }
+
+    // Resolve thumbnail before create when possible
+    let resolvedThumb: string | undefined = (() => {
+      const raw = payload.thumbnailUrl?.trim();
+      if (!raw) return undefined;
+      if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('/')) return raw;
+      return undefined; // data: handled below
+    })();
+
+    const rawThumb = payload.thumbnailUrl?.trim();
+    if (rawThumb?.startsWith('data:image/')) {
+      resolvedThumb = (await saveThumbnail(transferId, rawThumb)) || undefined;
+    } else if (!resolvedThumb && contentFirstImage) {
+      resolvedThumb = contentFirstImage;
+    } else if (!resolvedThumb && isImageMime(mimeType) && dataUrl.startsWith('data:image/')) {
+      resolvedThumb = (await saveThumbnail(transferId, dataUrl)) || undefined;
+    }
+
     const created = await appendFileTransfer({
+      preferredId: transferId,
       title: payload.title?.trim() || undefined,
       fileName: payload.fileName.trim(),
-      mimeType: payload.mimeType.trim(),
-      dataUrl: payload.dataUrl.trim(),
-      sizeInBytes,
+      mimeType,
+      dataUrl,
+      sizeInBytes: finalSize,
       notes: payload.notes?.trim() || undefined,
       directoryVisibility: 'public',
       directoryCategory: payload.directoryCategory?.trim() || undefined,
@@ -120,38 +228,10 @@ export async function POST(request: NextRequest) {
       avatarUrl: resolvedAvatarUrl,
       businessPageSlug,
       videoUrl: payload.videoUrl?.trim() || undefined,
-      // Store thumbnail as a real file on disk; keep thumbnailUrl as the API path only
-      thumbnailUrl: (() => {
-        const raw = payload.thumbnailUrl?.trim();
-        if (!raw) return undefined;
-        // If it's already an HTTP URL (not a data URL), store as-is
-        if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('/')) return raw;
-        // It's a data URL — we'll save after creation but need ID; placeholder first
-        return raw; // will be overwritten below
-      })(),
+      thumbnailUrl: resolvedThumb,
     });
 
-    // ── Auto-derive thumbnail from main content if it is an image and no explicit thumb was given
-    const mainIsImage = isImageMime(payload.mimeType.trim()) && payload.dataUrl.trim().startsWith('data:image/');
-    const rawThumb = payload.thumbnailUrl?.trim() || (mainIsImage ? payload.dataUrl.trim() : undefined);
-
-    // Save thumbnail (R2 or disk) and patch the record with the URL
-    if (rawThumb && rawThumb.startsWith('data:image/')) {
-      const thumbApiUrl = await saveThumbnail(created.id, rawThumb);
-      if (thumbApiUrl) {
-        // Replace the huge base64 thumbnailUrl with the lightweight API path
-        try {
-          await updateFileTransfer(created.id, { thumbnailUrl: thumbApiUrl });
-          created.thumbnailUrl = thumbApiUrl;
-        } catch { /* non-fatal */ }
-      } else {
-        // thumbnail save failed — clear it so the feed doesn't show a broken image
-        try {
-          await updateFileTransfer(created.id, { thumbnailUrl: undefined });
-        } catch { /* non-fatal */ }
-        created.thumbnailUrl = undefined;
-      }
-    }
+    created.thumbnailUrl = resolvedThumb || created.thumbnailUrl;
 
     // Fire analytics + milestones for authenticated users (non-blocking)
     if (userId) {

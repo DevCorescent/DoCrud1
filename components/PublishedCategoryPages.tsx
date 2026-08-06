@@ -255,10 +255,14 @@ export function PostDetailContent({
 
   const hashtags = item.chips ?? [];
 
-  // Resolve images from real dataUrl, or fall back to gradient placeholder
-  const isSingleImage = !!item.dataUrl && !!item.mimeType && item.mimeType.startsWith('image/');
+  // Resolve images from real dataUrl (base64 or R2 https URL), gallery HTML, or thumbnail fallback
+  const isHttpImage = !!item.dataUrl && /^https?:\/\//i.test(item.dataUrl) && !!item.mimeType?.startsWith('image/');
+  const isSingleImage = !!item.dataUrl && !!item.mimeType && item.mimeType.startsWith('image/') && (
+    item.dataUrl.startsWith('data:image/') || isHttpImage
+  );
   const isGallery = !!item.dataUrl && item.mimeType === 'text/html';
   const galleryImages: string[] = isGallery ? extractImagesFromGalleryHtml(item.dataUrl!) : [];
+  const fallbackThumb = item.thumbnailUrl && !item.thumbnailUrl.startsWith('data:') ? item.thumbnailUrl : null;
 
   return (
     <div className="space-y-6">
@@ -266,10 +270,15 @@ export function PostDetailContent({
       {isSingleImage ? (
         <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.dataUrl} alt={item.title} className="w-full max-h-[520px] object-contain" />
+          <img src={item.dataUrl} alt={item.title} className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
         </div>
       ) : isGallery && galleryImages.length > 0 ? (
         <ImageSlider images={galleryImages} />
+      ) : fallbackThumb ? (
+        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-black">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={fallbackThumb} alt={item.title} className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
+        </div>
       ) : (
         /* fallback gradient placeholder */
         <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl bg-gradient-to-br from-rose-500/20 via-pink-600/15 to-purple-700/20 border border-white/[0.08] flex items-center justify-center">

@@ -1190,7 +1190,7 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
       {item.thumbnailUrl && (
         <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.thumbnailUrl} alt={item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
+          <img src={item.thumbnailUrl} alt={item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
         </Link>
       )}
 
@@ -1354,7 +1354,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         {item.thumbnailUrl && (
           <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.thumbnailUrl} alt={item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
+            <img src={item.thumbnailUrl} alt={item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
           </Link>
         )}
 
@@ -1926,13 +1926,14 @@ function CardCommentPanel({ item, onClose }: { item: PublishedItem; onClose: () 
 function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: string }) {
   const [liked, setLiked] = useState(item.likedByViewer ?? false);
   const [bookmarked, toggleBookmarked] = useBookmark(item.id, item.category);
-  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(item.commentsCount ?? 0);
   const likeStat    = item.stats?.find(s => s.l === 'likes');
   const localLikes  = (item.likesCount ?? parseInt(likeStat?.v?.replace(/[k,]/g, v => v === 'k' ? '000' : '') ?? '0', 10)) || 0;
   const [likeCount, setLikeCount] = useState(localLikes);
   const likeInFlight = useRef(false);
+  // Use lean feed thumbnailUrl (R2 CDN or /api/public/thumbnail) — never refetch base64 blobs
+  const thumbUrl = item.thumbnailUrl && !item.thumbnailUrl.startsWith('data:') ? item.thumbnailUrl : null;
 
   useEffect(() => { setLiked(item.likedByViewer ?? false); }, [item.likedByViewer]);
   useEffect(() => { setLikeCount(item.likesCount ?? localLikes); }, [item.likesCount]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1958,22 +1959,13 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
     }
   }, [liked, item.id, item.isReal, item.category]);
 
-  useEffect(() => {
-    if (item.isReal && item.mimeType) {
-      fetch(`/api/public/published/${item.id}/thumbnail`)
-        .then(r => r.ok ? r.json() : null)
-        .then((d: { dataUrl: string | null } | null) => { if (d?.dataUrl) setThumbUrl(d.dataUrl); })
-        .catch(() => {});
-    }
-  }, [item.id, item.isReal, item.mimeType]);
-
   const displayName = item.uploadedByName || item.byline.split(' · ')[0];
   const initials    = displayName.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()??'').join('');
   const profileHref = item.businessPageSlug
     ? `/businesses/${item.businessPageSlug}`
     : item.uploadedByUserId ? `/u/${item.uploadedByUserId}` : null;
   const postAvatarInner = item.avatarUrl
-    ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" />
+    ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" loading="lazy" decoding="async" />
     : (initials || <ImageIcon className="h-3.5 w-3.5 opacity-60" />);
 
   return (
@@ -2007,17 +1999,17 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
         </button>
       </div>
 
-      {/* image — full bleed */}
-      {(thumbUrl || !item.isReal) && (
+      {/* image — use feed thumbnailUrl (CDN / proxy), not per-card base64 fetch */}
+      {thumbUrl && (
         <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
-          {thumbUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={thumbUrl} alt={item.title} className="w-full max-h-[480px] object-cover" />
-          ) : (
-            <div className="w-full h-52 bg-[#16161c] flex items-center justify-center">
-              <ImageIcon className="h-8 w-8 text-white/10" />
-            </div>
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={thumbUrl}
+            alt={item.title}
+            className="w-full max-h-[480px] object-cover"
+            loading="lazy"
+            decoding="async"
+          />
         </Link>
       )}
 

@@ -84,17 +84,36 @@ export async function GET(
       }
     }
 
-    // ── 2 & 3. Read transfer record for fallback (single-row lookup, not full scan) ──
-    const { selectFileTransferRowById } = await import('@/lib/server/db/file-transfers-rows');
+    // ── 2. Lean meta first (avoid pulling multi-MB dataUrl unless needed) ───
+    const {
+      selectFileTransferThumbMeta,
+      selectFileTransferRowById,
+    } = await import('@/lib/server/db/file-transfers-rows');
+    const meta = await selectFileTransferThumbMeta(id);
+    if (!meta) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+    // ── 2a. thumbnailUrl is an external R2/CDN URL — redirect directly ────
+    if (meta.thumbnailUrl && (meta.thumbnailUrl.startsWith('https://') || meta.thumbnailUrl.startsWith('http://'))) {
+      return NextResponse.redirect(meta.thumbnailUrl, { status: 302 });
+    }
+
+    // Need blob fields only for data: / embedded image fallbacks
+    const needsBlob =
+      !!meta.thumbnailUrl?.startsWith('data:image/') ||
+      (!!meta.hasDataUrl && (
+        !!meta.mimeType?.startsWith('image/') ||
+        (meta.mimeType === 'text/html' &&
+          (meta.directoryCategory === 'post' || meta.directoryCategory === 'product'))
+      ));
+
+    if (!needsBlob) {
+      return NextResponse.json({ error: 'Thumbnail not found' }, { status: 404 });
+    }
+
     const t = await selectFileTransferRowById(id);
     if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    // ── 1.5a. thumbnailUrl is an external R2/CDN URL — redirect directly ────
-    if (t.thumbnailUrl && (t.thumbnailUrl.startsWith('https://') || t.thumbnailUrl.startsWith('http://'))) {
-      return NextResponse.redirect(t.thumbnailUrl, { status: 302 });
-    }
-
-    // ── 1.5b. Stored thumbnailUrl data URL (e.g. product cover image) ───────
+    // ── 2b. Stored thumbnailUrl data URL (e.g. product cover image) ───────
     if (t.thumbnailUrl?.startsWith('data:image/')) {
       const parts = t.thumbnailUrl.split(',');
       if (parts.length === 2 && parts[1]) {
@@ -113,26 +132,32 @@ export async function GET(
       }
     }
 
-    // ── 2. Main content is itself an image ──────────────────────────────────
-    if (t.mimeType?.startsWith('image/') && t.dataUrl?.startsWith('data:image/')) {
-      const parts = t.dataUrl.split(',');
-      if (parts.length === 2 && parts[1]) {
-        const mimeType = t.mimeType.toLowerCase();
-        const buffer = Buffer.from(parts[1], 'base64');
-        saveToDisk(id, buffer, mimeType);
-        migrateToR2(id, buffer);
-        return new NextResponse(buffer, {
-          status: 200,
-          headers: {
-            'Content-Type': mimeType,
-            'Cache-Control': 'public, max-age=86400',
-            'Content-Length': String(buffer.length),
-          },
-        });
+    // ── 3. Main content is itself an image ──────────────────────────────────
+    if (t.mimeType?.startsWith('image/')) {
+      // Already stored as R2/CDN URL in dataUrl
+      if (t.dataUrl && (t.dataUrl.startsWith('https://') || t.dataUrl.startsWith('http://'))) {
+        return NextResponse.redirect(t.dataUrl, { status: 302 });
+      }
+      if (t.dataUrl?.startsWith('data:image/')) {
+        const parts = t.dataUrl.split(',');
+        if (parts.length === 2 && parts[1]) {
+          const mimeType = t.mimeType.toLowerCase();
+          const buffer = Buffer.from(parts[1], 'base64');
+          saveToDisk(id, buffer, mimeType);
+          migrateToR2(id, buffer);
+          return new NextResponse(buffer, {
+            status: 200,
+            headers: {
+              'Content-Type': mimeType,
+              'Cache-Control': 'public, max-age=86400',
+              'Content-Length': String(buffer.length),
+            },
+          });
+        }
       }
     }
 
-    // ── 3. HTML gallery (multi-image post or product) ───────────────────────
+    // ── 4. HTML gallery (multi-image post or product) ───────────────────────
     if (
       t.mimeType === 'text/html' &&
       t.dataUrl?.startsWith('data:text/html') &&
@@ -141,6 +166,11 @@ export async function GET(
       const htmlBase64 = t.dataUrl.split(',')[1];
       if (htmlBase64) {
         const html = Buffer.from(htmlBase64, 'base64').toString('utf-8');
+        // Prefer first https image (already on R2), else embedded data:image
+        const httpsMatch = html.match(/src=["'](https?:\/\/[^"']+)["']/i);
+        if (httpsMatch?.[1]) {
+          return NextResponse.redirect(httpsMatch[1], { status: 302 });
+        }
         const match = html.match(/src="(data:image\/([^;]+);base64,([^"]+))"/);
         if (match) {
           const mimeType = `image/${match[2].toLowerCase()}`;

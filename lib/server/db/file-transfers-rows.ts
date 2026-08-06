@@ -63,6 +63,62 @@ export async function selectFileTransferRowById(idOrShareId: string): Promise<Se
   return doc ? strip(doc) : null;
 }
 
+/**
+ * Lean lookup for thumbnail serving — prefer thumbnailUrl / mime without pulling
+ * multi-MB dataUrl blobs. Falls back to full row only when needed by caller.
+ */
+export async function selectFileTransferThumbMeta(idOrShareId: string): Promise<{
+  id: string;
+  shareId?: string;
+  thumbnailUrl?: string;
+  mimeType?: string;
+  directoryCategory?: string;
+  hasDataUrl: boolean;
+} | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  const docs = await db.collection(COL).aggregate([
+    { $match: { $or: [{ _id: idOrShareId }, { shareId: idOrShareId }] } },
+    {
+      $project: {
+        id: 1,
+        shareId: 1,
+        thumbnailUrl: 1,
+        mimeType: 1,
+        directoryCategory: 1,
+        hasDataUrl: {
+          $cond: {
+            if: { $and: [{ $ifNull: ['$dataUrl', false] }, { $ne: ['$dataUrl', ''] }] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    { $limit: 1 },
+  ]).toArray();
+  const d = docs[0] as
+    | {
+        id?: string;
+        _id?: string;
+        shareId?: string;
+        thumbnailUrl?: string;
+        mimeType?: string;
+        directoryCategory?: string;
+        hasDataUrl?: boolean;
+      }
+    | undefined;
+  if (!d) return null;
+  return {
+    id: d.id || d._id || idOrShareId,
+    shareId: d.shareId,
+    thumbnailUrl: d.thumbnailUrl,
+    mimeType: d.mimeType,
+    directoryCategory: d.directoryCategory,
+    hasDataUrl: !!d.hasDataUrl,
+  };
+}
+
 export async function upsertFileTransferRow(t: SecureFileTransfer): Promise<void> {
   const db = await getMongoDb();
   if (!db) return;

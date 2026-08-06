@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/server/auth';
+import { authOptions, resolveSessionUserId } from '@/lib/server/auth';
 import {
   publicFaceOtpsPath,
   publicFaceApplicationsPath,
@@ -29,13 +29,13 @@ function generateOtp() {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const userId = await resolveSessionUserId(session);
+    if (!userId) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    const userId = session.user.id;
-    const userEmail = session.user.email as string;
-    const userName = session.user.name as string;
+    const userEmail = session?.user?.email as string;
+    const userName = session?.user?.name as string;
 
     const infinity = await hasInfinity(userId);
     if (!infinity) {

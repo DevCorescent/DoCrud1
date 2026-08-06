@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import nodemailer from 'nodemailer';
-import { getAuthSession } from '@/lib/server/auth';
+import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { createAccessEvent, getHistoryEntryById, updateHistoryEntry } from '@/lib/server/history';
 import { getMailSettings } from '@/lib/server/settings';
 import { isValidEmail } from '@/lib/server/security';
@@ -25,6 +25,8 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getAuthSession();
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = await resolveSessionUserId(session);
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const payload = await request.json() as { historyId?: string; signerKey?: string };
     const historyId = String(payload.historyId || '').trim();
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
     const entry = await getHistoryEntryById(historyId);
     if (!entry) return NextResponse.json({ error: 'History entry not found' }, { status: 404 });
 
-    const infinity = await hasInfinity(session.user.id!);
+    const infinity = await hasInfinity(userId);
     if (!infinity) {
       return NextResponse.json({ error: 'Docrud Infinity required', code: 'INFINITY_REQUIRED', feature: 'esign' }, { status: 403 });
     }

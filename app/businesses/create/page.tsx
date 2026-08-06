@@ -1,6 +1,6 @@
 import NextDynamic from 'next/dynamic';
 import { redirect } from 'next/navigation';
-import { getAuthSession } from '@/lib/server/auth';
+import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { hasInfinity } from '@/lib/server/infinity';
 import { buildPageMetadata } from '@/lib/seo';
 
@@ -17,7 +17,8 @@ export const metadata = buildPageMetadata({
 export default async function CreateBusinessPage() {
   const session = await getAuthSession();
   if (!session) redirect('/login?next=/businesses/create');
-  const infinity = await hasInfinity(session.user!.id!);
+  const userId = await resolveSessionUserId(session);
+  const infinity = userId ? await hasInfinity(userId) : false;
   if (!infinity) redirect('/infinity?returnTo=/businesses/create');
   return <BusinessPageCreator />;
 }

@@ -75,8 +75,19 @@ export async function getInfinityStatus(userId: string): Promise<InfinityStatus>
 }
 
 export async function hasInfinity(userId: string): Promise<boolean> {
+  if (!userId) return false;
   const s = await getInfinityStatus(userId);
   return s.active;
+}
+
+/** Infinity check that resolves the canonical user id from the session (email-first). */
+export async function hasInfinityForSession(
+  session: { user?: { id?: string | null; email?: string | null } } | null | undefined,
+): Promise<boolean> {
+  const { resolveSessionUserId } = await import('@/lib/server/auth');
+  const userId = await resolveSessionUserId(session);
+  if (!userId) return false;
+  return hasInfinity(userId);
 }
 
 /* ── Write ──────────────────────────────────────────────────────── */

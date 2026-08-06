@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/server/auth';
+import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { listBusinessPages, getBusinessPagesByOwner, createBusinessPage, generateUniqueSlug } from '@/lib/server/business-pages';
 import { hasInfinity } from '@/lib/server/infinity';
 import { randomUUID } from 'crypto';
@@ -36,7 +36,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const session = await getAuthSession();
-    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userId = await resolveSessionUserId(session);
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json() as {
       name?: string; tagline?: string; description?: string; industry?: string;
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
     if (!body.name?.trim()) return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     if (!body.industry?.trim()) return NextResponse.json({ error: 'Industry is required' }, { status: 400 });
 
-    const infinity = await hasInfinity(session.user.id);
+    const infinity = await hasInfinity(userId);
     if (!infinity) {
       return NextResponse.json({ error: 'Docrud Infinity required', code: 'INFINITY_REQUIRED', feature: 'business_page' }, { status: 403 });
     }
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
     const page = await createBusinessPage({
       id: randomUUID(),
       slug,
-      ownerUserId: session.user.id,
+      ownerUserId: userId,
       name: body.name.trim(),
       tagline: body.tagline?.trim(),
       description: body.description?.trim(),

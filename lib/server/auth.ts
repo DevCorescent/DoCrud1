@@ -318,3 +318,20 @@ warmAuthSettingsCache();
 export function getAuthSession() {
   return getServerSession(authOptions);
 }
+
+/**
+ * Resolve the canonical stored user id for a session.
+ * Prefer email lookup — session.user.id can be a stale Google OAuth sub
+ * while Infinity / profiles are keyed by the stored DoCrud user id.
+ */
+export async function resolveSessionUserId(
+  session: { user?: { id?: string | null; email?: string | null } } | null | undefined,
+): Promise<string | null> {
+  const email = session?.user?.email?.trim();
+  if (email) {
+    const stored = await getStoredUserByEmail(email).catch(() => null);
+    if (stored?.id) return stored.id;
+  }
+  const id = session?.user?.id?.trim();
+  return id || null;
+}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/server/auth';
+import { authOptions, resolveSessionUserId } from '@/lib/server/auth';
 import {
   publicFaceOtpsPath,
   publicFaceApplicationsPath,
@@ -36,11 +36,10 @@ interface UserRecord {
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
+    const userId = await resolveSessionUserId(session);
+    if (!userId) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
-
-    const userId = session.user.id;
 
     const infinity = await hasInfinity(userId);
     if (!infinity) {
@@ -125,8 +124,8 @@ export async function POST(req: NextRequest) {
 
     const users = await readJsonFile<UserRecord[]>(usersPath, []);
     const user = users.find(u => u.id === userId);
-    const userEmail = user?.email || (session.user.email as string);
-    const userName = user?.name || (session.user.name as string);
+    const userEmail = user?.email || (session?.user?.email as string) || '';
+    const userName = user?.name || (session?.user?.name as string) || '';
 
     const now = new Date().toISOString();
     const applicationId = `pf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

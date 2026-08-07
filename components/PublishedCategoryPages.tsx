@@ -43,6 +43,7 @@ type PublishedItem = {
   dataUrl?: string;
   mimeType?: string;
   videoUrl?: string;
+  thumbnailUrl?: string;
 };
 
 type Comment = {

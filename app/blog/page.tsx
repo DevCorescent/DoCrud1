@@ -1,7 +1,7 @@
 import PublicBlogPage from '@/components/PublicBlogPage';
 import { buildPageMetadata } from '@/lib/seo';
 import { getBlogCategories, getPublicBlogPosts } from '@/lib/server/blog';
-import { getLandingSettings, getThemeSettings } from '@/lib/server/settings';
+import { getLandingSettings, getThemeSettings, defaultLandingSettings, defaultThemeSettings } from '@/lib/server/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,12 +15,17 @@ export const metadata = buildPageMetadata({
 });
 
 export default async function BlogPage() {
-  const [landingSettings, themeSettings, initialPosts, categories] = await Promise.all([
-    getLandingSettings(),
-    getThemeSettings(),
-    getPublicBlogPosts(),
-    getBlogCategories(),
-  ]);
+  let landingSettings = defaultLandingSettings;
+  let themeSettings = defaultThemeSettings;
+  let initialPosts: Awaited<ReturnType<typeof getPublicBlogPosts>> = [];
+  let categories: string[] = [];
+  try {
+    const results = await Promise.all([getLandingSettings(), getThemeSettings(), getPublicBlogPosts(), getBlogCategories()]);
+    landingSettings = results[0];
+    themeSettings = results[1];
+    initialPosts = results[2];
+    categories = results[3];
+  } catch {}
 
   return (
     <PublicBlogPage

@@ -12,6 +12,7 @@ import { PresenceBadge } from '@/components/PresenceBadge';
 const PublicFaceApplicationForm = dynamic(() => import('@/components/PublicFaceApplicationForm'), { ssr: false });
 const FeaturePostPanel          = dynamic(() => import('@/components/FeaturePostPanel'), { ssr: false });
 const ProfilePublishedFeed      = dynamic(() => import('@/components/ProfilePublishedFeed'), { ssr: false });
+import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import {
   ArrowLeft,
   BarChart3,
@@ -73,6 +74,8 @@ import {
   BadgeCheck,
   Users,
   PenLine,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 /* ─── BusinessPagesTab ──────────────────────────────────────────────── */
@@ -2396,6 +2399,18 @@ export default function UserProfilePage() {
   const [infinityPayError, setInfinityPayError] = useState('');
   const [publishedPosts, setPublishedPosts] = useState<Array<{ id: string; shareId: string; title?: string; fileName: string; likesCount: number; commentsCount: number; viewCount: number; featured: boolean; featuredUntil?: string; featuredPlan?: string; createdAt: string }>>([]);
   const [featurePanelPost, setFeaturePanelPost] = useState<{ id: string; title: string } | null>(null);
+
+  const [colorMode, setColorMode] = useState<'dark' | 'light'>('dark');
+
+  useEffect(() => {
+    setColorMode(getStoredColorMode());
+  }, []);
+
+  function toggleColorMode() {
+    const next = colorMode === 'dark' ? 'light' : 'dark';
+    setColorMode(next);
+    applyColorMode(next);
+  }
 
   const [connectionsData, setConnectionsData] = useState<{ followers: ConnectionCard[]; following: ConnectionCard[] } | null>(null);
   const [connectionsLoading, setConnectionsLoading] = useState(false);
@@ -5820,6 +5835,43 @@ export default function UserProfilePage() {
                       <span className="text-[12px] text-white/60 font-medium text-right truncate max-w-[200px] sm:max-w-none">{value}</span>
                     </div>
                   ))}
+                  <div className="px-5 py-4">
+                    <button
+                      type="button"
+                      onClick={() => setEditOpen(true)}
+                      className="flex items-center gap-2 h-9 px-4 rounded-[11px] text-[12.5px] font-semibold text-white/70 hover:text-white/90 transition-colors"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+                    >
+                      <Edit2 className="h-3.5 w-3.5" />
+                      Edit Profile &amp; Save Changes
+                    </button>
+                  </div>
+                </div>
+              </Section>
+
+              {/* ── Appearance ── */}
+              <Section id="appearance" title="Appearance" subtitle="Display and theme preferences"
+                badge={colorMode === 'dark' ? 'Dark' : 'Light'} badgeColor={colorMode === 'dark' ? 'rgba(129,140,248,0.75)' : 'rgba(251,191,36,0.80)'}
+                icon={colorMode === 'dark' ? <Moon className="h-3.5 w-3.5 text-white/40" /> : <Sun className="h-3.5 w-3.5 text-amber-400/60" />}>
+                <div className="px-5 py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[12.5px] font-semibold text-white/70">Night Mode</p>
+                      <p className="text-[11px] text-white/28 mt-0.5">Toggle between dark and light interface</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={toggleColorMode}
+                      className={`relative shrink-0 flex h-6 w-11 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${colorMode === 'dark' ? 'bg-indigo-500/70' : 'bg-amber-400/70'}`}
+                      role="switch" aria-checked={colorMode === 'dark'} aria-label="Toggle night mode"
+                    >
+                      <span className={`absolute top-0.5 h-5 w-5 rounded-full shadow transition-transform duration-200 flex items-center justify-center ${colorMode === 'dark' ? 'translate-x-5 bg-white' : 'translate-x-0.5 bg-white'}`}>
+                        {colorMode === 'dark'
+                          ? <Moon className="h-3 w-3 text-indigo-500" />
+                          : <Sun className="h-3 w-3 text-amber-500" />}
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </Section>
 

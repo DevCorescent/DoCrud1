@@ -3,7 +3,7 @@ import PublicSiteChrome from '@/components/PublicSiteChrome';
 import InquiryForm from '@/components/InquiryForm';
 import { Card, CardContent } from '@/components/ui/card';
 import { buildPageMetadata } from '@/lib/seo';
-import { getLandingSettings, getThemeSettings } from '@/lib/server/settings';
+import { getLandingSettings, getThemeSettings, defaultLandingSettings, defaultThemeSettings } from '@/lib/server/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +16,13 @@ export const metadata = buildPageMetadata({
 });
 
 export default async function ContactPage() {
-  const [settings, themeSettings] = await Promise.all([getLandingSettings(), getThemeSettings()]);
+  let settings = defaultLandingSettings;
+  let themeSettings = defaultThemeSettings;
+  try {
+    const results = await Promise.all([getLandingSettings(), getThemeSettings()]);
+    settings = results[0];
+    themeSettings = results[1];
+  } catch {}
 
   return (
     <PublicSiteChrome softwareName={themeSettings.softwareName} accentLabel={themeSettings.accentLabel} settings={settings}>

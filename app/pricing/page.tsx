@@ -1,7 +1,7 @@
 ﻿import PublicSiteChrome from '@/components/PublicSiteChrome';
 import PricingExperience from '@/components/PricingExperience';
 import { buildPageMetadata } from '@/lib/seo';
-import { getThemeSettings, getLandingSettings } from '@/lib/server/settings';
+import { getThemeSettings, getLandingSettings, defaultThemeSettings, defaultLandingSettings } from '@/lib/server/settings';
 import { getPublicSaasPlansByAudience } from '@/lib/server/saas';
 import { getAuthSession } from '@/lib/server/auth';
 
@@ -16,13 +16,25 @@ export const metadata = buildPageMetadata({
 });
 
 export default async function PricingPage() {
-  const [settings, themeSettings, businessPlans, individualPlans, session] = await Promise.all([
-    getLandingSettings(),
-    getThemeSettings(),
-    getPublicSaasPlansByAudience('business'),
-    getPublicSaasPlansByAudience('individual'),
-    getAuthSession(),
-  ]);
+  let settings = defaultLandingSettings;
+  let themeSettings = defaultThemeSettings;
+  let businessPlans: Awaited<ReturnType<typeof getPublicSaasPlansByAudience>> = [];
+  let individualPlans: Awaited<ReturnType<typeof getPublicSaasPlansByAudience>> = [];
+  let session: Awaited<ReturnType<typeof getAuthSession>> = null;
+  try {
+    const results = await Promise.all([
+      getLandingSettings(),
+      getThemeSettings(),
+      getPublicSaasPlansByAudience('business'),
+      getPublicSaasPlansByAudience('individual'),
+      getAuthSession(),
+    ]);
+    settings = results[0];
+    themeSettings = results[1];
+    businessPlans = results[2];
+    individualPlans = results[3];
+    session = results[4];
+  } catch {}
 
   return (
     <PublicSiteChrome softwareName={themeSettings.softwareName} accentLabel={themeSettings.accentLabel} settings={settings}>

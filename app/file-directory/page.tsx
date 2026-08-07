@@ -1,6 +1,6 @@
 import PublicFileDirectoryPage from '@/components/PublicFileDirectoryPage';
 import { buildPageMetadata } from '@/lib/seo';
-import { getLandingSettings, getThemeSettings } from '@/lib/server/settings';
+import { getLandingSettings, getThemeSettings, defaultLandingSettings, defaultThemeSettings } from '@/lib/server/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,10 +13,13 @@ export const metadata = buildPageMetadata({
 });
 
 export default async function FileDirectoryPage() {
-  const [landingSettings, themeSettings] = await Promise.all([
-    getLandingSettings(),
-    getThemeSettings(),
-  ]);
+  let landingSettings = defaultLandingSettings;
+  let themeSettings = defaultThemeSettings;
+  try {
+    const results = await Promise.all([getLandingSettings(), getThemeSettings()]);
+    landingSettings = results[0];
+    themeSettings = results[1];
+  } catch {}
 
   return (
     <PublicFileDirectoryPage

@@ -41,6 +41,24 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
 
     const userGigs = allGigs.filter((g) => g.ownerUserId === userId);
 
+    const isOwnProfile = sessionUser?.id === userId;
+
+    // Resume files are only fully exposed to the owner. Other viewers get the
+    // metadata needed to render the download action, never the storage URL —
+    // downloads go through /api/profile/resume/[userId], which enforces the
+    // Docrud Infinity entitlement server-side.
+    const safeProfile = isOwnProfile
+      ? profile
+      : {
+          ...profile,
+          resumeFiles: (profile.resumeFiles ?? []).map((entry) => ({
+            id: entry.id,
+            fileName: entry.fileName,
+            uploadedAt: entry.uploadedAt,
+            url: '',
+          })),
+        };
+
     const safeUser = {
       id: found.id,
       name: found.name,
@@ -52,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
 
     return NextResponse.json({
       user: safeUser,
-      profile,
+      profile: safeProfile,
       stats: {
         followers: counts.followers,
         following: counts.following,
@@ -63,7 +81,7 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
         totalComments: publishAnalytics.totalComments,
       },
       isFollowing: followingThisUser,
-      isOwnProfile: sessionUser?.id === userId,
+      isOwnProfile,
       recentPublished: [],
       recentGigs: userGigs.slice(0, 6).map((g) => ({
         id: g.id,

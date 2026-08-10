@@ -1811,6 +1811,15 @@ function hpTimeAgo(iso: string): string {
 const HP_AVATAR_CLS = 'bg-white/[0.07] text-white/55';
 const HP_PAGE_SIZE  = 8;
 const HP_META_LINE_RE = /^(Registration URL|Shop URL|WhatsApp|Application URL|Website|Contact|Email|Phone)\s*:/i;
+/* auto-generated / placeholder titles (e.g. a photo post stored as "post" or
+   "IMG_2034.jpg") — these are not real content and must not render as a title */
+const HP_JUNK_TITLE_RE  = /\.\w{2,5}$/;
+const HP_GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'video', 'survey', 'article', 'upload']);
+function hpIsJunkTitle(item: { title?: string; isReal?: boolean }): boolean {
+  if (!item.isReal) return false;
+  const t = (item.title ?? '').trim().toLowerCase();
+  return !t || HP_JUNK_TITLE_RE.test(t) || HP_GENERIC_TITLES.has(t);
+}
 function hpGetBodySnippet(raw: string, maxLen = 200): string {
   const cleaned = raw.replace(/https?:\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').trim();
   const prose = cleaned.split(/\n+/)
@@ -2013,7 +2022,6 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
             ) : (
               <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
             )}
-            {item.isReal && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
           </div>
           <p className="text-[11px] text-white/35 mt-0.5 truncate">
             {item.badge}{authorMeta ? ` · ${authorMeta}` : ''} · {hpTimeAgo(item.postedAt)}
@@ -2044,11 +2052,13 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
 
       {/* content */}
       <div>
-        <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-          {item.title}
-        </h3>
+        {!hpIsJunkTitle(item) && (
+          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+            {item.title}
+          </h3>
+        )}
         {item.body && (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">
+          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${hpIsJunkTitle(item) ? '' : 'mt-1.5'}`}>
             {hpGetBodySnippet(item.body)}
           </p>
         )}
@@ -2484,7 +2494,7 @@ function HomepageLiveFeed() {
           <div className="p-3 border-t border-white/[0.05] space-y-2">
             <Link
               href="/published"
-              className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-4 py-2.5 text-[11.5px] font-semibold text-white/55 transition hover:border-white/[0.18] hover:bg-white/[0.09] hover:text-white/85 active:scale-[0.98]"
+              className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.16] bg-white/[0.09] px-4 py-2.5 text-[11.5px] font-semibold text-white/90 transition hover:border-white/[0.24] hover:bg-white/[0.14] hover:text-white active:scale-[0.98]"
             >
               <Plus className="h-3.5 w-3.5 transition-transform group-hover:rotate-90 duration-200" />
               Publish something
@@ -2668,11 +2678,11 @@ function HomepageLiveFeed() {
           {/* header */}
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.05] shrink-0">
             <div className="flex items-center gap-2">
-              <TrendingUp className="h-3.5 w-3.5 text-orange-400/60" />
+              <TrendingUp className="h-3.5 w-3.5 text-white/35" />
               <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-white/40">Live Feed</span>
             </div>
             {totalTrends > 0 && (
-              <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9.5px] font-bold text-orange-400">🔥 {totalTrends}</span>
+              <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[9.5px] font-bold text-white/55">🔥 {totalTrends}</span>
             )}
           </div>
 
@@ -2688,7 +2698,9 @@ function HomepageLiveFeed() {
                     <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
                       <span className="text-[11px] font-bold text-white/20 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{item.title}</p>
+                        <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">
+                          {hpIsJunkTitle(item) ? (hpGetBodySnippet(item.body, 80) || item.badge) : item.title}
+                        </p>
                         <p className="text-[10.5px] text-white/25 mt-0.5">{item.uploadedByName || 'Docrud'} · {hpTimeAgo(item.postedAt)}</p>
                       </div>
                     </Link>
@@ -2702,12 +2714,12 @@ function HomepageLiveFeed() {
                   <div className="flex items-center gap-2">
                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">Trending</p>
                     {totalTrends > 0 && (
-                      <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9.5px] font-bold text-orange-400/80">{totalTrends} 🔥</span>
+                      <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[9.5px] font-bold text-white/50">{totalTrends} 🔥</span>
                     )}
                   </div>
                   {totalTrends > 0 && (
                     <button type="button" onClick={() => setSort('Popular')}
-                      className="text-[10.5px] font-semibold text-orange-400/60 hover:text-orange-400 transition">
+                      className="text-[10.5px] font-semibold text-white/40 hover:text-white/70 transition">
                       Sort feed →
                     </button>
                   )}
@@ -2717,12 +2729,14 @@ function HomepageLiveFeed() {
                   <div className="space-y-3.5 mb-4">
                     {topTrendingPosts.map((item, i) => (
                       <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
-                        <span className="text-[11px] font-bold text-orange-400/40 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
+                        <span className="text-[11px] font-bold text-white/20 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
                         <div className="min-w-0 flex-1">
-                          <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{item.title}</p>
+                          <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">
+                            {hpIsJunkTitle(item) ? (hpGetBodySnippet(item.body, 80) || item.badge) : item.title}
+                          </p>
                           <div className="flex items-center gap-1 mt-0.5">
-                            <TrendingUp className="h-3 w-3 text-orange-400/50" />
-                            <span className="text-[10.5px] font-bold text-orange-400/60">{trends[item.id]?.count} trending</span>
+                            <TrendingUp className="h-3 w-3 text-white/30" />
+                            <span className="text-[10.5px] font-bold text-white/45">{trends[item.id]?.count} trending</span>
                           </div>
                         </div>
                       </Link>
@@ -2744,12 +2758,12 @@ function HomepageLiveFeed() {
                         onClick={() => { setTagSearch(tag); setActivecat('All'); }}
                         className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10.5px] font-medium transition ${
                           tagSearch === tag
-                            ? 'border-orange-400/40 bg-orange-500/10 text-orange-300'
+                            ? 'border-white/[0.18] bg-white/[0.10] text-white/85'
                             : 'border-white/[0.07] bg-white/[0.05] text-white/45 hover:bg-white/[0.09] hover:text-white/80'
                         }`}
                       >
                         #{tag}
-                        <span className="font-bold tabular-nums text-orange-400/70">{count}</span>
+                        <span className="font-bold tabular-nums text-white/45">{count}</span>
                       </button>
                     ))}
                   </div>
@@ -2784,7 +2798,7 @@ function HomepageLiveFeed() {
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0 min-w-[32px] justify-end">
                           {trendCount > 0 && (
-                            <span className="flex items-center gap-0.5 text-[9.5px] font-bold text-orange-400/60">
+                            <span className="flex items-center gap-0.5 text-[9.5px] font-bold text-white/40">
                               <TrendingUp className="h-2.5 w-2.5" />{trendCount}
                             </span>
                           )}
@@ -2803,7 +2817,7 @@ function HomepageLiveFeed() {
                   <div className="space-y-3">
                     {history.slice(0, 6).map((h, i) => (
                       <div key={i} className="flex items-start gap-2.5">
-                        <TrendingUp className="h-3.5 w-3.5 text-orange-400/35 shrink-0 mt-0.5" />
+                        <TrendingUp className="h-3.5 w-3.5 text-white/25 shrink-0 mt-0.5" />
                         <div className="min-w-0 flex-1">
                           <p className="text-[11.5px] font-semibold text-white/50 leading-snug line-clamp-1">{h.title}</p>
                           <p className="text-[10px] text-white/22 mt-0.5 capitalize">{h.category} · {hpTimeAgo(new Date(h.trendedAt).toISOString())}</p>
@@ -4559,11 +4573,11 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
             height: 'clamp(28px,5vw,34px)',
             padding: '0 clamp(10px,2vw,14px)',
             borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.13)',
+            background: 'rgba(255,255,255,0.14)',
+            border: '1px solid rgba(255,255,255,0.22)',
             backdropFilter: 'blur(16px)',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 10px rgba(0,0,0,0.25)',
-            color: 'rgba(255,255,255,0.75)',
+            color: 'rgba(255,255,255,0.98)',
             fontSize: 'clamp(10.5px,1.8vw,12.5px)',
             letterSpacing: '0.01em',
             whiteSpace: 'nowrap',

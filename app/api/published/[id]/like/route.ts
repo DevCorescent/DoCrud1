@@ -32,7 +32,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           type: 'like',
           actorId: actor?.id ?? identifier,
           actorName: actor?.name || session?.user?.name || 'Someone',
-          actorAvatar: actor ? undefined : undefined,
           targetUserId: post.uploadedByUserId,
           resourceId: post.id,
           resourceTitle: post.title || post.fileName,

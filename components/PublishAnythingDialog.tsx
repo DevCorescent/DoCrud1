@@ -701,11 +701,14 @@ export default function PublishAnythingDialog({
 
       const endpoint = fields.visibility === 'public' ? '/api/public/file-directory/publish' : '/api/file-transfers';
       const contentBody = (category === 'post' ? fields.postCaption : buildTextBody()).trim() || undefined;
+      // Photo posts have no title field — never fall back to the category id,
+      // otherwise the literal word "post" is stored and rendered as the title.
+      const resolvedTitle = fields.title.trim() || (category === 'post' ? '' : category);
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: fields.title.trim() || category,
+          title: resolvedTitle || undefined,
           fileName, mimeType, dataUrl, sizeInBytes,
           notes: contentBody,
           directoryVisibility: fields.visibility,
@@ -741,7 +744,7 @@ export default function PublishAnythingDialog({
       if (publishedId && onPublished) {
         onPublished({
           id: publishedId,
-          title: fields.title.trim() || category,
+          title: resolvedTitle,
           content: contentBody || '',
           category,
         });

@@ -12,6 +12,8 @@ import { PresenceBadge } from '@/components/PresenceBadge';
 const PublicFaceApplicationForm = dynamic(() => import('@/components/PublicFaceApplicationForm'), { ssr: false });
 const FeaturePostPanel          = dynamic(() => import('@/components/FeaturePostPanel'), { ssr: false });
 const ProfilePublishedFeed      = dynamic(() => import('@/components/ProfilePublishedFeed'), { ssr: false });
+// Canonical publish experience — the same dialog Home / Published / Business pages use.
+const PublishAnythingDialog     = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import {
   ArrowLeft,
@@ -2652,13 +2654,8 @@ export default function UserProfilePage() {
   const [refSentMsg, setRefSentMsg] = useState('');
   const [refSendErr, setRefSendErr] = useState('');
 
-  // Publish modal state
+  // Publish modal state — the form itself is the shared PublishAnythingDialog.
   const [publishModalOpen, setPublishModalOpen] = useState(false);
-  const [publishForm, setPublishForm] = useState({ title: '', category: 'document', tags: [] as string[], notes: '', tagInput: '' });
-  const [publishFile, setPublishFile] = useState<File | null>(null);
-  const [publishSubmitting, setPublishSubmitting] = useState(false);
-  const [publishError, setPublishError] = useState('');
-  const [publishSuccess, setPublishSuccess] = useState(false);
 
   useEffect(() => {
     if (!userId || userId === 'undefined' || userId === 'null') {
@@ -3278,214 +3275,14 @@ export default function UserProfilePage() {
         </div>
       )}
 
-      {publishModalOpen && isOwnProfile && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}
-          onClick={() => !publishSubmitting && setPublishModalOpen(false)}
-        >
-          <div
-            className="relative w-full sm:max-w-lg rounded-t-[26px] sm:rounded-[26px] overflow-hidden"
-            style={{ background: '#0f0f12', border: '1px solid rgba(255,255,255,0.07)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-[10px]" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 3px 12px rgba(99,102,241,0.35)' }}>
-                  <Share2 className="h-3.5 w-3.5 text-white" />
-                </div>
-                <div>
-                  <p className="text-[14px] font-black text-white">Publish to Feed</p>
-                  <p className="text-[10.5px] text-white/30">Share with the Docrud community</p>
-                </div>
-              </div>
-              <button type="button" onClick={() => !publishSubmitting && setPublishModalOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/30 hover:text-white/70 transition-colors">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="px-5 py-5 space-y-4 max-h-[70vh] overflow-y-auto [scrollbar-width:none]">
-              {publishSuccess ? (
-                <div className="py-10 text-center">
-                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10">
-                    <CheckCircle2 className="h-7 w-7 text-emerald-400" />
-                  </div>
-                  <p className="text-[16px] font-black text-white">Published!</p>
-                  <p className="text-[12px] text-white/35 mt-1.5">Your post is now live on the feed.</p>
-                  <div className="mt-5 flex gap-2 justify-center">
-                    <a href="/published" className="flex h-9 items-center gap-1.5 rounded-[11px] border border-white/[0.09] bg-white/[0.04] px-4 text-[12px] font-semibold text-white/60 hover:text-white/85 transition">
-                      <ExternalLink className="h-3.5 w-3.5" /> View Feed
-                    </a>
-                    <button type="button" onClick={() => { setPublishModalOpen(false); window.location.reload(); }}
-                      className="flex h-9 items-center gap-2 rounded-[11px] px-4 text-[12px] font-bold text-white transition"
-                      style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
-                      Done
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Title */}
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/35 mb-1.5">Title</label>
-                    <input
-                      type="text"
-                      value={publishForm.title}
-                      onChange={e => setPublishForm(f => ({ ...f, title: e.target.value }))}
-                      placeholder="Give your post a descriptive title…"
-                      className="w-full h-10 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3.5 text-[13px] text-white placeholder:text-white/20 outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/[0.12] transition"
-                    />
-                  </div>
-
-                  {/* Category */}
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/35 mb-2">Category</label>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      {(['document','article','portfolio','announcement','job','event','hackathon','product'] as const).map(cat => (
-                        <button key={cat} type="button"
-                          onClick={() => setPublishForm(f => ({ ...f, category: cat }))}
-                          className={`rounded-[10px] border py-2 text-[10px] font-bold capitalize transition ${
-                            publishForm.category === cat
-                              ? 'border-indigo-500/40 bg-indigo-500/[0.12] text-indigo-300'
-                              : 'border-white/[0.06] bg-white/[0.03] text-white/40 hover:bg-white/[0.06] hover:text-white/65'
-                          }`}>
-                          {cat === 'announcement' ? 'Announce' : cat === 'hackathon' ? 'Hack' : cat === 'portfolio' ? 'Portfolio' : cat}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* File upload */}
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/35 mb-1.5">File <span className="text-white/20 normal-case font-normal">(PDF, image, or doc — max 15 MB)</span></label>
-                    <label className={`flex flex-col items-center justify-center w-full rounded-[14px] border-2 border-dashed py-6 cursor-pointer transition ${
-                      publishFile ? 'border-indigo-500/30 bg-indigo-500/[0.05]' : 'border-white/[0.08] bg-white/[0.02] hover:border-white/[0.14] hover:bg-white/[0.04]'
-                    }`}>
-                      <input type="file" className="hidden" accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.webp,.svg"
-                        onChange={e => { const f = e.target.files?.[0]; if (f) setPublishFile(f); }} />
-                      {publishFile ? (
-                        <div className="text-center">
-                          <FileText className="h-6 w-6 text-indigo-400 mx-auto mb-1.5" />
-                          <p className="text-[12px] font-semibold text-indigo-300">{publishFile.name}</p>
-                          <p className="text-[10px] text-white/30 mt-0.5">{(publishFile.size / 1024).toFixed(0)} KB · click to change</p>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <Plus className="h-6 w-6 text-white/20 mx-auto mb-1.5" />
-                          <p className="text-[12px] font-semibold text-white/30">Click to upload file</p>
-                          <p className="text-[10px] text-white/18 mt-0.5">PDF · Images · Docs</p>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-
-                  {/* Notes */}
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/35 mb-1.5">Description <span className="text-white/20 normal-case font-normal">(optional)</span></label>
-                    <textarea
-                      value={publishForm.notes}
-                      onChange={e => setPublishForm(f => ({ ...f, notes: e.target.value }))}
-                      rows={3}
-                      placeholder="Add context, key points, or a summary…"
-                      className="w-full rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3.5 py-2.5 text-[13px] text-white placeholder:text-white/20 outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/[0.12] transition resize-none"
-                    />
-                  </div>
-
-                  {/* Tags */}
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-[0.18em] text-white/35 mb-1.5">Tags <span className="text-white/20 normal-case font-normal">(optional)</span></label>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {publishForm.tags.map((tag, i) => (
-                        <span key={i} className="flex items-center gap-1 rounded-full border border-white/[0.09] bg-white/[0.05] px-2.5 py-1 text-[11px] font-semibold text-white/60">
-                          {tag}
-                          <button type="button" onClick={() => setPublishForm(f => ({ ...f, tags: f.tags.filter((_, j) => j !== i) }))} className="text-white/30 hover:text-white/70 ml-0.5">×</button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={publishForm.tagInput}
-                        onChange={e => setPublishForm(f => ({ ...f, tagInput: e.target.value }))}
-                        onKeyDown={e => {
-                          if ((e.key === 'Enter' || e.key === ',') && publishForm.tagInput.trim()) {
-                            e.preventDefault();
-                            setPublishForm(f => ({ ...f, tags: [...f.tags, f.tagInput.trim()], tagInput: '' }));
-                          }
-                        }}
-                        placeholder="Type a tag and press Enter"
-                        className="flex-1 h-9 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] text-white placeholder:text-white/20 outline-none focus:border-indigo-500/30 transition"
-                      />
-                      <button type="button"
-                        onClick={() => { if (publishForm.tagInput.trim()) setPublishForm(f => ({ ...f, tags: [...f.tags, f.tagInput.trim()], tagInput: '' })); }}
-                        className="h-9 px-3 rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-[11px] font-semibold text-white/40 hover:text-white/70 transition">
-                        Add
-                      </button>
-                    </div>
-                  </div>
-
-                  {publishError && <p className="text-[12px] text-rose-400 font-medium">{publishError}</p>}
-                </>
-              )}
-            </div>
-
-            {!publishSuccess && (
-              <div className="px-5 py-4 border-t border-white/[0.06] flex items-center justify-between gap-3">
-                <p className="text-[10.5px] text-white/25">Your post will be visible on the community feed.</p>
-                <button
-                  type="button"
-                  disabled={publishSubmitting || !publishFile || !publishForm.title.trim()}
-                  onClick={async () => {
-                    if (!publishFile || !publishForm.title.trim()) return;
-                    setPublishSubmitting(true);
-                    setPublishError('');
-                    try {
-                      const reader = new FileReader();
-                      const dataUrl = await new Promise<string>((res, rej) => {
-                        reader.onload = () => res(reader.result as string);
-                        reader.onerror = rej;
-                        reader.readAsDataURL(publishFile);
-                      });
-                      const res = await fetch('/api/public/file-directory/publish', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          title: publishForm.title.trim(),
-                          fileName: publishFile.name,
-                          mimeType: publishFile.type || 'application/octet-stream',
-                          dataUrl,
-                          sizeInBytes: publishFile.size,
-                          notes: publishForm.notes.trim() || undefined,
-                          directoryCategory: publishForm.category,
-                          directoryTags: publishForm.tags,
-                          directoryVisibility: 'public',
-                          authMode: 'public',
-                        }),
-                      });
-                      const d = await res.json() as { transfer?: { id: string }; error?: string };
-                      if (!res.ok || !d.transfer) throw new Error(d.error || 'Publish failed.');
-                      setPublishSuccess(true);
-                    } catch (e) {
-                      setPublishError(e instanceof Error ? e.message : 'Something went wrong.');
-                    } finally {
-                      setPublishSubmitting(false);
-                    }
-                  }}
-                  className="flex items-center gap-2 h-9 px-5 rounded-[11px] text-[12.5px] font-bold transition-all active:scale-[0.97] disabled:opacity-50"
-                  style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', boxShadow: publishSubmitting ? 'none' : '0 3px 14px rgba(99,102,241,0.35)' }}
-                >
-                  {publishSubmitting ? (
-                    <><div className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" /> Publishing…</>
-                  ) : (
-                    <><Share2 className="h-3.5 w-3.5" /> Publish Post</>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Publish — shared canonical dialog (the same component Home uses). */}
+      {isOwnProfile && (
+        <PublishAnythingDialog
+          open={publishModalOpen}
+          onOpenChange={setPublishModalOpen}
+          isAuthenticated={Boolean(session?.user)}
+          onPublished={() => window.location.reload()}
+        />
       )}
 
       {/* ─── cover ─── */}
@@ -3756,7 +3553,7 @@ export default function UserProfilePage() {
                 {isOwnProfile && (
                   <button
                     type="button"
-                    onClick={() => { setPublishModalOpen(true); setPublishError(''); setPublishSuccess(false); setPublishFile(null); setPublishForm({ title: '', category: 'document', tags: [], notes: '', tagInput: '' }); }}
+                    onClick={() => setPublishModalOpen(true)}
                     className="flex items-center gap-1.5 h-9 px-4 rounded-[11px] text-[12.5px] font-semibold border border-white/[0.09] bg-white/[0.05] text-white/70 hover:bg-white/[0.09] hover:text-white/90 hover:border-white/[0.15] transition-all active:scale-[0.97]"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -3771,7 +3568,7 @@ export default function UserProfilePage() {
               <ProfilePublishedFeed
                 userId={user.id}
                 isOwn={isOwnProfile}
-                onPublish={isOwnProfile ? () => { setPublishModalOpen(true); setPublishError(''); setPublishSuccess(false); setPublishFile(null); setPublishForm({ title: '', category: 'document', tags: [], notes: '', tagInput: '' }); } : undefined}
+                onPublish={isOwnProfile ? () => setPublishModalOpen(true) : undefined}
               />
             )}
             {isOwnProfile && publishedView === 'tracker' && <PublisherTrackingPanel />}

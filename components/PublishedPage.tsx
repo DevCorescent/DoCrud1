@@ -5,6 +5,7 @@ import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import { PresenceDot } from '@/components/PresenceBadge';
 const PublishAnythingDialog = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import {
   ArrowLeft,
@@ -1163,7 +1164,8 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
             ) : (
               <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{authorName}</span>
             )}
-            {item.isReal && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
+            {/* Presence — green only while the author is genuinely online now. */}
+            <PresenceDot userId={item.uploadedByUserId} size="sm" />
             {/* Featured badge — clean amber pill */}
             <span className="inline-flex items-center gap-1 rounded-full px-2 py-[2.5px] text-[9px] font-bold uppercase tracking-[0.08em] shrink-0"
               style={{ background: 'rgba(251,191,36,0.10)', border: '1px solid rgba(251,191,36,0.22)', color: 'rgba(253,224,71,0.85)' }}>
@@ -1333,7 +1335,8 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
               ) : (
                 <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
               )}
-              {item.isReal && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
+              {/* Presence — green only while the author is genuinely online now. */}
+            <PresenceDot userId={item.uploadedByUserId} size="sm" />
             </div>
             <p className="text-[11px] text-white/35 mt-0.5 truncate">
               {item.badge} · {timeAgo(item.postedAt)}
@@ -1991,7 +1994,8 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
           ) : (
             <span className="text-[13.5px] font-semibold text-white">{displayName}</span>
           )}
-          {item.isReal && <span className="ml-2 h-1.5 w-1.5 inline-block rounded-full bg-emerald-400 animate-pulse" />}
+          {/* Presence — green only while the author is genuinely online now. */}
+          <span className="ml-2 inline-flex align-middle"><PresenceDot userId={item.uploadedByUserId} size="sm" /></span>
           <p className="text-[11px] text-white/35 mt-0.5">{item.badge} · {timeAgo(item.postedAt)}</p>
         </div>
         <button type="button" onClick={e=>{e.stopPropagation();toggleBookmarked();}} className={`transition ${bookmarked?'text-white/70':'text-white/25 hover:text-white/60'}`}>

@@ -236,8 +236,11 @@ export function TelemetryTracker() {
   // ── Initial mount ────────────────────────────────────────────────────
   useEffect(() => {
     if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      // Start the heartbeat timer only. The route-change effect below fires an
+      // immediate ping ~100 ms from now carrying isPageView, which is strictly
+      // more informative — sending one here too meant two identical requests on
+      // the page's critical path on every cold load.
       startPing();
-      fetchPing(buildPayload({ tabVisible: true, consumeCounters: false }));
     }
     return () => stopPing();
   // eslint-disable-next-line react-hooks/exhaustive-deps

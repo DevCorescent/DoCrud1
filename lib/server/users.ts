@@ -9,6 +9,8 @@ import {
   selectAllUserRows,
   selectUserRowByEmail,
   selectUserRowById,
+  updateUserLastSeenRow,
+  updateUserPresenceEndedRow,
   upsertUserRow,
 } from '@/lib/server/db/users-rows';
 
@@ -128,6 +130,45 @@ export async function upsertStoredUser(user: StoredUser): Promise<void> {
   const idx = users.findIndex((u) => u.id === user.id);
   const next = idx === -1 ? [...users, user] : users.map((u, i) => (i === idx ? user : u));
   await saveStoredUsers(next);
+}
+
+/**
+ * Stamp presence for one user.
+ *
+ * Presence is the highest-frequency write in the app, so on Mongo this is a
+ * targeted `$set` of a single field rather than a full-document replace. The
+ * users cache is deliberately NOT invalidated: at up to 3 s stale against a
+ * 60 s online threshold it cannot change an answer, and invalidating on every
+ * heartbeat would make every cached user read miss.
+ */
+export async function touchUserLastSeen(id: string, lastSeenAt: string): Promise<void> {
+  if (getDbPool()) {
+    const updated = await updateUserLastSeenRow(id, lastSeenAt);
+    if (updated) return;
+    // Row absent (seeded/default user not yet written) — fall through to upsert.
+  }
+  const users = await getStoredUsers();
+  const target = users.find((u) => u.id === id);
+  if (!target) return;
+  await upsertStoredUser({ ...target, lastSeenAt });
+}
+
+/**
+ * End presence for one user (logout).
+ *
+ * `lastSeenAt` is deliberately preserved — the user really was here until this
+ * moment, so "Last seen just now" is correct. Only the online flag flips.
+ */
+export async function endUserPresence(id: string): Promise<void> {
+  const presenceEndedAt = new Date().toISOString();
+  if (getDbPool()) {
+    const updated = await updateUserPresenceEndedRow(id, presenceEndedAt);
+    if (updated) return;
+  }
+  const users = await getStoredUsers();
+  const target = users.find((u) => u.id === id);
+  if (!target) return;
+  await upsertStoredUser({ ...target, presenceEndedAt });
 }
 
 /** Per-row delete — single DELETE instead of full table rewrite. */

@@ -1,6 +1,6 @@
 import { readJsonFile, writeJsonFile, userProfilesPath, followsPath } from '@/lib/server/storage';
 import { getDbPool, getMongoDb } from '@/lib/server/database';
-import { selectAllUserProfileRows, selectUserProfileRow, upsertUserProfileRow } from '@/lib/server/db/user-profiles-rows';
+import { selectAllUserProfileRows, selectUserProfileAvatarRows, selectUserProfileRow, upsertUserProfileRow } from '@/lib/server/db/user-profiles-rows';
 
 export interface UserProfileData {
   headline?: string;
@@ -96,6 +96,29 @@ export async function getProfileData(userId: string): Promise<UserProfileData> {
   }
   const profiles = await getAllProfiles();
   return profiles[userId] ?? {};
+}
+
+/**
+ * Avatar URLs for many users in ONE query.
+ *
+ * Feeds and lists render dozens of author avatars at once. Calling
+ * getProfileData() per author was an N+1 that dominated the published-feed
+ * response time (measured: ~2.15 s for 13 authors, versus ~3 ms with the
+ * enrichment skipped entirely).
+ */
+export async function getProfileAvatars(userIds: string[]): Promise<Map<string, string | null>> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  if (ids.length === 0) return new Map();
+
+  if (getDbPool()) {
+    const rows = await selectUserProfileAvatarRows(ids);
+    // Unknown ids resolve to null rather than being omitted, so callers do not
+    // have to distinguish "no profile" from "no avatar".
+    if (rows) return new Map(ids.map((id) => [id, rows.get(id) ?? null]));
+  }
+
+  const profiles = await getAllProfiles();
+  return new Map(ids.map((id) => [id, profiles[id]?.avatarUrl ?? null]));
 }
 
 export async function updateProfileData(userId: string, data: Partial<UserProfileData>): Promise<void> {

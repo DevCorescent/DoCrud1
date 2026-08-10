@@ -9,6 +9,7 @@
     "start": "next start",
     "start:local": "next start -H 127.0.0.1 -p 3010",
     "lint": "next lint",
+    "test:presence": "tsx scripts/presence-selftest.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:seed": "node scripts/db-seed.mjs",
     "db:migrate-blobs": "node --max-old-space-size=4096 scripts/db-migrate-blobs.mjs",

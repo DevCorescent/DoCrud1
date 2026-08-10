@@ -2,12 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { getMessages, sendMessage, deleteMessage, triggerAutoReply } from '@/lib/server/messages';
-import { readJsonFile, messagesPath } from '@/lib/server/storage';
-
-interface MessagesData {
-  conversations: Record<string, { participants: string[]; status: string }>;
-}
+import { getConversations, getMessages, sendMessage, deleteMessage, triggerAutoReply } from '@/lib/server/messages';
 
 // GET /api/messages/[conversationId] — get messages
 export async function GET(
@@ -17,9 +12,12 @@ export async function GET(
   const session = await getAuthSession();
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const data = await readJsonFile<MessagesData>(messagesPath, { conversations: {} });
-  const conv = data.conversations[params.conversationId];
-  if (!conv || !conv.participants.includes(session.user.id)) {
+  // Read through the service layer so the check honours the active storage
+  // backend (Mongo collection or JSON). getConversations() already filters to
+  // conversations the user participates in, so a hit is also the access check.
+  const conversations = await getConversations(session.user.id);
+  const conv = conversations.find((conversation) => conversation.id === params.conversationId);
+  if (!conv) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
@@ -40,10 +38,10 @@ export async function POST(
   const session = await getAuthSession();
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const data = await readJsonFile<MessagesData>(messagesPath, { conversations: {} });
-  const conv = data.conversations[params.conversationId];
+  const conversations = await getConversations(session.user.id);
+  const conv = conversations.find((conversation) => conversation.id === params.conversationId);
 
-  if (!conv || !conv.participants.includes(session.user.id)) {
+  if (!conv) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
   if (conv.status === 'rejected') {
@@ -51,9 +49,7 @@ export async function POST(
   }
   // If still a request, only the requester may send more messages
   if (conv.status === 'request') {
-    const fullData = await readJsonFile<{ conversations: Record<string, { requestFrom?: string }> }>(messagesPath, { conversations: {} });
-    const requestFrom = fullData.conversations[params.conversationId]?.requestFrom;
-    if (requestFrom && requestFrom !== session.user.id) {
+    if (conv.requestFrom && conv.requestFrom !== session.user.id) {
       return NextResponse.json({ error: 'Cannot send until request is accepted' }, { status: 403 });
     }
   }
@@ -103,9 +99,9 @@ export async function DELETE(
   const session = await getAuthSession();
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const data = await readJsonFile<MessagesData>(messagesPath, { conversations: {} });
-  const conv = data.conversations[params.conversationId];
-  if (!conv || !conv.participants.includes(session.user.id)) {
+  const conversations = await getConversations(session.user.id);
+  const conv = conversations.find((conversation) => conversation.id === params.conversationId);
+  if (!conv) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 

@@ -10,7 +10,14 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useSession } from 'next-auth/react';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
+import {
+  addRecentSearch,
+  clearRecentSearches,
+  readRecentSearches,
+  type RecentSearch,
+} from '@/lib/recent-searches';
 import {
   Search,
   X,
@@ -24,6 +31,9 @@ import {
   UserRound,
   Globe,
   FileSignature,
+  TrendingUp,
+  Clock,
+  ArrowUpLeft,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -389,6 +399,129 @@ function FilterChips({ active, onChange }: { active: SearchFilter; onChange: (f:
   );
 }
 
+// ─── Discovery (pre-typing) — Most searched + Recent searches ────────────────
+
+/** Module-level so opening the bar a second time does not refetch. */
+let trendingCache: { at: number; queries: string[] } | null = null;
+const TRENDING_TTL_MS = 5 * 60 * 1000;
+
+function DiscoveryRow({
+  label, kind, idx, active, onRun, onHover,
+}: {
+  label: string;
+  kind: 'trending' | 'recent';
+  idx: number;
+  active: boolean;
+  onRun: (query: string) => void;
+  onHover: (idx: number) => void;
+}) {
+  const Icon = kind === 'trending' ? TrendingUp : Clock;
+  return (
+    <button
+      type="button"
+      // onMouseDown, not onClick: the input's blur would otherwise fire first
+      // and tear the panel down before the click lands.
+      onMouseDown={(e) => { e.preventDefault(); onRun(label); }}
+      onMouseEnter={() => onHover(idx)}
+      className="gs-row"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 11, width: '100%',
+        padding: '8px 12px', borderRadius: 12, border: 'none',
+        background: active ? 'rgba(255,255,255,0.055)' : 'none',
+        textAlign: 'left', cursor: 'pointer', transition: 'background 120ms ease',
+        animation: `gsRowIn 0.18s ${idx * 0.02}s cubic-bezier(0.22,1,0.36,1) both`,
+      }}
+    >
+      <div style={{
+        width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+        background: kind === 'trending' ? 'rgba(251,146,60,0.11)' : 'rgba(255,255,255,0.05)',
+        border: `1px solid ${kind === 'trending' ? 'rgba(251,146,60,0.16)' : 'rgba(255,255,255,0.07)'}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <Icon style={{ width: 13, height: 13, color: kind === 'trending' ? 'rgba(253,186,116,0.80)' : 'rgba(255,255,255,0.40)' }} />
+      </div>
+      <span style={{
+        flex: 1, minWidth: 0, fontSize: 13, fontWeight: 550,
+        color: 'rgba(255,255,255,0.82)', letterSpacing: '-0.01em',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{label}</span>
+      <ArrowUpLeft style={{ width: 12, height: 12, color: 'rgba(255,255,255,0.16)', flexShrink: 0 }} />
+    </button>
+  );
+}
+
+function SectionHeading({ label, action }: { label: string; action?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 8px 4px' }}>
+      <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'rgba(255,255,255,0.22)', whiteSpace: 'nowrap' }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
+      {action}
+    </div>
+  );
+}
+
+function EmptyLine({ text }: { text: string }) {
+  return (
+    <p style={{ margin: '2px 12px 8px', fontSize: 11.5, color: 'rgba(255,255,255,0.24)', letterSpacing: '-0.005em' }}>{text}</p>
+  );
+}
+
+interface DiscoveryProps {
+  trending: string[];
+  recent: RecentSearch[];
+  activeIdx: number;
+  onRun: (query: string) => void;
+  onHover: (idx: number) => void;
+  onClearRecent: () => void;
+}
+
+/**
+ * Shown while the input is empty, on both desktop and mobile. Once the user
+ * types, the caller swaps this out for the existing results panel — there is
+ * only ever one search implementation behind both.
+ */
+function DiscoveryPanel({ trending, recent, activeIdx, onRun, onHover, onClearRecent }: DiscoveryProps) {
+  return (
+    <div style={{ overflowY: 'auto', maxHeight: 420, scrollbarWidth: 'none', padding: '0 6px 10px' }}>
+      <SectionHeading label="Most searched" />
+      {trending.length > 0
+        ? trending.map((q, i) => (
+            <DiscoveryRow key={`t-${q}`} label={q} kind="trending" idx={i}
+              active={activeIdx === i} onRun={onRun} onHover={onHover} />
+          ))
+        : <EmptyLine text="No popular searches yet." />}
+
+      <div style={{ height: 6 }} />
+
+      <SectionHeading
+        label="Recent searches"
+        action={recent.length > 0 ? (
+          <button
+            type="button"
+            onMouseDown={(e) => { e.preventDefault(); onClearRecent(); }}
+            style={{
+              border: 'none', background: 'none', cursor: 'pointer', padding: '0 2px',
+              fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
+              color: 'rgba(255,255,255,0.30)', transition: 'color 120ms ease',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.65)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.30)'; }}
+          >
+            Clear
+          </button>
+        ) : undefined}
+      />
+      {recent.length > 0
+        ? recent.map((entry, i) => (
+            <DiscoveryRow key={`r-${entry.query}`} label={entry.query} kind="recent"
+              idx={trending.length + i} active={activeIdx === trending.length + i}
+              onRun={onRun} onHover={onHover} />
+          ))
+        : <EmptyLine text="No recent searches yet." />}
+    </div>
+  );
+}
+
 // ─── Main dropdown panel ──────────────────────────────────────────────────────
 
 interface DropdownProps {
@@ -504,6 +637,12 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
     const [isMounted,    setIsMounted]    = useState(false);
     const [cycleIdx,     setCycleIdx]     = useState(0);
     const [activeFilter, setActiveFilter] = useState<SearchFilter>('all');
+    const [trending,     setTrending]     = useState<string[]>(() => trendingCache?.queries ?? []);
+    const [recent,       setRecent]       = useState<RecentSearch[]>([]);
+    const [discoveryIdx, setDiscoveryIdx] = useState(-1);
+
+    const { data: session } = useSession();
+    const userId = session?.user?.id || null;
 
     const inputDesktopRef = useRef<HTMLInputElement>(null);
     const inputMobileRef  = useRef<HTMLInputElement>(null);
@@ -527,7 +666,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
 
     const closeAll = useCallback(() => {
       setDesktopOpen(false); setMobileOpen(false);
-      setQuery(''); setDbResults([]); setLoading(false); setActiveFilter('all');
+      setQuery(''); setDbResults([]); setLoading(false); setActiveFilter('all'); setDiscoveryIdx(-1);
       if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
       if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     }, []);
@@ -586,7 +725,71 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
       setQuery(value);
       fetchDb(value, activeFilter);
       setDesktopOpen(true);
+      setDiscoveryIdx(-1);
     }, [fetchDb, activeFilter]);
+
+    /* ── Discovery data ──────────────────────────────────────────────────── */
+
+    // Recent searches are read from localStorage, so they are on screen in the
+    // same frame the panel opens — no request, no spinner.
+    const isOpen = desktopOpen || mobileOpen;
+    useEffect(() => {
+      if (!isOpen) return;
+      setRecent(readRecentSearches(userId));
+    }, [isOpen, userId]);
+
+    // Most searched comes from the shared telemetry aggregate. Fetched at most
+    // once per 5 min per tab, never per keystroke.
+    useEffect(() => {
+      if (!isOpen) return;
+      if (trendingCache && Date.now() - trendingCache.at < TRENDING_TTL_MS) {
+        setTrending(trendingCache.queries);
+        return;
+      }
+      let cancelled = false;
+      fetch('/api/search/trending')
+        .then((res) => (res.ok ? res.json() : { queries: [] }))
+        .then((data: { queries?: string[] }) => {
+          const queries = Array.isArray(data.queries) ? data.queries : [];
+          trendingCache = { at: Date.now(), queries };
+          if (!cancelled) setTrending(queries);
+        })
+        .catch(() => { /* discovery is optional — leave the section empty */ });
+      return () => { cancelled = true; };
+    }, [isOpen]);
+
+    /**
+     * Commit a search — the single place a query is recorded as "the user
+     * actually searched this". Called on Enter, on opening a result, and by
+     * one-click discovery items. Never on keystrokes.
+     */
+    const commitSearch = useCallback((value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      setRecent(addRecentSearch(trimmed, userId));
+    }, [userId]);
+
+    /**
+     * One-click execution for Most searched / Recent searches.
+     *
+     * Runs exactly the path a typed query takes — same `fetchDb`, same
+     * /api/search call, same results panel. The only difference is that the
+     * query arrives preselected instead of typed, so no Enter is needed.
+     */
+    const runSearch = useCallback((value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return;
+      setQuery(trimmed);
+      setDiscoveryIdx(-1);
+      commitSearch(trimmed);
+      fetchDb(trimmed, activeFilter);
+      if (!mobileOpen) setDesktopOpen(true);
+      (mobileOpen ? inputMobileRef : inputDesktopRef).current?.focus();
+    }, [commitSearch, fetchDb, activeFilter, mobileOpen]);
+
+    const handleClearRecent = useCallback(() => {
+      setRecent(clearRecentSearches(userId));
+    }, [userId]);
 
     const handleFilterChange = useCallback((f: SearchFilter) => {
       setActiveFilter(f);
@@ -606,8 +809,53 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
     }, [query, activeFilter]);
 
     // Whether to show the dropdown (only when there are results ready OR we need the filter UI)
+    const hasQuery   = query.trim().length > 0;
     const hasContent = localResults.length > 0 || filteredDbResults.length > 0 || (!loading && query.trim().length >= 2);
-    const dropdownVisible = desktopOpen && hasContent;
+    // Empty input now opens the discovery view instead of nothing at all.
+    const dropdownVisible = desktopOpen && (hasContent || !hasQuery);
+
+    const discoveryItems = useMemo(
+      () => [...trending, ...recent.map((entry) => entry.query)],
+      [trending, recent],
+    );
+
+    /**
+     * Keyboard: ↑/↓ walk the discovery list and Enter runs the highlighted item
+     * (identical to clicking it). With text typed, Enter commits the query the
+     * user is already looking at. Escape keeps its existing close behaviour.
+     */
+    const handleInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Escape') { closeAll(); return; }
+
+      const browsing = !hasQuery && discoveryItems.length > 0;
+
+      if (browsing && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        setDiscoveryIdx((idx) => {
+          const step = e.key === 'ArrowDown' ? 1 : -1;
+          const next = idx + step;
+          if (next < 0) return discoveryItems.length - 1;
+          if (next >= discoveryItems.length) return 0;
+          return next;
+        });
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (browsing && discoveryIdx >= 0) {
+          e.preventDefault();
+          runSearch(discoveryItems[discoveryIdx]);
+          return;
+        }
+        if (hasQuery) commitSearch(query);
+      }
+    }, [closeAll, hasQuery, discoveryItems, discoveryIdx, runSearch, commitSearch, query]);
+
+    /** Opening a result is a committed search — worth remembering. */
+    const handleResultOpen = useCallback(() => {
+      if (hasQuery) commitSearch(query);
+      closeAll();
+    }, [hasQuery, commitSearch, query, closeAll]);
 
     // Track input bar position for portal
     useEffect(() => {
@@ -645,7 +893,12 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
     const activePlaceholder = placeholder ?? cycle[cycleIdx];
     const dropProps: DropdownProps = {
       query, localResults, dbResults: filteredDbResults, loading, activeFilter,
-      onFilterChange: handleFilterChange, onClose: closeAll, intentHint,
+      onFilterChange: handleFilterChange, onClose: handleResultOpen, intentHint,
+    };
+
+    const discoveryProps: DiscoveryProps = {
+      trending, recent, activeIdx: discoveryIdx,
+      onRun: runSearch, onHover: setDiscoveryIdx, onClearRecent: handleClearRecent,
     };
 
     // Input border glow when actively loading
@@ -673,6 +926,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
             @keyframes gsPulse  { 0%,100%{opacity:0.4} 50%{opacity:1} }
             @keyframes gsBarSweep { 0%{transform:translateX(-120%)} 100%{transform:translateX(450%)} }
             @keyframes gsFadeIn { from{opacity:0;transform:translateY(-6px) scale(0.98)} to{opacity:1;transform:none} }
+            @keyframes gsBackdropIn { from{opacity:0} to{opacity:1} }
           `}</style>
         )}
 
@@ -700,7 +954,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
               onFocus={() => setDesktopOpen(true)}
-              onKeyDown={(e) => { if (e.key === 'Escape') closeAll(); }}
+              onKeyDown={handleInputKeyDown}
               placeholder={activePlaceholder}
               className="[&::placeholder]:text-white/35"
               style={{
@@ -759,29 +1013,48 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
           </div>
         </div>
 
-        {/* ── Desktop portalled dropdown — only when content is ready ── */}
+        {/* ── Desktop portalled glass panel ── */}
         {isMounted && dropdownVisible && portalRect && createPortal(
-          <div
-            ref={portalRef}
-            style={{
-              position: 'fixed',
-              top: portalRect.top,
-              left: portalRect.left,
-              width: portalRect.width,
-              zIndex: 9980,
-              borderRadius: 18,
-              overflow: 'hidden',
-              background: 'rgba(9,9,12,0.82)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(64px) saturate(2)',
-              WebkitBackdropFilter: 'blur(64px) saturate(2)',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.70), 0 4px 16px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.06)',
-              animation: 'gsFadeIn 0.18s cubic-bezier(0.22,1,0.36,1) both',
-              paddingTop: 10,
-            }}
-          >
-            <DropdownPanel {...dropProps} />
-          </div>,
+          <>
+            {/* Subdued backdrop — focuses attention on search without blacking
+                out the page.
+                Starts just below the search bar so the nav and the input itself
+                stay crisp, and is pointer-events:none so the input remains
+                clickable no matter how the header stacks. Closing is already
+                handled by the click-outside listener. */}
+            <div
+              style={{
+                position: 'fixed', inset: 0, top: Math.max(0, portalRect.top - 5),
+                zIndex: 9970, pointerEvents: 'none',
+                background: 'rgba(0,0,0,0.34)',
+                backdropFilter: 'blur(6px)',
+                WebkitBackdropFilter: 'blur(6px)',
+                animation: 'gsBackdropIn 0.20s ease both',
+              }}
+            />
+            <div
+              ref={portalRef}
+              style={{
+                position: 'fixed',
+                top: portalRect.top,
+                left: portalRect.left,
+                width: portalRect.width,
+                maxWidth: 'calc(100vw - 24px)',
+                zIndex: 9980,
+                borderRadius: 18,
+                overflow: 'hidden',
+                background: 'rgba(14,14,17,0.78)',
+                border: '1px solid rgba(255,255,255,0.10)',
+                backdropFilter: 'blur(64px) saturate(2)',
+                WebkitBackdropFilter: 'blur(64px) saturate(2)',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.70), 0 4px 16px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.07)',
+                animation: 'gsFadeIn 0.18s cubic-bezier(0.22,1,0.36,1) both',
+                paddingTop: 10,
+              }}
+            >
+              {hasQuery ? <DropdownPanel {...dropProps} /> : <DiscoveryPanel {...discoveryProps} />}
+            </div>
+          </>,
           document.body,
         )}
 
@@ -836,6 +1109,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
+                  onKeyDown={handleInputKeyDown}
                   className="[&::placeholder]:text-white/35"
                   style={{
                     flex: 1, background: 'transparent', border: 'none', outline: 'none',
@@ -878,40 +1152,11 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                   </div>
                 )}
 
-                {/* Empty state — quick links */}
-                {!query.trim() && (
-                  <div style={{ padding: '16px 14px' }}>
-                    <p style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.22)', marginBottom: 10, paddingLeft: 2 }}>Quick Access</p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      {([
-                        { label: 'Feed',               sub: 'Browse published content',     href: '/published',  Icon: Globe },
-                        { label: 'People',             sub: 'Discover professionals',       href: '/people',     Icon: UserRound },
-                        { label: 'E-Sign Studio',      sub: 'Create & sign documents',      href: '/esign',      Icon: FileSignature },
-                        { label: 'Gigs',               sub: 'Find & post opportunities',    href: '/gigs',       Icon: Briefcase },
-                        { label: 'My Documents',       sub: 'Your document workspace',      href: '/documents',  Icon: FileText },
-                      ] as Array<{ label:string; sub:string; href:string; Icon: React.ComponentType<{style?:React.CSSProperties}> }>).map(({ label, sub, href, Icon }, i) => (
-                        <a
-                          key={href}
-                          href={href}
-                          onClick={closeAll}
-                          className="gsm-row"
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 13, padding: '11px 10px',
-                            borderRadius: 14, textDecoration: 'none',
-                            animation: `gsm-row 0.22s ${i * 0.04}s cubic-bezier(0.22,1,0.36,1) both`,
-                          }}
-                        >
-                          <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Icon style={{ width: 17, height: 17, color: 'rgba(255,255,255,0.40)' } as React.CSSProperties} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14.5, fontWeight: 600, color: 'rgba(255,255,255,0.82)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>{label}</div>
-                            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.30)', marginTop: 2, lineHeight: 1.3 }}>{sub}</div>
-                          </div>
-                          <ChevronRight style={{ width: 14, height: 14, color: 'rgba(255,255,255,0.16)', flexShrink: 0 } as React.CSSProperties} />
-                        </a>
-                      ))}
-                    </div>
+                {/* Empty state — Most searched + Recent searches (same
+                    discovery view as desktop, same one-click execution) */}
+                {!hasQuery && (
+                  <div style={{ padding: '10px 8px 4px' }}>
+                    <DiscoveryPanel {...discoveryProps} />
                   </div>
                 )}
 

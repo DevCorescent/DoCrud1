@@ -9,6 +9,7 @@ import { useSession, signOut } from 'next-auth/react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
+import { PresenceDot } from '@/components/PresenceBadge';
 import {
   Activity,
   ArrowLeft,
@@ -1953,7 +1954,12 @@ function HpMetaChips({ body, byline, category }: { body: string; byline: string;
 }
 
 
-function HomepageFeedCard({ item }: { item: HpFeedItem }) {
+/**
+ * Memoised: the feed container re-renders on scroll, sort, category and trend
+ * updates, and without this every visible card re-rendered with it. `item`
+ * object identity is stable between fetches, so a shallow compare is enough.
+ */
+const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: HpFeedItem }) {
   const router = useRouter();
   const [liked,      setLiked]      = React.useState(item.likedByViewer ?? false);
   const [likeCount,  setLikeCount]  = React.useState(item.likesCount ?? 0);
@@ -2013,7 +2019,8 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
             ) : (
               <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
             )}
-            {item.isReal && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
+            {/* Presence — green only while the author is genuinely online now. */}
+            <PresenceDot userId={item.uploadedByUserId} size="sm" />
           </div>
           <p className="text-[11px] text-white/35 mt-0.5 truncate">
             {item.badge}{authorMeta ? ` · ${authorMeta}` : ''} · {hpTimeAgo(item.postedAt)}
@@ -2149,7 +2156,7 @@ function HomepageFeedCard({ item }: { item: HpFeedItem }) {
       </div>
     </article>
   );
-}
+});
 
 /* localStorage helpers — mirror PublishedPage */
 type HpTrendEntry = { count: number; trendedByViewer: boolean; category: string; title: string; chips: string[] };
@@ -2209,36 +2216,18 @@ function HomepageLiveFeed() {
 
   /* initial load */
   React.useEffect(() => {
-    const t0 = Date.now();
-    console.log('[hp-feed] fetch START');
-    fetch('/api/public/published?limit=20')
-      .then(r => {
-        console.log(`[hp-feed] response received in ${Date.now() - t0}ms — status: ${r.status}`);
-        return r.json();
-      })
+    const controller = new AbortController();
+    fetch('/api/public/published?limit=20', { signal: controller.signal })
+      .then(r => r.json())
       .then((d: { items?: HpFeedItem[]; total?: number; hasMore?: boolean }) => {
-        console.log(`[hp-feed] JSON parsed in ${Date.now() - t0}ms — items: ${Array.isArray(d.items) ? d.items.length : 'NOT ARRAY'} total: ${d.total}`);
-        if (!Array.isArray(d.items)) {
-          console.error('[hp-feed] unexpected shape:', JSON.stringify(d).slice(0, 300));
-          return;
-        }
-        /* log image sources */
-        const thumbMongo   = d.items.filter(i => i.thumbnailUrl?.startsWith('/api/')).length;
-        const thumbCloud   = d.items.filter(i => i.thumbnailUrl && !i.thumbnailUrl.startsWith('/api/') && !i.thumbnailUrl.startsWith('data:')).length;
-        const thumbNone    = d.items.filter(i => !i.thumbnailUrl).length;
-        const avatarSet    = d.items.filter(i => i.avatarUrl).length;
-        const avatarMongo  = d.items.filter(i => i.avatarUrl?.startsWith('/api/')).length;
-        const avatarCloud  = d.items.filter(i => i.avatarUrl && !i.avatarUrl.startsWith('/api/')).length;
-        console.log(`[hp-feed] thumbnails — mongodb: ${thumbMongo}, cloud: ${thumbCloud}, none: ${thumbNone}`);
-        console.log(`[hp-feed] avatars — total set: ${avatarSet}, mongodb: ${avatarMongo}, cloud: ${avatarCloud}, missing: ${d.items.length - avatarSet}`);
+        if (!Array.isArray(d.items)) return;
         setAllItems(d.items);
         d.items.forEach(i => knownIds.current.add(i.id));
-        console.log(`[hp-feed] state set in ${Date.now() - t0}ms`);
       })
-      .catch((err) => {
-        console.error(`[hp-feed] FETCH ERROR after ${Date.now() - t0}ms:`, err);
-      })
-      .finally(() => setLoading(false));
+      .catch(() => { /* aborted or offline — the poll below reconciles */ })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    // React 18 StrictMode double-mounts in dev; aborting stops the duplicate.
+    return () => controller.abort();
   }, []);
 
   /* poll every 60s for new posts */
@@ -2284,16 +2273,38 @@ function HomepageLiveFeed() {
     }
   }, [newItems]);
 
+  /**
+   * Trend counters live in localStorage and are written by this same tab.
+   *
+   * This used to poll every 2 s and unconditionally setState four times, so the
+   * whole feed re-rendered every 2 seconds forever even when nothing had
+   * changed (fresh array identities defeat any downstream memoisation).
+   *
+   * Now: poll far less often, and only setState when the serialised value has
+   * actually changed. A tab left open costs nothing.
+   */
   React.useEffect(() => {
+    let lastSignature = '';
     const sync = () => {
-      setTrends(hpReadTrends());
-      setTagTrends(hpReadTagTrends());
-      setCatTrends(hpReadCatTrends());
-      setHistory(hpReadTrendHistory());
+      const next = {
+        trends: hpReadTrends(),
+        tagTrends: hpReadTagTrends(),
+        catTrends: hpReadCatTrends(),
+        history: hpReadTrendHistory(),
+      };
+      const signature = JSON.stringify(next);
+      if (signature === lastSignature) return;
+      lastSignature = signature;
+      setTrends(next.trends);
+      setTagTrends(next.tagTrends);
+      setCatTrends(next.catTrends);
+      setHistory(next.history);
     };
     sync();
-    const iv = setInterval(sync, 2000);
-    return () => clearInterval(iv);
+    const iv = setInterval(sync, 15_000);
+    // A trend written in another tab should still show up promptly.
+    window.addEventListener('storage', sync);
+    return () => { clearInterval(iv); window.removeEventListener('storage', sync); };
   }, []);
 
   const filtered = React.useMemo(() => {

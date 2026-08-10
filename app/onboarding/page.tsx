@@ -2388,8 +2388,9 @@ function OnboardingPageInner() {
                             </div>
                         }
                       </div>
-                      {/* Online dot */}
-                      <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#050508] bg-emerald-400" />
+                      {/* No presence dot here: the referrer lookup returns no
+                          user id, so there is nothing authoritative to show.
+                          A decorative green dot would read as "online". */}
                     </div>
                     {/* Text */}
                     <div className="flex-1 min-w-0">

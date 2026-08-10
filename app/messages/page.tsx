@@ -60,6 +60,7 @@ import {
   ChevronUp as ChevronUpIcon,
 } from 'lucide-react';
 import InfinityUpgradeModal from '@/components/InfinityUpgradeModal';
+import { PresenceBadge, PresenceDot } from '@/components/PresenceBadge';
 
 /* ─── Types ─────────────────────────────────────────────── */
 interface ChatMeta {
@@ -1148,6 +1149,7 @@ function InfoPanel({
           <Avatar user={otherUser} size={12} />
           <div className="text-center">
             <p style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>{otherUser.name}</p>
+            <div className="mt-1 flex justify-center"><PresenceBadge userId={otherUser.id} /></div>
             {otherUser.headline && <p style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.30)', marginTop: 2 }}>{otherUser.headline}</p>}
           </div>
           <Link
@@ -2073,7 +2075,12 @@ function MessagesPageInner() {
           <div className="flex-1 min-w-0 flex items-center gap-2">
             {showMobileChat && otherUser ? (
               <Link href={`/u/${otherUser.id}`} className="flex items-center gap-2 min-w-0">
-                <Avatar user={otherUser} size={7} />
+                <div className="relative flex-shrink-0">
+                  <Avatar user={otherUser} size={7} />
+                  <span className="absolute -bottom-0.5 -right-0.5">
+                    <PresenceDot userId={otherUser.id} size="sm" />
+                  </span>
+                </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="truncate font-semibold" style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.90)' }}>{otherUser.name}</p>
@@ -2215,6 +2222,9 @@ function MessagesPageInner() {
                         style={{ animationDelay: `${i * 18}ms`, background: isAct ? 'rgba(59,130,246,0.07)' : '', borderLeftColor: isAct ? '#3b82f6' : 'transparent', minHeight: 64 }}>
                         <div className="relative flex-shrink-0">
                           <Avatar user={conv.otherUser} size={10} />
+                          <span className="absolute -bottom-0.5 -right-0.5">
+                            <PresenceDot userId={conv.otherUser.id} size="sm" />
+                          </span>
                           {unread > 0 && <span className="absolute -top-0.5 -right-0.5 rounded-full border-[2px]" style={{ width: 11, height: 11, background: '#3b82f6', borderColor: '#0D0D0F', boxShadow: '0 0 7px rgba(59,130,246,0.65)' }} />}
                         </div>
                         <div className="flex-1 min-w-0">

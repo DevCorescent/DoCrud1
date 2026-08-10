@@ -556,7 +556,6 @@ export default function PublicTalentProfilePage(props: {
                       <div className="relative flex h-full w-full items-center justify-center text-2xl font-semibold text-slate-900">
                         {!props.entry.avatarDataUrl ? String(props.entry.displayName || 'T').trim().slice(0, 1).toUpperCase() : null}
                       </div>
-                      <span className="absolute bottom-1.5 right-1.5 h-4 w-4 rounded-full bg-emerald-500 ring-2 ring-white" />
                     </div>
                     <div className="min-w-0">
                       <h1 className="text-2xl font-semibold tracking-[-0.04em] text-slate-950">{props.entry.displayName}</h1>

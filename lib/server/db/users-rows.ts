@@ -31,6 +31,58 @@ export async function selectUserRowByEmail(email: string): Promise<StoredUser | 
   return doc ? strip(doc) : null;
 }
 
+/**
+ * Presence-only projection for a batch of user ids.
+ *
+ * One indexed `$in` query returning just `lastSeenAt` — deliberately not
+ * `selectAllUserRows()`, which would pull the whole users collection (and every
+ * heartbeat write invalidates the users cache, so that read would rarely hit).
+ *
+ * Returns null when Mongo is not configured so the caller can fall back to the
+ * JSON storage path.
+ */
+export interface PresenceRow {
+  lastSeenAt: string | null;
+  presenceEndedAt: string | null;
+}
+
+export async function selectUserPresenceRows(
+  ids: string[],
+): Promise<Map<string, PresenceRow> | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const docs = await db.collection<StoredUser & { _id: string }>(COL)
+    .find(
+      { _id: { $in: ids as never } },
+      { projection: { _id: 1, lastSeenAt: 1, presenceEndedAt: 1 } },
+    )
+    .toArray();
+
+  return new Map(docs.map((doc) => [
+    String(doc._id),
+    { lastSeenAt: doc.lastSeenAt ?? null, presenceEndedAt: doc.presenceEndedAt ?? null },
+  ]));
+}
+
+/** Stamp presence without rewriting the rest of the user document. */
+export async function updateUserLastSeenRow(id: string, lastSeenAt: string): Promise<boolean> {
+  const db = await getMongoDb();
+  if (!db) return false;
+  const result = await db.collection(COL)
+    .updateOne({ _id: id as never }, { $set: { lastSeenAt } });
+  return result.matchedCount > 0;
+}
+
+/** Mark presence as explicitly ended (logout). Leaves `lastSeenAt` intact. */
+export async function updateUserPresenceEndedRow(id: string, presenceEndedAt: string): Promise<boolean> {
+  const db = await getMongoDb();
+  if (!db) return false;
+  const result = await db.collection(COL)
+    .updateOne({ _id: id as never }, { $set: { presenceEndedAt } });
+  return result.matchedCount > 0;
+}
+
 export async function upsertUserRow(user: StoredUser): Promise<void> {
   const db = await getMongoDb();
   if (!db) return;

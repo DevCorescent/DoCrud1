@@ -131,7 +131,26 @@ export interface User {
   invitedByUserId?: string;
   invitedByEmail?: string;
   inviteStatus?: 'pending' | 'active' | 'disabled';
+  /**
+   * Analytics signal — "this account did something". Written by
+   * appendUserActivityEvent() from server-side activity events. NOT presence.
+   */
   lastActivityAt?: string;
+  /**
+   * Presence signal — ISO-8601 UTC timestamp of the last authenticated
+   * heartbeat from a visible, recently-interacted browser tab.
+   *
+   * Written ONLY by POST /api/presence/ping. Never by analytics, telemetry,
+   * document generation, background jobs or login.
+   */
+  lastSeenAt?: string;
+  /**
+   * Presence stop marker — ISO-8601 UTC timestamp written when the user signs
+   * out. Presence counts as ended while this is at or after `lastSeenAt`, so a
+   * logout drops the online dot immediately instead of waiting out the
+   * threshold. The next heartbeat writes a newer `lastSeenAt` and supersedes it.
+   */
+  presenceEndedAt?: string;
   workspaceAccessMode?: 'standard' | 'board_room_only';
   boardRoomIds?: string[];
   policyAcceptance?: {

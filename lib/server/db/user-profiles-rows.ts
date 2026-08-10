@@ -23,6 +23,30 @@ export async function selectUserProfileRow(userId: string): Promise<UserProfileD
   return profile as UserProfileData;
 }
 
+/**
+ * Avatars for a batch of users — one indexed `$in` projecting a single field.
+ *
+ * The feed used to call selectUserProfileRow() per author: N round trips to the
+ * database, each pulling the WHOLE profile document (which can carry a base64
+ * avatar, resume text and portfolio blobs) just to read `avatarUrl`.
+ *
+ * Returns null when Mongo is not configured so the caller can fall back to the
+ * JSON store, which is already a single read.
+ */
+export async function selectUserProfileAvatarRows(
+  userIds: string[],
+): Promise<Map<string, string | null> | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  if (userIds.length === 0) return new Map();
+
+  const docs = await db.collection<UserProfileData & { _id: string }>(COL)
+    .find({ _id: { $in: userIds as never } }, { projection: { _id: 1, avatarUrl: 1 } })
+    .toArray();
+
+  return new Map(docs.map((doc) => [String(doc._id), doc.avatarUrl ?? null]));
+}
+
 export async function upsertUserProfileRow(userId: string, profile: UserProfileData): Promise<void> {
   const db = await getMongoDb();
   if (!db) return;

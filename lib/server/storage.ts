@@ -174,6 +174,16 @@ export async function ensureDirectory(filePath: string) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
 }
 
+/**
+ * Per-read tracing. Every storage read used to log a line; on a busy route that
+ * is synchronous stdout work on the request path for no production benefit.
+ * Set DOCRUD_TRACE_STORAGE=1 to get the old behaviour back when debugging.
+ */
+const TRACE_STORAGE = process.env.DOCRUD_TRACE_STORAGE === '1';
+function trace(message: string) {
+  if (TRACE_STORAGE) console.log(message);
+}
+
 export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
   const label = path.basename(filePath);
   if (getDbPool()) {
@@ -182,14 +192,14 @@ export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T>
       try {
         const value = await adapter.read();
         const count = Array.isArray(value) ? (value as unknown[]).length : typeof value === 'object' && value !== null ? Object.keys(value as object).length : '?';
-        console.log(`[storage] ${label} → DB row-adapter (${count} items)`);
+        trace(`[storage] ${label} → DB row-adapter (${count} items)`);
         return value as T;
       } catch (error) {
         console.error(`[storage] ${label} → DB row-adapter FAILED`, error);
         return fallback;
       }
     }
-    console.log(`[storage] ${label} → getDbPool() set but NO adapter, falling to app_state`);
+    trace(`[storage] ${label} → getDbPool() set but NO adapter, falling to app_state`);
   }
 
   const appStateKey = getAppStateKey(filePath);
@@ -199,10 +209,10 @@ export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T>
       const databaseValue = await readAppState<T>(appStateKey);
       if (databaseValue !== null) {
         const count = Array.isArray(databaseValue) ? (databaseValue as unknown[]).length : '?';
-        console.log(`[storage] ${label} → app_state key=${appStateKey} (${count} items)`);
+        trace(`[storage] ${label} → app_state key=${appStateKey} (${count} items)`);
         return databaseValue;
       }
-      console.log(`[storage] ${label} → app_state key=${appStateKey} not found, returning fallback`);
+      trace(`[storage] ${label} → app_state key=${appStateKey} not found, returning fallback`);
     } catch (error) {
       console.error(`[storage] ${label} → app_state read FAILED`, error);
     }
@@ -213,10 +223,10 @@ export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T>
     const content = await fs.readFile(filePath, 'utf8');
     const parsed = JSON.parse(content) as T;
     const count = Array.isArray(parsed) ? (parsed as unknown[]).length : '?';
-    console.log(`[storage] ${label} → JSON file (${count} items)`);
+    trace(`[storage] ${label} → JSON file (${count} items)`);
     return parsed;
   } catch {
-    console.log(`[storage] ${label} → JSON file not found, returning fallback`);
+    trace(`[storage] ${label} → JSON file not found, returning fallback`);
     return fallback;
   }
 }

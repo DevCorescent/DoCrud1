@@ -2,17 +2,14 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { toggleMessageIndex, getMessageIndex } from '@/lib/server/messages';
-import { readJsonFile, messagesPath } from '@/lib/server/storage';
-
-interface MessagesData {
-  conversations: Record<string, { participants: string[] }>;
-}
+import { getConversations, toggleMessageIndex, getMessageIndex } from '@/lib/server/messages';
 
 async function checkAccess(convId: string, userId: string) {
-  const data = await readJsonFile<MessagesData>(messagesPath, { conversations: {} });
-  const conv = data.conversations[convId];
-  return conv?.participants.includes(userId) ?? false;
+  // Read through the service layer so the check honours the active storage
+  // backend (Mongo collection or JSON). getConversations() already filters to
+  // conversations the user participates in.
+  const conversations = await getConversations(userId);
+  return conversations.some((conversation) => conversation.id === convId);
 }
 
 // GET /api/messages/[conversationId]/index — get bookmarked message IDs

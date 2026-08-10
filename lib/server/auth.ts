@@ -6,7 +6,7 @@ import { normalizeEmail, verifyPassword } from '@/lib/server/security';
 import { applyRoadmapPromotionToSubscription, getDefaultPublicPlan, getEffectiveSaasPlanForUser, isSubscriptionPeriodExpired } from '@/lib/server/saas-plans';
 import { buildPolicyAcceptance } from '@/lib/policy-consent';
 import { getAuthSettings, getAuthSettingsSync } from '@/lib/server/settings';
-import { getStoredUsers, getStoredUserByEmail, saveStoredUsers, upsertStoredUser, type StoredUser } from '@/lib/server/users';
+import { endUserPresence, getStoredUsers, getStoredUserByEmail, saveStoredUsers, upsertStoredUser, type StoredUser } from '@/lib/server/users';
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
 
 export type { StoredUser };
@@ -304,6 +304,25 @@ export function buildAuthOptions(): NextAuthOptions {
       return session;
     },
   },
+    events: {
+      /**
+       * Signing out ends presence immediately.
+       *
+       * The heartbeat stops on its own, but that would leave the last heartbeat
+       * looking fresh (and the green dot lit) for up to the online threshold.
+       * Stamping the stop marker here is the only presence-related touch on the
+       * auth flow — session semantics are unchanged.
+       */
+      async signOut({ token }) {
+        const id = token?.id ? String(token.id) : '';
+        if (!id) return;
+        try {
+          await endUserPresence(id);
+        } catch (err) {
+          console.error('[auth] failed to end presence on sign out:', err);
+        }
+      },
+    },
     pages: {
       signIn: '/login',
     },

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PublicFaceStarIcon, PUBLIC_FACE_CATEGORY_LABELS } from '@/components/PublicFaceBadge';
+import { PresenceDot } from '@/components/PresenceBadge';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft,
@@ -87,6 +88,9 @@ function Avatar({ person, size }: { person: Person; size: number }) {
           ? <img src={person.profile.avatarUrl} alt={person.name} className="w-full h-full object-cover" />
           : getInitials(person.name)}
       </div>
+      <span className="absolute -bottom-0.5 -right-0.5 z-20">
+        <PresenceDot userId={person.id} size={size >= 52 ? 'md' : 'sm'} />
+      </span>
     </div>
   );
 }

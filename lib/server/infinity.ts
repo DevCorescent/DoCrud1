@@ -1,11 +1,16 @@
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
 import { getDbPool, getMongoDb } from '@/lib/server/database';
+import {
+  INFINITY_MONTHLY_PAISE,
+  INFINITY_ANNUAL_PAISE,
+  INFINITY_DRIVE_GB,
+} from '@/lib/infinity-plan';
 
 /* ── Constants ──────────────────────────────────────────────────── */
 
-export const INFINITY_MONTHLY_PAISE = 29900;    // ₹299
-export const INFINITY_ANNUAL_PAISE  = 249900;   // ₹2,499
-export const INFINITY_DRIVE_GB      = 5;
+// Canonical values live in lib/infinity-plan.ts (client-safe) and are re-exported
+// here so existing importers of this module keep working unchanged.
+export { INFINITY_MONTHLY_PAISE, INFINITY_ANNUAL_PAISE, INFINITY_DRIVE_GB };
 
 /** Billing + admin grant periods */
 export type InfinityPeriod = 'monthly' | '3m' | '6m' | 'annual';

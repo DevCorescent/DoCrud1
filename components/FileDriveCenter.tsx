@@ -52,6 +52,15 @@ import QRShareDialog, { type QRShareTarget } from '@/components/QRShareDialog';
 import QRScannerDialog, { type AddedShareFile } from '@/components/QRScannerDialog';
 import { listSharesForItem } from '@/lib/shareStore';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
+import {
+  FREE_DRIVE_GB,
+  FREE_PLAN_LABEL,
+  INFINITY_ANNUAL_RUPEES,
+  INFINITY_ANNUAL_SAVING_PCT,
+  INFINITY_DRIVE_GB,
+  INFINITY_MONTHLY_RUPEES,
+  INFINITY_PLAN_LABEL,
+} from '@/lib/infinity-plan';
 
 /* --- Types --------------------------------------------------------------- */
 
@@ -364,28 +373,42 @@ function loadItemsFromStorage(): DriveItem[] | null {
 
 /* --- Drive plans ---------------------------------------------------------- */
 
-interface DrivePlan { id: string; label: string; gb: number; price: number; color: string; popular: boolean; perks: string[]; }
+/**
+ * Drive storage is granted exclusively through Docrud Infinity — the separate
+ * drive-starter / drive-pro plans were removed server-side (see
+ * app/api/billing/drive-upgrade/route.ts). Storage, pricing and plan name all
+ * come from lib/infinity-plan.ts so this UI can never drift from the entitlement.
+ */
+interface DrivePlan {
+  id: string; label: string; gb: number;
+  price: number;        // monthly ₹
+  annualPrice: number;  // annual ₹
+  color: string; popular: boolean; perks: string[];
+}
 const DRIVE_PLANS: DrivePlan[] = [
-  { id:'free',    label:'Free',    gb:  0.5, price:  0, color:'#94a3b8', popular:false,
-    perks:['500 MB storage','Upload files & folders','In-app file viewer','Search, sort & pagination','Basic link sharing'] },
-  { id:'starter', label:'Starter', gb: 10,   price: 49, color:'#818cf8', popular:false,
-    perks:['10 GB storage','Email & WhatsApp sharing','Color label tagging','Offline availability','Private & password-protected files'] },
-  { id:'pro',     label:'Pro',     gb: 50,   price: 99, color:'#a78bfa', popular:true,
-    perks:['50 GB storage','QR code sharing & scanner','Folder lock protection','Move files across folders','File history & audit trail'] },
+  { id:'free', label:FREE_PLAN_LABEL, gb:FREE_DRIVE_GB, price:0, annualPrice:0, color:'#94a3b8', popular:false,
+    perks:['500 MB storage','Upload files & folders','In-app file viewer','Search, sort & pagination','Private & password-protected files'] },
+  { id:'infinity', label:INFINITY_PLAN_LABEL, gb:INFINITY_DRIVE_GB, price:INFINITY_MONTHLY_RUPEES, annualPrice:INFINITY_ANNUAL_RUPEES, color:'#818cf8', popular:true,
+    perks:[
+      `${INFINITY_DRIVE_GB} GB drive storage`,
+      'Email, WhatsApp & QR sharing',
+      'Folder lock, file move & history',
+      'Color labels & offline availability',
+      'Business pages, unlimited services & direct messaging',
+    ] },
 ];
 
 /** Maps server-side planId → local DRIVE_PLANS id */
 function serverPlanToLocal(serverPlanId: string): string {
-  if (serverPlanId === 'drive-pro')     return 'pro';
-  if (serverPlanId === 'drive-starter') return 'starter';
-  if (serverPlanId === 'infinity')      return 'pro'; // Infinity gets Pro-tier features
+  // 'infinity' plus legacy grandfathered drive-* plan ids all resolve to the paid tier
+  if (serverPlanId && serverPlanId !== 'free') return 'infinity';
   return 'free';
 }
 
 /* --- Feature gating ------------------------------------------------------- */
 
 const PLAN_TIER: Record<string, number> = {
-  free: 0, starter: 1, pro: 2,
+  free: 0, infinity: 1,
 };
 
 type DriveFeature =
@@ -393,24 +416,24 @@ type DriveFeature =
   | 'qrShare' | 'qrScanner' | 'folderLock' | 'fileMove' | 'fileHistory' | 'bulkMoveShare';
 
 const FEATURE_MIN_TIER: Record<DriveFeature, number> = {
-  emailShare:    1,  // Starter+
+  emailShare:    1,  // Docrud Infinity
   whatsappShare: 1,
   fileLabels:    1,
   offlineToggle: 1,
   filePrivacy:   0,  // free for all plans
-  qrShare:       2,  // Pro+
-  qrScanner:     2,
-  folderLock:    2,
-  fileMove:      2,
-  fileHistory:   2,
-  bulkMoveShare: 2,
+  qrShare:       1,
+  qrScanner:     1,
+  folderLock:    1,
+  fileMove:      1,
+  fileHistory:   1,
+  bulkMoveShare: 1,
 };
 
 const FEATURE_REQUIRED_PLAN: Record<DriveFeature, string> = {
-  emailShare:    'Starter', whatsappShare: 'Starter', fileLabels:  'Starter',
-  offlineToggle: 'Starter', filePrivacy:   'Starter',
-  qrShare:       'Pro',     qrScanner:     'Pro',     folderLock:  'Pro',
-  fileMove:      'Pro',     fileHistory:   'Pro',     bulkMoveShare:'Pro',
+  emailShare:    INFINITY_PLAN_LABEL, whatsappShare: INFINITY_PLAN_LABEL, fileLabels:   INFINITY_PLAN_LABEL,
+  offlineToggle: INFINITY_PLAN_LABEL, filePrivacy:   INFINITY_PLAN_LABEL,
+  qrShare:       INFINITY_PLAN_LABEL, qrScanner:     INFINITY_PLAN_LABEL, folderLock:   INFINITY_PLAN_LABEL,
+  fileMove:      INFINITY_PLAN_LABEL, fileHistory:   INFINITY_PLAN_LABEL, bulkMoveShare: INFINITY_PLAN_LABEL,
 };
 
 /* --- Storage helpers ------------------------------------------------------ */
@@ -520,7 +543,8 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
 
   /* -- Drive plan + storage -- */
   const [currentPlan, setCurrentPlan] = useState(() =>
-    typeof window !== 'undefined' ? (localStorage.getItem(PLAN_KEY) ?? 'free') : 'free'
+    // Normalise so plan ids cached before the Infinity-only rollout still resolve
+    typeof window !== 'undefined' ? serverPlanToLocal(localStorage.getItem(PLAN_KEY) ?? 'free') : 'free'
   );
   const [serverLimitGb,  setServerLimitGb]  = useState<number | null>(null);
   const [quotaLoaded,    setQuotaLoaded]    = useState(false);
@@ -641,7 +665,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
     for (const t of thresholds) {
       if (storagePct >= t.pct && !localStorage.getItem(t.key)) {
         localStorage.setItem(t.key, '1');
-        const gbLabel = storagePlan.gb >= 1024 ? `${storagePlan.gb / 1024} TB` : `${storagePlan.gb} GB`;
+        const gbLabel = storagePlan.gb < 1 ? `${Math.round(storagePlan.gb * 1024)} MB` : `${storagePlan.gb} GB`;
         fetch('/api/billing/storage-alert', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -658,13 +682,10 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storagePct]);
 
-  /* -- Razorpay drive plan checkout -- */
+  /* -- Razorpay Docrud Infinity checkout (drive storage comes with Infinity) -- */
   const handleDriveUpgrade = useCallback(async (planId: string) => {
+    // Free is every account's baseline — nothing to purchase or downgrade to.
     if (planId === 'free') {
-      setCurrentPlan('free');
-      localStorage.removeItem('drive_alert_75');
-      localStorage.removeItem('drive_alert_90');
-      localStorage.removeItem('drive_alert_100');
       setPlansOpen(false);
       return;
     }
@@ -673,10 +694,10 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
     setDriveCheckoutError('');
 
     try {
-      const res = await fetch('/api/billing/drive-upgrade', {
+      const res = await fetch('/api/billing/infinity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planId: `drive-${planId}`, period: billingPeriod }),
+        body: JSON.stringify({ period: billingPeriod }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.order?.id || !data?.keyId) {
@@ -697,21 +718,20 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
         key: data.keyId,
         amount: data.pricing?.totalAmountInPaise,
         currency: 'INR',
-        name: 'Ddrive',
-        description: data.planLabel,
+        name: 'Docrud',
+        description: `${INFINITY_PLAN_LABEL} · ${billingPeriod === 'annual' ? 'Annual' : 'Monthly'}`,
         order_id: data.order.id,
         handler: async (payment: Record<string, string>) => {
           try {
-            const verifyRes = await fetch('/api/billing/drive-upgrade', {
+            const verifyRes = await fetch('/api/billing/infinity', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ ...payment, planId: `drive-${planId}`, period: billingPeriod }),
+              body: JSON.stringify({ ...payment, period: billingPeriod }),
             });
             const verifyData = await verifyRes.json().catch(() => null);
             if (!verifyRes.ok) throw new Error(verifyData?.error || 'Verification failed.');
             setCurrentPlan(planId);
-            const grantedGb: number = verifyData?.grantedGb ?? (DRIVE_PLANS.find(p => p.id === planId)?.gb ?? 0);
-            setServerLimitGb(grantedGb);
+            setServerLimitGb(INFINITY_DRIVE_GB);
             localStorage.setItem(PLAN_KEY, planId);
             localStorage.removeItem('drive_alert_75');
             localStorage.removeItem('drive_alert_90');
@@ -1374,7 +1394,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
             </div>
 
             {/* Scan QR — icon only, neutral styling */}
-            <button onClick={() => { if (!checkFeature('qrScanner')) return; setScannerOpen(true); }} title={featureAvailable('qrScanner') ? 'Scan QR' : 'Requires Pro'}
+            <button onClick={() => { if (!checkFeature('qrScanner')) return; setScannerOpen(true); }} title={featureAvailable('qrScanner') ? 'Scan QR' : `Requires ${INFINITY_PLAN_LABEL}`}
               style={{ width:32, height:32, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.08)', borderRadius:9, cursor:'pointer', flexShrink:0, transition:'background .12s', opacity: featureAvailable('qrScanner') ? 1 : 0.50 }}
               onMouseEnter={e=>(e.currentTarget.style.background='rgba(255,255,255,.08)')} onMouseLeave={e=>(e.currentTarget.style.background='rgba(255,255,255,.04)')}>
               <ScanLine style={{ width:13, height:13, color:'rgba(255,255,255,.50)' }} />
@@ -2343,11 +2363,11 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
                             <button className="fd-act fd-act-secondary" onClick={e=>{e.stopPropagation();toggleStar(item.id);}} style={{ width:26,height:26,borderRadius:7,border:'none',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:item.starred?'rgba(251,191,36,.70)':'rgba(255,255,255,.16)' }}>
                               <Star style={{ width:11, height:11, fill:item.starred?'rgba(251,191,36,.70)':'none' }} />
                             </button>
-                            <button className="fd-act fd-act-secondary fd-hide-mobile" onClick={e=>{e.stopPropagation(); if(!checkFeature('qrShare')) return; setQrShareTarget({id:item.id,name:item.name,kind:isFolder?'folder':'file',fileKind:item.kind});}} style={{ width:26,height:26,borderRadius:7,border:'none',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'rgba(255,255,255,.18)', position:'relative' }} title={featureAvailable('qrShare')?'Share QR':'Requires Pro'}>
+                            <button className="fd-act fd-act-secondary fd-hide-mobile" onClick={e=>{e.stopPropagation(); if(!checkFeature('qrShare')) return; setQrShareTarget({id:item.id,name:item.name,kind:isFolder?'folder':'file',fileKind:item.kind});}} style={{ width:26,height:26,borderRadius:7,border:'none',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'rgba(255,255,255,.18)', position:'relative' }} title={featureAvailable('qrShare')?'Share QR':`Requires ${INFINITY_PLAN_LABEL}`}>
                               <QrCode style={{ width:11, height:11 }} />
                             </button>
                             {!isFolder && (
-                              <button className="fd-act fd-act-secondary fd-hide-mobile" onClick={e=>{e.stopPropagation(); if(!checkFeature('whatsappShare')) return; shareOnWhatsApp(item);}} title={featureAvailable('whatsappShare')?'WhatsApp':'Requires Starter'} style={{ width:26,height:26,borderRadius:7,border:'none',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'rgba(255,255,255,.18)' }}>
+                              <button className="fd-act fd-act-secondary fd-hide-mobile" onClick={e=>{e.stopPropagation(); if(!checkFeature('whatsappShare')) return; shareOnWhatsApp(item);}} title={featureAvailable('whatsappShare')?'WhatsApp':`Requires ${INFINITY_PLAN_LABEL}`} style={{ width:26,height:26,borderRadius:7,border:'none',background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'rgba(255,255,255,.18)' }}>
                                 <MessageCircle style={{ width:11, height:11 }} />
                               </button>
                             )}
@@ -2885,7 +2905,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
             </div>
             <p style={{ margin:'0 0 6px', fontSize:15, fontWeight:700, color:'rgba(255,255,255,.90)' }}>Storage Full</p>
             <p style={{ margin:'0 0 18px', fontSize:12, color:'rgba(255,255,255,.38)', lineHeight:1.6 }}>
-              Your {storagePlan.gb} GB {storagePlan.label} plan is full.<br/>
+              Your {storagePlan.gb < 1 ? `${Math.round(storagePlan.gb * 1024)} MB` : `${storagePlan.gb} GB`} {storagePlan.label} plan is full.<br/>
               Upgrade to keep uploading.
             </p>
             <button onClick={() => { setUpgradeOpen(false); setPlansOpen(true); }}
@@ -2921,7 +2941,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
                 {(['monthly','annual'] as const).map(p => (
                   <button key={p} onClick={() => setBillingPeriod(p)}
                     style={{ padding:'6px 13px', border:'none', background:billingPeriod===p?'rgba(255,255,255,.09)':'transparent', cursor:'pointer', fontSize:11.5, fontWeight:600, color:billingPeriod===p?'rgba(255,255,255,.85)':'rgba(255,255,255,.35)', transition:'all .12s', display:'flex', alignItems:'center', gap:5, whiteSpace:'nowrap' }}>
-                    {p === 'monthly' ? 'Monthly' : <><span>Annual</span><span style={{ fontSize:8.5, fontWeight:700, background:'rgba(255,255,255,.08)', color:'rgba(255,255,255,.50)', borderRadius:4, padding:'1px 5px' }}>–17%</span></>}
+                    {p === 'monthly' ? 'Monthly' : <><span>Annual</span><span style={{ fontSize:8.5, fontWeight:700, background:'rgba(255,255,255,.08)', color:'rgba(255,255,255,.50)', borderRadius:4, padding:'1px 5px' }}>–{INFINITY_ANNUAL_SAVING_PCT}%</span></>}
                   </button>
                 ))}
               </div>
@@ -2945,12 +2965,12 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
 
             {/* -- Plans grid / carousel -- */}
             <div className="fd-plans-scroll fd-scroll" style={{ padding:'20px 24px 24px', overflowY:'auto', flex:1 }}>
-              <div className="fd-plans-grid" style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
+              <div className="fd-plans-grid" style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:12 }}>
                 {DRIVE_PLANS.map(plan => {
                   const isActive     = currentPlan === plan.id;
                   const isBusy       = driveCheckoutBusy === plan.id;
                   const monthlyPrice = plan.price;
-                  const annualPrice  = Math.round(plan.price * 10);
+                  const annualPrice  = plan.annualPrice;
                   const annualFull   = plan.price * 12;
                   return (
                     <div key={plan.id} className="fd-plan-card" style={{
@@ -2984,7 +3004,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
                       {/* Plan name + storage */}
                       <p style={{ margin:'0 0 2px', fontSize:14, fontWeight:700, color:'rgba(255,255,255,.88)', letterSpacing:'-0.01em' }}>{plan.label}</p>
                       <p style={{ margin:'0 0 14px', fontSize:11, color:'rgba(255,255,255,.32)', fontWeight:500 }}>
-                        {plan.gb >= 1024 ? `${plan.gb/1024} TB` : `${plan.gb} GB`} storage
+                        {plan.gb < 1 ? `${Math.round(plan.gb * 1024)} MB` : `${plan.gb} GB`} storage
                       </p>
 
                       {/* Price */}
@@ -3020,7 +3040,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
                       {/* CTA */}
                       <button
                         onClick={e => { e.stopPropagation(); void handleDriveUpgrade(plan.id); }}
-                        disabled={!!driveCheckoutBusy || (isActive && plan.price > 0)}
+                        disabled={!!driveCheckoutBusy || isActive || plan.price === 0}
                         style={{
                           width:'100%', padding:'9px 0', borderRadius:10,
                           border: isActive ? '1px solid rgba(255,255,255,.20)' : '1px solid rgba(255,255,255,.12)',
@@ -3029,7 +3049,7 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
                             : plan.popular
                               ? 'rgba(255,255,255,.08)'
                               : 'rgba(255,255,255,.04)',
-                          cursor: (!!driveCheckoutBusy || (isActive && plan.price > 0)) ? 'not-allowed' : 'pointer',
+                          cursor: (!!driveCheckoutBusy || isActive || plan.price === 0) ? 'not-allowed' : 'pointer',
                           fontSize:12, fontWeight:600,
                           color: isActive ? 'rgba(255,255,255,.85)' : 'rgba(255,255,255,.55)',
                           opacity: !!driveCheckoutBusy && !isBusy ? 0.4 : 1,
@@ -3041,8 +3061,8 @@ export default function FileDriveCenter({ open, onClose }: FileDriveCenterProps)
                         {isActive
                           ? (plan.price === 0 ? '✓ Current plan' : '✓ Active')
                           : isBusy ? 'Processing…'
-                          : plan.price === 0 ? 'Downgrade to Free'
-                          : 'Upgrade'}
+                          : plan.price === 0 ? 'Included with every account'
+                          : `Upgrade to ${INFINITY_PLAN_LABEL}`}
                       </button>
                     </div>
                   );

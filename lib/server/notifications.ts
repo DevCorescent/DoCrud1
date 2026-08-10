@@ -6,6 +6,7 @@ import { buildBillingThreshold } from '@/lib/server/billing';
 import { getUserUsageSummary } from '@/lib/server/saas';
 import { getVisibleDealRooms } from '@/lib/server/deal-rooms';
 import { getDeduplicatedSocialEventsForUser } from '@/lib/server/social-events';
+import { getProfileData } from '@/lib/server/user-profiles';
 import { getDbPool, getMongoDb } from '@/lib/server/database';
 
 type NotificationState = {
@@ -288,6 +289,15 @@ function resolveSocialHref(e: { type: string; href?: string; actorId?: string; r
 
 async function buildSocialNotifications(user: User, state: NotificationState): Promise<WorkspaceNotification[]> {
   const events = await getDeduplicatedSocialEventsForUser(user.id);
+
+  // Resolve each actor's current profile avatar. Most event producers never snapshot
+  // actorAvatar, and snapshots taken before a DP upload are stale — so read the live
+  // profile avatar (same source the published feed uses) and keep the stored snapshot
+  // only as a fallback. Users without a DP still resolve to undefined → initials avatar.
+  const actorIds = Array.from(new Set(events.map((e) => e.actorId).filter(Boolean)));
+  const actorProfiles = await Promise.all(actorIds.map((id) => getProfileData(id).catch(() => null)));
+  const avatarByActorId = new Map(actorIds.map((id, i) => [id, actorProfiles[i]?.avatarUrl || undefined]));
+
   return events.map((e) => {
     const notificationId = `social-${e.id}`;
     const toneMap: Record<string, WorkspaceNotification['tone']> = {
@@ -327,7 +337,7 @@ async function buildSocialNotifications(user: User, state: NotificationState): P
       read: isRead(state, user.id, notificationId),
       tone: toneMap[e.type] ?? 'default',
       actorName: e.actorName,
-      actorAvatar: e.actorAvatar,
+      actorAvatar: avatarByActorId.get(e.actorId) || e.actorAvatar,
       actorId: e.actorId,
       metadata: {
         resourceTitle: e.resourceTitle,

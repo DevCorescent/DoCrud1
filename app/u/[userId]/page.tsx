@@ -1308,6 +1308,35 @@ function ImageAdjustModal({
   );
 }
 
+/* ─── Resume upload constraints ──────────────────────────────────────
+   Mirrors the existing server limit in /api/profile/upload-resume (MAX_BYTES). */
+const RESUME_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const RESUME_ACCEPT_EXTS = ['pdf', 'doc', 'docx'] as const;
+const RESUME_ACCEPT_ATTR =
+  '.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+function resumeExt(name: string) {
+  return (name.split('.').pop() ?? '').toLowerCase();
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Returns an error message, or null when the file is acceptable. */
+function validateResumeFile(file: File): string | null {
+  if (!RESUME_ACCEPT_EXTS.includes(resumeExt(file.name) as typeof RESUME_ACCEPT_EXTS[number])) {
+    return 'Unsupported file type — upload a PDF, DOC or DOCX file.';
+  }
+  if (file.size === 0) return 'That file is empty — choose another resume.';
+  if (file.size > RESUME_MAX_BYTES) {
+    return `File is too large (${formatFileSize(file.size)}) — maximum ${RESUME_MAX_BYTES / 1024 / 1024} MB.`;
+  }
+  return null;
+}
+
 interface EditModalProps {
   profile: UserProfileData;
   userName: string;
@@ -1336,6 +1365,8 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
     fileName: string;
   } | null>(null);
   const [rollingBack, setRollingBack] = useState<string | null>(null);
+  const [resumeDragging, setResumeDragging] = useState(false);
+  const [resumePicked, setResumePicked] = useState<{ name: string; size: number; ext: string } | null>(null);
   const [imgUploading, setImgUploading] = useState<'avatar' | 'banner' | null>(null);
 
   async function handleImageFile(file: File, field: 'avatarUrl' | 'coverGradient') {
@@ -1459,6 +1490,30 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
 
   function removeSkill(s: string) {
     set('skills', (form.skills ?? []).filter((x) => x !== s));
+  }
+
+  /** Entry point for both the file picker and drag & drop. */
+  function handleResumeSelect(file: File) {
+    setResumeWarn('');
+    setResumeSuccess(null);
+    const invalid = validateResumeFile(file);
+    if (invalid) {
+      setResumePicked(null);
+      setResumeErr(invalid);
+      return;
+    }
+    setResumeErr('');
+    setResumePicked({ name: file.name, size: file.size, ext: resumeExt(file.name) });
+    void handleResumeUpload(file);
+  }
+
+  function handleResumeDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    setResumeDragging(false);
+    if (resumeUploading) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleResumeSelect(file);
   }
 
   async function handleResumeUpload(file: File) {
@@ -1732,21 +1787,37 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
               )}
             </div>
 
-            {/* Upload card */}
+            {/* Upload card — click to browse or drag & drop */}
             <div
               onClick={() => !resumeUploading && resumeInputRef.current?.click()}
-              className={`relative flex items-center gap-4 rounded-[16px] border border-dashed px-4 py-4 cursor-pointer transition-all group ${resumeUploading ? 'border-white/20 bg-white/[0.02] cursor-wait' : 'border-white/[0.12] hover:border-white/30 hover:bg-white/[0.03]'}`}
+              onDragOver={(e) => { e.preventDefault(); if (!resumeUploading) setResumeDragging(true); }}
+              onDragEnter={(e) => { e.preventDefault(); if (!resumeUploading) setResumeDragging(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setResumeDragging(false); }}
+              onDrop={handleResumeDrop}
+              className={`relative flex items-center gap-4 rounded-[16px] border border-dashed px-4 py-4 cursor-pointer transition-all group ${
+                resumeUploading
+                  ? 'border-white/20 bg-white/[0.02] cursor-wait'
+                  : resumeDragging
+                    ? 'border-indigo-400/60 bg-indigo-500/[0.07]'
+                    : 'border-white/[0.12] hover:border-white/30 hover:bg-white/[0.03]'
+              }`}
             >
-              <div className={`h-10 w-10 rounded-[12px] flex items-center justify-center shrink-0 ${resumeUploading ? 'bg-white/[0.06]' : 'bg-white/[0.06] group-hover:bg-white/[0.10]'} transition-colors`}>
-                {resumeUploading ? <Loader2 className="h-4 w-4 text-white/50 animate-spin" /> : <Upload className="h-4 w-4 text-white/50" />}
+              <div className={`h-10 w-10 rounded-[12px] flex items-center justify-center shrink-0 transition-colors ${resumeDragging && !resumeUploading ? 'bg-indigo-500/15' : 'bg-white/[0.06] group-hover:bg-white/[0.10]'}`}>
+                {resumeUploading
+                  ? <Loader2 className="h-4 w-4 text-white/50 animate-spin" />
+                  : <Upload className={`h-4 w-4 ${resumeDragging ? 'text-indigo-300' : 'text-white/50'}`} />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white/80">{resumeUploading ? 'Parsing resume with AI…' : 'Import from resume'}</p>
+                <p className="text-sm font-semibold text-white/80">
+                  {resumeUploading ? 'Uploading resume…' : resumeDragging ? 'Drop your resume here' : 'Upload resume'}
+                </p>
                 <p className="text-[11px] text-white/35 mt-0.5">
-                  {resumeUploading ? 'Extracting skills, experience, education — one moment' : 'PDF or Word · up to 10 MB · AI auto-fills every section'}
+                  {resumeUploading
+                    ? 'Saving your file and extracting skills, experience, education — one moment'
+                    : 'Click to browse or drag & drop · PDF, DOC or DOCX · up to 10 MB'}
                 </p>
               </div>
-              {!resumeUploading && (
+              {!resumeUploading && !resumeDragging && (
                 <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-white/[0.07] group-hover:bg-white/[0.12] transition-colors">
                   <Sparkles className="h-3 w-3 text-white/50" />
                   <span className="text-[11px] font-semibold text-white/60">AI</span>
@@ -1756,10 +1827,50 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
             <input
               ref={resumeInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt,.md,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              accept={RESUME_ACCEPT_ATTR}
               className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleResumeUpload(f); e.target.value = ''; } }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) { handleResumeSelect(f); e.target.value = ''; } }}
             />
+
+            {/* Selected file — name, size, icon, replace / remove */}
+            {resumePicked && (
+              <div className="mt-3 flex items-center gap-3 rounded-[14px] border border-white/[0.08] bg-white/[0.03] px-3.5 py-3">
+                <div className="h-9 w-9 rounded-[11px] bg-white/[0.06] flex items-center justify-center shrink-0">
+                  {resumeUploading
+                    ? <Loader2 className="h-4 w-4 text-white/45 animate-spin" />
+                    : <FileText className="h-4 w-4 text-white/45" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12.5px] font-medium text-white/80 truncate">{resumePicked.name}</p>
+                  <p className="text-[10.5px] text-white/30 mt-0.5">
+                    {resumePicked.ext.toUpperCase()} · {formatFileSize(resumePicked.size)}
+                    {resumeUploading
+                      ? ' · Uploading…'
+                      : resumeErr ? '' : <span className="text-emerald-400/70"> · Uploaded</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    disabled={resumeUploading}
+                    onClick={() => resumeInputRef.current?.click()}
+                    className="h-7 px-2.5 rounded-[8px] bg-white/[0.05] hover:bg-white/[0.10] transition-colors text-[10.5px] font-medium text-white/45 hover:text-white/70 disabled:opacity-40"
+                    title="Replace resume"
+                  >
+                    Replace
+                  </button>
+                  <button
+                    type="button"
+                    disabled={resumeUploading}
+                    onClick={() => { setResumePicked(null); setResumeErr(''); setResumeWarn(''); setResumeSuccess(null); }}
+                    className="h-7 w-7 rounded-[8px] bg-white/[0.05] hover:bg-rose-500/[0.14] flex items-center justify-center transition-colors disabled:opacity-40"
+                    title="Remove"
+                  >
+                    <X className="h-3 w-3 text-white/40" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Download template link */}
             <a
@@ -2516,6 +2627,10 @@ export default function UserProfilePage() {
   const [hasUpraised, setHasUpraised] = useState(false);
   const [upraiseLoading, setUpraisedLoading] = useState(false);
 
+  // Resume download (Docrud Infinity gated — enforced server-side)
+  const [resumeDlBusy, setResumeDlBusy] = useState(false);
+  const [resumeDlMsg, setResumeDlMsg] = useState('');
+
   // Services tab state
   interface ServiceItem {
     id: string; title: string; tagline: string; description: string; category: string;
@@ -2896,6 +3011,41 @@ export default function UserProfilePage() {
       setUpraisedCount((c) => c + (prev ? 1 : -1));
     } finally {
       setUpraisedLoading(false);
+    }
+  }
+
+  /**
+   * Downloads the profile owner's resume through /api/profile/resume/[userId].
+   * The storage URL is never exposed to the client — the route proxies the file
+   * only after it has verified the viewer's Docrud Infinity entitlement.
+   */
+  async function handleResumeDownload() {
+    if (!session) { router.push('/login'); return; }
+    if (!userId || resumeDlBusy) return;
+    setResumeDlBusy(true);
+    setResumeDlMsg('');
+    try {
+      const res = await fetch(`/api/profile/resume/${userId}`);
+      if (!res.ok) {
+        const json = await res.json().catch(() => null) as { error?: string } | null;
+        setResumeDlMsg(json?.error ?? 'Resume not available.');
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition') ?? '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = match?.[1] ?? 'resume.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setResumeDlMsg('Resume not available.');
+    } finally {
+      setResumeDlBusy(false);
     }
   }
 
@@ -3410,7 +3560,8 @@ export default function UserProfilePage() {
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 shrink-0 relative z-10 sm:pb-1 sm:self-end">
+          <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0 relative z-10 sm:pb-1 sm:self-end">
+            <div className="flex items-center gap-2">
             {isOwnProfile ? (
               <>
                 <button
@@ -3477,8 +3628,29 @@ export default function UserProfilePage() {
                     <span className="hidden sm:inline">Message</span>
                   </Link>
                 )}
+                {/* Resume download — only rendered when this profile actually has one.
+                    Access is verified server-side against Docrud Infinity. */}
+                {(profile.resumeFiles?.length ?? 0) > 0 && (
+                  <button
+                    onClick={() => void handleResumeDownload()}
+                    disabled={resumeDlBusy}
+                    className="flex items-center gap-2 h-9 px-3.5 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/70 text-sm font-medium hover:bg-white/[0.08] hover:text-white/90 transition-colors active:scale-95 disabled:opacity-60"
+                    title="Download Resume"
+                  >
+                    {resumeDlBusy
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <FileText className="h-3.5 w-3.5" />}
+                    <span className="hidden sm:inline">Download Resume</span>
+                    <span className="sm:hidden">Resume</span>
+                  </button>
+                )}
               </>
             ) : null}
+            </div>
+            {/* Resume download notice — e.g. "Upgrade to infinity plan." */}
+            {resumeDlMsg && (
+              <p className="text-[11px] text-white/40 text-left sm:text-right">{resumeDlMsg}</p>
+            )}
           </div>
         </div>
 

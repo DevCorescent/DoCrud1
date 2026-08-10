@@ -1,9 +1,11 @@
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
 import { getDbPool, getMongoDb } from '@/lib/server/database';
 import { getFileTransfers } from '@/lib/server/file-transfers';
+import { FREE_DRIVE_GB, INFINITY_DRIVE_GB } from '@/lib/infinity-plan';
 
-export const FREE_DRIVE_GB   = 0.5;   // 500 MB for all users with no plan
-export const INFINITY_DRIVE_GB = 5;   // 5 GB for Docrud Infinity subscribers
+// Canonical values live in lib/infinity-plan.ts (client-safe) and are re-exported
+// here so existing importers of this module keep working unchanged.
+export { FREE_DRIVE_GB, INFINITY_DRIVE_GB };
 
 export const DRIVE_PLAN_GB: Record<string, number> = {
   'drive-starter': 10,

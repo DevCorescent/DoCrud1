@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getStoredUsers } from '@/lib/server/auth';
-import { getAllProfiles, getFollowCounts } from '@/lib/server/user-profiles';
+import { getDirectoryProfiles, getFollowCountsForUsers } from '@/lib/server/user-profiles';
 import { getPublicGigListings } from '@/lib/server/gigs';
 import { getUpraiseCounts } from '@/lib/server/upraised';
 
@@ -10,12 +10,11 @@ export async function GET() {
   try {
     const [users, profiles, gigs] = await Promise.all([
       getStoredUsers(),
-      getAllProfiles(),
+      getDirectoryProfiles(),
       getPublicGigListings(),
     ]);
 
     const filteredForCounts = users.filter((u) => u.isActive !== false);
-    const upraiseCounts = await getUpraiseCounts(filteredForCounts.map((u) => u.id));
 
     // Count gigs per owner
     const gigCountByUser: Record<string, number> = {};
@@ -32,10 +31,15 @@ export async function GET() {
       return true;
     });
 
-    // Build people cards with follow counts
-    const people = await Promise.all(
-      filteredUsers.map(async (user) => {
-        const counts = await getFollowCounts(user.id);
+    // Follow counts and upraise counts for every card in two batched calls,
+    // rather than one query per user (previously 2 round trips x N users).
+    const [followCounts, upraiseCounts] = await Promise.all([
+      getFollowCountsForUsers(filteredUsers.map((user) => user.id)),
+      getUpraiseCounts(filteredForCounts.map((u) => u.id)),
+    ]);
+
+    const people = filteredUsers.map((user) => {
+        const counts = followCounts[user.id] ?? { followers: 0, following: 0 };
         const profile = profiles[user.id] ?? {};
         return {
           id: user.id,
@@ -65,8 +69,7 @@ export async function GET() {
           },
           upraiseCount: upraiseCounts[user.id] ?? 0,
         };
-      }),
-    );
+    });
 
     // Public Faces first, then docrudGo verified, then most upraised, then most followed
     people.sort((a, b) => {

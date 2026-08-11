@@ -4,10 +4,10 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import {
   X, Crown, Zap, Building2, MessageSquare, Star,
-  FileSignature, HardDrive, Check,
+  FileSignature, HardDrive, Check, FileText, Eye,
 } from 'lucide-react';
 
-type InfinityFeature = 'business_page' | 'services_limit' | 'chat' | 'public_face' | 'esign' | 'drive';
+type InfinityFeature = 'business_page' | 'services_limit' | 'chat' | 'public_face' | 'esign' | 'drive' | 'resume' | 'profile_intelligence';
 
 interface Props {
   feature: InfinityFeature;
@@ -51,6 +51,20 @@ const FEATURE_META: Record<InfinityFeature, { icon: React.ReactNode; title: stri
     color: 'text-emerald-400',
     glow: 'shadow-[0_0_40px_rgba(52,211,153,0.2)]',
   },
+  resume: {
+    icon: <FileText className="w-5 h-5" />,
+    title: 'Resume downloads require Infinity',
+    desc: 'Download resumes from other profiles, and see who viewed your profile or downloaded yours.',
+    color: 'text-indigo-400',
+    glow: 'shadow-[0_0_40px_rgba(129,140,248,0.22)]',
+  },
+  profile_intelligence: {
+    icon: <Eye className="w-5 h-5" />,
+    title: 'Profile intelligence requires Infinity',
+    desc: 'See exactly who viewed your profile and who downloaded your resume, with names and profile links.',
+    color: 'text-indigo-400',
+    glow: 'shadow-[0_0_40px_rgba(129,140,248,0.22)]',
+  },
   drive: {
     icon: <HardDrive className="w-5 h-5" />,
     title: '5 GB Drive Storage with Infinity',
@@ -67,6 +81,8 @@ const PERKS = [
   { icon: <Star className="w-3.5 h-3.5" />,       label: 'Public Face Badge' },
   { icon: <FileSignature className="w-3.5 h-3.5" />, label: 'E-Sign Documents' },
   { icon: <HardDrive className="w-3.5 h-3.5" />,  label: '5 GB Drive Storage' },
+  { icon: <FileText className="w-3.5 h-3.5" />,   label: 'Resume Downloads' },
+  { icon: <Eye className="w-3.5 h-3.5" />,        label: 'Profile Visitor Insights' },
 ];
 
 export default function InfinityUpgradeModal({ feature, onClose, returnTo }: Props) {

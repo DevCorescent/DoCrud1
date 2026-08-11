@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { toggleTrend, getFileTransfers } from '@/lib/server/file-transfers';
+import { toggleTrend, getFileTransferById } from '@/lib/server/file-transfers';
 import { earnCredits } from '@/lib/server/credits';
 import { addSocialEvent } from '@/lib/server/social-events';
-import { getStoredUsers } from '@/lib/server/auth';
+import { getStoredUserById, getStoredUserByEmail } from '@/lib/server/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,13 +19,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     const result = await toggleTrend(id, identifier);
 
     if (result.trended) {
-      const transfers = await getFileTransfers();
-      const post = transfers.find((t) => t.id === id || t.shareId === id);
+      const post = await getFileTransferById(id);
       if (post?.uploadedByUserId && post.uploadedByUserId !== identifier) {
         void earnCredits(post.uploadedByUserId, 'post_like', 1, `Your post "${post.title || post.fileName}" is trending`).catch(() => {});
 
-        const users = await getStoredUsers().catch(() => []);
-        const actor = users.find((u) => u.id === identifier || u.email === identifier);
+        // Targeted lookup instead of loading the whole users table to find one actor.
+        const actor = identifier.includes('@')
+          ? await getStoredUserByEmail(identifier).catch(() => null)
+          : await getStoredUserById(identifier).catch(() => null);
         void addSocialEvent({
           type: 'like',
           actorId: actor?.id ?? identifier,

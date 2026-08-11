@@ -6,7 +6,8 @@ import { buildBillingThreshold } from '@/lib/server/billing';
 import { getUserUsageSummary } from '@/lib/server/saas';
 import { getVisibleDealRooms } from '@/lib/server/deal-rooms';
 import { getDeduplicatedSocialEventsForUser } from '@/lib/server/social-events';
-import { getProfileData } from '@/lib/server/user-profiles';
+import { getProfileAvatars } from '@/lib/server/user-profiles';
+import { hasInfinity } from '@/lib/server/infinity';
 import { getDbPool, getMongoDb } from '@/lib/server/database';
 
 type NotificationState = {
@@ -96,11 +97,17 @@ async function buildMailboxNotifications(user: User, state: NotificationState) {
   return notifications;
 }
 
-async function buildBillingNotifications(user: User, state: NotificationState) {
+async function buildBillingNotifications(
+  user: User,
+  state: NotificationState,
+  historyPromise?: Promise<DocumentHistory[]>,
+) {
   if (user.workspaceAccessMode === 'board_room_only') return [] as WorkspaceNotification[];
   if (user.role === 'admin') return [] as WorkspaceNotification[];
 
-  const { usage } = await getUserUsageSummary(user);
+  // Reuse the caller's history read when there is one. Awaited only after the
+  // early returns above, so admin / board-room users still fetch nothing extra.
+  const { usage } = await getUserUsageSummary(user, historyPromise ? await historyPromise : undefined);
   const threshold = buildBillingThreshold(usage.thresholdPercentUsed ?? 0, usage.remainingGenerations);
   if (threshold.state === 'healthy') return [];
 
@@ -294,12 +301,29 @@ async function buildSocialNotifications(user: User, state: NotificationState): P
   // actorAvatar, and snapshots taken before a DP upload are stale — so read the live
   // profile avatar (same source the published feed uses) and keep the stored snapshot
   // only as a fallback. Users without a DP still resolve to undefined → initials avatar.
+  // ONE batched, avatarUrl-projected query. Previously this was getProfileData()
+  // per actor: N round trips, each pulling a whole profile document to read a
+  // single field (measured: 4 extra queries on a typical notifications request).
   const actorIds = Array.from(new Set(events.map((e) => e.actorId).filter(Boolean)));
-  const actorProfiles = await Promise.all(actorIds.map((id) => getProfileData(id).catch(() => null)));
-  const avatarByActorId = new Map(actorIds.map((id, i) => [id, actorProfiles[i]?.avatarUrl || undefined]));
 
-  return events.map((e) => {
-    const notificationId = `social-${e.id}`;
+  // PRIVACY: actor identity in these notifications is a Docrud Infinity feature,
+  // exactly as it is in /api/profile/activity. Without the entitlement the owner
+  // sees "Someone ..." and no avatar or profile link — the identity never
+  // reaches the response. Fetched alongside the avatars, so no extra latency.
+  const [canSeeIdentity, avatarRows] = await Promise.all([
+    hasInfinity(user.id).catch(() => false),
+    getProfileAvatars(actorIds).catch(() => new Map<string, string | null>()),
+  ]);
+  const avatarByActorId = new Map(
+    actorIds.map((id) => [id, canSeeIdentity ? avatarRows.get(id) || undefined : undefined]),
+  );
+
+  return events.map((rawEvent) => {
+    // Redact before any title/href is built, so nothing downstream can leak it.
+    const e = canSeeIdentity
+      ? rawEvent
+      : { ...rawEvent, actorName: 'Someone', actorId: '', actorHeadline: undefined, href: undefined };
+    const notificationId = `social-${rawEvent.id}`;
     const toneMap: Record<string, WorkspaceNotification['tone']> = {
       follow: 'sky',
       profile_view: 'default',
@@ -348,11 +372,17 @@ async function buildSocialNotifications(user: User, state: NotificationState): P
 }
 
 export async function getWorkspaceNotifications(user: User) {
+  // Started before the (serial) read-state fetch so the history round trip
+  // overlaps it instead of queueing behind it, and shared with the billing
+  // builder — getUserUsageSummary() used to issue a SECOND identical
+  // getHistoryEntries() call, so the same collection was read twice per request.
+  const historyPromise = getHistoryEntries();
+
   const state = await getNotificationState(user.id);
   const [history, mailNotifications, billingNotifications, boardRoomNotifications, socialNotifications] = await Promise.all([
-    getHistoryEntries(),
+    historyPromise,
     buildMailboxNotifications(user, state),
-    buildBillingNotifications(user, state),
+    buildBillingNotifications(user, state, historyPromise),
     buildBoardRoomNotifications(user, state),
     buildSocialNotifications(user, state),
   ]);

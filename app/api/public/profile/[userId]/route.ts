@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStoredUsers, getAuthSession } from '@/lib/server/auth';
-import { getStoredUserById } from '@/lib/server/users';
+import { getAuthSession } from '@/lib/server/auth';
+import {
+  getStoredUserById,
+  getStoredUserByEmail,
+} from '@/lib/server/users';
 import { getProfileData, getFollowCounts, isFollowing as checkIsFollowing } from '@/lib/server/user-profiles';
-import { getPublicGigListings } from '@/lib/server/gigs';
+import { getPublicGigListingsForUser } from '@/lib/server/gigs';
 import { getPublicAnalyticsForUser } from '@/lib/server/file-transfers';
 
 export const dynamic = 'force-dynamic';
@@ -18,30 +21,29 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
   try {
     const { userId } = params;
 
-    const users = await getStoredUsers();
-    let found = users.find((u) => u.id === userId);
-    // Fallback: cache may be stale for newly registered users — do a direct DB row lookup
-    if (!found) found = await getStoredUserById(userId) ?? undefined;
+    // The viewer lookup, the profile owner lookup and every profile fragment are
+    // independent — resolve them in a single round of concurrency instead of
+    // walking them one await at a time.
+    const [found, session, profile, counts, userGigs, publishAnalytics] = await Promise.all([
+      getStoredUserById(userId),
+      getAuthSession(),
+      getProfileData(userId),
+      getFollowCounts(userId),
+      getPublicGigListingsForUser(userId),
+      getPublicAnalyticsForUser(userId),
+    ]);
+
     if (!found) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const session = await getAuthSession();
     const sessionUser = session?.user?.email
-      ? users.find((u) => u.email.toLowerCase() === session.user!.email!.toLowerCase())
+      ? await getStoredUserByEmail(session.user.email)
       : null;
 
-    const [profile, counts, allGigs, followingThisUser, publishAnalytics] = await Promise.all([
-      getProfileData(userId),
-      getFollowCounts(userId),
-      getPublicGigListings(),
-      sessionUser ? checkIsFollowing(sessionUser.id, userId) : Promise.resolve(false),
-      getPublicAnalyticsForUser(userId),
-    ]);
-
-    const userGigs = allGigs.filter((g) => g.ownerUserId === userId);
-
     const isOwnProfile = sessionUser?.id === userId;
+    const followingThisUser =
+      sessionUser && !isOwnProfile ? await checkIsFollowing(sessionUser.id, userId) : false;
 
     // Resume files are only fully exposed to the owner. Other viewers get the
     // metadata needed to render the download action, never the storage URL —

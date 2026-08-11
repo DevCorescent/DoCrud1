@@ -1,6 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import {
+  getStoredColorMode,
+  applyColorMode,
+} from '@/app/components/ThemeController';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { AlignCenter, AlignLeft, AlignRight, BarChart3, Bold, BrainCircuit, Clock, Copy, Download, Eye, FileSpreadsheet, Italic, KeyRound, LineChart, Link2, Loader2, Mail, MessageCircle, Moon, PencilLine, PieChart, Plus, Redo2, RefreshCw, Rows3, Save, Search, Sheet, SlidersHorizontal, Sun, Trash2, Underline, Undo2, Upload, Users, X } from 'lucide-react';
 import { useCollabEngine } from '@/lib/collabEngine';
@@ -282,6 +286,7 @@ export default function DocSheetCenter({ history, onHistoryRefresh, layout = 'mo
   const [libraryPage, setLibraryPage] = useState(1);
   const pageSize = 8;
   const [workbook, setWorkbook] = useState<DocSheetWorkbook>(() => createDocSheetWorkbook());
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => getStoredColorMode());
   const [activeSheetId, setActiveSheetId] = useState(workbook.sheets[0]?.id || '');
   const [savedHistoryId, setSavedHistoryId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -350,7 +355,7 @@ export default function DocSheetCenter({ history, onHistoryRefresh, layout = 'mo
   const lastChangeAtRef = useRef<number>(0);
   const saveStartedAtRef = useRef<number>(0);
   const [isDirty, setIsDirty] = useState(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  
   const [aiFloatOpen, setAiFloatOpen] = useState(false);
   const [menuAnchorPos, setMenuAnchorPos] = useState<{ top: number; left: number } | null>(null);
   const [collabOpen, setCollabOpen] = useState(false);
@@ -2414,7 +2419,11 @@ export default function DocSheetCenter({ history, onHistoryRefresh, layout = 'mo
               {/* Theme toggle */}
               <button
                 type="button"
-                onClick={() => setTheme((t) => t === 'dark' ? 'light' : 'dark')}
+onClick={() => {
+  const next = theme === 'dark' ? 'light' : 'dark';
+  setTheme(next);
+  applyColorMode(next);
+}}
                 className="h-8 w-8 rounded-lg flex items-center justify-center transition ds-btn-ghost"
                 style={{ color: 'var(--ds-c3)', border: '1px solid var(--ds-s2)', background: 'var(--ds-s4)' }}
                 title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}

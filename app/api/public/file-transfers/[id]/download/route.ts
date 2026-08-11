@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canUnlockFileTransfer, getFileTransfers, recordFileTransferEvent, resolveFileTransferDataUrl } from '@/lib/server/file-transfers';
+import { canUnlockFileTransfer, getFileTransferById, recordFileTransferEvent, resolveFileTransferDataUrl } from '@/lib/server/file-transfers';
 import { isStorageUrl } from '@/lib/server/r2';
 
 export const dynamic = 'force-dynamic';
@@ -17,8 +17,7 @@ function decodeDataUrl(dataUrl: string) {
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const transfers = await getFileTransfers();
-    const entry = transfers.find((item) => item.shareId === params.id || item.id === params.id);
+    const entry = await getFileTransferById(params.id);
     if (!entry) {
       return NextResponse.json({ error: 'File transfer not found.' }, { status: 404 });
     }

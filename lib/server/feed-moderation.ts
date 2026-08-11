@@ -10,7 +10,9 @@
  *   reports: [{id, reason, detail, reporterUserId, reporterEmail, createdAt, status}]
  */
 
-import { getFileTransfers, updateFileTransfer } from '@/lib/server/file-transfers';
+import { getFileTransferById, getFileTransfers, updateFileTransfer } from '@/lib/server/file-transfers';
+import { getDbPool } from '@/lib/server/database';
+import { selectLeanFileTransferRows } from '@/lib/server/db/file-transfers-rows';
 import { getStoredUsers } from '@/lib/server/auth';
 import { sendTrackedMail } from '@/lib/server/mailer';
 import type { SecureFileTransfer } from '@/types/document';
@@ -23,15 +25,19 @@ function uid() { return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}
 // ── Read helpers ───────────────────────────────────────────────────────
 
 export async function getAllPublishedItems(): Promise<SecureFileTransfer[]> {
-  const transfers = await getFileTransfers();
-  return transfers.filter(
-    (t) => t.directoryVisibility === 'public' && t.authMode === 'public',
-  ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Moderation only reads metadata and `reports`, never the file bytes.
+  const transfers = getDbPool()
+    ? await selectLeanFileTransferRows({ directoryVisibility: 'public', authMode: 'public' })
+    : (await getFileTransfers()).filter(
+        (t) => t.directoryVisibility === 'public' && t.authMode === 'public',
+      );
+  return transfers.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 }
 
 export async function getPublishedItemById(id: string): Promise<SecureFileTransfer | null> {
-  const all = await getFileTransfers();
-  return all.find((t) => t.id === id || t.shareId === id) ?? null;
+  return getFileTransferById(id);
 }
 
 // ── Report a published item ────────────────────────────────────────────

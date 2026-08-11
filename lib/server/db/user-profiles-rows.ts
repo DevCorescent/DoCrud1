@@ -47,6 +47,92 @@ export async function selectUserProfileAvatarRows(
   return new Map(docs.map((doc) => [String(doc._id), doc.avatarUrl ?? null]));
 }
 
+/**
+ * Directory-card fields for every profile, in one projected query.
+ *
+ * selectAllUserProfileRows() returns whole profile documents — resume text,
+ * portfolio entries, base64 avatars — and measured 4.8 s against the live
+ * cluster. The people directory renders a fixed, small set of fields, so it
+ * asks for exactly those.
+ */
+const DIRECTORY_FIELDS = [
+  'docrudGo',
+  'publicFace',
+  'headline',
+  'bio',
+  'location',
+  'avatarUrl',
+  'bannerUrl',
+  'coverGradient',
+  'coverPosition',
+  'skills',
+  'openToWork',
+  'pronouns',
+] as const;
+
+export async function selectUserProfileDirectoryRows(): Promise<Record<string, UserProfileData> | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const projection: Record<string, unknown> = { _id: 1 };
+  for (const field of DIRECTORY_FIELDS) projection[field] = 1;
+
+  // `coverGradient` is legacy: normally a ~50 character CSS gradient, but older
+  // profile edits stored the cover photo in it as a base64 data URL (current
+  // uploads go to bannerUrl instead, and the profile editor clears these on
+  // save). One such value is 217 KB — 80% of this query's entire payload.
+  //
+  // Directory cards apply it as `style={{ background: coverGradient }}`, and a
+  // bare data URL is not valid CSS there, so it renders nothing while also
+  // suppressing the fallback gradient. Dropping it server-side keeps the blob
+  // off the wire AND lets those cards fall back to a real gradient.
+  //
+  // Scoped to the directory only — /u/[userId] renders the same legacy value as
+  // an <img>, where it does work, and is untouched.
+  projection.coverGradient = {
+    $cond: [
+      { $eq: [{ $indexOfCP: [{ $ifNull: ['$coverGradient', ''] }, 'data:'] }, 0] },
+      '$$REMOVE',
+      '$coverGradient',
+    ],
+  };
+
+  const docs = await db.collection(COL).aggregate([{ $project: projection }]).toArray();
+
+  const map: Record<string, UserProfileData> = {};
+  for (const { _id, ...profile } of docs as Array<{ _id: string } & UserProfileData>) {
+    map[String(_id)] = profile as UserProfileData;
+  }
+  return map;
+}
+
+/**
+ * A named subset of one profile document.
+ *
+ * Profile documents carry base64 avatars, resume files and portfolio entries.
+ * Callers that need two or three flags should not pay for all of that — most
+ * importantly the NextAuth jwt callback, which runs on every authenticated
+ * request and reads a single boolean.
+ */
+export async function selectUserProfileFields<K extends keyof UserProfileData>(
+  userId: string,
+  fields: readonly K[],
+): Promise<Pick<UserProfileData, K> | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const projection: Record<string, 1> = {};
+  for (const field of fields) projection[field as string] = 1;
+
+  const doc = await db
+    .collection<UserProfileData & { _id: string }>(COL)
+    .findOne({ _id: userId }, { projection });
+  if (!doc) return null;
+
+  const { _id: _unused, ...profile } = doc;
+  return profile as Pick<UserProfileData, K>;
+}
+
 export async function upsertUserProfileRow(userId: string, profile: UserProfileData): Promise<void> {
   const db = await getMongoDb();
   if (!db) return;

@@ -32,6 +32,22 @@ export async function selectUserRowByEmail(email: string): Promise<StoredUser | 
 }
 
 /**
+ * Existence check for one user id — the cheapest possible lookup.
+ *
+ * `_id` equality on the default index (IDHACK), projected down to `_id` alone,
+ * so nothing but the key crosses the wire. For callers that need to know a user
+ * exists without reading the document (e.g. the profile QR endpoint).
+ *
+ * Returns null when Mongo is not configured, so the caller can fall back.
+ */
+export async function selectUserIdExists(id: string): Promise<boolean | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  const doc = await db.collection(COL).findOne({ _id: id as never }, { projection: { _id: 1 } });
+  return Boolean(doc);
+}
+
+/**
  * Presence-only projection for a batch of user ids.
  *
  * One indexed `$in` query returning just `lastSeenAt` — deliberately not

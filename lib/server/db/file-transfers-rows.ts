@@ -11,9 +11,123 @@ function strip(doc: SecureFileTransfer & { _id?: unknown }): SecureFileTransfer 
 export async function selectAllFileTransferRows(): Promise<SecureFileTransfer[]> {
   const db = await getMongoDb();
   if (!db) return [];
-  const docs = await db.collection<SecureFileTransfer & { _id: string }>(COL)
-    .find({}).sort({ createdAt: -1, _id: -1 }).toArray();
+
+  const docs = await db
+    .collection<SecureFileTransfer & { _id: string }>(COL)
+    .find({})
+    .sort({ createdAt: -1, _id: -1 })
+    .toArray();
+
   return docs.map(strip);
+}
+
+/**
+ * Public file transfers for one user.
+ *
+ * Used by profile analytics so we don't load every file_transfer
+ * document in the database.
+ */
+export async function selectPublicFileTransferRowsForUser(
+  userId: string,
+): Promise<SecureFileTransfer[]> {
+  const db = await getMongoDb();
+  if (!db) return [];
+
+  const docs = await db
+    .collection(COL)
+    .find({
+      uploadedByUserId: userId,
+      directoryVisibility: 'public',
+      revokedAt: null,
+    })
+    .project({
+      dataUrl: 0,
+      encryptedDataUrl: 0,
+    })
+    .toArray();
+
+  return docs.map((doc) => {
+    const { _id: _unused, ...rest } = doc as {
+      _id?: unknown;
+    } & SecureFileTransfer;
+
+    return rest as SecureFileTransfer;
+  });
+}
+
+/**
+ * Public analytics totals for one user, aggregated inside MongoDB.
+ *
+ * Returns a single small document instead of streaming every matching
+ * file_transfer row (which can each carry multi-MB dataUrl blobs) back to
+ * Node just to sum a handful of counters.
+ */
+export async function aggregatePublicAnalyticsForUser(
+  userId: string,
+  nowIso: string,
+): Promise<{
+  totalViews: number;
+  totalLikes: number;
+  totalComments: number;
+  publishCount: number;
+  featuredCount: number;
+} | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const docs = await db
+    .collection(COL)
+    .aggregate([
+      {
+        $match: {
+          uploadedByUserId: userId,
+          directoryVisibility: 'public',
+          revokedAt: null,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          publishCount: { $sum: 1 },
+          totalViews: { $sum: { $ifNull: ['$viewCount', { $ifNull: ['$openCount', 0] }] } },
+          totalLikes: { $sum: { $ifNull: ['$likesCount', 0] } },
+          totalComments: { $sum: { $ifNull: ['$commentsCount', 0] } },
+          featuredCount: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $toBool: { $ifNull: ['$featured', false] } },
+                    { $gt: [{ $ifNull: ['$featuredUntil', ''] }, nowIso] },
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ])
+    .toArray();
+
+  const row = docs[0] as
+    | {
+        publishCount?: number;
+        totalViews?: number;
+        totalLikes?: number;
+        totalComments?: number;
+        featuredCount?: number;
+      }
+    | undefined;
+
+  return {
+    totalViews: row?.totalViews ?? 0,
+    totalLikes: row?.totalLikes ?? 0,
+    totalComments: row?.totalComments ?? 0,
+    publishCount: row?.publishCount ?? 0,
+    featuredCount: row?.featuredCount ?? 0,
+  };
 }
 
 /**
@@ -22,16 +136,25 @@ export async function selectAllFileTransferRows(): Promise<SecureFileTransfer[]>
  * computed boolean `hasDataUrl` so thumbnail URL logic can still work correctly.
  * Orders of magnitude faster than selectAllFileTransferRows for feed use-cases.
  */
-export async function selectPublicFileTransfersForFeed(): Promise<(SecureFileTransfer & { hasDataUrl?: boolean })[]> {
+export async function selectPublicFileTransfersForFeed(
+  options: { moderationFiltered?: boolean } = {},
+): Promise<
+  (SecureFileTransfer & {
+    hasDataUrl?: boolean;
+    hasImageDataUrl?: boolean;
+    hasHtmlDataUrl?: boolean;
+  })[]
+> {
   const db = await getMongoDb();
   if (!db) return [];
+  const { moderationFiltered = true } = options;
   const docs = await db.collection(COL).aggregate([
     {
       $match: {
         directoryVisibility: 'public',
         authMode: 'public',
-        revokedAt: { $exists: false },
-        moderationStatus: { $nin: ['suspended', 'removed'] },
+        revokedAt: null,
+        ...(moderationFiltered ? { moderationStatus: { $nin: ['suspended', 'removed'] } } : {}),
       },
     },
     {
@@ -43,15 +166,154 @@ export async function selectPublicFileTransfersForFeed(): Promise<(SecureFileTra
             else: false,
           },
         },
+        // Prefix tests evaluated server-side, so callers can reproduce
+        // `dataUrl.startsWith('data:image/')` without the blob crossing the wire.
+        hasImageDataUrl: {
+          $eq: [{ $indexOfCP: [{ $ifNull: ['$dataUrl', ''] }, 'data:image/'] }, 0],
+        },
+        hasHtmlDataUrl: {
+          $eq: [{ $indexOfCP: [{ $ifNull: ['$dataUrl', ''] }, 'data:text/html'] }, 0],
+        },
       },
     },
     { $project: { dataUrl: 0, encryptedDataUrl: 0 } },
     { $sort: { createdAt: -1, _id: -1 } },
   ]).toArray();
   return docs.map(d => {
-    const { _id: _unused, ...rest } = d as { _id?: unknown } & SecureFileTransfer & { hasDataUrl?: boolean };
+    const { _id: _unused, ...rest } = d as { _id?: unknown } & SecureFileTransfer & {
+      hasDataUrl?: boolean;
+      hasImageDataUrl?: boolean;
+      hasHtmlDataUrl?: boolean;
+    };
     return rest;
   });
+}
+
+/** Fields that are large and never needed by list/summary views. */
+const LIST_PROJECTION = {
+  dataUrl: 0,
+  encryptedDataUrl: 0,
+  accessEvents: 0,
+  comments: 0,
+  likedBy: 0,
+  trendedBy: 0,
+  interestedBy: 0,
+} as const;
+
+/**
+ * Most-recently-updated active transfers, filtered and limited in MongoDB.
+ *
+ * Callers that only render a short "recent" list previously pulled the whole
+ * collection (dataUrl blobs and all) and sorted it in Node.
+ */
+export async function selectRecentFileTransferRows(
+  match: Record<string, unknown>,
+  limit: number,
+): Promise<SecureFileTransfer[]> {
+  const db = await getMongoDb();
+  if (!db) return [];
+  const docs = await db
+    .collection(COL)
+    .find({ revokedAt: null, ...match })
+    .project(LIST_PROJECTION)
+    .sort({ updatedAt: -1, _id: -1 })
+    .limit(limit)
+    .toArray();
+  return docs.map((doc) => {
+    const { _id: _unused, ...rest } = doc as { _id?: unknown } & SecureFileTransfer;
+    return rest as SecureFileTransfer;
+  });
+}
+
+/**
+ * Non-revoked transfers matching an arbitrary filter, without the blob fields.
+ *
+ * For directory search paths that still need to score rows in JS — the match
+ * itself belongs in MongoDB, and the multi-MB dataUrl never has to travel.
+ */
+export async function selectLeanFileTransferRows(
+  match: Record<string, unknown>,
+): Promise<SecureFileTransfer[]> {
+  const db = await getMongoDb();
+  if (!db) return [];
+  const docs = await db
+    .collection(COL)
+    .find({ revokedAt: null, ...match })
+    .project(LIST_PROJECTION)
+    .toArray();
+  return docs.map((doc) => {
+    const { _id: _unused, ...rest } = doc as { _id?: unknown } & SecureFileTransfer;
+    return rest as SecureFileTransfer;
+  });
+}
+
+/** Per-category counts for non-revoked transfers, counted inside MongoDB. */
+export async function aggregateDirectoryCategoryCounts(): Promise<Array<{ label: string; count: number }> | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  const docs = await db
+    .collection(COL)
+    .aggregate([
+      { $match: { revokedAt: null, directoryCategory: { $type: 'string' } } },
+      { $group: { _id: { $trim: { input: '$directoryCategory' } }, count: { $sum: 1 } } },
+      { $match: { _id: { $ne: '' } } },
+    ])
+    .toArray();
+  return (docs as Array<{ _id: string; count: number }>).map((d) => ({ label: d._id, count: d.count }));
+}
+
+/** Directory-wide totals, summed inside MongoDB instead of over a full read. */
+export async function aggregateDirectoryStats(): Promise<{
+  totalFiles: number;
+  publicFiles: number;
+  totalSizeInBytes: number;
+  totalOpens: number;
+  totalDownloads: number;
+} | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  const docs = await db
+    .collection(COL)
+    .aggregate([
+      { $match: { revokedAt: null } },
+      {
+        $group: {
+          _id: null,
+          totalFiles: { $sum: 1 },
+          publicFiles: { $sum: { $cond: [{ $eq: ['$directoryVisibility', 'public'] }, 1, 0] } },
+          totalSizeInBytes: { $sum: { $ifNull: ['$sizeInBytes', 0] } },
+          totalOpens: { $sum: { $ifNull: ['$openCount', 0] } },
+          totalDownloads: { $sum: { $ifNull: ['$downloadCount', 0] } },
+        },
+      },
+    ])
+    .toArray();
+  const row = docs[0] as Record<string, number> | undefined;
+  return {
+    totalFiles: row?.totalFiles ?? 0,
+    publicFiles: row?.publicFiles ?? 0,
+    totalSizeInBytes: row?.totalSizeInBytes ?? 0,
+    totalOpens: row?.totalOpens ?? 0,
+    totalDownloads: row?.totalDownloads ?? 0,
+  };
+}
+
+/**
+ * The set of access passwords already in use.
+ *
+ * Upload used to read the entire collection (6.6 MB of dataUrl blobs, measured)
+ * purely to check a new password against existing ones. `distinct` returns just
+ * the values.
+ */
+export async function selectExistingAccessPasswords(): Promise<Set<string>> {
+  const db = await getMongoDb();
+  if (!db) return new Set();
+  const values = await db.collection(COL).distinct('accessPassword', {
+    accessPassword: { $type: 'string' },
+  });
+  return new Set(
+    (values as string[]).map((value) => value.trim().toUpperCase()).filter(Boolean),
+  );
 }
 
 export async function selectFileTransferRowById(idOrShareId: string): Promise<SecureFileTransfer | null> {

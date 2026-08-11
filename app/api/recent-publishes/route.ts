@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getFileTransfers } from '@/lib/server/file-transfers';
+import { getDbPool } from '@/lib/server/database';
+import { selectRecentFileTransferRows } from '@/lib/server/db/file-transfers-rows';
 
 export const dynamic = 'force-dynamic';
+
+/** Upper bounds on what this endpoint can ever render (8 owned + 10 public). */
+const OWNED_LIMIT = 8;
+const PUBLIC_LIMIT = 12;
 
 type RecentPublishSource = 'public' | 'yours';
 
@@ -21,7 +27,7 @@ function formatBytes(bytes: number) {
 
 function isOwnedByViewer(
   entry: Awaited<ReturnType<typeof getFileTransfers>>[number],
-  viewer: NonNullable<Awaited<ReturnType<typeof getAuthSession>>>['user'],
+  viewer: NonNullable<NonNullable<Awaited<ReturnType<typeof getAuthSession>>>['user']>,
 ) {
   if (viewer.role === 'admin') {
     return entry.uploadedByUserId === viewer.id
@@ -38,33 +44,74 @@ function isOwnedByViewer(
     || entry.uploadedBy.toLowerCase() === (viewer.email || '').toLowerCase();
 }
 
+type Viewer = NonNullable<Awaited<ReturnType<typeof getAuthSession>>>['user'];
+type Transfer = Awaited<ReturnType<typeof getFileTransfers>>[number];
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Mongo equivalent of isOwnedByViewer(). */
+function ownedMatch(viewer: Viewer) {
+  const email = (viewer.email || '').toLowerCase();
+  const or: Record<string, unknown>[] = [{ uploadedByUserId: viewer.id }];
+  if (email) or.push({ uploadedBy: { $regex: `^${escapeRegExp(email)}$`, $options: 'i' } });
+  if (viewer.role === 'client') or.push({ organizationId: viewer.id });
+  return { $or: or };
+}
+
+/**
+ * Fetches only the rows this endpoint can actually render.
+ *
+ * The public slice is over-fetched by OWNED_LIMIT so that removing the
+ * viewer's own posts still leaves a full page of public ones.
+ */
+async function loadRecent(viewer: Viewer | null): Promise<{
+  publicTransfers: Transfer[];
+  ownedTransfers: Transfer[];
+}> {
+  const publicMatch = { directoryVisibility: 'public', authMode: 'public' };
+
+  if (getDbPool()) {
+    const [publicTransfers, ownedTransfers] = await Promise.all([
+      selectRecentFileTransferRows(publicMatch, PUBLIC_LIMIT + OWNED_LIMIT),
+      viewer ? selectRecentFileTransferRows(ownedMatch(viewer), OWNED_LIMIT) : Promise.resolve([]),
+    ]);
+    return { publicTransfers, ownedTransfers };
+  }
+
+  // JSON-file fallback (no database configured).
+  const active = (await getFileTransfers())
+    .filter((entry) => !entry.revokedAt)
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+  return {
+    publicTransfers: active.filter(
+      (entry) => entry.directoryVisibility === 'public' && entry.authMode === 'public',
+    ),
+    ownedTransfers: viewer ? active.filter((entry) => isOwnedByViewer(entry, viewer)) : [],
+  };
+}
+
 export async function GET() {
   try {
-    const [session, transfers] = await Promise.all([getAuthSession(), getFileTransfers()]);
+    const session = await getAuthSession();
     const viewer = session?.user || null;
 
-    const activeTransfers = transfers
-      .filter((entry) => !entry.revokedAt)
-      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime());
+    const { publicTransfers, ownedTransfers } = await loadRecent(viewer);
 
-    const publicTransfers = activeTransfers.filter(
-      (entry) => entry.directoryVisibility === 'public' && entry.authMode === 'public',
-    );
-
-    const ownedTransfers = viewer
-      ? activeTransfers.filter((entry) => isOwnedByViewer(entry, viewer))
-      : [];
+    // Set membership instead of the previous nested `.some()` scan (O(n·m) → O(n)).
+    const ownedIds = new Set(ownedTransfers.map((entry) => entry.id));
 
     const selected = viewer
       ? [
-          ...ownedTransfers.slice(0, 8).map((entry) => ({ entry, source: 'yours' as RecentPublishSource })),
+          ...ownedTransfers.slice(0, OWNED_LIMIT).map((entry) => ({ entry, source: 'yours' as RecentPublishSource })),
           ...publicTransfers
-            .filter((entry) => !ownedTransfers.some((owned) => owned.id === entry.id))
+            .filter((entry) => !ownedIds.has(entry.id))
             .slice(0, 10)
             .map((entry) => ({ entry, source: 'public' as RecentPublishSource })),
         ]
       : publicTransfers
-          .slice(0, 12)
+          .slice(0, PUBLIC_LIMIT)
           .map((entry) => ({ entry, source: 'public' as RecentPublishSource }));
 
     const items = selected.map(({ entry, source }) => ({

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { addComment, getFileTransfers } from '@/lib/server/file-transfers';
+import { addComment, getFileTransferById } from '@/lib/server/file-transfers';
 import { addSocialEvent } from '@/lib/server/social-events';
 
 export const dynamic = 'force-dynamic';
@@ -10,12 +10,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const session = await getAuthSession();
     const viewerIdentifier = session?.user?.id || session?.user?.email || '';
-    const transfers = await getFileTransfers();
-    const t = transfers.find(
-      (x) => (x.id === id || x.shareId === id) &&
-              x.directoryVisibility === 'public' &&
-              !x.revokedAt,
-    );
+    const found = await getFileTransferById(id);
+    const t =
+      found && found.directoryVisibility === 'public' && !found.revokedAt ? found : null;
     if (!t) return NextResponse.json({ comments: [] });
     return NextResponse.json({
       comments: (t.comments ?? []).map((c) => ({

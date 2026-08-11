@@ -788,7 +788,7 @@ export default function LoginPage() {
 
                   {/* Submit button */}
                   <button type="submit" disabled={isSubmitting}
-                    className="group relative flex h-9 w-full items-center justify-center gap-2 overflow-hidden rounded-[11px] bg-white text-[13px] font-black text-[#070709] shadow-[0_0_40px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.6)] transition hover:bg-white/93 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:rounded-[13px] sm:text-[13.5px]">
+                    className="group relative flex h-9 w-full items-center justify-center gap-2 overflow-hidden rounded-[11px] bg-white text-[13px] font-black text-[#070709] shadow-[0_0_40px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.6)] transition hover:bg-white/93 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#070709] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:rounded-[13px] sm:text-[13.5px]">
                     <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                     <span className="relative">{isSubmitting ? 'Signing in…' : 'Sign in'}</span>
                     {!isSubmitting && <ArrowRight className="relative h-3.5 w-3.5 transition group-hover:translate-x-0.5" />}

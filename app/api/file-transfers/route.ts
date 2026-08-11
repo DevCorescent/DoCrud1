@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { appendFileTransfer, deleteFileTransferRow, getFileTransfers, saveFileTransfers, updateFileTransfer } from '@/lib/server/file-transfers';
 import { getDbPool } from '@/lib/server/database';
-import { selectFileTransferRowById } from '@/lib/server/db/file-transfers-rows';
+import { selectFileTransferRowById, selectFileTransferRowsForUser } from '@/lib/server/db/file-transfers-rows';
 import { getProfileData } from '@/lib/server/user-profiles';
 import { attachFileToLocker, createFileLocker, ensureLockerRotation, getVisibleLockersForUser } from '@/lib/server/file-lockers';
 import { checkDriveQuota } from '@/lib/server/drive-storage';
@@ -20,6 +20,17 @@ export async function GET() {
     const session = await getAuthSession();
     if (!session?.user || !canUseTransfers(session.user.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Same visibility rules, applied by MongoDB instead of by scanning the whole
+    // collection in Node. Falls back to the JSON path when no database is set up.
+    if (getDbPool()) {
+      const visible = await selectFileTransferRowsForUser({
+        role: session.user.role,
+        email: session.user.email || '',
+        orgId: session.user.id,
+      });
+      return NextResponse.json(visible);
     }
 
     const transfers = await getFileTransfers();

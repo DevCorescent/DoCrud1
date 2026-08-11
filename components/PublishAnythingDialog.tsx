@@ -814,8 +814,8 @@ export default function PublishAnythingDialog({
         sm:h-auto sm:max-h-[88dvh] sm:rounded-[28px]
         border border-white/[0.08] bg-[#0a0a0e]
         shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_-1px_0_0_rgba(255,255,255,0.06),0_32px_80px_rgba(0,0,0,0.98)]
-        animate-in fade-in slide-in-from-bottom-8 duration-[300ms] ease-[cubic-bezier(0.25,0.75,0,1)]
-        sm:slide-in-from-bottom-4 sm:zoom-in-[99%] sm:duration-[180ms]">
+        animate-in fade-in slide-in-from-bottom-8 [animation-duration:300ms] [animation-timing-function:cubic-bezier(0.25,0.75,0,1)]
+        sm:slide-in-from-bottom-4 sm:zoom-in-[99%] sm:[animation-duration:180ms]">
 
         {/* Mobile drag handle */}
         <div className="flex sm:hidden shrink-0 justify-center pt-3 pb-1">

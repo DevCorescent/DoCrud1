@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
+import { getAuthSession } from '@/lib/server/auth';
+import { getStoredUserByEmail } from '@/lib/server/users';
 import {
   getRazorpayConfig,
   buildBillingAmounts,
   buildRazorpayReceipt,
   createPendingCommerceTransaction,
 } from '@/lib/server/billing';
-import { getFileTransfers } from '@/lib/server/file-transfers';
+import { getFileTransferById } from '@/lib/server/file-transfers';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,11 +33,11 @@ export async function POST(request: NextRequest) {
     if (!postId) return NextResponse.json({ error: 'postId is required.' }, { status: 400 });
     if (!FEATURE_PLANS[planKey]) return NextResponse.json({ error: 'Invalid plan.' }, { status: 400 });
 
-    const [users, transfers] = await Promise.all([getStoredUsers(), getFileTransfers()]);
-    const user = users.find((u) => u.email.toLowerCase() === session.user!.email!.toLowerCase());
+    const [user, post] = await Promise.all([
+      getStoredUserByEmail(session.user!.email!),
+      getFileTransferById(postId),
+    ]);
     if (!user) return NextResponse.json({ error: 'User not found.' }, { status: 404 });
-
-    const post = transfers.find((t) => t.id === postId || t.shareId === postId);
     if (!post) return NextResponse.json({ error: 'Post not found.' }, { status: 404 });
     if (post.uploadedByUserId !== user.id) {
       return NextResponse.json({ error: 'You can only feature your own posts.' }, { status: 403 });

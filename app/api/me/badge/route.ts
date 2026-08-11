@@ -1,17 +1,22 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { getProfileData } from '@/lib/server/user-profiles';
+import { resolveSessionUserId } from '@/lib/server/auth';
+import { getProfileFields } from '@/lib/server/user-profiles';
 
 export const dynamic = 'force-dynamic';
 
+/** The only profile fields this badge renders. */
+const BADGE_FIELDS = ['docrudGo', 'docrudInfinity', 'docrudInfinityExpiresAt', 'avatarUrl'] as const;
+
 export async function GET() {
   const session = await getAuthSession();
-  const { resolveSessionUserId } = await import('@/lib/server/auth');
   const userId = await resolveSessionUserId(session);
   if (!userId) {
     return NextResponse.json({ docrudGo: false, avatarUrl: null });
   }
-  const profile = await getProfileData(userId);
+  // Projected: the full profile document carries resume files and portfolio
+  // entries this endpoint never looks at.
+  const profile = await getProfileFields(userId, BADGE_FIELDS);
 
   // Infinity badge: granted via docrudGo (legacy) OR active docrudInfinity subscription
   const hasInfinityActive = !!profile?.docrudInfinity && (

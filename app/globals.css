@@ -1421,16 +1421,25 @@
     backdrop-filter: blur(22px);
   }
 
-  :root[data-ui-mode='dark'] body main [class*='bg-white'],
-  :root[data-ui-mode='dark'] body main [class*='bg-slate-50'],
-  :root[data-ui-mode='dark'] body main [class*='bg-slate-100'],
-  :root[data-ui-mode='dark'] body main [class*='bg-card'],
-  :root[data-ui-mode='dark'] body section [class*='bg-white'],
-  :root[data-ui-mode='dark'] body section [class*='bg-slate-50'],
-  :root[data-ui-mode='dark'] body article [class*='bg-white'],
-  :root[data-ui-mode='dark'] body article [class*='bg-slate-50'],
-  :root[data-ui-mode='dark'] body div [class*='bg-white/8'],
-  :root[data-ui-mode='dark'] body div [class*='bg-white/9'] {
+  /*
+   * Dark-mode surface conversion for light-coloured PANELS.
+   *
+   * `:not(button)` matters: without it this rule also repainted buttons whose
+   * class merely contains `bg-white`. A light CTA such as the login submit
+   * (`bg-white text-[#070709]`) had its background forced to rgba(10,10,12,.78)
+   * while its dark text stayed put — 1.0:1 contrast, i.e. an invisible button.
+   * Buttons carry their own surface styling and must not be repainted here.
+   */
+  :root[data-ui-mode='dark'] body main [class*='bg-white']:not(button),
+  :root[data-ui-mode='dark'] body main [class*='bg-slate-50']:not(button),
+  :root[data-ui-mode='dark'] body main [class*='bg-slate-100']:not(button),
+  :root[data-ui-mode='dark'] body main [class*='bg-card']:not(button),
+  :root[data-ui-mode='dark'] body section [class*='bg-white']:not(button),
+  :root[data-ui-mode='dark'] body section [class*='bg-slate-50']:not(button),
+  :root[data-ui-mode='dark'] body article [class*='bg-white']:not(button),
+  :root[data-ui-mode='dark'] body article [class*='bg-slate-50']:not(button),
+  :root[data-ui-mode='dark'] body div [class*='bg-white/8']:not(button),
+  :root[data-ui-mode='dark'] body div [class*='bg-white/9']:not(button) {
     background-image: none !important;
     background-color: rgba(10, 10, 12, 0.78) !important;
     backdrop-filter: blur(20px);
@@ -1453,6 +1462,20 @@
   :root[data-ui-mode='dark'] body [class*='text-slate-800'],
   :root[data-ui-mode='dark'] body [class*='text-black'] {
     color: rgb(248 250 252) !important;
+  }
+
+  /*
+   * Restore dark text on SOLID-WHITE controls.
+   *
+   * The blanket rule above lightens dark text for dark mode, which is right for
+   * text sitting on dark surfaces — but a light CTA (`bg-white text-slate-950`,
+   * e.g. the signup "Continue" button) then rendered near-white on white: 1.0:1,
+   * invisible. `~=` matches the exact `bg-white` token only, so translucent
+   * glass surfaces such as `bg-white/[0.06]` are deliberately NOT affected.
+   */
+  :root[data-ui-mode='dark'] body button[class~='bg-white'],
+  :root[data-ui-mode='dark'] body a[class~='bg-white'] {
+    color: rgb(2 6 23) !important;
   }
 
   :root[data-ui-mode='dark'] .premium-shell [class*='text-slate-700'],

@@ -12,6 +12,8 @@ import {
   deleteFileTransferRow,
   patchFileTransfersByFolderId,
   patchFileTransfersByLockerId,
+  aggregatePublicAnalyticsForUser,
+  selectExistingAccessPasswords,
 } from '@/lib/server/db/file-transfers-rows';
 
 export { deleteFileTransferRow, patchFileTransfersByFolderId, patchFileTransfersByLockerId };
@@ -34,9 +36,8 @@ function generateStrongSecret(length = 14) {
   return randomBytes(length).toString('base64url').slice(0, length).toUpperCase();
 }
 
-function generateUniqueAccessPassword(existingTransfers: SecureFileTransfer[], preferred?: string) {
+function generateUniqueAccessPassword(existing: Set<string>, preferred?: string) {
   const normalizedPreferred = preferred?.trim().toUpperCase();
-  const existing = new Set(existingTransfers.map((item) => item.accessPassword?.trim().toUpperCase()).filter(Boolean));
   if (normalizedPreferred && !existing.has(normalizedPreferred)) {
     return normalizedPreferred;
   }
@@ -105,6 +106,21 @@ export async function getFileTransfers(): Promise<SecureFileTransfer[]> {
   return readJsonFile<SecureFileTransfer[]>(fileTransfersPath, []);
 }
 
+/**
+ * Single transfer by id or shareId.
+ *
+ * Routes that need exactly one transfer used to call getFileTransfers() and
+ * .find() over the result — an O(n) transfer of the whole collection (dataUrl
+ * blobs included) to answer an O(1) question. This goes straight to the row.
+ */
+export async function getFileTransferById(idOrShareId: string): Promise<SecureFileTransfer | null> {
+  if (getDbPool()) {
+    return selectFileTransferRowById(idOrShareId);
+  }
+  const transfers = await getFileTransfers();
+  return transfers.find((item) => item.id === idOrShareId || item.shareId === idOrShareId) ?? null;
+}
+
 export async function saveFileTransfers(transfers: SecureFileTransfer[]): Promise<void> {
   if (getDbPool()) {
     await reconcileFileTransferRows(transfers);
@@ -122,7 +138,17 @@ export async function appendFileTransfer(
     preferredId?: string;
   },
 ): Promise<SecureFileTransfer> {
-  const transfers = await getFileTransfers();
+  const usingDb = Boolean(getDbPool());
+  // The JSON path needs the whole array to rewrite the file; the database path
+  // needs only the in-use access passwords, not every dataUrl blob.
+  const transfers = usingDb ? [] : await getFileTransfers();
+  const existingPasswords = usingDb
+    ? await selectExistingAccessPasswords()
+    : new Set(
+        transfers
+          .map((item) => item.accessPassword?.trim().toUpperCase())
+          .filter((value): value is string => Boolean(value)),
+      );
   const now = new Date().toISOString();
   const id = input.preferredId?.trim() || `transfer-${Date.now()}-${randomBytes(4).toString('hex')}`;
 
@@ -133,11 +159,11 @@ export async function appendFileTransfer(
 
   if (input.encryptionEnabled && input.passwords) {
     encryptedPayload = encryptTransferDataUrl(input.dataUrl, input.passwords);
-    accessPassword = generateUniqueAccessPassword(transfers, input.preferredAccessPassword || input.passwords.accessPassword);
+    accessPassword = generateUniqueAccessPassword(existingPasswords, input.preferredAccessPassword || input.passwords.accessPassword);
     securePassword = generateStrongSecret();
     parserPassword = generateStrongSecret();
   } else if (input.authMode === 'password' || input.authMode === 'password_and_email' || input.authMode === 'triple_password') {
-    accessPassword = generateUniqueAccessPassword(transfers, input.preferredAccessPassword || input.accessPassword);
+    accessPassword = generateUniqueAccessPassword(existingPasswords, input.preferredAccessPassword || input.accessPassword);
     if (input.authMode === 'triple_password') {
       securePassword = generateStrongSecret();
       parserPassword = generateStrongSecret();
@@ -188,7 +214,7 @@ export async function appendFileTransfer(
     updatedAt: now,
   };
 
-  if (getDbPool()) {
+  if (usingDb) {
     await upsertFileTransferRow(transfer);
   } else {
     await writeJsonFile(fileTransfersPath, [transfer, ...transfers]);
@@ -502,16 +528,47 @@ export async function getPublicAnalyticsForUser(userId: string): Promise<{
   publishCount: number;
   featuredCount: number;
 }> {
+  if (getDbPool()) {
+    const aggregated = await aggregatePublicAnalyticsForUser(userId, new Date().toISOString());
+    if (aggregated) return aggregated;
+  }
+
+  // JSON-file fallback (no database configured).
   const transfers = await getFileTransfers();
-  const now = new Date();
+
   const posts = transfers.filter(
-    (t) => t.uploadedByUserId === userId && t.directoryVisibility === 'public' && !t.revokedAt,
+    (t) =>
+      t.uploadedByUserId === userId &&
+      t.directoryVisibility === 'public' &&
+      !t.revokedAt,
   );
+
+  let totalViews = 0;
+  let totalLikes = 0;
+  let totalComments = 0;
+  let featuredCount = 0;
+
+  const now = Date.now();
+
+  for (const post of posts) {
+    totalViews += post.viewCount ?? post.openCount ?? 0;
+    totalLikes += post.likesCount ?? 0;
+    totalComments += post.commentsCount ?? 0;
+
+    if (
+      post.featured &&
+      post.featuredUntil &&
+      new Date(post.featuredUntil).getTime() > now
+    ) {
+      featuredCount++;
+    }
+  }
+
   return {
-    totalViews: posts.reduce((s, t) => s + (t.viewCount ?? t.openCount ?? 0), 0),
-    totalLikes: posts.reduce((s, t) => s + (t.likesCount ?? 0), 0),
-    totalComments: posts.reduce((s, t) => s + (t.commentsCount ?? 0), 0),
+    totalViews,
+    totalLikes,
+    totalComments,
     publishCount: posts.length,
-    featuredCount: posts.filter((t) => t.featured && t.featuredUntil && new Date(t.featuredUntil) > now).length,
+    featuredCount,
   };
 }

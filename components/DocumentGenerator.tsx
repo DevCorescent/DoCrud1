@@ -23,40 +23,50 @@ import { buildAbsoluteAppUrl } from '@/lib/url';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { AlertTriangle, ArrowRight, Award, BarChart3, Bell, BookOpen, BrainCircuit, BriefcaseBusiness, ChevronDown, ChevronRight, CircleHelp, Copy, CreditCard, Download, Eye, FileSearch, FileSignature, FileSpreadsheet, FileText, FolderKanban, History, KeyRound, LayoutDashboard, LineChart, Link2, Lock, LockKeyhole, LogOut, Mail, Maximize2, Menu, MessageSquare, MoreHorizontal, PanelLeftClose, PanelLeftOpen, PenLine, PieChart, QrCode, RefreshCw, ScanText, Search, Settings, Share2, ShieldCheck, Sparkles, Table2, Upload, UserRound, Users, Video, Wrench, X } from 'lucide-react';
 import ShareLinkModal from './ShareLinkModal';
-import ClientPortal from './ClientPortal';
-import EmployeePortal from './EmployeePortal';
-import BusinessSettingsCenter from './BusinessSettingsCenter';
-import TutorialsCenter from './TutorialsCenter';
-import DoxpertCenter from './DoxpertCenter';
-import DocumentVisualizerCenter from './DocumentVisualizerCenter';
-import DocumentVisualizerModal from './DocumentVisualizerModal';
 import ProfileCenter from './ProfileCenter';
 import FileTransferCenter from './FileTransferCenter';
 import SecureAccessCenter from './SecureAccessCenter';
-import DocSheetCenter from './DocSheetCenter';
 import BillingCenter from './BillingCenter';
 import SupportCenter from './SupportCenter';
-import TeamWorkspaceCenter from './TeamWorkspaceCenter';
-import DealRoomCenter from './DealRoomCenter';
 import InternalMailboxCenter from './InternalMailboxCenter';
-import DailyToolsCenter from './DailyToolsCenter';
-import ScratchpadCenter from './ScratchpadCenter';
-import HiringDeskCenter from './HiringDeskCenter';
 import DocrudiansCenter from './DocrudiansCenter';
-import TemplatePublisherCenter from './TemplatePublisherCenter';
-	import VirtualIdCenter from './VirtualIdCenter';
-	import CertificatesCenter from './CertificatesCenter';
 	import GigsCenter from './GigsCenter';
 	import TalentLeadsCenter from './TalentLeadsCenter';
-	import SuperAdminCommandCenter from './SuperAdminCommandCenter';
-import FormsCenter from './FormsCenter';
-import TemplateStudioDialog from './TemplateStudioDialog';
 import { PdfSignatureBoxEditor } from './PdfSignatureBoxEditor';
 	import WorkspaceTour from './WorkspaceTour';
 	import DocrudLogo from './DocrudLogo';
 import type { BusinessSettings } from '@/types/document';
 import { fullWorkspaceTour, WORKSPACE_TOUR_STORAGE_KEY, workspaceTours, type WorkspaceTourFeatureKey } from '@/lib/workspace-tour';
 import { trackTelemetry } from '@/lib/telemetry-client';
+
+import NextDynamic from 'next/dynamic';
+
+/*
+ * Workspace tab panels, code-split.
+ *
+ * Radix <TabsContent> mounts children only while its tab is active, so each
+ * of these chunks downloads the first time a user opens that tab rather than
+ * being bundled into the initial /workspace payload.
+ */
+const DailyToolsCenter = NextDynamic(() => import('./DailyToolsCenter'), { ssr: false });
+const DocSheetCenter = NextDynamic(() => import('./DocSheetCenter'), { ssr: false });
+const SuperAdminCommandCenter = NextDynamic(() => import('./SuperAdminCommandCenter'), { ssr: false });
+const DocumentVisualizerCenter = NextDynamic(() => import('./DocumentVisualizerCenter'), { ssr: false });
+const DocumentVisualizerModal = NextDynamic(() => import('./DocumentVisualizerModal'), { ssr: false });
+const TemplateStudioDialog = NextDynamic(() => import('./TemplateStudioDialog'), { ssr: false });
+const DoxpertCenter = NextDynamic(() => import('./DoxpertCenter'), { ssr: false });
+const TeamWorkspaceCenter = NextDynamic(() => import('./TeamWorkspaceCenter'), { ssr: false });
+const DealRoomCenter = NextDynamic(() => import('./DealRoomCenter'), { ssr: false });
+const HiringDeskCenter = NextDynamic(() => import('./HiringDeskCenter'), { ssr: false });
+const TemplatePublisherCenter = NextDynamic(() => import('./TemplatePublisherCenter'), { ssr: false });
+const FormsCenter = NextDynamic(() => import('./FormsCenter'), { ssr: false });
+const ScratchpadCenter = NextDynamic(() => import('./ScratchpadCenter'), { ssr: false });
+const CertificatesCenter = NextDynamic(() => import('./CertificatesCenter'), { ssr: false });
+const VirtualIdCenter = NextDynamic(() => import('./VirtualIdCenter'), { ssr: false });
+const BusinessSettingsCenter = NextDynamic(() => import('./BusinessSettingsCenter'), { ssr: false });
+const TutorialsCenter = NextDynamic(() => import('./TutorialsCenter'), { ssr: false });
+const ClientPortal = NextDynamic(() => import('./ClientPortal'), { ssr: false });
+const EmployeePortal = NextDynamic(() => import('./EmployeePortal'), { ssr: false });
 import GlobalSearchBar from './GlobalSearchBar';
 
 const emptyDashboard: DashboardMetrics = {
@@ -4697,7 +4707,7 @@ export default function DocumentGenerator() {
 		                />
 		                {/* Drawer panel */}
 		                <div
-		                  className={`fixed inset-x-0 bottom-0 z-50 flex flex-col md:hidden rounded-t-[32px] bg-white/[0.97] backdrop-blur-3xl border-t border-white/70 shadow-[0_-32px_80px_rgba(15,23,42,0.18),0_-1px_0_rgba(255,255,255,0.8)] transition-transform duration-[340ms] ease-[cubic-bezier(0.32,0.72,0,1)] ${notificationOpen ? 'translate-y-0' : 'translate-y-full'}`}
+		                  className={`fixed inset-x-0 bottom-0 z-50 flex flex-col md:hidden rounded-t-[32px] bg-white/[0.97] backdrop-blur-3xl border-t border-white/70 shadow-[0_-32px_80px_rgba(15,23,42,0.18),0_-1px_0_rgba(255,255,255,0.8)] transition-transform [transition-duration:340ms] [transition-timing-function:cubic-bezier(0.32,0.72,0,1)] ${notificationOpen ? 'translate-y-0' : 'translate-y-full'}`}
 		                  style={{ maxHeight: '88svh', paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
 		                >
 		                  {/* Drag handle */}

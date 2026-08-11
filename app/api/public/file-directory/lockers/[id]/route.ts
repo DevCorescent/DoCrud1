@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getFileLockerById } from '@/lib/server/file-lockers';
 import { getFileTransfers } from '@/lib/server/file-transfers';
+import { getDbPool } from '@/lib/server/database';
+import { selectLeanFileTransferRows } from '@/lib/server/db/file-transfers-rows';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,9 +15,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const password = (request.nextUrl.searchParams.get('password') || '').trim().toUpperCase();
     const unlocked = password && password === locker.currentPassword;
-    const transfers = await getFileTransfers();
+    // Only this locker's files, matched in MongoDB and without dataUrl blobs.
+    const transfers = getDbPool()
+      ? await selectLeanFileTransferRows({ lockerId: locker.id })
+      : (await getFileTransfers()).filter((item) => !item.revokedAt && item.lockerId === locker.id);
     const files = transfers
-      .filter((item) => !item.revokedAt && item.lockerId === locker.id)
       .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
       .map((item) => ({
         id: item.id,

@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import type { Metadata } from 'next';
 import PublishedItemPage from '@/components/PublishedItemPage';
 import { buildPageMetadata, buildArticleSchema, buildBreadcrumbSchema, jsonLd, metaDesc } from '@/lib/seo';
@@ -6,8 +7,15 @@ import { getPublicAppBaseUrl } from '@/lib/url';
 
 export const dynamic = 'force-dynamic';
 
+/*
+ * generateMetadata() and Page() both need the same record, and Next.js calls
+ * them separately for one request. React's cache() collapses that into a single
+ * database lookup per request.
+ */
+const loadItem = cache((id: string) => getPublishedItemById(id));
+
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const item = await getPublishedItemById(params.id);
+  const item = await loadItem(params.id);
 
   if (!item || item.directoryVisibility !== 'public') {
     return buildPageMetadata({
@@ -42,7 +50,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
 export default async function Page({ params }: { params: { id: string } }) {
   const baseUrl = getPublicAppBaseUrl();
-  const item = await getPublishedItemById(params.id);
+  const item = await loadItem(params.id);
 
   const articleSchema =
     item && item.directoryVisibility === 'public'

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import { readJsonFile, writeJsonFile, dataDir } from '@/lib/server/storage';
 import { getAuthSession } from '@/lib/server/auth';
-import { appendFileTransfer, getFileTransfers } from '@/lib/server/file-transfers';
+import { appendFileTransfer, getFileTransferById } from '@/lib/server/file-transfers';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,8 +85,7 @@ export async function POST(
   let sizeB    = rec.sizeInBytes ?? 0;
 
   if (dataUrl.length < 10 && rec.sourceTransferId) {
-    const transfers = await getFileTransfers();
-    const src = transfers.find(t => t.id === rec.sourceTransferId || t.shareId === rec.sourceTransferId);
+    const src = await getFileTransferById(rec.sourceTransferId);
     if (src) { dataUrl = src.dataUrl; mime = src.mimeType; sizeB = src.sizeInBytes ?? 0; }
   }
 

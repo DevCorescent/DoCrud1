@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { recordPresencePing, recordPresenceOffline } from '@/lib/server/presence';
 import { isIpBlocked } from '@/lib/server/telemetry';
-import { getStoredUsers } from '@/lib/server/auth';
+import { getStoredUserById } from '@/lib/server/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,14 +17,32 @@ function ip(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const clientIp = ip(req);
-    if (clientIp && await isIpBlocked(clientIp)) {
-      return NextResponse.json({ ok: true });
+
+    // Body parsing is local work, so do it before the blocklist read — that lets
+    // the blocklist check and the user lookup share one round trip window. The
+    // block still short-circuits before anything is recorded.
+    const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+
+    const blockedPromise = clientIp ? isIpBlocked(clientIp) : Promise.resolve(false);
+
+    if (!body?.sessionId) {
+      await blockedPromise.catch(() => false);
+      return NextResponse.json({ ok: false }, { status: 400 });
     }
 
-    const body = await req.json().catch(() => null) as Record<string, unknown> | null;
-    if (!body?.sessionId) return NextResponse.json({ ok: false }, { status: 400 });
-
     const sessionId = String(body.sessionId);
+    const userId = body.userId ? String(body.userId) : undefined;
+
+    // One indexed _id lookup — this fires every 20 s per open tab, so it must
+    // not pull the whole users collection to read five fields. Started here so
+    // it overlaps the blocklist read instead of following it.
+    const userPromise = userId
+      ? getStoredUserById(userId).catch(() => null)
+      : Promise.resolve(null);
+
+    if (await blockedPromise.catch(() => false)) {
+      return NextResponse.json({ ok: true });
+    }
 
     if (body.offline === true) {
       await recordPresenceOffline(sessionId);
@@ -32,26 +50,12 @@ export async function POST(req: NextRequest) {
     }
 
     // Enrich with real user data if we have a userId
-    let userEmail: string | undefined;
-    let userName: string | undefined;
-    let organizationName: string | undefined;
-    let accountType: string | undefined;
-    let planId: string | undefined;
-
-    const userId = body.userId ? String(body.userId) : undefined;
-    if (userId) {
-      try {
-        const users = await getStoredUsers();
-        const u = users.find((u) => u.id === userId);
-        if (u) {
-          userEmail = u.email;
-          userName = u.name;
-          organizationName = u.organizationName;
-          accountType = u.accountType;
-          planId = (u.subscription as Record<string, string> | undefined)?.planId;
-        }
-      } catch { /* non-fatal */ }
-    }
+    const u = await userPromise;
+    const userEmail = u?.email;
+    const userName = u?.name;
+    const organizationName = u?.organizationName;
+    const accountType = u?.accountType;
+    const planId = (u?.subscription as Record<string, string> | undefined)?.planId;
 
     await recordPresencePing({
       sessionId,

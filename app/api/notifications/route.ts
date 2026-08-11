@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
+import { getAuthSession } from '@/lib/server/auth';
+import { getStoredUserByEmail } from '@/lib/server/users';
 import { getWorkspaceNotifications, markWorkspaceNotificationsRead } from '@/lib/server/notifications';
 
 export const dynamic = 'force-dynamic';
@@ -12,8 +13,8 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const users = await getStoredUsers();
-    const storedUser = users.find((entry) => entry.email.toLowerCase() === sessionEmail.toLowerCase());
+    // Indexed email lookup instead of scanning the whole users collection.
+    const storedUser = await getStoredUserByEmail(sessionEmail);
     if (!storedUser) {
       return NextResponse.json({ notifications: [], unreadCount: 0 });
     }
@@ -27,8 +28,7 @@ export async function GET() {
 }
 
 async function resolveUser(email: string) {
-  const users = await getStoredUsers();
-  return users.find((entry) => entry.email.toLowerCase() === email.toLowerCase()) ?? null;
+  return getStoredUserByEmail(email);
 }
 
 /** POST — mark specific notification ids as read */

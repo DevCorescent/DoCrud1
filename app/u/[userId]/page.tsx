@@ -9,6 +9,9 @@ import { useSession, signOut } from 'next-auth/react';
 import VerifiedBadge from '@/components/VerifiedBadge';
 import PublicFaceBadge, { PublicFaceStarIcon, PUBLIC_FACE_CATEGORY_LABELS } from '@/components/PublicFaceBadge';
 import { PresenceBadge } from '@/components/PresenceBadge';
+import ProfileQRCode from '@/components/ProfileQRCode';
+const InfinityUpgradeModal = dynamic(() => import('@/components/InfinityUpgradeModal'), { ssr: false });
+const ProfileActivityPanel = dynamic(() => import('@/components/ProfileActivityPanel'), { ssr: false });
 const PublicFaceApplicationForm = dynamic(() => import('@/components/PublicFaceApplicationForm'), { ssr: false });
 const FeaturePostPanel          = dynamic(() => import('@/components/FeaturePostPanel'), { ssr: false });
 const ProfilePublishedFeed      = dynamic(() => import('@/components/ProfilePublishedFeed'), { ssr: false });
@@ -2629,6 +2632,8 @@ export default function UserProfilePage() {
 
   // Resume download (Docrud Infinity gated — enforced server-side)
   const [resumeDlBusy, setResumeDlBusy] = useState(false);
+  // Opened only in response to a 403 from the server — never used to decide access.
+  const [showResumeInfinityModal, setShowResumeInfinityModal] = useState(false);
   const [resumeDlMsg, setResumeDlMsg] = useState('');
 
   // Services tab state
@@ -2923,6 +2928,25 @@ export default function UserProfilePage() {
 
   const servicesLoadedForRef = useRef<string | null>(null);
   // Load services when services tab is active (once per userId — re-fetch only if user changes)
+  /*
+   * Record the profile visit. Fire-and-forget and guarded by a ref so a
+   * re-render never re-posts: rendering never waits on analytics, and the
+   * server additionally dedupes to one visit row per visitor/owner/day.
+   * Self-visits are rejected server-side.
+   */
+  const visitLoggedForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!userId || !session || !data || data.isOwnProfile) return;
+    if (visitLoggedForRef.current === userId) return;
+    visitLoggedForRef.current = userId;
+    void fetch('/api/profile/view', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ targetUserId: userId }),
+      keepalive: true,
+    }).catch(() => { /* analytics is non-critical */ });
+  }, [userId, session, data]);
+
   useEffect(() => {
     if (tab !== 'services' || !userId) return;
     if (servicesLoadedForRef.current === userId) return;
@@ -3027,8 +3051,13 @@ export default function UserProfilePage() {
     try {
       const res = await fetch(`/api/profile/resume/${userId}`);
       if (!res.ok) {
+        // The server is authoritative. 403 means the viewer lacks Docrud
+        // Infinity — surface the upgrade path instead of a raw error string.
+        if (res.status === 403) { setShowResumeInfinityModal(true); return; }
+        if (res.status === 401) { router.push('/login'); return; }
+        if (res.status === 404) { setResumeDlMsg('Resume not available.'); return; }
         const json = await res.json().catch(() => null) as { error?: string } | null;
-        setResumeDlMsg(json?.error ?? 'Resume not available.');
+        setResumeDlMsg(json?.error ?? 'Something went wrong. Please try again.');
         return;
       }
       const blob = await res.blob();
@@ -3043,7 +3072,7 @@ export default function UserProfilePage() {
       a.remove();
       URL.revokeObjectURL(url);
     } catch {
-      setResumeDlMsg('Resume not available.');
+      setResumeDlMsg('Unable to connect. Please try again.');
     } finally {
       setResumeDlBusy(false);
     }
@@ -3646,7 +3675,22 @@ export default function UserProfilePage() {
                 )}
               </>
             ) : null}
+            {/* Profile QR — individual accounts only. Appended after the existing
+                actions so none of them shift position. The QR itself is fetched
+                lazily, on open, so this adds no request to the initial load. */}
+            {user.accountType !== 'business' && (
+              <ProfileQRCode userId={user.id} userName={user.name} />
+            )}
             </div>
+
+            {/* Shown only after the server returns 403 for a resume download. */}
+            {showResumeInfinityModal && (
+              <InfinityUpgradeModal
+                feature="resume"
+                onClose={() => setShowResumeInfinityModal(false)}
+                returnTo={`/u/${user.id}`}
+              />
+            )}
             {/* Resume download notice — e.g. "Upgrade to infinity plan." */}
             {resumeDlMsg && (
               <p className="text-[11px] text-white/40 text-left sm:text-right">{resumeDlMsg}</p>
@@ -5076,6 +5120,9 @@ export default function UserProfilePage() {
                 <p className="text-white/30 text-sm">No recent published activity.</p>
               </div>
             )}
+
+            {/* Profile activity — owner only; identity gating is server-side */}
+            {isOwnProfile && <ProfileActivityPanel />}
 
             {/* Published page engagement tracking */}
             {isOwnProfile && <PublisherTrackingPanel />}

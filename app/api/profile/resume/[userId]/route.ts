@@ -7,6 +7,8 @@ import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileData } from '@/lib/server/user-profiles';
 import { hasInfinity } from '@/lib/server/infinity';
 import { isStorageUrl } from '@/lib/server/r2';
+import { recordResumeDownload } from '@/lib/server/profile-activity';
+import { addSocialEvent } from '@/lib/server/social-events';
 
 const MIME_BY_EXT: Record<string, string> = {
   pdf:  'application/pdf',
@@ -55,6 +57,30 @@ export async function GET(_req: NextRequest, { params }: { params: { userId: str
     }
 
     const fileName = (entry.fileName || 'resume').replace(/[^\w.\-]+/g, '_');
+
+    // Authorization has already passed at this point, so this download counts.
+    // Fire-and-forget: the bytes must not wait on analytics. The record is
+    // idempotent per downloader/owner/day, so browser retries cannot inflate it.
+    if (!isOwner) {
+      void recordResumeDownload({
+        resumeOwnerId: params.userId,
+        downloaderUserId: viewerId,
+        resumeId: entry.id,
+      }).catch(() => { /* non-critical */ });
+
+      // Neutral title on purpose: the notification bell is not entitlement-aware,
+      // so naming the downloader here would leak identity to an owner without the
+      // Infinity entitlement. Identity is served by /api/profile/activity, which
+      // gates on the owner's plan.
+      void addSocialEvent({
+        type: 'document_viewed',
+        actorId: viewerId,
+        actorName: 'Someone',
+        targetUserId: params.userId,
+        resourceTitle: 'your resume',
+        href: '/u/' + params.userId,
+      }).catch(() => { /* non-critical */ });
+    }
 
     // Stored in R2 — proxy the bytes so the storage URL stays server-side
     if (isStorageUrl(entry.url)) {

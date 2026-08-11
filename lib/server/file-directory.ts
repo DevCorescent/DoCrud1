@@ -1,5 +1,11 @@
 import { SecureFileTransfer } from '@/types/document';
 import { getFileTransfers } from '@/lib/server/file-transfers';
+import { getDbPool } from '@/lib/server/database';
+import {
+  aggregateDirectoryCategoryCounts,
+  aggregateDirectoryStats,
+  selectLeanFileTransferRows,
+} from '@/lib/server/db/file-transfers-rows';
 
 export interface FileDirectorySearchEntry {
   kind?: 'file' | 'locker';
@@ -91,13 +97,19 @@ export async function searchPublicDirectory(options: {
   category?: string;
   limit?: number;
 }) {
-  const transfers = await getFileTransfers();
   const query = normalizedText(options.query);
   const category = normalizedText(options.category);
   const limit = Math.max(1, Math.min(options.limit || 12, 30));
 
-  return transfers
-    .filter((entry) => !entry.revokedAt && entry.directoryVisibility === 'public' && entry.authMode === 'public')
+  // Visibility filtering happens in MongoDB; only the relevance score, which has
+  // no SQL/aggregation equivalent, stays in JS.
+  const candidates = getDbPool()
+    ? await selectLeanFileTransferRows({ directoryVisibility: 'public', authMode: 'public' })
+    : (await getFileTransfers()).filter(
+        (entry) => !entry.revokedAt && entry.directoryVisibility === 'public' && entry.authMode === 'public',
+      );
+
+  return candidates
     .filter((entry) => !category || normalizedText(entry.directoryCategory) === category)
     .map((entry) => ({ entry, score: scoreTransfer(entry, query) }))
     .filter(({ score }) => !query || score > 0)
@@ -115,7 +127,6 @@ export async function searchPrivateDirectory(options: {
   category?: string;
   limit?: number;
 }) {
-  const transfers = await getFileTransfers();
   const query = normalizedText(options.query);
   const password = (options.password || '').trim().toUpperCase();
   const category = normalizedText(options.category);
@@ -125,9 +136,21 @@ export async function searchPrivateDirectory(options: {
     return [];
   }
 
-  const matchingTransfers = transfers
-    .filter((entry) => !entry.revokedAt && entry.directoryVisibility !== 'public' && entry.accessPassword === password)
-    .filter((entry) => !category || normalizedText(entry.directoryCategory) === category);
+  // The password match is an exact-equality filter — let MongoDB do it rather
+  // than streaming every transfer in the database into this process.
+  const candidates = getDbPool()
+    ? await selectLeanFileTransferRows({
+        directoryVisibility: { $ne: 'public' },
+        accessPassword: password,
+      })
+    : (await getFileTransfers()).filter(
+        (entry) =>
+          !entry.revokedAt && entry.directoryVisibility !== 'public' && entry.accessPassword === password,
+      );
+
+  const matchingTransfers = candidates.filter(
+    (entry) => !category || normalizedText(entry.directoryCategory) === category,
+  );
 
   const lockerMap = new Map<string, SecureFileTransfer[]>();
   const looseFiles: SecureFileTransfer[] = [];
@@ -187,6 +210,15 @@ export async function searchPrivateDirectory(options: {
 }
 
 export async function getDirectoryCategories() {
+  if (getDbPool()) {
+    const counted = await aggregateDirectoryCategoryCounts();
+    if (counted) {
+      return counted.sort(
+        (left, right) => right.count - left.count || left.label.localeCompare(right.label),
+      );
+    }
+  }
+
   const transfers = await getFileTransfers();
   const categoryMap = new Map<string, number>();
 
@@ -206,6 +238,25 @@ function formatStorageMb(bytes: number) {
 }
 
 export async function getFileDirectoryStats() {
+  if (getDbPool()) {
+    const [totals, categories] = await Promise.all([
+      aggregateDirectoryStats(),
+      aggregateDirectoryCategoryCounts(),
+    ]);
+    if (totals && categories) {
+      return {
+        totalFiles: totals.totalFiles,
+        publicFiles: totals.publicFiles,
+        privateFiles: totals.totalFiles - totals.publicFiles,
+        totalSizeInBytes: totals.totalSizeInBytes,
+        totalSizeLabel: formatStorageMb(totals.totalSizeInBytes),
+        totalOpens: totals.totalOpens,
+        totalDownloads: totals.totalDownloads,
+        categoryCount: categories.length,
+      };
+    }
+  }
+
   const transfers = await getFileTransfers();
   const activeTransfers = transfers.filter((entry) => !entry.revokedAt);
   const publicTransfers = activeTransfers.filter((entry) => entry.directoryVisibility === 'public');

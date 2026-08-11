@@ -20,3 +20,6 @@ data/collaboration-settings.json
 .devtools/
 data/custom/templates.json
 data/auth-settings.json
+
+# Migration backups — contain user image data, keep local only
+profile-image-migration-backup-*.json

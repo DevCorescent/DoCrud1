@@ -6646,12 +6646,6 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
   const [searchLoading, setSearchLoading] = useState(false);
 
   /* ── Live homepage data ─────────────────────────────────────── */
-  type LiveProfile = {
-    id: string; name: string; accountType: string; createdAt: string; docrudGo: boolean;
-    profile: { headline?: string; bio?: string; location?: string; avatarUrl?: string; bannerUrl?: string; coverGradient?: string; coverPosition?: string; skills?: string[]; openToWork?: boolean };
-    stats: { followers: number; following: number; gigsCount: number };
-    upraiseCount: number;
-  };
   type LiveGig = {
     id: string; slug: string; title: string; summary: string; category: string;
     skills: string[]; budgetLabel: string; timelineLabel: string; engagementType: string;
@@ -6665,7 +6659,6 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
     gigs: { value: string; raw: number; label: string };
   };
   type LiveFeed = NHCLiveFeed;
-  const [liveProfiles, setLiveProfiles] = useState<LiveProfile[]>([]);
   const [liveGigs, setLiveGigs] = useState<LiveGig[]>([]);
   const [liveMetrics, setLiveMetrics] = useState<LiveMetrics | null>(null);
   const [liveFeeds, setLiveFeeds] = useState<LiveFeed[]>([]);
@@ -6673,19 +6666,16 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
   useEffect(() => {
     const load = async () => {
       try {
-        const [pRes, gRes, mRes, fRes] = await Promise.all([
-          fetch('/api/public/people'),
+        // NOTE: /api/public/people is deliberately NOT fetched here.
+        // NewHomepageContent accepts a `liveProfiles` prop but never reads it,
+        // so this request downloaded ~233 KB on every homepage load and
+        // rendered nothing. If a live-profiles section is meant to exist, wire
+        // the fetch back up together with the markup that renders it.
+        const [gRes, mRes, fRes] = await Promise.all([
           fetch('/api/public/gigs'),
           fetch('/api/public/homepage-metrics'),
           fetch('/api/public/feeds'),
         ]);
-        if (pRes.ok) {
-          const d = await pRes.json() as { people?: LiveProfile[] };
-          if (Array.isArray(d.people)) {
-            const sorted = [...d.people].sort((a, b) => (b.upraiseCount - a.upraiseCount) || (b.stats.followers - a.stats.followers));
-            setLiveProfiles(sorted);
-          }
-        }
         if (gRes.ok) {
           const d = await gRes.json() as { gigs?: LiveGig[] };
           if (Array.isArray(d.gigs)) {
@@ -7976,7 +7966,6 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                       }
                     } catch { /* silent */ }
                   }}
-                  liveProfiles={liveProfiles}
                   liveGigs={liveGigs}
                   liveMetrics={liveMetrics}
                   liveFeeds={liveFeeds}

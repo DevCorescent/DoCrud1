@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFileTransfers, updateFileTransfer } from '@/lib/server/file-transfers';
+import { getFileTransferById, updateFileTransfer } from '@/lib/server/file-transfers';
 import { getAuthSession } from '@/lib/server/auth';
 
 export const dynamic = 'force-dynamic';
@@ -38,17 +38,17 @@ function cleanChips(tags: string[] | undefined): string[] | undefined {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const session = await getAuthSession();
+    const [session, found] = await Promise.all([getAuthSession(), getFileTransferById(id)]);
     const viewerIdentifier = session?.user?.id || session?.user?.email || '';
     const viewerUserId = session?.user?.id || '';
-    const transfers = await getFileTransfers();
-    const t = transfers.find(
-      (x) => (x.id === id || x.shareId === id) &&
-              x.directoryVisibility === 'public' &&
-              x.authMode === 'public' &&
-              !x.revokedAt &&
-              x.moderationStatus !== 'removed',
-    );
+    const t =
+      found &&
+      found.directoryVisibility === 'public' &&
+      found.authMode === 'public' &&
+      !found.revokedAt &&
+      found.moderationStatus !== 'removed'
+        ? found
+        : null;
     if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const cat = t.directoryCategory?.toLowerCase() || 'document';
@@ -120,8 +120,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     const viewerUserId = session?.user?.id;
     if (!viewerUserId) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
 
-    const transfers = await getFileTransfers();
-    const t = transfers.find((x) => (x.id === id || x.shareId === id) && !x.revokedAt);
+    const found = await getFileTransferById(id);
+    const t = found && !found.revokedAt ? found : null;
     if (!t) return NextResponse.json({ error: 'Not found.' }, { status: 404 });
     if (t.uploadedByUserId !== viewerUserId) return NextResponse.json({ error: 'You can only delete your own posts.' }, { status: 403 });
 

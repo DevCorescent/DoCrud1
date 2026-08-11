@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { canUnlockFileTransfer, getFileTransfers, isPreviewableFile, recordFileTransferEvent, resolveFileTransferDataUrl } from '@/lib/server/file-transfers';
+import { canUnlockFileTransfer, getFileTransferById, isPreviewableFile, recordFileTransferEvent, resolveFileTransferDataUrl } from '@/lib/server/file-transfers';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const transfers = await getFileTransfers();
-    const entry = transfers.find((item) => item.shareId === params.id || item.id === params.id);
+    const entry = await getFileTransferById(params.id);
     if (!entry) {
       return NextResponse.json({ error: 'File transfer not found.' }, { status: 404 });
     }

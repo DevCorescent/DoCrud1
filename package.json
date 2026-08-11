@@ -9,14 +9,18 @@
     "start": "next start",
     "start:local": "next start -H 127.0.0.1 -p 3010",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "test:presence": "tsx scripts/presence-selftest.ts",
     "db:init": "node scripts/db-init.mjs",
+    "db:indexes": "node scripts/db-indexes.mjs",
     "db:seed": "node scripts/db-seed.mjs",
     "db:migrate-blobs": "node --max-old-space-size=4096 scripts/db-migrate-blobs.mjs",
     "compress-r2": "tsx scripts/compress-r2-images.ts",
     "compress-r2:dry": "tsx scripts/compress-r2-images.ts --dry-run",
     "migrate-mongo-r2": "tsx scripts/migrate-mongo-images-to-r2.ts",
-    "migrate-mongo-r2:dry": "tsx scripts/migrate-mongo-images-to-r2.ts --dry-run"
+    "migrate-mongo-r2:dry": "tsx scripts/migrate-mongo-images-to-r2.ts --dry-run",
+    "migrate-profile-r2": "tsx scripts/migrate-profile-images-to-r2.ts",
+    "migrate-profile-r2:dry": "tsx scripts/migrate-profile-images-to-r2.ts --dry-run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",
@@ -43,6 +47,7 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.6.205",
     "puppeteer": "^24.40.0",
+    "qrcode-generator": "^2.0.4",
     "react": "^18",
     "react-dom": "^18",
     "sharp": "^0.35.2",

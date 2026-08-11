@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getFileTransfers } from '@/lib/server/file-transfers';
+import { getDbPool } from '@/lib/server/database';
+import { selectPublicFileTransfersForFeed } from '@/lib/server/db/file-transfers-rows';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,16 +66,25 @@ function initials(name: string) {
 
 export async function GET() {
   try {
-    const transfers = await getFileTransfers();
+    // Public filtering happens in MongoDB; dataUrl (avg ~95 KB/doc) stays there
+    // and only the prefix tests this route needs come back as booleans.
+    const transfers = getDbPool()
+      ? await selectPublicFileTransfersForFeed({ moderationFiltered: false })
+      : (await getFileTransfers()).filter(
+          (t) =>
+            t.directoryVisibility === 'public' &&
+            t.authMode === 'public' &&
+            !t.revokedAt,
+        );
 
     const items = transfers
-      .filter(
-        (t) =>
-          t.directoryVisibility === 'public' &&
-          t.authMode === 'public' &&
-          !t.revokedAt,
-      )
       .map((t, i) => {
+        const hasImageDataUrl =
+          (t as { hasImageDataUrl?: boolean }).hasImageDataUrl ??
+          !!t.dataUrl?.startsWith('data:image/');
+        const hasHtmlDataUrl =
+          (t as { hasHtmlDataUrl?: boolean }).hasHtmlDataUrl ??
+          !!t.dataUrl?.startsWith('data:text/html');
         const rawCat = (t.directoryCategory ?? '').toLowerCase().trim();
         const displayCat = CATEGORY_MAP[rawCat] ?? 'Productivity';
         const author = t.uploadedBy?.split('@')[0] ?? 'Anonymous';
@@ -98,14 +109,14 @@ export async function GET() {
             // 1. Explicit valid URL (API path or https://)
             if (u && !u.startsWith('data:')) return u;
             // 2. Main content is an image → thumbnail endpoint handles it
-            if (t.mimeType?.startsWith('image/') && t.dataUrl?.startsWith('data:image/')) {
+            if (t.mimeType?.startsWith('image/') && hasImageDataUrl) {
               return `/api/public/thumbnail/${t.id}`;
             }
             // 3. HTML gallery post/product → thumbnail endpoint parses first image
             if (
               t.mimeType === 'text/html' &&
               (t.directoryCategory === 'post' || t.directoryCategory === 'product') &&
-              t.dataUrl?.startsWith('data:text/html')
+              hasHtmlDataUrl
             ) {
               return `/api/public/thumbnail/${t.id}`;
             }

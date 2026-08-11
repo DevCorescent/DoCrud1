@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
+import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
+import { getStoredUserById } from '@/lib/server/users';
+import { recordProfileVisit } from '@/lib/server/profile-activity';
 import { addSocialEvent } from '@/lib/server/social-events';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +13,8 @@ export const dynamic = 'force-dynamic';
  * Rate-limited to one event per viewer per target per hour (server-side).
  */
 
-// In-memory rate limit: "viewerId:targetId" → last record time
+// In-memory guard for the notification event only. The durable 24h visit
+// dedup lives in profile_visits, keyed by visitor/owner/day.
 const viewRateLimit = new Map<string, number>();
 
 export async function POST(req: NextRequest) {
@@ -24,14 +27,24 @@ export async function POST(req: NextRequest) {
     const targetUserId = body?.targetUserId?.trim();
     if (!targetUserId) return NextResponse.json({ ok: false });
 
-    const users = await getStoredUsers();
-    const actor = users.find((u) => u.email.toLowerCase() === sessionEmail.toLowerCase());
-    if (!actor || actor.id === targetUserId) return NextResponse.json({ ok: false });
+    // Indexed lookup — this used to read the entire users collection.
+    const actorId = await resolveSessionUserId(session);
+    if (!actorId || actorId === targetUserId) return NextResponse.json({ ok: false });
+    const actor = await getStoredUserById(actorId);
+    if (!actor) return NextResponse.json({ ok: false });
 
-    // Rate-limit: one view notification per viewer→target per 60 minutes
+    // Durable, idempotent: one visit row per visitor/owner/UTC day, so repeated
+    // renders or navigations cannot create duplicate records.
+    void recordProfileVisit({
+      profileOwnerId: targetUserId,
+      visitorUserId: actor.id,
+      source: 'profile',
+    }).catch(() => { /* non-critical */ });
+
+    // Rate-limit the *notification* to one per viewer→target per 60 minutes
     const key = `${actor.id}:${targetUserId}`;
     const lastView = viewRateLimit.get(key) ?? 0;
-    if (Date.now() - lastView < 60 * 60 * 1000) return NextResponse.json({ ok: false });
+    if (Date.now() - lastView < 60 * 60 * 1000) return NextResponse.json({ ok: true });
     viewRateLimit.set(key, Date.now());
 
     void addSocialEvent({

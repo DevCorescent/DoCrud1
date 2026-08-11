@@ -7,7 +7,7 @@ import { applyRoadmapPromotionToSubscription, getDefaultPublicPlan, getEffective
 import { buildPolicyAcceptance } from '@/lib/policy-consent';
 import { getAuthSettings, getAuthSettingsSync } from '@/lib/server/settings';
 import { endUserPresence, getStoredUsers, getStoredUserByEmail, saveStoredUsers, upsertStoredUser, type StoredUser } from '@/lib/server/users';
-import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
+import { getProfileData, getProfileFields, updateProfileData } from '@/lib/server/user-profiles';
 
 export type { StoredUser };
 export { getStoredUsers, saveStoredUsers };
@@ -239,9 +239,17 @@ export function buildAuthOptions(): NextAuthOptions {
         if (lookupEmail) {
           const storedUser = await getStoredUserByEmail(lookupEmail);
           if (storedUser) {
+            // `profile` is read for exactly one boolean below, and only matters
+            // for individual accounts. Fetching the whole profile document here
+            // meant every authenticated request pulled base64 avatars, resume
+            // files and portfolio entries out of Mongo. Same value, projected —
+            // and skipped entirely when the account type makes it irrelevant.
+            const needsEmailVerified = storedUser.accountType === 'individual';
             const [plan, profile] = await Promise.all([
               getEffectiveSaasPlanForUser(storedUser).catch(() => null),
-              getProfileData(storedUser.id).catch(() => null),
+              needsEmailVerified
+                ? getProfileFields(storedUser.id, ['emailVerified'] as const).catch(() => null)
+                : Promise.resolve(null),
             ]);
             const expired = isSubscriptionPeriodExpired(storedUser.subscription);
             const suspended = Boolean(storedUser.safety?.suspendedUntil && new Date(storedUser.safety.suspendedUntil).getTime() > Date.now());
@@ -340,17 +348,31 @@ export function getAuthSession() {
 
 /**
  * Resolve the canonical stored user id for a session.
- * Prefer email lookup — session.user.id can be a stale Google OAuth sub
- * while Infinity / profiles are keyed by the stored DoCrud user id.
+ *
+ * `session.user.id` is authoritative and FRESH: the jwt callback above runs on
+ * every getServerSession() call, looks the user up by email, and assigns
+ * `token.id = storedUser.id`. So by the time any route reaches this function,
+ * the canonical id has already been read from the database during this same
+ * request — querying by email again just repeats that query.
+ *
+ * This is not a cache. Nothing is retained between requests, and no
+ * authorization value is reused: role, permissions and suspension are still
+ * recomputed from the database by the jwt callback on every single request.
+ *
+ * The email lookup is kept as a fallback for tokens that carry no id (legacy
+ * tokens issued before the callback set it), which is exactly the case the
+ * original ordering existed to cover.
  */
 export async function resolveSessionUserId(
   session: { user?: { id?: string | null; email?: string | null } } | null | undefined,
 ): Promise<string | null> {
+  const id = session?.user?.id?.trim();
+  if (id) return id;
+
   const email = session?.user?.email?.trim();
   if (email) {
     const stored = await getStoredUserByEmail(email).catch(() => null);
     if (stored?.id) return stored.id;
   }
-  const id = session?.user?.id?.trim();
-  return id || null;
+  return null;
 }

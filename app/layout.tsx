@@ -72,7 +72,10 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   themeColor: '#0d0e11',
-  colorScheme: 'dark',
+  // The app supports both themes (ThemeController), dark by default. Pinning
+  // this to 'dark' left native controls, scrollbars and autofill dark for
+  // visitors who chose the light theme.
+  colorScheme: 'dark light',
 }
 
 export const metadata: Metadata = {
@@ -340,12 +343,20 @@ export default function RootLayout({
     ],
   }
 
+  /*
+   * Dark is the documented default (ThemeController.getStoredColorMode() falls
+   * back to 'dark'), but that runs in a useEffect — so the first paint had
+   * neither `data-ui-mode` nor `.dark`, and every themed surface rendered with
+   * light styling on the dark page until hydration. Declaring the default on
+   * the server removes that flash; ThemeController still switches to light on
+   * mount when the visitor has chosen it.
+   */
   return (
-    <html lang="en" className={manrope.variable}>
+    <html lang="en" className={`${manrope.variable} dark`} data-ui-mode="dark">
       <head>
-        {/* Indexing & browser hints */}
-        <meta name="msapplication-TileColor" content="#0d0e11" />
-        <meta name="msapplication-TileImage" content="/docrud-favicon.png" />
+        {/* Indexing & browser hints.
+            msapplication-TileColor / TileImage are intentionally NOT repeated
+            here — they are already emitted by `metadata.other` above. */}
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

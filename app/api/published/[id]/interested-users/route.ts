@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { getFileTransfers } from '@/lib/server/file-transfers';
+import { getFileTransferById } from '@/lib/server/file-transfers';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,8 +10,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const session = await getAuthSession();
     if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const transfers = await getFileTransfers();
-    const post = transfers.find((t) => t.id === id || t.shareId === id);
+    const post = await getFileTransferById(id);
     if (!post) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Only the post owner can see the list

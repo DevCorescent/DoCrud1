@@ -867,6 +867,24 @@ export async function getPublicGigListings() {
     .sort((left, right) => +new Date(right.updatedAt) - +new Date(left.updatedAt));
 }
 
+/**
+ * Published+public gigs owned by one user.
+ *
+ * Filters on ownerUserId in the same single pass as the visibility checks, so
+ * profile pages never materialise (or sort) the full public gig list.
+ */
+export async function getPublicGigListingsForUser(userId: string) {
+  const gigs = await getGigListings();
+  return gigs
+    .filter(
+      (gig) =>
+        gig.ownerUserId === userId &&
+        gig.status === 'published' &&
+        gig.visibility === 'public',
+    )
+    .sort((left, right) => +new Date(right.updatedAt) - +new Date(left.updatedAt));
+}
+
 export async function getGigListingBySlug(slug: string) {
   const gigs = await getGigListings();
   return gigs.find((gig) => gig.slug === slug) || null;

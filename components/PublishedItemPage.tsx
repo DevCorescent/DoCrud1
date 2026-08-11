@@ -1698,7 +1698,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
               <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0C] via-[#0A0A0C]/20 to-transparent" />
             </div>
           )}
-          <div className="px-4 sm:px-6 lg:px-10 xl:px-14 2xl:px-20 py-8 lg:py-12">
+          <div className="px-0 sm:px-6 lg:px-10 xl:px-14 2xl:px-20 py-8 lg:py-12">
             {item.category === 'post'      && <PostDetailContent      {...sharedCatProps} />}
             {item.category === 'poll'      && <PollDetailContent      {...sharedCatProps} />}
             {item.category === 'survey'    && <SurveyDetailContent    {...sharedCatProps} />}

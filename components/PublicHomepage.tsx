@@ -6342,7 +6342,7 @@ function NewHomepageContent({
 
         {/* ── Publish heading + content discovery + feed cards + gig slider (grouped) ── */}
         <div className="flex flex-col" style={{ gap: 14 }}>
-          <PublishHeading onPublish={() => onPublishClick()} />
+         
         <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
         </div>
 

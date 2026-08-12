@@ -1,6 +1,6 @@
 [
   {
-    "sessionId": "s-mspvuf5c-zakq5s",
+    "sessionId": "s-msq4rgiy-z6h7x8",
     "visitorId": "v-msmvb4yb-x7zu52",
     "path": "/login",
     "surface": "public",
@@ -11,19 +11,19 @@
     "os": "macOS",
     "tabVisible": false,
     "navigatorOnline": true,
-    "firstSeenAt": "2026-08-12T09:24:26.428Z",
-    "lastPingAt": "2026-08-12T09:24:50.076Z",
-    "lastInteractionAt": "2026-08-12T09:24:26.428Z",
+    "firstSeenAt": "2026-08-12T13:33:56.665Z",
+    "lastPingAt": "2026-08-12T13:34:02.131Z",
+    "lastInteractionAt": "2026-08-12T13:33:56.665Z",
     "pageViews": 1,
     "pathHistory": [
       "/login"
     ],
     "focusDurationMs": 0,
-    "clickCount": 4,
+    "clickCount": 2,
     "keystrokeCount": 2,
     "scrollEventCount": 0,
-    "idleMs": 1814,
-    "connectionType": "4g",
+    "idleMs": 4271,
+    "connectionType": "3g",
     "engagementScore": 32
   }
 ]

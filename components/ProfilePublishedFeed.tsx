@@ -648,17 +648,20 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
         {item.thumbnailUrl && (
           <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-0 rounded-xl overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.thumbnailUrl} alt={item.title}
+            <img src={item.thumbnailUrl} alt={item.category === 'post' ? '' : item.title}
               className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
           </Link>
         )}
 
         {/* content */}
+        {/* content — photo posts: body/caption only, never auto title */}
         <Link href={`/published/${item.id}`} className="block">
-          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-            {item.title}
-          </h3>
-          {item.body && <BodyOrChips body={item.body} byline={item.byline} category={item.category} />}
+          {item.category !== 'post' && !/\.\w{2,5}$/i.test(item.title.trim()) && !['post', 'poll', 'document', 'file', 'image', 'photo', 'video', 'survey', 'article', 'upload'].includes(item.title.trim().toLowerCase()) && (
+            <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+              {item.title}
+            </h3>
+          )}
+          {item.body?.trim() && <BodyOrChips body={item.body} byline={item.byline} category={item.category} />}
         </Link>
 
         {/* chips */}

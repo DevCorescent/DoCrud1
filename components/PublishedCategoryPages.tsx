@@ -263,7 +263,9 @@ export function PostDetailContent({
   };
 
   const hashtags = item.chips ?? [];
-  const junkTitle = item.isReal && ['post', 'poll', 'document', 'file', 'image', 'video', 'survey', 'article', 'upload'].includes(item.title.trim().toLowerCase());
+  // Photo posts have no user title — caption lives in body/notes only.
+  // Never render item.title (often auto-filled from fileName or "post").
+  const hasRealCaption = Boolean(item.body && item.body.trim());
 
   // Resolve images from real dataUrl (base64 or R2 https URL), gallery HTML, or thumbnail fallback
   const isHttpImage = !!item.dataUrl && /^https?:\/\//i.test(item.dataUrl) && !!item.mimeType?.startsWith('image/');
@@ -280,14 +282,14 @@ export function PostDetailContent({
       {isSingleImage ? (
         <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black -mx-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.dataUrl} alt={item.title} className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
+          <img src={item.dataUrl} alt="" className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
         </div>
       ) : isGallery && galleryImages.length > 0 ? (
         <ImageSlider images={galleryImages} />
       ) : fallbackThumb ? (
         <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={fallbackThumb} alt={item.title} className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
+          <img src={fallbackThumb} alt="" className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
         </div>
       ) : (
         /* fallback gradient placeholder */
@@ -313,17 +315,14 @@ export function PostDetailContent({
         </div>
       </div>
 
-      {/* Caption / title — hide generic category titles like "post" */}
-      {!junkTitle && (
-        <h2 className="text-2xl font-bold leading-snug tracking-tight text-white">{item.title}</h2>
+      {/* Caption = body/notes only — never item.title */}
+      {hasRealCaption && (
+        <div className="space-y-4">
+          {item.body.split('\n\n').filter(Boolean).map((para, i) => (
+            <p key={i} className="text-[15px] leading-[1.85] text-white/70">{para}</p>
+          ))}
+        </div>
       )}
-
-      {/* Body text */}
-      <div className="space-y-4">
-        {item.body.split('\n\n').filter(Boolean).map((para, i) => (
-          <p key={i} className="text-[15px] leading-[1.85] text-white/70">{para}</p>
-        ))}
-      </div>
 
       {/* Engagement row */}
       <div className="flex items-center gap-4 py-3 border-t border-b border-white/[0.07]">

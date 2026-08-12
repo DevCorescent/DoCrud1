@@ -977,12 +977,15 @@ function TrendingPanel({
             {topNews.length === 0 && <p className="text-[11px] text-white/20">No news yet</p>}
             {topNews.map((item, i) => {
               const eng = (item.likesCount ?? 0) + (item.commentsCount ?? 0) + (item.trendCount ?? 0);
+              const label = feedLabel(item);
               return (
                 <Link key={item.id} href={`/published/${item.shareId || item.id}`} className="group flex items-start gap-2.5">
                   <span className="text-[11px] font-bold text-white/20 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{item.title}</p>
-                    <p className="text-[10.5px] text-white/25 mt-0.5">
+                    {label ? (
+                      <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{label}</p>
+                    ) : null}
+                    <p className={`text-[10.5px] text-white/25 ${label ? 'mt-0.5' : ''}`}>
                       {eng > 0 ? `${eng >= 1000 ? `${(eng / 1000).toFixed(1)}k` : eng} engagements · ` : ''}{timeAgo(item.postedAt)}
                     </p>
                   </div>
@@ -1016,20 +1019,23 @@ function TrendingPanel({
 
           {topTrendingPosts.length > 0 ? (
             <div className="space-y-3.5 mb-4">
-              {topTrendingPosts.map((item, i) => (
+              {topTrendingPosts.map((item, i) => {
+                const label = feedLabel(item);
+                return (
                 <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
                   <span className="text-[11px] font-bold text-orange-400/40 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">
-                      {item.category === 'post' ? getBodySnippet(item.body, 60) : item.title}
-                    </p>
-                    <div className="flex items-center gap-1 mt-0.5">
+                    {label ? (
+                      <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{label}</p>
+                    ) : null}
+                    <div className={`flex items-center gap-1 ${label ? 'mt-0.5' : ''}`}>
                       <TrendingUp className="h-3 w-3 text-orange-400/50" />
                       <span className="text-[10.5px] font-bold text-orange-400/60">{trends[item.id]?.count} trending</span>
                     </div>
                   </div>
                 </Link>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <p className="text-[11px] text-white/20 mb-4 leading-relaxed">
@@ -1104,7 +1110,9 @@ function TrendingPanel({
                 <div key={i} className="flex items-start gap-2.5">
                   <TrendingUp className="h-3.5 w-3.5 text-orange-400/35 shrink-0 mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11.5px] font-semibold text-white/50 leading-snug line-clamp-1">{h.title}</p>
+                    <p className="text-[11.5px] font-semibold text-white/50 leading-snug line-clamp-1">
+                      {isJunkTitle({ title: h.title }) ? (h.category || 'Post') : h.title}
+                    </p>
                     <p className="text-[10px] text-white/22 mt-0.5 capitalize">{h.category} · {timeAgo(new Date(h.trendedAt).toISOString())}</p>
                   </div>
                 </div>
@@ -1120,13 +1128,23 @@ function TrendingPanel({
   );
 }
 
-/* ─── title cleanliness check for real items ─────────────────────── */
+/* ─── hide filenames / generic defaults; photo caption = body only ── */
 const JUNK_TITLE_RE = /\.\w{2,5}$/;
-const GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'video', 'survey', 'article', 'upload']);
-function isJunkTitle(item: PublishedItem): boolean {
-  if (!item.isReal) return false;
+const GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'photo', 'video', 'survey', 'article', 'upload']);
+function isJunkTitle(item: { title: string }): boolean {
   const t = item.title.trim().toLowerCase();
   return JUNK_TITLE_RE.test(t) || GENERIC_TITLES.has(t);
+}
+function hasRealCaption(body?: string): boolean {
+  return Boolean(body && body.trim());
+}
+/** Sidebar label — posts: body/caption only, never title/filename. '' if nothing real. */
+function feedLabel(item: { title: string; body?: string; category?: string }): string {
+  if (item.category === 'post') {
+    return hasRealCaption(item.body) ? getBodySnippet(item.body!, 80) : '';
+  }
+  if (!isJunkTitle(item)) return item.title;
+  return hasRealCaption(item.body) ? getBodySnippet(item.body!, 80) : '';
 }
 
 /* ─── featured card — same structure as PublishedCard + featured badge ── */
@@ -1195,11 +1213,11 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
       {item.thumbnailUrl && (
         <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.thumbnailUrl} alt={item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
+          <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
         </Link>
       )}
 
-      {/* ── content ── */}
+      {/* ── content — photo posts: body/caption only, never title ── */}
       <Link href={`/published/${item.id}`} className="block">
         {item.category !== 'post' && !isJunkTitle(item) && (
           <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
@@ -1360,11 +1378,11 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         {item.thumbnailUrl && (
           <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.thumbnailUrl} alt={item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
+            <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
           </Link>
         )}
 
-        {/* ── content ── */}
+        {/* ── content — photo posts: body only, never title ── */}
         <Link href={`/published/${item.id}`} className="block">
           {item.category !== 'post' && !isJunkTitle(item) && (
             <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
@@ -2683,7 +2701,7 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={thumbUrl}
-            alt={item.title}
+            alt=""
             className="w-full max-h-[480px] object-cover"
             loading="lazy"
             decoding="async"
@@ -2691,14 +2709,14 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
         </Link>
       )}
 
-      {/* caption */}
+      {/* caption = body/notes only — never auto title/filename for photo posts */}
       <Link href={`/published/${item.id}`} className="block">
         {item.category !== 'post' && !isJunkTitle(item) && (
           <p className="text-[13.5px] font-semibold text-white leading-snug line-clamp-2 group-hover:text-white/85 transition-colors">
             {searchQuery ? highlight(item.title, searchQuery) : item.title}
           </p>
         )}
-        {item.body && (
+        {hasRealCaption(item.body) && (
           <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${item.category !== 'post' && !isJunkTitle(item) ? 'mt-1.5' : ''}`}>
             {searchQuery ? highlight(getBodySnippet(item.body), searchQuery) : getBodySnippet(item.body)}
           </p>

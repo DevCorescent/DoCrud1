@@ -274,6 +274,17 @@ function getBodySnippet(raw: string): string {
   return prose.join(' ').slice(0, 220).trim();
 }
 
+/* Hide filenames (photo.jpg) and generic defaults ("post") from visible titles */
+const JUNK_TITLE_RE = /\.\w{2,5}$/;
+const GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'photo', 'video', 'survey', 'article', 'upload']);
+function isJunkTitle(title: string): boolean {
+  const t = title.trim().toLowerCase();
+  return JUNK_TITLE_RE.test(t) || GENERIC_TITLES.has(t);
+}
+function hasRealCaption(body?: string): boolean {
+  return Boolean(body && body.trim());
+}
+
 function isUrl(s: string) {
   try { return /^https?:\/\//.test(s); } catch { return false; }
 }
@@ -1716,7 +1727,13 @@ export default function PublishedItemPage({ id }: { id: string }) {
             <ChevronRight className="h-3 w-3 shrink-0 text-white/20" />
             <span className="shrink-0 capitalize text-white/35">{item.category}</span>
             <ChevronRight className="h-3 w-3 shrink-0 text-white/20" />
-            <span className="truncate font-medium text-white/55">{item.title}</span>
+            <span className="truncate font-medium text-white/55">
+              {item.category === 'post'
+                ? (hasRealCaption(item.body) ? getBodySnippet(item.body).slice(0, 48) : (item.badge || 'Post'))
+                : isJunkTitle(item.title)
+                  ? (hasRealCaption(item.body) ? getBodySnippet(item.body).slice(0, 48) : item.badge || item.category)
+                  : item.title}
+            </span>
           </nav>
 
           {/* header actions */}
@@ -1889,10 +1906,12 @@ export default function PublishedItemPage({ id }: { id: string }) {
               </div>
             )}
 
-            {/* title */}
-            <h1 className="mt-5 text-[1.75rem] font-bold leading-[1.2] tracking-[-0.03em] text-white sm:text-[2rem] lg:text-[2.25rem]">
-              {item.title}
-            </h1>
+            {/* title — never for photo posts; hide filenames/generics for other cats */}
+            {item.category !== 'post' && !isJunkTitle(item.title) && (
+              <h1 className="mt-5 text-[1.75rem] font-bold leading-[1.2] tracking-[-0.03em] text-white sm:text-[2rem] lg:text-[2.25rem]">
+                {item.title}
+              </h1>
+            )}
 
             {/* byline row */}
             <div className="mt-4 flex flex-col gap-3 border-b border-white/[0.07] pb-5 sm:flex-row sm:items-center sm:justify-between">

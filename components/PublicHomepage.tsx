@@ -4496,96 +4496,96 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
 
   const current = CYCLE_TYPES[idx];
 
-  return (
-    <div className="w-full select-none">
-      <style>{`
-        @keyframes ph-in  { from { opacity:0; transform:translateY(8px) scale(0.93); } to { opacity:1; transform:none; } }
-        @keyframes ph-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(-7px) scale(0.95); } }
-        @keyframes ph-row { from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:none; } }
-      `}</style>
+  // return (
+  //   // <div className="w-full select-none">
+  //   //   <style>{`
+  //   //     @keyframes ph-in  { from { opacity:0; transform:translateY(8px) scale(0.93); } to { opacity:1; transform:none; } }
+  //   //     @keyframes ph-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(-7px) scale(0.95); } }
+  //   //     @keyframes ph-row { from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:none; } }
+  //   //   `}</style>
 
-      {/* Single flex row — never wraps */}
-      <div
-        className="flex items-center justify-between gap-2"
-        style={{ animation: 'ph-row 0.45s 0.04s cubic-bezier(0.22,1,0.36,1) both' }}
-      >
-        {/* ── Headline (no-wrap) ── */}
-        <div className="flex items-center gap-0 min-w-0 overflow-hidden" style={{ flex: '1 1 0' }}>
+  //   //   // Single flex row — never wraps
+  //   //   <div
+  //   //     className="flex items-center justify-between gap-2"
+  //   //     style={{ animation: 'ph-row 0.45s 0.04s cubic-bezier(0.22,1,0.36,1) both' }}
+  //   //   >
+  //   //     //── Headline (no-wrap) ── 
+  //   //     // <div className="flex items-center gap-0 min-w-0 overflow-hidden" style={{ flex: '1 1 0' }}>
 
-          {/* "Publish" */}
-          <span style={{
-            fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
-            letterSpacing: '-0.03em', lineHeight: 1,
-            color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            Publish
-          </span>
+  //   //       //"Publish" 
+  //   //       <span style={{
+  //   //         fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
+  //   //         letterSpacing: '-0.03em', lineHeight: 1,
+  //   //         color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', flexShrink: 0,
+  //   //       }}>
+  //   //         Publish
+  //   //       </span>
 
-          {/* Separator › */}
-          <span style={{
-            fontSize: 'clamp(13px,3vw,19px)', fontWeight: 400,
-            color: 'rgba(255,255,255,0.18)', margin: '0 clamp(5px,1.2vw,9px)',
-            flexShrink: 0, lineHeight: 1,
-          }}>›</span>
+  //   //       // Separator 
+  //   //       <span style={{
+  //   //         fontSize: 'clamp(13px,3vw,19px)', fontWeight: 400,
+  //   //         color: 'rgba(255,255,255,0.18)', margin: '0 clamp(5px,1.2vw,9px)',
+  //   //         flexShrink: 0, lineHeight: 1,
+  //   //       }}>›</span>
 
-          {/* Animated rotating word */}
-          <span
-            key={idx}
-            style={{
-              fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
-              letterSpacing: '-0.03em', lineHeight: 1,
-              color: current.color,
-              textShadow: `0 0 22px ${current.color}44`,
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              flexShrink: 0, whiteSpace: 'nowrap',
-              animation: phase === 'in'
-                ? 'ph-in 0.28s cubic-bezier(0.22,1,0.36,1) both'
-                : 'ph-out 0.24s cubic-bezier(0.55,0,1,0.45) both',
-            }}
-          >
-            <current.Icon style={{
-              width: 'clamp(11px,2vw,15px)', height: 'clamp(11px,2vw,15px)',
-              color: current.color, opacity: 0.72, flexShrink: 0,
-            }} />
-            {current.label}
-          </span>
+  //   //       // Animated rotating word 
+  //   //       <span
+  //   //         key={idx}
+  //   //         style={{
+  //   //           fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
+  //   //           letterSpacing: '-0.03em', lineHeight: 1,
+  //   //           color: current.color,
+  //   //           textShadow: `0 0 22px ${current.color}44`,
+  //   //           display: 'inline-flex', alignItems: 'center', gap: 5,
+  //   //           flexShrink: 0, whiteSpace: 'nowrap',
+  //   //           animation: phase === 'in'
+  //   //             ? 'ph-in 0.28s cubic-bezier(0.22,1,0.36,1) both'
+  //   //             : 'ph-out 0.24s cubic-bezier(0.55,0,1,0.45) both',
+  //   //         }}
+  //   //       >
+  //   //         <current.Icon style={{
+  //   //           width: 'clamp(11px,2vw,15px)', height: 'clamp(11px,2vw,15px)',
+  //   //           color: current.color, opacity: 0.72, flexShrink: 0,
+  //   //         }} />
+  //   //         {current.label}
+  //   //       </span>
 
-          {/* "& more." */}
-          <span style={{
-            fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
-            letterSpacing: '-0.03em', lineHeight: 1,
-            color: 'rgba(255,255,255,0.38)', marginLeft: 'clamp(5px,1.2vw,9px)',
-            whiteSpace: 'nowrap', flexShrink: 0,
-          }}>
-            &amp; more.
-          </span>
-        </div>
+  //   //       // "& more." 
+  //   //       <span style={{
+  //   //         fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
+  //   //         letterSpacing: '-0.03em', lineHeight: 1,
+  //   //         color: 'rgba(255,255,255,0.38)', marginLeft: 'clamp(5px,1.2vw,9px)',
+  //   //         whiteSpace: 'nowrap', flexShrink: 0,
+  //   //       }}>
+  //   //         &amp; more.
+  //   //       </span>
+  //   //     </div> 
 
-        {/* ── Publish CTA ── */}
-        <button
-          type="button"
-          onClick={onPublish}
-          className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
-          style={{
-            height: 'clamp(28px,5vw,34px)',
-            padding: '0 clamp(10px,2vw,14px)',
-            borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.13)',
-            backdropFilter: 'blur(16px)',
-            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 10px rgba(0,0,0,0.25)',
-            color: 'rgba(255,255,255,0.75)',
-            fontSize: 'clamp(10.5px,1.8vw,12.5px)',
-            letterSpacing: '0.01em',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <Plus style={{ width: 'clamp(10px,1.6vw,12px)', height: 'clamp(10px,1.6vw,12px)', flexShrink: 0, opacity: 0.75 }} />
-          Publish
-        </button>
-      </div>
-    </div>
-  );
+  //   //     // ── Publish CTA ── 
+  //   //    <button
+  //   //       type="button"
+  //   //       onClick={onPublish}
+  //   //       className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
+  //   //       style={{
+  //   //         height: 'clamp(28px,5vw,34px)',
+  //   //         padding: '0 clamp(10px,2vw,14px)',
+  //   //         borderRadius: 10,
+  //   //         background: 'rgba(255,255,255,0.08)',
+  //   //         border: '1px solid rgba(255,255,255,0.13)',
+  //   //         backdropFilter: 'blur(16px)',
+  //   //         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 10px rgba(0,0,0,0.25)',
+  //   //         color: 'rgba(255,255,255,0.75)',
+  //   //         fontSize: 'clamp(10.5px,1.8vw,12.5px)',
+  //   //         letterSpacing: '0.01em',
+  //   //         whiteSpace: 'nowrap',
+  //   //       }}
+  //   //     >
+  //   //       <Plus style={{ width: 'clamp(10px,1.6vw,12px)', height: 'clamp(10px,1.6vw,12px)', flexShrink: 0, opacity: 0.75 }} />
+  //   //       Publish
+  //   //     </button>
+  //   //   </div>
+  //   // </div>
+  // );
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -4617,7 +4617,7 @@ const CONTENT_TYPES = [
 const CDS_VISIBLE_MOBILE = 3; // tabs shown on mobile
 const CDS_VISIBLE_DESKTOP = 7; // tabs shown on desktop
 
-function ContentDiscoveryStrip() {
+function ContentDiscoveryStrip({ onPublish }: { onPublish: () => void }) {
   const [open, setOpen]       = React.useState(false);
   const [activeId, setActiveId] = React.useState('all');
   const [isMobile, setIsMobile] = React.useState(false);
@@ -4656,46 +4656,169 @@ function ContentDiscoveryStrip() {
       `}</style>
 
       {/* Scrollable pill row */}
-      <div className="cds-scroll" style={{ display:'flex', alignItems:'center', gap: 6, paddingBottom: 2 }}>
-        {CONTENT_TYPES.slice(0, isMobile ? undefined : CDS_VISIBLE_DESKTOP).map(({ id, label, count, Icon, color, rgb }, i) => {
-          const isActive = activeId === id;
-          return (
-            <Link
-              key={id}
-              href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
-              onClick={() => { setActiveId(id); setOpen(false); }}
+      <div
+  className="cds-scroll"
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    paddingBottom: 2,
+  }}
+>
+  {CONTENT_TYPES.slice(0, isMobile ? undefined : CDS_VISIBLE_DESKTOP).map(
+    ({ id, label, count, Icon, color, rgb }, i) => {
+      const isActive = activeId === id;
+
+      return (
+        <React.Fragment key={id}>
+          <Link
+            href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
+            onClick={() => {
+              setActiveId(id);
+              setOpen(false);
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              height: 31,
+              padding: '0 10px 0 7px',
+              borderRadius: 999,
+              textDecoration: 'none',
+              flexShrink: 0,
+              background: isActive
+                ? `rgba(${rgb},0.13)`
+                : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${
+                isActive
+                  ? `rgba(${rgb},0.28)`
+                  : 'rgba(255,255,255,0.07)'
+              }`,
+              boxShadow: isActive
+                ? `0 0 14px rgba(${rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.07)`
+                : 'none',
+              transition:
+                'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+              animation: `cds-tab-in 0.26s ${
+                Math.min(i, 6) * 0.025
+              }s cubic-bezier(0.22,1,0.36,1) both`,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <div
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                height: 31, padding: '0 10px 0 7px',
-                borderRadius: 999, textDecoration: 'none', flexShrink: 0,
-                background: isActive ? `rgba(${rgb},0.13)` : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${isActive ? `rgba(${rgb},0.28)` : 'rgba(255,255,255,0.07)'}`,
-                boxShadow: isActive ? `0 0 14px rgba(${rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.07)` : 'none',
-                transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
-                animation: `cds-tab-in 0.26s ${Math.min(i, 6) * 0.025}s cubic-bezier(0.22,1,0.36,1) both`,
-                whiteSpace: 'nowrap',
+                width: 17,
+                height: 17,
+                borderRadius: 6,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: isActive
+                  ? `rgba(${rgb},0.26)`
+                  : `rgba(${rgb},0.10)`,
+                transition: 'background 160ms ease',
               }}
             >
-              <div style={{
-                width: 17, height: 17, borderRadius: 6, flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: isActive ? `rgba(${rgb},0.26)` : `rgba(${rgb},0.10)`,
-                transition: 'background 160ms ease',
-              }}>
-                <Icon style={{ width: 9.5, height: 9.5, color: isActive ? color : `rgba(${rgb},0.65)` }} />
-              </div>
-              <span style={{
-                fontSize: 11.5, fontWeight: isActive ? 700 : 500, letterSpacing: '-0.01em',
-                color: isActive ? 'rgba(255,255,255,0.90)' : 'rgba(255,255,255,0.44)',
+              <Icon
+                style={{
+                  width: 9.5,
+                  height: 9.5,
+                  color: isActive ? color : `rgba(${rgb},0.65)`,
+                }}
+              />
+            </div>
+
+            <span
+              style={{
+                fontSize: 11.5,
+                fontWeight: isActive ? 700 : 500,
+                letterSpacing: '-0.01em',
+                color: isActive
+                  ? 'rgba(255,255,255,0.90)'
+                  : 'rgba(255,255,255,0.44)',
                 transition: 'color 160ms ease',
-              }}>{label}</span>
-              {isActive && count > 0 && (
-                <span style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fontWeight: 700, color, opacity: 0.68, marginLeft: 1 }}>{count}</span>
-              )}
-            </Link>
-          );
-        })}
-      </div>
+              }}
+            >
+              {label}
+            </span>
+
+            {isActive && count > 0 && (
+              <span
+                style={{
+                  fontSize: 9,
+                  fontVariantNumeric: 'tabular-nums',
+                  fontWeight: 700,
+                  color,
+                  opacity: 0.68,
+                  marginLeft: 1,
+                }}
+              >
+                {count}
+              </span>
+            )}
+          </Link>
+
+          {/* Publish immediately after All */}
+          {id === 'all' && (
+            <button
+              type="button"
+              onClick={onPublish}
+              className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                height: 31,
+                padding: '0 10px 0 7px',
+                borderRadius: 999,
+                flexShrink: 0,
+                background: 'rgba(250,204,21,0.13)',
+                border: '1px solid rgba(250,204,21,0.28)',
+                boxShadow:
+                  '0 0 14px rgba(250,204,21,0.12), inset 0 1px 0 rgba(255,255,255,0.07)',
+                transition:
+                  'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.90)',
+                fontSize: 11.5,
+                fontWeight: 700,
+                letterSpacing: '-0.01em',
+                animation:
+                  'cds-tab-in 0.26s 0.025s cubic-bezier(0.22,1,0.36,1) both',
+              }}
+            >
+              <div
+                style={{
+                  width: 17,
+                  height: 17,
+                  borderRadius: 6,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(250,204,21,0.26)',
+                  transition: 'background 160ms ease',
+                }}
+              >
+                <Plus
+                  style={{
+                    width: 9.5,
+                    height: 9.5,
+                    color: '#facc15',
+                  }}
+                />
+              </div>
+
+              <span>Publish</span>
+            </button>
+          )}
+        </React.Fragment>
+      );
+    }
+  )}
+</div>
 
       {/* More button — OUTSIDE the scroll div so dropdown isn't clipped by overflow */}
       {!isMobile && (
@@ -6192,7 +6315,7 @@ function NewHomepageContent({
         {/* ── Publish heading + content discovery + feed cards + gig slider (grouped) ── */}
         <div className="flex flex-col" style={{ gap: 14 }}>
           <PublishHeading onPublish={() => onPublishClick()} />
-          <ContentDiscoveryStrip />
+        <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
         </div>
 
         {/* ── Gigs grid ── */}

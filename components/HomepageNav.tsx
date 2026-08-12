@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
 import GlobalSearchBar, { type GlobalSearchBarHandle, type LocalSearchResult } from '@/components/GlobalSearchBar';
-import { useSession } from 'next-auth/react';
+import { useSession ,signOut } from 'next-auth/react';
 
 /* ── Ddrive premium "D" icon ──────────────────────────────────────── */
 function DdriveIcon({ size = 12 }: { size?: number }) {
@@ -60,6 +60,7 @@ import {
   Heart,
   Home,
   LayoutGrid,
+  LogOut,
   Layers,
   Mail,
   Menu,
@@ -202,7 +203,7 @@ export default function HomepageNav({
   const [toolsOpen, setToolsOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
   const [profileOpen, setProfileOpen] = useState(false);
-
+const profileTriggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     setIsMounted(true);
     setColorMode(getStoredColorMode());
@@ -841,7 +842,7 @@ export default function HomepageNav({
             )}
             <Link
               href="/profile"
-              className="relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.14] bg-gradient-to-br from-white/[0.14] to-white/[0.06] text-white/70 transition hover:from-white/[0.20] hover:to-white/[0.10] hover:text-white shadow-[0_2px_8px_rgba(0,0,0,0.3)] active:scale-95 overflow-hidden"
+            className="hidden md:flex relative z-10 h-8 w-8 items-center justify-center rounded-full border border-white/[0.14] bg-gradient-to-br from-white/[0.14] to-white/[0.06] text-white/70 transition hover:from-white/[0.20] hover:to-white/[0.10] hover:text-white shadow-[0_2px_8px_rgba(0,0,0,0.3)] active:scale-95 overflow-hidden"
               style={badge?.docrudGo ? { boxShadow: '0 0 0 2px #08090a, 0 2px 12px rgba(99,102,241,0.4)' } : undefined}
             >
               {(badge?.avatarUrl || session?.user?.image) ? (
@@ -854,13 +855,163 @@ export default function HomepageNav({
               ) : (
                 <User className="h-3.5 w-3.5" />
               )}
-            </Link>
+                        </Link>
+
+            {/* Mobile profile trigger */}
+            <button
+             ref={profileTriggerRef}
+              type="button"
+              onClick={() => setProfileOpen((prev) => !prev)}
+              aria-label="Open profile menu"
+              className="md:hidden relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.14] bg-gradient-to-br from-white/[0.14] to-white/[0.06] text-white/70 transition active:scale-95 overflow-hidden"
+              style={
+                badge?.docrudGo
+                  ? {
+                      boxShadow:
+                        '0 0 0 2px #08090a, 0 2px 12px rgba(99,102,241,0.4)',
+                    }
+                  : undefined
+              }
+            >
+              {(badge?.avatarUrl || session?.user?.image) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={badge?.avatarUrl || session!.user!.image!}
+                  alt="Profile"
+                  className="h-full w-full object-cover"
+                />
+              ) : session?.user?.name ? (
+                <span
+                  className="text-[11px] font-bold leading-none select-none"
+                  style={
+                    badge?.docrudGo
+                      ? { color: '#a5b4fc' }
+                      : { color: 'rgba(255,255,255,0.8)' }
+                  }
+                >
+                  {session.user.name.charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <User className="h-3.5 w-3.5" />
+              )}
+            </button>
+
             {badge?.docrudGo && (
               <span
                 className="absolute -bottom-0.5 -right-0.5 z-20 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[7px] font-black"
                 style={{ background: 'linear-gradient(135deg,#4f46e5,#818cf8)', color: '#ffffff', boxShadow: '0 0 0 1.5px #08090a', fontSize: 9 }}
               >∞</span>
             )}
+            {/* Mobile profile dropdown */}
+{/* Mobile profile dropdown */}
+{profileOpen &&
+  createPortal(
+    <div
+      className="md:hidden fixed right-3 top-[54px] z-[2147483647] pointer-events-auto w-[238px] overflow-hidden rounded-[18px] border border-white/[0.10] bg-[#0b0b10]/95 backdrop-blur-2xl shadow-[0_24px_70px_rgba(0,0,0,0.72)]"
+    >
+      {/* Appearance */}
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
+        <div className="flex items-center gap-3">
+          {colorMode === 'dark' ? (
+            <Moon className="h-4 w-4 text-violet-300/75" />
+          ) : (
+            <Sun className="h-4 w-4 text-amber-300/75" />
+          )}
+
+          <div>
+            <p className="text-[12px] font-semibold text-white/85">
+              Appearance
+            </p>
+            <p className="text-[10px] text-white/30">
+              {colorMode === 'dark' ? 'Dark mode' : 'Light mode'}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleColorMode}
+          className={`relative h-5 w-9 rounded-full transition-colors ${
+            colorMode === 'dark' ? 'bg-violet-500/75' : 'bg-white/15'
+          }`}
+          aria-label="Toggle dark and light mode"
+        >
+          <span
+            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+              colorMode === 'dark' ? 'translate-x-4' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Ddrive */}
+      <button
+        type="button"
+        onClick={() => {
+          setProfileOpen(false);
+          onFileDriveClick?.();
+        }}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.05] active:bg-white/[0.08]"
+      >
+        <DdriveIcon size={16} />
+        <span className="text-[12px] font-medium text-white/75">
+          Ddrive
+        </span>
+      </button>
+
+      {/* Profile */}
+      <Link
+        href="/profile"
+        onClick={() => setProfileOpen(false)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left text-[12px] font-medium text-white/75 transition hover:bg-white/[0.05] active:bg-white/[0.08]"
+      >
+        <User className="h-4 w-4 text-white/45" />
+        <span>Profile</span>
+      </Link>
+
+      {/* Upgrade */}
+      <button
+        type="button"
+        onClick={() => {
+          setProfileOpen(false);
+          window.location.assign('/profile');
+        }}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.05] active:bg-white/[0.08]"
+      >
+        <Sparkles className="h-4 w-4 shrink-0 text-violet-400/80" />
+
+        <div>
+          <p className="text-[12px] font-semibold text-white/80">
+            {badge?.docrudGo ? 'Docrud Infinity' : 'Upgrade to Premium'}
+          </p>
+
+          <p className="text-[10px] text-white/30">
+            {badge?.docrudGo
+              ? 'Infinity membership'
+              : 'Unlock premium features'}
+          </p>
+        </div>
+      </button>
+
+      <div className="h-px bg-white/[0.06]" />
+
+      {/* Sign out */}
+      <button
+        type="button"
+        onClick={async () => {
+          setProfileOpen(false);
+          await signOut({ callbackUrl: '/onboarding' });
+        }}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left text-red-400/80 transition hover:bg-red-500/[0.06] active:bg-red-500/[0.10]"
+      >
+        <LogOut className="h-4 w-4" />
+        <span className="text-[12px] font-medium">
+          Sign out
+        </span>
+      </button>
+    </div>,
+    document.body
+  )}
           </div>
         )}
 

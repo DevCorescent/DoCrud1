@@ -42,22 +42,49 @@ export default function GlobalBottomNav() {
 
   /* scroll-hide / scroll-show */
   useEffect(() => {
-    const onScroll = () => {
-      if (ticking.current) return;
-      ticking.current = true;
-      requestAnimationFrame(() => {
-        const y    = window.scrollY;
-        const diff = y - lastY.current;
-        if (Math.abs(diff) > 4) {
-          setVisible(diff < 0 || y < 60); // show on scroll-up or near top
-          lastY.current = y;
-        }
+  const onScroll = () => {
+    if (ticking.current) return;
+
+    ticking.current = true;
+
+    requestAnimationFrame(() => {
+      const y = window.scrollY;
+      const previousY = lastY.current;
+      const diff = y - previousY;
+
+      // Initialize the scroll position
+      if (previousY === 0) {
+        lastY.current = y;
         ticking.current = false;
-      });
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+        return;
+      }
+
+      // Ignore tiny movements
+      if (Math.abs(diff) > 4) {
+        if (diff > 0) {
+          // Scrolling DOWN
+          setVisible(false);
+        } else {
+          // Scrolling UP
+          setVisible(true);
+        }
+
+        lastY.current = y;
+      }
+
+      ticking.current = false;
+    });
+  };
+
+  // Start from the current position
+  lastY.current = window.scrollY;
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  return () => {
+    window.removeEventListener('scroll', onScroll);
+  };
+}, []);
 
   if (!mounted || !shouldShow(pathname)) return null;
 
@@ -66,38 +93,46 @@ export default function GlobalBottomNav() {
       <style>{`
         @media (min-width: 640px) { .gnb-bar { display: none !important; } }
 
-        @keyframes gnb-in {
-          from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-          to   { opacity: 1; transform: translateX(-50%) translateY(0); }
-        }
+       
+.gnb-bar {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  width: calc(100% - 32px);
+  max-width: 380px;
+  z-index: 9995;
+  height: 62px;
 
-        .gnb-bar {
-          position: fixed;
-          bottom: 18px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: calc(100% - 32px);
-          max-width: 380px;
-          z-index: 9995;
-          height: 62px;
-          background: rgba(0, 0, 0, 0.82);
-          backdrop-filter: blur(28px) saturate(180%);
-          -webkit-backdrop-filter: blur(28px) saturate(180%);
-          border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 24px;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.07);
-          display: flex;
-          align-items: center;
-          animation: gnb-in 0.36s cubic-bezier(0.22,1,0.36,1) 0.05s both;
-          transition: opacity 0.28s cubic-bezier(0.4,0,0.2,1), transform 0.28s cubic-bezier(0.4,0,0.2,1);
-          will-change: transform, opacity;
-        }
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
 
-        .gnb-bar.gnb-hidden {
-          opacity: 0;
-          transform: translateX(-50%) translateY(16px);
-          pointer-events: none;
-        }
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 24px;
+
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.55),
+    0 2px 8px rgba(0,0,0,0.30),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+
+  display: flex;
+  align-items: center;
+
+  opacity: 1;
+
+  transition:
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 260ms ease;
+
+  will-change: transform, opacity;
+}
+
+.gnb-bar.gnb-hidden {
+  opacity: 0;
+  transform: translateX(-50%) translateY(calc(100% + 24px));
+  pointer-events: none;
+}
 
         .gnb-item {
           display: flex;

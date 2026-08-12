@@ -4496,96 +4496,88 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
 
   const current = CYCLE_TYPES[idx];
 
-  // return (
-  //   // <div className="w-full select-none">
-  //   //   <style>{`
-  //   //     @keyframes ph-in  { from { opacity:0; transform:translateY(8px) scale(0.93); } to { opacity:1; transform:none; } }
-  //   //     @keyframes ph-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(-7px) scale(0.95); } }
-  //   //     @keyframes ph-row { from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:none; } }
-  //   //   `}</style>
+  return (
+    <div className="w-full select-none">
+      <style>{`
+        @keyframes ph-in  { from { opacity:0; transform:translateY(8px) scale(0.93); } to { opacity:1; transform:none; } }
+        @keyframes ph-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(-7px) scale(0.95); } }
+        @keyframes ph-row { from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:none; } }
+      `}</style>
 
-  //   //   // Single flex row — never wraps
-  //   //   <div
-  //   //     className="flex items-center justify-between gap-2"
-  //   //     style={{ animation: 'ph-row 0.45s 0.04s cubic-bezier(0.22,1,0.36,1) both' }}
-  //   //   >
-  //   //     //── Headline (no-wrap) ── 
-  //   //     // <div className="flex items-center gap-0 min-w-0 overflow-hidden" style={{ flex: '1 1 0' }}>
+      <div
+        className="flex items-center justify-between gap-2"
+        style={{ animation: 'ph-row 0.45s 0.04s cubic-bezier(0.22,1,0.36,1) both' }}
+      >
+        <div className="flex items-center gap-0 min-w-0 overflow-hidden" style={{ flex: '1 1 0' }}>
+          <span style={{
+            fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
+            letterSpacing: '-0.03em', lineHeight: 1,
+            color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            Publish
+          </span>
 
-  //   //       //"Publish" 
-  //   //       <span style={{
-  //   //         fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
-  //   //         letterSpacing: '-0.03em', lineHeight: 1,
-  //   //         color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', flexShrink: 0,
-  //   //       }}>
-  //   //         Publish
-  //   //       </span>
+          <span style={{
+            fontSize: 'clamp(13px,3vw,19px)', fontWeight: 400,
+            color: 'rgba(255,255,255,0.18)', margin: '0 clamp(5px,1.2vw,9px)',
+            flexShrink: 0, lineHeight: 1,
+          }}>›</span>
 
-  //   //       // Separator 
-  //   //       <span style={{
-  //   //         fontSize: 'clamp(13px,3vw,19px)', fontWeight: 400,
-  //   //         color: 'rgba(255,255,255,0.18)', margin: '0 clamp(5px,1.2vw,9px)',
-  //   //         flexShrink: 0, lineHeight: 1,
-  //   //       }}>›</span>
+          <span
+            key={idx}
+            style={{
+              fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
+              letterSpacing: '-0.03em', lineHeight: 1,
+              color: current.color,
+              textShadow: `0 0 22px ${current.color}44`,
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              flexShrink: 0, whiteSpace: 'nowrap',
+              animation: phase === 'in'
+                ? 'ph-in 0.28s cubic-bezier(0.22,1,0.36,1) both'
+                : 'ph-out 0.24s cubic-bezier(0.55,0,1,0.45) both',
+            }}
+          >
+            <current.Icon style={{
+              width: 'clamp(11px,2vw,15px)', height: 'clamp(11px,2vw,15px)',
+              color: current.color, opacity: 0.72, flexShrink: 0,
+            }} />
+            {current.label}
+          </span>
 
-  //   //       // Animated rotating word 
-  //   //       <span
-  //   //         key={idx}
-  //   //         style={{
-  //   //           fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
-  //   //           letterSpacing: '-0.03em', lineHeight: 1,
-  //   //           color: current.color,
-  //   //           textShadow: `0 0 22px ${current.color}44`,
-  //   //           display: 'inline-flex', alignItems: 'center', gap: 5,
-  //   //           flexShrink: 0, whiteSpace: 'nowrap',
-  //   //           animation: phase === 'in'
-  //   //             ? 'ph-in 0.28s cubic-bezier(0.22,1,0.36,1) both'
-  //   //             : 'ph-out 0.24s cubic-bezier(0.55,0,1,0.45) both',
-  //   //         }}
-  //   //       >
-  //   //         <current.Icon style={{
-  //   //           width: 'clamp(11px,2vw,15px)', height: 'clamp(11px,2vw,15px)',
-  //   //           color: current.color, opacity: 0.72, flexShrink: 0,
-  //   //         }} />
-  //   //         {current.label}
-  //   //       </span>
+          <span style={{
+            fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
+            letterSpacing: '-0.03em', lineHeight: 1,
+            color: 'rgba(255,255,255,0.38)', marginLeft: 'clamp(5px,1.2vw,9px)',
+            whiteSpace: 'nowrap', flexShrink: 0,
+          }}>
+            &amp; more.
+          </span>
+        </div>
 
-  //   //       // "& more." 
-  //   //       <span style={{
-  //   //         fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
-  //   //         letterSpacing: '-0.03em', lineHeight: 1,
-  //   //         color: 'rgba(255,255,255,0.38)', marginLeft: 'clamp(5px,1.2vw,9px)',
-  //   //         whiteSpace: 'nowrap', flexShrink: 0,
-  //   //       }}>
-  //   //         &amp; more.
-  //   //       </span>
-  //   //     </div> 
-
-  //   //     // ── Publish CTA ── 
-  //   //    <button
-  //   //       type="button"
-  //   //       onClick={onPublish}
-  //   //       className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
-  //   //       style={{
-  //   //         height: 'clamp(28px,5vw,34px)',
-  //   //         padding: '0 clamp(10px,2vw,14px)',
-  //   //         borderRadius: 10,
-  //   //         background: 'rgba(255,255,255,0.08)',
-  //   //         border: '1px solid rgba(255,255,255,0.13)',
-  //   //         backdropFilter: 'blur(16px)',
-  //   //         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 10px rgba(0,0,0,0.25)',
-  //   //         color: 'rgba(255,255,255,0.75)',
-  //   //         fontSize: 'clamp(10.5px,1.8vw,12.5px)',
-  //   //         letterSpacing: '0.01em',
-  //   //         whiteSpace: 'nowrap',
-  //   //       }}
-  //   //     >
-  //   //       <Plus style={{ width: 'clamp(10px,1.6vw,12px)', height: 'clamp(10px,1.6vw,12px)', flexShrink: 0, opacity: 0.75 }} />
-  //   //       Publish
-  //   //     </button>
-  //   //   </div>
-  //   // </div>
-  // );
+        <button
+          type="button"
+          onClick={onPublish}
+          className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
+          style={{
+            height: 'clamp(28px,5vw,34px)',
+            padding: '0 clamp(10px,2vw,14px)',
+            borderRadius: 10,
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.13)',
+            backdropFilter: 'blur(16px)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.09), 0 2px 10px rgba(0,0,0,0.25)',
+            color: 'rgba(255,255,255,0.75)',
+            fontSize: 'clamp(10.5px,1.8vw,12.5px)',
+            letterSpacing: '0.01em',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <Plus style={{ width: 'clamp(10px,1.6vw,12px)', height: 'clamp(10px,1.6vw,12px)', flexShrink: 0, opacity: 0.75 }} />
+          Publish
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /* ─────────────────────────────────────────────────────────────

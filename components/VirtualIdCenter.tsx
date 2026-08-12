@@ -298,6 +298,7 @@ export default function VirtualIdCenter() {
                     <QrCode className="h-3.5 w-3.5" />
                     QR access
                   </div>
+                  {/* eslint-disable-next-line @next/next/no-img-element -- QR may be data:/external URL */}
                   <img src={card.qrUrl} alt={`${card.title} QR`} className="mt-3 h-36 w-36 rounded-xl bg-white p-2 object-contain" />
                   <a href={card.qrUrl} download={`${card.slug}-qr.png`} className="mt-3 inline-flex items-center text-xs font-medium text-slate-700 hover:text-slate-950">
                     <Download className="mr-2 h-3.5 w-3.5" />

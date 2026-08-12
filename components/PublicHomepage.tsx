@@ -2059,16 +2059,16 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
 
       {/* thumbnail */}
       {item.thumbnailUrl && (
-        <div className="mb-3.5 rounded-xl overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={item.thumbnailUrl}
-            alt={item.category === 'post' || hpIsJunkTitle(item) ? '' : item.title}
-            className="w-full max-h-[380px] object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-            loading="lazy"
-            decoding="async"
-          />
-        </div>
+        <div className="mb-3.5 -mx-4 overflow-hidden sm:-mx-0">
+  {/* eslint-disable-next-line @next/next/no-img-element */}
+  <img
+    src={item.thumbnailUrl}
+    alt={item.category === 'post' || hpIsJunkTitle(item) ? '' : item.title}
+    className="block w-full h-auto object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+    loading="lazy"
+    decoding="async"
+  />
+</div>
       )}
 
       {/* content — photo posts: caption = body only; never show auto title/filename */}

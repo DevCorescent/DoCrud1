@@ -488,6 +488,36 @@ export async function toggleCommentLike(
   }
   return { liked, likesCount };
 }
+export async function updateComment(
+  transferId: string,
+  commentId: string,
+  userId: string,
+  text: string,
+): Promise<SecureFileTransfer> {
+  const usingDb = Boolean(getDbPool());
+  const transfers = usingDb ? [] : await getFileTransfers();
+  const current = usingDb
+    ? await selectFileTransferRowById(transferId)
+    : transfers.find((t) => t.id === transferId || t.shareId === transferId) || null;
+  if (!current) throw new Error('Post not found.');
+  const comments = current.comments ?? [];
+  const idx = comments.findIndex((c) => c.id === commentId);
+  if (idx < 0) throw new Error('Comment not found.');
+  if (comments[idx].userId !== userId) throw new Error('Not allowed to edit this comment.');
+  const trimmed = text.trim().slice(0, 1000);
+  if (!trimmed) throw new Error('Comment text required.');
+  const nextComments = comments.map((c, i) => (i === idx ? { ...c, text: trimmed } : c));
+  const next = { ...current, comments: nextComments, updatedAt: new Date().toISOString() };
+  if (usingDb) {
+    await upsertFileTransferRow(next);
+  } else {
+    const tIdx = transfers.findIndex((t) => t.id === transferId || t.shareId === transferId);
+    transfers[tIdx] = next;
+    await writeJsonFile(fileTransfersPath, transfers);
+  }
+  return next;
+}
+
 export async function deleteComment(
   transferId: string,
   commentId: string,
@@ -520,7 +550,7 @@ export async function deleteComment(
     throw new Error('You can only delete your own comments.');
   }
 
-  // Delete the selected comment and its replies.
+  // Delete the selected comment and its nested replies.
   const commentIdsToDelete = new Set<string>([commentId]);
 
   let changed = true;
@@ -568,7 +598,7 @@ export async function deleteComment(
 
   return next;
 }
-export async function featureTransfer(
+
   transferId: string,
   plan: 'spotlight' | 'boost' | 'prime',
   orderId: string,

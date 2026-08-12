@@ -769,12 +769,6 @@ function Creator({ onClose, onCreated }: { onClose(): void; onCreated(r: Recent)
               <p style={{margin:0,fontSize:14.5,fontWeight:700,color:'rgba(255,255,255,0.90)',letterSpacing:'-0.02em'}}>
                 {step==='design' ? 'New Recent' : 'Publish Settings'}
               </p>
-              {/* Live dot */}
-              <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 7px',borderRadius:99,
-                background:'rgba(16,185,129,0.12)',border:'1px solid rgba(16,185,129,0.20)'}}>
-                <span style={{width:5,height:5,borderRadius:'50%',background:'#10b981',animation:'rcGlow 2s ease infinite'}}/>
-                <span style={{fontSize:9,fontWeight:700,color:'#6ee7b7',letterSpacing:'0.06em'}}>LIVE</span>
-              </span>
             </div>
             <p style={{margin:'1px 0 0',fontSize:10.5,color:'rgba(255,255,255,0.28)',fontWeight:400}}>
               {step==='design' ? 'Design your card — template, media or text' : 'Set audience, expiry & call-to-action'}

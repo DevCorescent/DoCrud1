@@ -15,11 +15,14 @@ import {
   Heart,
   Image as ImageIcon,
   MessageCircle,
+  MoreHorizontal,
+  Pencil,
   Play,
   Send,
   Share2,
   Star,
   ThumbsUp,
+  Trash2,
   TrendingUp,
   Trophy,
   Video as VideoIcon,
@@ -55,6 +58,7 @@ type Comment = {
   timestamp: string;
   likes: number;
   parentId?: string;
+  userId?: string;
   likedByMe: boolean;
   replies: Comment[];
 };
@@ -74,6 +78,9 @@ interface CategoryPageProps {
   submitComment: () => void;
   submitReply: (parentId: string, text: string) => void;
   likeComment: (commentId: string) => void;
+  editComment?: (commentId: string, text: string) => void;
+  deleteComment?: (commentId: string) => void;
+  currentUserId?: string;
   totalComments: number;
   commentRef: React.RefObject<HTMLTextAreaElement>;
 }
@@ -242,6 +249,7 @@ export function PostDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [heartBurst, setHeartBurst] = useState(false);
@@ -255,6 +263,7 @@ export function PostDetailContent({
   };
 
   const hashtags = item.chips ?? [];
+  const junkTitle = item.isReal && ['post', 'poll', 'document', 'file', 'image', 'video', 'survey', 'article', 'upload'].includes(item.title.trim().toLowerCase());
 
   // Resolve images from real dataUrl (base64 or R2 https URL), gallery HTML, or thumbnail fallback
   const isHttpImage = !!item.dataUrl && /^https?:\/\//i.test(item.dataUrl) && !!item.mimeType?.startsWith('image/');
@@ -267,22 +276,22 @@ export function PostDetailContent({
 
   return (
     <div className="space-y-6">
-      {/* Media section */}
+      {/* Media section — full-bleed on mobile */}
       {isSingleImage ? (
-        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-black">
+        <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black -mx-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.dataUrl} alt={item.title} className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
         </div>
       ) : isGallery && galleryImages.length > 0 ? (
         <ImageSlider images={galleryImages} />
       ) : fallbackThumb ? (
-        <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-black">
+        <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={fallbackThumb} alt={item.title} className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
         </div>
       ) : (
         /* fallback gradient placeholder */
-        <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl bg-gradient-to-br from-rose-500/20 via-pink-600/15 to-purple-700/20 border border-white/[0.08] flex items-center justify-center">
+        <div className="relative h-64 sm:h-80 w-full overflow-hidden sm:rounded-2xl bg-gradient-to-br from-rose-500/20 via-pink-600/15 to-purple-700/20 sm:border sm:border-white/[0.08] flex items-center justify-center">
           <div className="absolute inset-0 bg-gradient-to-br from-rose-400/10 via-transparent to-purple-600/10" />
           <div className="relative flex flex-col items-center gap-3 text-white/20">
             <ImageIcon className="h-16 w-16" />
@@ -304,8 +313,10 @@ export function PostDetailContent({
         </div>
       </div>
 
-      {/* Caption / title */}
-      <h2 className="text-2xl font-bold leading-snug tracking-tight text-white">{item.title}</h2>
+      {/* Caption / title — hide generic category titles like "post" */}
+      {!junkTitle && (
+        <h2 className="text-2xl font-bold leading-snug tracking-tight text-white">{item.title}</h2>
+      )}
 
       {/* Body text */}
       <div className="space-y-4">
@@ -379,6 +390,9 @@ export function PostDetailContent({
         submitComment={submitComment}
         submitReply={submitReply}
         likeComment={likeComment}
+        editComment={editComment}
+        deleteComment={deleteComment}
+        currentUserId={currentUserId}
         totalComments={totalComments}
         commentRef={commentRef}
       />
@@ -393,6 +407,7 @@ export function PollDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const storageKey = `poll_voted_${item.id}`;
@@ -563,7 +578,7 @@ export function PollDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -602,6 +617,7 @@ function parseSurveyQuestions(body: string, title: string): SurveyQuestion[] {
 export function SurveyDetailContent({
   item, comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const questions: SurveyQuestion[] = parseSurveyQuestions(item.body, item.title);
@@ -658,7 +674,7 @@ export function SurveyDetailContent({
         <CommentSection
           comments={comments} commentText={commentText} displayName={displayName}
           setCommentText={setCommentText}
-          submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+          submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
         />
       </div>
     );
@@ -782,7 +798,7 @@ export function SurveyDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -823,6 +839,7 @@ export function ChartDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [animated, setAnimated] = useState(false);
@@ -1105,7 +1122,7 @@ export function ChartDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1118,6 +1135,7 @@ export function ThreadDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const parts = item.body.split('\n\n').filter(Boolean);
@@ -1142,7 +1160,7 @@ export function ThreadDetailContent({
   return (
     <div className="space-y-6">
       {/* Sticky progress */}
-      <div className="sticky top-14 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 py-2 border-b border-white/[0.06] bg-[#0A0A0C]/95 backdrop-blur-xl">
+      <div className="sticky top-14 z-30 sm:-mx-6 px-4 sm:px-6 py-2 border-b border-white/[0.06] bg-[#0A0A0C]/95 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-white/40">Part {currentPart} of {total}</span>
           <div className="h-1 w-32 rounded-full bg-white/[0.08] overflow-hidden">
@@ -1243,7 +1261,7 @@ export function ThreadDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1304,6 +1322,7 @@ export function VideoDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [playing, setPlaying] = useState(false);
@@ -1571,7 +1590,7 @@ export function VideoDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1619,6 +1638,7 @@ export function MilestoneDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [confetti, setConfetti] = useState(false);
@@ -1728,7 +1748,7 @@ export function MilestoneDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1741,6 +1761,7 @@ export function TutorialDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const progressKey = `tutorial_progress_${item.id}`;
@@ -1968,7 +1989,7 @@ export function TutorialDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1985,6 +2006,9 @@ interface CommentSectionProps {
   submitComment: () => void;
   submitReply: (parentId: string, text: string) => void;
   likeComment: (commentId: string) => void;
+  editComment?: (commentId: string, text: string) => void;
+  deleteComment?: (commentId: string) => void;
+  currentUserId?: string;
   totalComments: number;
   commentRef: React.RefObject<HTMLTextAreaElement>;
 }
@@ -1992,7 +2016,9 @@ interface CommentSectionProps {
 export function CommentSection({
   comments, commentText, displayName,
   setCommentText,
-  submitComment, submitReply, likeComment, totalComments, commentRef,
+  submitComment, submitReply, likeComment,
+  editComment, deleteComment, currentUserId,
+  totalComments, commentRef,
 }: CommentSectionProps) {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -2048,12 +2074,17 @@ export function CommentSection({
             <CommentRow
               key={c.id}
               comment={c}
+              currentUserId={currentUserId}
               onLike={() => likeComment(c.id)}
               replyOpen={replyTo === c.id}
               replyText={replyText}
               onReplyToggle={() => { setReplyTo(replyTo === c.id ? null : c.id); setReplyText(''); }}
               onReplyTextChange={setReplyText}
               onLikeReply={(rid) => likeComment(rid)}
+              onEdit={editComment ? (text) => editComment(c.id, text) : undefined}
+              onEditReply={editComment}
+              onDelete={deleteComment ? () => deleteComment(c.id) : undefined}
+              onDeleteReply={deleteComment}
               onSubmitReply={() => {
                 if (!replyText.trim()) return;
                 const text = replyText;
@@ -2072,13 +2103,16 @@ export function CommentSection({
 /* ─── Comment row ────────────────────────────────────────────────── */
 function CommentRow({
   comment: c,
+  currentUserId,
   onLike,
   replyOpen, replyText,
   onReplyToggle, onReplyTextChange,
   onLikeReply,
   onSubmitReply,
+  onEdit, onEditReply, onDelete, onDeleteReply,
 }: {
   comment: Comment;
+  currentUserId?: string;
   onLike: () => void;
   replyOpen: boolean;
   replyText: string;
@@ -2086,7 +2120,37 @@ function CommentRow({
   onReplyTextChange: (v: string) => void;
   onLikeReply: (id: string) => void;
   onSubmitReply: () => void;
+  onEdit?: (text: string) => void;
+  onEditReply?: (id: string, text: string) => void;
+  onDelete?: () => void;
+  onDeleteReply?: (id: string) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(c.text);
+  const [editSaving, setEditSaving] = useState(false);
+  const [replyMenuOpen, setReplyMenuOpen] = useState<string | null>(null);
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [replyEditText, setReplyEditText] = useState('');
+  const [replyEditSaving, setReplyEditSaving] = useState(false);
+  const isOwner = Boolean(currentUserId && c.userId && c.userId === currentUserId);
+
+  useEffect(() => { setEditText(c.text); }, [c.text]);
+
+  const saveEdit = async () => {
+    if (!editText.trim() || editSaving || !onEdit) return;
+    setEditSaving(true);
+    try { await onEdit(editText); setEditing(false); }
+    finally { setEditSaving(false); }
+  };
+
+  const saveReplyEdit = async (rid: string) => {
+    if (!replyEditText.trim() || replyEditSaving || !onEditReply) return;
+    setReplyEditSaving(true);
+    try { await onEditReply(rid, replyEditText); setEditingReplyId(null); }
+    finally { setReplyEditSaving(false); }
+  };
+
   return (
     <div className="flex gap-3">
       <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${c.color}`}>
@@ -2096,8 +2160,71 @@ function CommentRow({
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold text-white/80">{c.author}</span>
           <span className="text-[10px] text-white/25">{timeAgo(c.timestamp)}</span>
+          {isOwner && onEdit && onDelete && !editing && (
+            <div className="relative ml-auto">
+              <button
+                type="button"
+                onClick={() => setMenuOpen(v => !v)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-white/25 transition hover:bg-white/[0.06] hover:text-white/70"
+                aria-label="Comment options"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-7 z-20 min-w-[120px] overflow-hidden rounded-xl border border-white/[0.10] bg-[#141418] py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); setEditing(true); setEditText(c.text); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+                    >
+                      <Pencil className="h-3 w-3" /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); onDelete(); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-red-400 transition hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+
+        {editing ? (
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[13px] text-white outline-none focus:border-white/[0.18]"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void saveEdit()}
+                disabled={!editText.trim() || editSaving}
+                className="inline-flex h-7 items-center rounded-lg bg-white px-3 text-[11px] font-bold text-slate-950 transition disabled:opacity-25"
+              >
+                {editSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditing(false); setEditText(c.text); }}
+                disabled={editSaving}
+                className="inline-flex h-7 items-center rounded-lg px-3 text-[11px] font-semibold text-white/45 transition hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+        )}
 
         {/* Actions */}
         <div className="mt-2 flex items-center gap-3">
@@ -2145,30 +2272,96 @@ function CommentRow({
         {/* Nested replies */}
         {c.replies.length > 0 && (
           <div className="mt-4 space-y-3 border-l border-white/[0.06] pl-4">
-            {c.replies.map((r) => (
-              <div key={r.id} className="flex gap-3">
-                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${r.color}`}>
-                  {r.initials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-white/75">{r.author}</span>
-                    <span className="text-[10px] text-white/25">{timeAgo(r.timestamp)}</span>
+            {c.replies.map((r) => {
+              const replyOwner = Boolean(currentUserId && r.userId && r.userId === currentUserId);
+              const isEditingReply = editingReplyId === r.id;
+              return (
+                <div key={r.id} className="flex gap-3">
+                  <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${r.color}`}>
+                    {r.initials}
                   </div>
-                  <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
-                  <button
-                    type="button"
-                    onClick={() => onLikeReply(r.id)}
-                    className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold transition ${r.likedByMe ? 'text-rose-400' : 'text-white/20 hover:text-white/55'}`}
-                  >
-                    <Heart className={`h-2.5 w-2.5 ${r.likedByMe ? 'fill-rose-400' : ''}`} />
-                    {r.likes > 0 && (
-                      <span className="tabular-nums">{r.likes}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-semibold text-white/75">{r.author}</span>
+                      <span className="text-[10px] text-white/25">{timeAgo(r.timestamp)}</span>
+                      {replyOwner && onEditReply && onDeleteReply && !isEditingReply && (
+                        <div className="relative ml-auto">
+                          <button
+                            type="button"
+                            onClick={() => setReplyMenuOpen(v => v === r.id ? null : r.id)}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-md text-white/25 transition hover:bg-white/[0.06] hover:text-white/70"
+                            aria-label="Reply options"
+                          >
+                            <MoreHorizontal className="h-3 w-3" />
+                          </button>
+                          {replyMenuOpen === r.id && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setReplyMenuOpen(null)} />
+                              <div className="absolute right-0 top-6 z-20 min-w-[120px] overflow-hidden rounded-xl border border-white/[0.10] bg-[#141418] py-1 shadow-xl">
+                                <button
+                                  type="button"
+                                  onClick={() => { setReplyMenuOpen(null); setEditingReplyId(r.id); setReplyEditText(r.text); }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+                                >
+                                  <Pencil className="h-3 w-3" /> Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setReplyMenuOpen(null); onDeleteReply(r.id); }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-red-400 transition hover:bg-red-500/10"
+                                >
+                                  <Trash2 className="h-3 w-3" /> Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {isEditingReply ? (
+                      <div className="mt-1.5 space-y-2">
+                        <textarea
+                          value={replyEditText}
+                          onChange={(e) => setReplyEditText(e.target.value)}
+                          rows={2}
+                          className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[12px] text-white outline-none focus:border-white/[0.18]"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void saveReplyEdit(r.id)}
+                            disabled={!replyEditText.trim() || replyEditSaving}
+                            className="inline-flex h-7 items-center rounded-lg bg-white px-3 text-[11px] font-bold text-slate-950 transition disabled:opacity-25"
+                          >
+                            {replyEditSaving ? 'Saving…' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingReplyId(null)}
+                            disabled={replyEditSaving}
+                            className="inline-flex h-7 items-center rounded-lg px-3 text-[11px] font-semibold text-white/45 transition hover:text-white/80"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
                     )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => onLikeReply(r.id)}
+                      className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold transition ${r.likedByMe ? 'text-rose-400' : 'text-white/20 hover:text-white/55'}`}
+                    >
+                      <Heart className={`h-2.5 w-2.5 ${r.likedByMe ? 'fill-rose-400' : ''}`} />
+                      {r.likes > 0 && (
+                        <span className="tabular-nums">{r.likes}</span>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

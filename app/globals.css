@@ -1725,16 +1725,41 @@
   }
 }
 
-/* Light mode — invert dark-first homepage shell for readable light theme */
+/* Light mode — invert dark-first app shells for readable light theme */
 html[data-ui-mode='light'] body {
   background: #f4f4f5 !important;
   color-scheme: light;
 }
-html[data-ui-mode='light'] main.h-\[100dvh\] {
+/* Cover homepage (main), /published & similar viewport shells, and min-h-screen dark pages */
+html[data-ui-mode='light'] main.h-\[100dvh\],
+html[data-ui-mode='light'] .h-\[100dvh\].text-white,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0A0A0C\],
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0D0D0F\],
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#09090d\],
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#08090a\] {
   filter: invert(1) hue-rotate(180deg);
 }
 html[data-ui-mode='light'] main.h-\[100dvh\] img,
 html[data-ui-mode='light'] main.h-\[100dvh\] video,
-html[data-ui-mode='light'] main.h-\[100dvh\] [data-no-invert] {
+html[data-ui-mode='light'] main.h-\[100dvh\] [data-no-invert],
+html[data-ui-mode='light'] .h-\[100dvh\].text-white img,
+html[data-ui-mode='light'] .h-\[100dvh\].text-white video,
+html[data-ui-mode='light'] .h-\[100dvh\].text-white [data-no-invert],
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0A0A0C\] img,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0A0A0C\] video,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0A0A0C\] [data-no-invert],
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0D0D0F\] img,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0D0D0F\] video,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#0D0D0F\] [data-no-invert],
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#09090d\] img,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#09090d\] video,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#09090d\] [data-no-invert],
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#08090a\] img,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#08090a\] video,
+html[data-ui-mode='light'] .min-h-screen.bg-\[\#08090a\] [data-no-invert] {
+  filter: invert(1) hue-rotate(180deg);
+}
+/* Bottom nav is portaled outside page shells — invert it too in light mode */
+html[data-ui-mode='light'] .gnb-bar {
   filter: invert(1) hue-rotate(180deg);
 }

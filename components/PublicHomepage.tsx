@@ -2605,7 +2605,7 @@ function HomepageLiveFeed() {
           {/* feed cards */}
           <div className="flex-1 overflow-y-auto px-0 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* mobile-only: sort row — hidden */}
-            <div className="hidden flex items-center gap-2 py-3 max-w-[600px] mx-auto w-full">
+            <div className="hidden flex items-center gap-2 py-3 max-w-3xl mx-auto w-full">
               <span className="text-[12px] font-semibold text-white/60 tracking-tight shrink-0">
                 {HP_TABS.find(t => t.id === activecat)?.label ?? 'All'}
               </span>
@@ -2645,7 +2645,7 @@ function HomepageLiveFeed() {
                 </button>
               </div>
             </div>
-            <div className="mx-auto w-full max-w-[600px] divide-y divide-white/[0.045]">
+            <div className="mx-auto w-full max-w-3xl divide-y divide-white/[0.045]">
               {loading
                 ? Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="py-5 space-y-3 animate-pulse">

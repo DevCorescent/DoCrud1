@@ -278,9 +278,9 @@ export function PostDetailContent({
 
   return (
     <div className="space-y-6">
-      {/* Media section — full-bleed on mobile */}
+      {/* Media section — full-bleed on mobile (parent is px-0); rounded inset from sm+ */}
       {isSingleImage ? (
-        <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black -mx-0">
+        <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.dataUrl} alt="" className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
         </div>
@@ -302,6 +302,8 @@ export function PostDetailContent({
         </div>
       )}
 
+      {/* Text / actions / comments — pad on mobile so content stays inside page margins (parent is px-0) */}
+      <div className="space-y-6 px-4 sm:px-0">
       {/* Author row */}
       <div className="flex items-center gap-3">
         <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-sm font-bold text-white ${randomColor()}`}>
@@ -395,6 +397,7 @@ export function PostDetailContent({
         totalComments={totalComments}
         commentRef={commentRef}
       />
+      </div>
     </div>
   );
 }

@@ -1812,6 +1812,14 @@ function hpTimeAgo(iso: string): string {
 const HP_AVATAR_CLS = 'bg-white/[0.07] text-white/55';
 const HP_PAGE_SIZE  = 8;
 const HP_META_LINE_RE = /^(Registration URL|Shop URL|WhatsApp|Application URL|Website|Contact|Email|Phone)\s*:/i;
+/* Hide generic/file-extension titles (e.g. "post") — same rule as PublishedPage */
+const HP_JUNK_TITLE_RE = /\.\w{2,5}$/;
+const HP_GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'video', 'survey', 'article', 'upload']);
+function hpIsJunkTitle(item: { title: string; isReal?: boolean }): boolean {
+  if (!item.isReal) return false;
+  const t = item.title.trim().toLowerCase();
+  return HP_JUNK_TITLE_RE.test(t) || HP_GENERIC_TITLES.has(t);
+}
 function hpGetBodySnippet(raw: string, maxLen = 200): string {
   const cleaned = raw.replace(/https?:\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').trim();
   const prose = cleaned.split(/\n+/)
@@ -1987,7 +1995,7 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
 
   return (
     <article
-      className="group py-5 cursor-pointer"
+      className="group py-5 px-4 sm:px-0 cursor-pointer"
       role="link"
       tabIndex={0}
       onClick={() => router.push(postHref)}
@@ -2035,9 +2043,9 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
         </button>
       </div>
 
-      {/* thumbnail */}
+      {/* thumbnail — full-bleed on mobile (matches /published feed) */}
       {item.thumbnailUrl && (
-        <div className="mb-3.5 rounded-xl overflow-hidden">
+        <div className="mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.thumbnailUrl}
@@ -2051,11 +2059,13 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
 
       {/* content */}
       <div>
-        <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-          {item.title}
-        </h3>
+        {!hpIsJunkTitle(item) && (
+          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+            {item.title}
+          </h3>
+        )}
         {item.body && (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">
+          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${!hpIsJunkTitle(item) ? 'mt-1.5' : ''}`}>
             {hpGetBodySnippet(item.body)}
           </p>
         )}
@@ -2399,7 +2409,7 @@ function HomepageLiveFeed() {
       ` }} />
 
       {/* ── outer premium frame ── */}
-      <div className="relative -mx-4 sm:-mx-6 lg:-mx-10 xl:-mx-12 mt-2 mb-6"
+      <div className="relative sm:-mx-6 lg:-mx-10 xl:-mx-12 mt-2 mb-6"
         style={{
           overflow: 'clip',
           borderRadius: 'clamp(12px, 1.5vw, 24px)',
@@ -2579,7 +2589,7 @@ function HomepageLiveFeed() {
           </div>
 
           {/* feed cards */}
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex-1 overflow-y-auto px-0 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* mobile-only: sort row — hidden */}
             <div className="hidden flex items-center gap-2 py-3 max-w-[600px] mx-auto w-full">
               <span className="text-[12px] font-semibold text-white/60 tracking-tight shrink-0">
@@ -4592,11 +4602,12 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
    ContentDiscoveryStrip — find-by-type stats bar
 ───────────────────────────────────────────────────────────── */
 const CONTENT_TYPES = [
-  { id: 'all',          label: 'All',         count: 125, Icon: LayoutGrid,  color: '#a78bfa', rgb: '167,139,250'  },
+  { id: 'publish',      label: 'Publish',      count:   0, Icon: Send,         color: '#fb923c', rgb: '251,146,60'   },
   { id: 'news',         label: 'News',         count:   9, Icon: Newspaper,   color: '#60a5fa', rgb: '96,165,250'   },
   { id: 'article',      label: 'Articles',     count:   7, Icon: BookOpen,    color: '#818cf8', rgb: '129,140,248'  },
   { id: 'document',     label: 'Docs',         count:   6, Icon: FileText,    color: '#22d3ee', rgb: '34,211,238'   },
   { id: 'portfolio',    label: 'Portfolio',    count:   4, Icon: Layers,      color: '#f472b6', rgb: '244,114,182'  },
+  { id: 'all',          label: 'All',         count: 125, Icon: LayoutGrid,  color: '#a78bfa', rgb: '167,139,250'  },
   { id: 'announcement', label: 'Announce',     count:   5, Icon: Megaphone,   color: '#fb923c', rgb: '251,146,60'   },
   { id: 'job',          label: 'Jobs',         count:   5, Icon: Briefcase,   color: '#34d399', rgb: '52,211,153'   },
   { id: 'resume',       label: 'Resumes',      count:   3, Icon: User,        color: '#2dd4bf', rgb: '45,212,191'   },
@@ -4617,9 +4628,9 @@ const CONTENT_TYPES = [
 const CDS_VISIBLE_MOBILE = 3; // tabs shown on mobile
 const CDS_VISIBLE_DESKTOP = 7; // tabs shown on desktop
 
-function ContentDiscoveryStrip() {
+function ContentDiscoveryStrip({ onPublish }: { onPublish?: () => void }) {
   const [open, setOpen]       = React.useState(false);
-  const [activeId, setActiveId] = React.useState('all');
+  const [activeId, setActiveId] = React.useState('news');
   const [isMobile, setIsMobile] = React.useState(false);
   const dropRef               = React.useRef<HTMLDivElement>(null);
 
@@ -4659,23 +4670,20 @@ function ContentDiscoveryStrip() {
       <div className="cds-scroll" style={{ display:'flex', alignItems:'center', gap: 6, paddingBottom: 2 }}>
         {CONTENT_TYPES.slice(0, isMobile ? undefined : CDS_VISIBLE_DESKTOP).map(({ id, label, count, Icon, color, rgb }, i) => {
           const isActive = activeId === id;
-          return (
-            <Link
-              key={id}
-              href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
-              onClick={() => { setActiveId(id); setOpen(false); }}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                height: 31, padding: '0 10px 0 7px',
-                borderRadius: 999, textDecoration: 'none', flexShrink: 0,
-                background: isActive ? `rgba(${rgb},0.13)` : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${isActive ? `rgba(${rgb},0.28)` : 'rgba(255,255,255,0.07)'}`,
-                boxShadow: isActive ? `0 0 14px rgba(${rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.07)` : 'none',
-                transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
-                animation: `cds-tab-in 0.26s ${Math.min(i, 6) * 0.025}s cubic-bezier(0.22,1,0.36,1) both`,
-                whiteSpace: 'nowrap',
-              }}
-            >
+          const commonStyle: React.CSSProperties = {
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            height: 31, padding: '0 10px 0 7px',
+            borderRadius: 999, textDecoration: 'none', flexShrink: 0,
+            background: isActive ? `rgba(${rgb},0.13)` : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${isActive ? `rgba(${rgb},0.28)` : 'rgba(255,255,255,0.07)'}`,
+            boxShadow: isActive ? `0 0 14px rgba(${rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.07)` : 'none',
+            transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+            animation: `cds-tab-in 0.26s ${Math.min(i, 6) * 0.025}s cubic-bezier(0.22,1,0.36,1) both`,
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+          };
+          const inner = (
+            <>
               <div style={{
                 width: 17, height: 17, borderRadius: 6, flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -4692,6 +4700,28 @@ function ContentDiscoveryStrip() {
               {isActive && count > 0 && (
                 <span style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fontWeight: 700, color, opacity: 0.68, marginLeft: 1 }}>{count}</span>
               )}
+            </>
+          );
+          if (id === 'publish') {
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { setActiveId(id); setOpen(false); onPublish?.(); }}
+                style={{ ...commonStyle, font: 'inherit' }}
+              >
+                {inner}
+              </button>
+            );
+          }
+          return (
+            <Link
+              key={id}
+              href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
+              onClick={() => { setActiveId(id); setOpen(false); }}
+              style={commonStyle}
+            >
+              {inner}
             </Link>
           );
         })}
@@ -4748,7 +4778,7 @@ function ContentDiscoveryStrip() {
                 <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.11em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.20)' }}>All categories</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, padding: 5 }}>
-                {CONTENT_TYPES.slice(CDS_VISIBLE_DESKTOP).map(({ id, label, count, Icon, color, rgb }) => {
+                {CONTENT_TYPES.slice(CDS_VISIBLE_DESKTOP).filter(t => t.id !== 'publish').map(({ id, label, count, Icon, color, rgb }) => {
                   const isActive = activeId === id;
                   return (
                     <Link
@@ -5086,11 +5116,6 @@ function LiveLeaderboards() {
             <Trophy className="h-3.5 w-3.5 text-amber-400/60" />
           </div>
           <h2 className="text-[14px] font-bold tracking-tight text-white">Live Leaderboards</h2>
-          {/* LIVE badge */}
-          <span className="flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2.5 py-0.5 text-[9px] font-semibold text-white/40">
-            <span className={`h-1.5 w-1.5 rounded-full ${ticking ? 'bg-emerald-400 animate-ping' : 'bg-white/40 animate-pulse'}`} />
-            LIVE
-          </span>
           {lastUpdated && (
             <span className="hidden sm:inline text-[10px] text-white/18 tabular-nums">
               {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -5802,7 +5827,7 @@ function NewHomepageContent({
       className="flex flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y scrollbar-minimal pb-[env(safe-area-inset-bottom,0px)] [padding-bottom:max(180px,calc(180px+env(safe-area-inset-bottom,0px)))] md:[padding-bottom:max(176px,calc(176px+env(safe-area-inset-bottom,0px)))]"
       style={{ WebkitOverflowScrolling: 'touch', transform: 'translateZ(0)', willChange: 'scroll-position', contain: 'layout style' }}
     >
-      <div className="mx-auto w-full max-w-[1440px] space-y-6 sm:space-y-8 lg:space-y-10 px-4 sm:px-6 lg:px-10 xl:px-12 pt-5 sm:pt-7 lg:pt-8">
+      <div className="mx-auto w-full max-w-[1440px] space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-6 lg:px-10 xl:px-12 pt-5 sm:pt-7 lg:pt-8">
 
         {/* ── All-features bottom sheet (mobile only) ── */}
         {showAllFeatures && typeof document !== 'undefined' && createPortal(
@@ -6189,10 +6214,9 @@ function NewHomepageContent({
         {/* ── Ad banner slider ── */}
         {hpSections.adBanners && <AdBannerSlider />}
 
-        {/* ── Publish heading + content discovery + feed cards + gig slider (grouped) ── */}
+        {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
         <div className="flex flex-col" style={{ gap: 14 }}>
-          <PublishHeading onPublish={() => onPublishClick()} />
-          <ContentDiscoveryStrip />
+          <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
         </div>
 
         {/* ── Gigs grid ── */}
@@ -6344,7 +6368,7 @@ function NewHomepageContent({
           ];
 
           return (
-            <section className="hero-banners-section -mx-4 sm:mx-0 px-4 sm:px-0 lg:px-0 flex lg:grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory no-scrollbar scroll-px-4 sm:scroll-px-0 [scroll-behavior:smooth] [&_.hero-banner]:snap-start [&_.hero-banner]:shrink-0 [&_.hero-banner]:min-w-[88%] sm:[&_.hero-banner]:min-w-[72%] lg:[&_.hero-banner]:min-w-0 lg:[&_.hero-banner]:snap-none">
+            <section className="hero-banners-section mx-0 sm:mx-0 px-0 sm:px-0 lg:px-0 flex lg:grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory no-scrollbar scroll-px-0 sm:scroll-px-0 [scroll-behavior:smooth] [&_.hero-banner]:snap-start [&_.hero-banner]:shrink-0 [&_.hero-banner]:min-w-[88%] sm:[&_.hero-banner]:min-w-[72%] lg:[&_.hero-banner]:min-w-0 lg:[&_.hero-banner]:snap-none">
               <style dangerouslySetInnerHTML={{ __html: `
                 @keyframes __unused_hiringPulse {
                   0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); }
@@ -6526,10 +6550,10 @@ function NewHomepageContent({
         {false && <div className="cv-auto"><LiveLeaderboards /></div>}
 
         {/* ── Row 7: Built in India ──────────────────────────────── */}
-        {hpSections.builtInIndia && <div className="-mx-4 sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><BuiltInIndia /></div>}
+        {hpSections.builtInIndia && <div className="sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><BuiltInIndia /></div>}
 
         {/* ── Footer ───────────────────────────────────────────────── */}
-        {hpSections.footer && <div className="-mx-4 sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><PremiumFooter /></div>}
+        {hpSections.footer && <div className="sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><PremiumFooter /></div>}
 
       </div>
     </div>

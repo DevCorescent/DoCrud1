@@ -57,6 +57,8 @@ import {
   Users,
   X,
   Zap,
+  MoreHorizontal,
+  Pencil,
 } from 'lucide-react';
 
 /* ─── types ─────────────────────────────────────────────────────── */
@@ -122,7 +124,7 @@ const SEED_LIKES: Record<string, number> = {
 
 type RawComment = {
   id: string; author: string; initials: string; color: string;
-  text: string; timestamp: string; likes: number; parentId?: string;
+  text: string; timestamp: string; likes: number; parentId?: string; userId?: string;
 };
 type Comment = RawComment & { likedByMe: boolean; replies: Comment[] };
 
@@ -402,10 +404,10 @@ function stableColor(seed: string): string {
   let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
-type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean };
+type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean; userId?: string };
 
 function apiCommentToComment(c: ApiComment): Comment {
-  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, replies:[] };
+  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, userId:c.userId, replies:[] };
 }
 
 function buildCommentTree(flat: ApiComment[]): Comment[] {
@@ -1238,6 +1240,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const router = useRouter();
   const { data: session } = useSession();
   const displayName = session?.user?.name || 'Anonymous';
+  const currentUserId = session?.user?.id || session?.user?.email || '';
   const [item,          setItem]          = useState<PublishedItem | null>(null);
   const [related,       setRelated]       = useState<PublishedItem[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -1263,6 +1266,9 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError,   setDeleteError]   = useState('');
+  const [commentDeleteId, setCommentDeleteId] = useState<string | null>(null);
+  const [commentDeleteLoading, setCommentDeleteLoading] = useState(false);
+  const [commentActionError, setCommentActionError] = useState('');
   const [showAnalytics, setShowAnalytics] = useState(false);
   const commentRef  = useRef<HTMLTextAreaElement>(null);
   const sharePanelRef = useRef<HTMLDivElement>(null);
@@ -1438,7 +1444,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
   /* ── comment (real API for real items, localStorage for mocks) ── */
   const submitComment = async () => {
     if (!item || !commentText.trim()) return;
-    const optimistic: Comment = { id:`c_${Date.now()}`, author:displayName, initials:initials(displayName), color:stableColor(displayName), text:commentText.trim(), timestamp:new Date().toISOString(), likes:0, likedByMe:false, replies:[] };
+    const optimistic: Comment = { id:`c_${Date.now()}`, author:displayName, initials:initials(displayName), color:stableColor(displayName), text:commentText.trim(), timestamp:new Date().toISOString(), likes:0, likedByMe:false, userId: currentUserId || undefined, replies:[] };
     setComments(prev => [optimistic, ...prev]);
     setCommentText('');
     if (isRealItem) {
@@ -1461,7 +1467,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const submitReply = async (parentId: string, text?: string) => {
     const replyContent = (text ?? replyText).trim();
     if (!item || !replyContent) return;
-    const r: Comment = { id:`r_${Date.now()}`, author:displayName, initials:initials(displayName), color:randomColor(), text:replyContent, timestamp:new Date().toISOString(), likes:0, likedByMe:false, replies:[] };
+    const r: Comment = { id:`r_${Date.now()}`, author:displayName, initials:initials(displayName), color:randomColor(), text:replyContent, timestamp:new Date().toISOString(), likes:0, likedByMe:false, userId: currentUserId || undefined, replies:[] };
     setComments(prev => prev.map(c => c.id === parentId ? { ...c, replies:[...c.replies, r] } : c));
     setReplyText(''); setReplyTo(null);
     if (isRealItem) {
@@ -1499,6 +1505,76 @@ export default function PublishedItemPage({ id }: { id: string }) {
       } catch {}
     } else if (item) {
       setComments(prev => { saveLocalComments(item.id, prev); return prev; });
+    }
+  };
+
+  const editComment = async (commentId: string, text: string) => {
+    const trimmed = text.trim();
+    if (!item || !trimmed) return;
+    setCommentActionError('');
+    // Optimistic local update
+    setComments(prev => prev.map(c => {
+      if (c.id === commentId) return { ...c, text: trimmed };
+      return { ...c, replies: c.replies.map(r => r.id === commentId ? { ...r, text: trimmed } : r) };
+    }));
+    if (isRealItem) {
+      try {
+        const res = await fetch(`/api/public/published/${item.id}/comments/${commentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: trimmed }),
+        });
+        if (res.ok) {
+          const d = await res.json() as { comments: ApiComment[] };
+          setComments(buildCommentTree(d.comments));
+        } else {
+          const d = await res.json().catch(() => ({})) as { error?: string };
+          setCommentActionError(d.error || 'Failed to edit comment');
+          const cRes = await fetch(`/api/public/published/${item.id}/comments`);
+          if (cRes.ok) {
+            const cd = await cRes.json() as { comments: ApiComment[] };
+            setComments(buildCommentTree(cd.comments));
+          }
+        }
+      } catch {
+        setCommentActionError('Failed to edit comment');
+      }
+    } else {
+      setComments(prev => { saveLocalComments(item.id, prev); return prev; });
+    }
+  };
+
+  const confirmDeleteComment = async () => {
+    if (!item || !commentDeleteId) return;
+    setCommentDeleteLoading(true);
+    setCommentActionError('');
+    const idToDelete = commentDeleteId;
+    if (isRealItem) {
+      try {
+        const res = await fetch(`/api/public/published/${item.id}/comments/${idToDelete}`, { method: 'DELETE' });
+        if (res.ok) {
+          const d = await res.json() as { comments: ApiComment[] };
+          setComments(buildCommentTree(d.comments));
+          setCommentDeleteId(null);
+        } else {
+          const d = await res.json().catch(() => ({})) as { error?: string };
+          setCommentActionError(d.error || 'Failed to delete comment');
+        }
+      } catch {
+        setCommentActionError('Failed to delete comment');
+      } finally {
+        setCommentDeleteLoading(false);
+      }
+    } else {
+      setComments(prev => {
+        const next = prev
+          .filter(c => c.id !== idToDelete)
+          .map(c => ({ ...c, replies: c.replies.filter(r => r.id !== idToDelete) }));
+        saveLocalComments(item.id, next);
+        return next;
+      });
+      setCommentDeleteId(null);
+      setCommentDeleteLoading(false);
     }
   };
 
@@ -1552,6 +1628,9 @@ export default function PublishedItemPage({ id }: { id: string }) {
     comments, commentText, displayName,
     setCommentText, submitComment, submitReply,
     likeComment: (id: string) => void likeComment(id),
+    editComment: (id: string, text: string) => void editComment(id, text),
+    deleteComment: (id: string) => setCommentDeleteId(id),
+    currentUserId,
     totalComments, commentRef,
   };
 
@@ -1588,6 +1667,41 @@ export default function PublishedItemPage({ id }: { id: string }) {
                 className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 text-[13px] font-bold text-red-400 transition hover:bg-red-500/20 hover:text-red-300 disabled:opacity-40"
               >
                 {deleteLoading ? <><div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-400/30 border-t-red-400" /> Deleting…</> : <><Trash2 className="h-3.5 w-3.5" /> Delete post</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete comment confirm modal ── */}
+      {commentDeleteId && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => { if (!commentDeleteLoading) { setCommentDeleteId(null); setCommentActionError(''); } }} />
+          <div className="relative w-full max-w-sm rounded-2xl border border-white/[0.10] bg-[#111114] p-6 shadow-[0_32px_80px_rgba(0,0,0,0.8)]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 mb-4">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+            </div>
+            <h3 className="text-[15px] font-bold text-white">Delete this comment?</h3>
+            <p className="mt-1.5 text-[13px] text-white/45">This cannot be undone. Your comment will be removed immediately.</p>
+            {commentActionError && (
+              <p className="mt-3 rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2 text-[13px] text-red-400">{commentActionError}</p>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setCommentDeleteId(null); setCommentActionError(''); }}
+                disabled={commentDeleteLoading}
+                className="h-9 flex-1 rounded-xl border border-white/[0.08] bg-transparent text-[13px] font-medium text-white/55 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteComment()}
+                disabled={commentDeleteLoading}
+                className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 text-[13px] font-bold text-red-400 transition hover:bg-red-500/20 hover:text-red-300 disabled:opacity-40"
+              >
+                {commentDeleteLoading ? <><div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-400/30 border-t-red-400" /> Deleting…</> : <><Trash2 className="h-3.5 w-3.5" /> Delete</>}
               </button>
             </div>
           </div>
@@ -1745,11 +1859,11 @@ export default function PublishedItemPage({ id }: { id: string }) {
           </div>
         )}
 
-        <div className="px-4 sm:px-6 lg:px-10 xl:px-14 2xl:px-20">
+        <div className="px-0 sm:px-6 lg:px-10 xl:px-14 2xl:px-20">
         <div className="grid gap-10 lg:grid-cols-[1fr_320px]">
 
           {/* ════ LEFT COLUMN ════ */}
-          <article className="min-w-0">
+          <article className="min-w-0 px-4 sm:px-0">
 
             {/* category + badge chips — only when no thumbnail (already shown over image) */}
             {!item.thumbnailUrl && (
@@ -2119,6 +2233,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
                     <CommentItem
                       key={c.id}
                       comment={c}
+                      currentUserId={currentUserId}
                       onLike={() => void likeComment(c.id)}
                       onReply={() => { setReplyTo(replyTo === c.id ? null : c.id); setReplyText(''); }}
                       replyOpen={replyTo === c.id}
@@ -2126,6 +2241,10 @@ export default function PublishedItemPage({ id }: { id: string }) {
                       onReplyTextChange={setReplyText}
                       onSubmitReply={() => void submitReply(c.id)}
                       onLikeReply={rid => void likeComment(rid, c.id)}
+                      onEdit={(text) => void editComment(c.id, text)}
+                      onEditReply={(rid, text) => void editComment(rid, text)}
+                      onDelete={() => setCommentDeleteId(c.id)}
+                      onDeleteReply={(rid) => setCommentDeleteId(rid)}
                     />
                   ))
                 )}
@@ -2554,14 +2673,45 @@ function SideShareBtn({ icon: Icon, label, onClick, accent }: { icon: React.Elem
 }
 
 function CommentItem({
-  comment: c, onLike, onReply, replyOpen, replyText,
+  comment: c, currentUserId, onLike, onReply, replyOpen, replyText,
   onReplyTextChange, onSubmitReply, onLikeReply,
+  onEdit, onEditReply, onDelete, onDeleteReply,
 }: {
-  comment: Comment; onLike: () => void; onReply: () => void;
+  comment: Comment; currentUserId: string; onLike: () => void; onReply: () => void;
   replyOpen: boolean; replyText: string;
   onReplyTextChange: (v: string) => void;
   onSubmitReply: () => void; onLikeReply: (id: string) => void;
+  onEdit: (text: string) => void;
+  onEditReply: (id: string, text: string) => void;
+  onDelete: () => void;
+  onDeleteReply: (id: string) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(c.text);
+  const [editSaving, setEditSaving] = useState(false);
+  const [replyMenuOpen, setReplyMenuOpen] = useState<string | null>(null);
+  const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
+  const [replyEditText, setReplyEditText] = useState('');
+  const [replyEditSaving, setReplyEditSaving] = useState(false);
+  const isOwner = Boolean(currentUserId && c.userId && c.userId === currentUserId);
+
+  useEffect(() => { setEditText(c.text); }, [c.text]);
+
+  const saveEdit = async () => {
+    if (!editText.trim() || editSaving) return;
+    setEditSaving(true);
+    try { await onEdit(editText); setEditing(false); }
+    finally { setEditSaving(false); }
+  };
+
+  const saveReplyEdit = async (rid: string) => {
+    if (!replyEditText.trim() || replyEditSaving) return;
+    setReplyEditSaving(true);
+    try { await onEditReply(rid, replyEditText); setEditingReplyId(null); }
+    finally { setReplyEditSaving(false); }
+  };
+
   return (
     <div className="flex gap-3">
       <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${c.color}`}>
@@ -2571,8 +2721,70 @@ function CommentItem({
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold text-white/80">{c.author}</span>
           <span className="text-[10px] text-white/25">{timeAgo(c.timestamp)}</span>
+          {isOwner && !editing && (
+            <div className="relative ml-auto">
+              <button
+                type="button"
+                onClick={() => setMenuOpen(v => !v)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-white/25 transition hover:bg-white/[0.06] hover:text-white/70"
+                aria-label="Comment options"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-7 z-20 min-w-[120px] overflow-hidden rounded-xl border border-white/[0.10] bg-[#141418] py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); setEditing(true); setEditText(c.text); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+                    >
+                      <Pencil className="h-3 w-3" /> Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen(false); onDelete(); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-red-400 transition hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+        {editing ? (
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[13px] text-white outline-none focus:border-white/[0.18]"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void saveEdit()}
+                disabled={!editText.trim() || editSaving}
+                className="inline-flex h-7 items-center rounded-lg bg-white px-3 text-[11px] font-bold text-slate-950 transition disabled:opacity-25"
+              >
+                {editSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditing(false); setEditText(c.text); }}
+                disabled={editSaving}
+                className="inline-flex h-7 items-center rounded-lg px-3 text-[11px] font-semibold text-white/45 transition hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+        )}
         <div className="mt-2 flex items-center gap-3">
           <button type="button" onClick={onLike} className={`inline-flex items-center gap-1 text-[11px] font-semibold transition ${c.likedByMe ? 'text-rose-400' : 'text-white/25 hover:text-white/65'}`}>
             <Heart className={`h-3 w-3 ${c.likedByMe ? 'fill-rose-400' : ''}`} />
@@ -2606,26 +2818,92 @@ function CommentItem({
 
         {c.replies.length > 0 && (
           <div className="mt-4 space-y-3 border-l border-white/[0.06] pl-4">
-            {c.replies.map(r => (
-              <div key={r.id} className="flex gap-3">
-                <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${r.color}`}>{r.initials}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-white/75">{r.author}</span>
-                    <span className="text-[10px] text-white/25">{timeAgo(r.timestamp)}</span>
+            {c.replies.map(r => {
+              const replyOwner = Boolean(currentUserId && r.userId && r.userId === currentUserId);
+              const isEditingReply = editingReplyId === r.id;
+              return (
+                <div key={r.id} className="flex gap-3">
+                  <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${r.color}`}>{r.initials}</div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[12px] font-semibold text-white/75">{r.author}</span>
+                      <span className="text-[10px] text-white/25">{timeAgo(r.timestamp)}</span>
+                      {replyOwner && !isEditingReply && (
+                        <div className="relative ml-auto">
+                          <button
+                            type="button"
+                            onClick={() => setReplyMenuOpen(v => v === r.id ? null : r.id)}
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-md text-white/25 transition hover:bg-white/[0.06] hover:text-white/70"
+                            aria-label="Reply options"
+                          >
+                            <MoreHorizontal className="h-3 w-3" />
+                          </button>
+                          {replyMenuOpen === r.id && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setReplyMenuOpen(null)} />
+                              <div className="absolute right-0 top-6 z-20 min-w-[120px] overflow-hidden rounded-xl border border-white/[0.10] bg-[#141418] py-1 shadow-xl">
+                                <button
+                                  type="button"
+                                  onClick={() => { setReplyMenuOpen(null); setEditingReplyId(r.id); setReplyEditText(r.text); }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white"
+                                >
+                                  <Pencil className="h-3 w-3" /> Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setReplyMenuOpen(null); onDeleteReply(r.id); }}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-red-400 transition hover:bg-red-500/10"
+                                >
+                                  <Trash2 className="h-3 w-3" /> Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {isEditingReply ? (
+                      <div className="mt-1.5 space-y-2">
+                        <textarea
+                          value={replyEditText}
+                          onChange={e => setReplyEditText(e.target.value)}
+                          rows={2}
+                          className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[12px] text-white outline-none focus:border-white/[0.18]"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void saveReplyEdit(r.id)}
+                            disabled={!replyEditText.trim() || replyEditSaving}
+                            className="inline-flex h-7 items-center rounded-lg bg-white px-3 text-[11px] font-bold text-slate-950 transition disabled:opacity-25"
+                          >
+                            {replyEditSaving ? 'Saving…' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingReplyId(null)}
+                            disabled={replyEditSaving}
+                            className="inline-flex h-7 items-center rounded-lg px-3 text-[11px] font-semibold text-white/45 transition hover:text-white/80"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onLikeReply(r.id)}
+                      className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold transition ${r.likedByMe ? 'text-rose-400' : 'text-white/20 hover:text-white/55'}`}
+                    >
+                      <Heart className={`h-2.5 w-2.5 ${r.likedByMe ? 'fill-rose-400' : ''}`} />
+                      {r.likes > 0 && <span className="tabular-nums">{r.likes}</span>}
+                    </button>
                   </div>
-                  <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
-                  <button
-                    type="button"
-                    onClick={() => onLikeReply(r.id)}
-                    className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold transition ${r.likedByMe ? 'text-rose-400' : 'text-white/20 hover:text-white/55'}`}
-                  >
-                    <Heart className={`h-2.5 w-2.5 ${r.likedByMe ? 'fill-rose-400' : ''}`} />
-                    {r.likes > 0 && <span className="tabular-nums">{r.likes}</span>}
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

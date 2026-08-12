@@ -489,6 +489,69 @@ export async function toggleCommentLike(
   return { liked, likesCount };
 }
 
+export async function updateComment(
+  transferId: string,
+  commentId: string,
+  userId: string,
+  text: string,
+): Promise<SecureFileTransfer> {
+  const usingDb = Boolean(getDbPool());
+  const transfers = usingDb ? [] : await getFileTransfers();
+  const current = usingDb
+    ? await selectFileTransferRowById(transferId)
+    : transfers.find((t) => t.id === transferId || t.shareId === transferId) || null;
+  if (!current) throw new Error('Post not found.');
+  const comments = current.comments ?? [];
+  const idx = comments.findIndex((c) => c.id === commentId);
+  if (idx < 0) throw new Error('Comment not found.');
+  if (comments[idx].userId !== userId) throw new Error('Not allowed to edit this comment.');
+  const trimmed = text.trim().slice(0, 1000);
+  if (!trimmed) throw new Error('Comment text required.');
+  const nextComments = comments.map((c, i) => (i === idx ? { ...c, text: trimmed } : c));
+  const next = { ...current, comments: nextComments, updatedAt: new Date().toISOString() };
+  if (usingDb) {
+    await upsertFileTransferRow(next);
+  } else {
+    const tIdx = transfers.findIndex((t) => t.id === transferId || t.shareId === transferId);
+    transfers[tIdx] = next;
+    await writeJsonFile(fileTransfersPath, transfers);
+  }
+  return next;
+}
+
+export async function deleteComment(
+  transferId: string,
+  commentId: string,
+  userId: string,
+): Promise<SecureFileTransfer> {
+  const usingDb = Boolean(getDbPool());
+  const transfers = usingDb ? [] : await getFileTransfers();
+  const current = usingDb
+    ? await selectFileTransferRowById(transferId)
+    : transfers.find((t) => t.id === transferId || t.shareId === transferId) || null;
+  if (!current) throw new Error('Post not found.');
+  const comments = current.comments ?? [];
+  const target = comments.find((c) => c.id === commentId);
+  if (!target) throw new Error('Comment not found.');
+  if (target.userId !== userId) throw new Error('Not allowed to delete this comment.');
+  // Remove the comment and any direct replies
+  const nextComments = comments.filter((c) => c.id !== commentId && c.parentId !== commentId);
+  const next = {
+    ...current,
+    comments: nextComments,
+    commentsCount: nextComments.length,
+    updatedAt: new Date().toISOString(),
+  };
+  if (usingDb) {
+    await upsertFileTransferRow(next);
+  } else {
+    const tIdx = transfers.findIndex((t) => t.id === transferId || t.shareId === transferId);
+    transfers[tIdx] = next;
+    await writeJsonFile(fileTransfersPath, transfers);
+  }
+  return next;
+}
+
 export async function featureTransfer(
   transferId: string,
   plan: 'spotlight' | 'boost' | 'prime',

@@ -452,11 +452,12 @@ export default function HomepageNav({
 
   return (
     <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12 sticky top-0 z-40" style={{
-      background: 'rgba(6,6,10,0.52)',
-      backdropFilter: 'blur(56px) saturate(200%) brightness(0.90)',
-      WebkitBackdropFilter: 'blur(56px) saturate(200%) brightness(0.90)',
-      borderBottom: '1px solid rgba(255,255,255,0.07)',
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 0 rgba(255,255,255,0.03), 0 8px 32px rgba(0,0,0,0.28)',
+      /* Match GlobalBottomNav glassmorphism tokens */
+      background: 'rgba(0, 0, 0, 0.82)',
+      backdropFilter: 'blur(28px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+      borderBottom: '1px solid rgba(255,255,255,0.09)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.07)',
       transform: navVisible ? 'translateY(0)' : 'translateY(-100%)',
       transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
       willChange: 'transform',

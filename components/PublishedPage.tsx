@@ -1143,7 +1143,7 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
     : (initials.slice(0, 2) || <TabIcon className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5">
+    <article className="group py-5 px-4 sm:px-0">
       {/* ── header ── */}
       <div className="flex items-center gap-3 mb-3.5">
         {profileHref ? (
@@ -1314,7 +1314,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
     <>
       {modal && <ActionModal variant={modal} itemTitle={item.title} itemId={item.id} uploadedByUserId={item.uploadedByUserId} onClose={() => setModal(null)} />}
 
-      <article className="group py-5">
+      <article className="group py-5 px-4 sm:px-0">
         {/* ── header ── */}
         <div className="flex items-center gap-3 mb-3.5">
           {profileHref ? (
@@ -1576,7 +1576,7 @@ function GigCard({ item }: { item: PublishedItem }) {
   };
 
   return (
-    <article className="group py-5">
+    <article className="group py-5 px-4 sm:px-0">
       {/* Author header */}
       <div className="flex items-center gap-3 mb-3.5">
         {profileHref ? (
@@ -1972,7 +1972,7 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
     : (initials || <ImageIcon className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5">
+    <article className="group py-5 px-4 sm:px-0">
       {/* header */}
       <div className="flex items-center gap-3 mb-3.5">
         {/* clickable avatar */}
@@ -2241,7 +2241,7 @@ function ThreadCard({ item, searchQuery }: { item: PublishedItem; searchQuery: s
     : (initials || <MessageSquare className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5">
+    <article className="group py-5 px-4 sm:px-0">
       {/* header */}
       <div className="flex items-center gap-3 mb-3.5">
         {threadHref ? (
@@ -2392,7 +2392,7 @@ function MilestoneCard({ item, searchQuery }: { item: PublishedItem; searchQuery
     : (initials || <Award className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5">
+    <article className="group py-5 px-4 sm:px-0">
       {/* header */}
       <div className="flex items-center gap-3 mb-3.5">
         {milestoneHref ? (
@@ -3738,7 +3738,7 @@ export default function PublishedPage() {
 
         {/* ── Scrollable content area ── */}
         <div ref={feedScrollRef} className="flex-1 overflow-y-auto min-h-0 bg-[#0D0D0F]">
-          <div className="p-4 lg:py-6 lg:px-8 pb-24 lg:pb-10 space-y-10 max-w-3xl mx-auto w-full">
+          <div className="py-4 px-0 sm:p-4 lg:py-6 lg:px-8 pb-24 lg:pb-10 space-y-10 max-w-3xl mx-auto w-full">
 
             {isSearching ? (
               <SearchResults items={allItems} query={search} />

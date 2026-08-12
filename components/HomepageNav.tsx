@@ -201,6 +201,7 @@ export default function HomepageNav({
   const [msgUnread, setMsgUnread] = useState(0);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -534,7 +535,7 @@ export default function HomepageNav({
       <button
         type="button"
         onClick={() => searchBarRef.current?.openMobile()}
-        className="md:hidden flex flex-1 items-center gap-2 mx-2 h-[36px] min-w-0 rounded-[12px] px-3"
+        className="md:hidden flex flex-1 items-center gap-2 mx-1.5 h-[36px] min-w-0 rounded-[12px] px-3"
         style={{
           background: 'rgba(255,255,255,0.06)',
           border: '1px solid rgba(255,255,255,0.10)',
@@ -583,7 +584,7 @@ export default function HomepageNav({
         </button>
 
 
-        {/* Drive — mobile icon only (desktop shows the full Ddrive button above) */}
+        {/* Drive — mobile icon only (desktop shows the full Ddrive button above)
         <button
           type="button"
           onClick={() => onFileDriveClick?.()}
@@ -597,13 +598,13 @@ export default function HomepageNav({
           aria-label="Ddrive"
         >
           <DdriveIcon size={15} />
-        </button>
+        </button> */}
 
         {/* Messages icon (desktop only — mobile uses the bottom dock) */}
         {isAuthenticated && !guestMode && (
           <Link
             href="/messages"
-            className="relative hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/50 transition hover:bg-white/[0.09] hover:text-white/80 active:scale-95"
+            className="md:hidden relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/50 transition hover:bg-white/[0.09] hover:text-white/80 active:scale-95"
             aria-label={`Messages${msgUnread > 0 ? ` (${msgUnread} unread)` : ''}`}
           >
             <MessageSquare className="h-[15px] w-[15px]" />
@@ -811,7 +812,7 @@ export default function HomepageNav({
         <button
           type="button"
           onClick={toggleColorMode}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/50 transition hover:bg-white/[0.09] hover:text-white/80 active:scale-95"
+          className="hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/50 transition hover:bg-white/[0.09] hover:text-white/80 active:scale-95"
           aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           title={colorMode === 'dark' ? 'Light mode' : 'Dark mode'}
         >

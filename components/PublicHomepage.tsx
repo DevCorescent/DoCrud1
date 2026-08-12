@@ -1812,13 +1812,27 @@ function hpTimeAgo(iso: string): string {
 const HP_AVATAR_CLS = 'bg-white/[0.07] text-white/55';
 const HP_PAGE_SIZE  = 8;
 const HP_META_LINE_RE = /^(Registration URL|Shop URL|WhatsApp|Application URL|Website|Contact|Email|Phone)\s*:/i;
-/* Hide generic/file-extension titles (e.g. "post") — same rule as PublishedPage */
+/* Hide filenames / generic defaults. Photo-post caption is item.body (notes), never title. */
 const HP_JUNK_TITLE_RE = /\.\w{2,5}$/;
-const HP_GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'video', 'survey', 'article', 'upload']);
-function hpIsJunkTitle(item: { title: string; isReal?: boolean }): boolean {
-  if (!item.isReal) return false;
+const HP_GENERIC_TITLES = new Set(['post', 'poll', 'document', 'file', 'image', 'photo', 'video', 'survey', 'article', 'upload']);
+function hpIsJunkTitle(item: { title: string }): boolean {
   const t = item.title.trim().toLowerCase();
   return HP_JUNK_TITLE_RE.test(t) || HP_GENERIC_TITLES.has(t);
+}
+/** Real user-written caption for a photo post = body/notes, not title. */
+function hpHasRealCaption(body?: string): boolean {
+  return Boolean(body && body.trim());
+}
+/**
+ * Sidebar label: for posts use caption/body only (never title/filename).
+ * Returns '' when there is nothing real to show.
+ */
+function hpFeedLabel(item: { title: string; body?: string; category?: string }): string {
+  if (item.category === 'post') {
+    return hpHasRealCaption(item.body) ? hpGetBodySnippet(item.body!, 80) : '';
+  }
+  if (!hpIsJunkTitle(item)) return item.title;
+  return hpHasRealCaption(item.body) ? hpGetBodySnippet(item.body!, 80) : '';
 }
 function hpGetBodySnippet(raw: string, maxLen = 200): string {
   const cleaned = raw.replace(/https?:\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').trim();
@@ -2049,7 +2063,7 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.thumbnailUrl}
-            alt={item.title}
+            alt={item.category === 'post' || hpIsJunkTitle(item) ? '' : item.title}
             className="w-full max-h-[380px] object-cover transition-transform duration-500 group-hover:scale-[1.01]"
             loading="lazy"
             decoding="async"
@@ -2057,15 +2071,15 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
         </div>
       )}
 
-      {/* content */}
+      {/* content — photo posts: caption = body only; never show auto title/filename */}
       <div>
-        {!hpIsJunkTitle(item) && (
+        {item.category !== 'post' && !hpIsJunkTitle(item) && (
           <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
             {item.title}
           </h3>
         )}
-        {item.body && (
-          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${!hpIsJunkTitle(item) ? 'mt-1.5' : ''}`}>
+        {hpHasRealCaption(item.body) && (
+          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${item.category !== 'post' && !hpIsJunkTitle(item) ? 'mt-1.5' : ''}`}>
             {hpGetBodySnippet(item.body)}
           </p>
         )}
@@ -2705,15 +2719,20 @@ function HomepageLiveFeed() {
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-3">Recent</p>
                 <div className="space-y-3.5">
                   {recentItems.length === 0 && <p className="text-[11px] text-white/20">No posts yet</p>}
-                  {recentItems.map((item, i) => (
+                  {recentItems.map((item, i) => {
+                    const label = hpFeedLabel(item);
+                    return (
                     <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
                       <span className="text-[11px] font-bold text-white/20 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{item.title}</p>
-                        <p className="text-[10.5px] text-white/25 mt-0.5">{item.uploadedByName || 'Docrud'} · {hpTimeAgo(item.postedAt)}</p>
+                        {label ? (
+                          <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{label}</p>
+                        ) : null}
+                        <p className={`text-[10.5px] text-white/25 ${label ? 'mt-0.5' : ''}`}>{item.uploadedByName || 'Docrud'} · {hpTimeAgo(item.postedAt)}</p>
                       </div>
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               </section>
 
@@ -2736,18 +2755,23 @@ function HomepageLiveFeed() {
 
                 {topTrendingPosts.length > 0 ? (
                   <div className="space-y-3.5 mb-4">
-                    {topTrendingPosts.map((item, i) => (
+                    {topTrendingPosts.map((item, i) => {
+                      const label = hpFeedLabel(item);
+                      return (
                       <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
                         <span className="text-[11px] font-bold text-orange-400/40 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
                         <div className="min-w-0 flex-1">
-                          <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{item.title}</p>
-                          <div className="flex items-center gap-1 mt-0.5">
+                          {label ? (
+                            <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{label}</p>
+                          ) : null}
+                          <div className={`flex items-center gap-1 ${label ? 'mt-0.5' : ''}`}>
                             <TrendingUp className="h-3 w-3 text-orange-400/50" />
                             <span className="text-[10.5px] font-bold text-orange-400/60">{trends[item.id]?.count} trending</span>
                           </div>
                         </div>
                       </Link>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-[11px] text-white/20 mb-4 leading-relaxed">
@@ -2826,7 +2850,9 @@ function HomepageLiveFeed() {
                       <div key={i} className="flex items-start gap-2.5">
                         <TrendingUp className="h-3.5 w-3.5 text-orange-400/35 shrink-0 mt-0.5" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-[11.5px] font-semibold text-white/50 leading-snug line-clamp-1">{h.title}</p>
+                          <p className="text-[11.5px] font-semibold text-white/50 leading-snug line-clamp-1">
+                            {hpIsJunkTitle({ title: h.title }) ? (h.category || 'Post') : h.title}
+                          </p>
                           <p className="text-[10px] text-white/22 mt-0.5 capitalize">{h.category} · {hpTimeAgo(new Date(h.trendedAt).toISOString())}</p>
                         </div>
                       </div>

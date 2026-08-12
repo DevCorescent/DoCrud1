@@ -599,6 +599,7 @@ export async function deleteComment(
   return next;
 }
 
+export async function featureTransfer(
   transferId: string,
   plan: 'spotlight' | 'boost' | 'prime',
   orderId: string,

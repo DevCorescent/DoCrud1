@@ -1,5 +1,18 @@
 [
   {
+    "id": "te-1786541636664-4dvsce",
+    "createdAt": "2026-08-12T13:33:56.664Z",
+    "type": "page_view",
+    "surface": "public",
+    "path": "/login",
+    "title": "Docrud — Connecting Talent, Work & Opportunity",
+    "referrer": "direct",
+    "visitorId": "v-msmvb4yb-x7zu52",
+    "sessionId": "s-msq4rgiy-z6h7x8",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "ip": "::1"
+  },
+  {
     "id": "te-1786526666461-g0kpms",
     "createdAt": "2026-08-12T09:24:26.461Z",
     "type": "page_view",

@@ -286,7 +286,6 @@ export function PostDetailContent({
           <div className="absolute inset-0 bg-gradient-to-br from-rose-400/10 via-transparent to-purple-600/10" />
           <div className="relative flex flex-col items-center gap-3 text-white/20">
             <ImageIcon className="h-16 w-16" />
-            <span className="text-xs font-medium tracking-wider uppercase">Post</span>
           </div>
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#0A0A0C]/80 to-transparent" />
         </div>

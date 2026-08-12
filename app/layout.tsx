@@ -352,7 +352,11 @@ export default function RootLayout({
    * mount when the visitor has chosen it.
    */
   return (
-    <html lang="en" className={`${manrope.variable} dark`} data-ui-mode="dark">
+    <html
+  lang="en"
+  className={manrope.variable}
+  data-ui-mode="light"
+>
       <head>
         {/* Indexing & browser hints.
             msapplication-TileColor / TileImage are intentionally NOT repeated
@@ -382,7 +386,9 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className={`${manrope.className} bg-[#0D0D0F] text-slate-950 antialiased`}>
+     <body
+  className={`${manrope.className} bg-background text-foreground antialiased`}
+>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}

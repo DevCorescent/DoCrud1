@@ -488,7 +488,86 @@ export async function toggleCommentLike(
   }
   return { liked, likesCount };
 }
+export async function deleteComment(
+  transferId: string,
+  commentId: string,
+  userId: string,
+): Promise<SecureFileTransfer> {
+  const usingDb = Boolean(getDbPool());
 
+  const transfers = usingDb ? [] : await getFileTransfers();
+
+  const current = usingDb
+    ? await selectFileTransferRowById(transferId)
+    : transfers.find(
+        (t) => t.id === transferId || t.shareId === transferId,
+      ) || null;
+
+  if (!current) {
+    throw new Error('Post not found.');
+  }
+
+  const comments = current.comments ?? [];
+
+  const comment = comments.find((c) => c.id === commentId);
+
+  if (!comment) {
+    throw new Error('Comment not found.');
+  }
+
+  // Only the comment owner can delete the comment.
+  if (comment.userId !== userId) {
+    throw new Error('You can only delete your own comments.');
+  }
+
+  // Delete the selected comment and its replies.
+  const commentIdsToDelete = new Set<string>([commentId]);
+
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const c of comments) {
+      if (
+        c.parentId &&
+        commentIdsToDelete.has(c.parentId) &&
+        !commentIdsToDelete.has(c.id)
+      ) {
+        commentIdsToDelete.add(c.id);
+        changed = true;
+      }
+    }
+  }
+
+  const nextComments = comments.filter(
+    (c) => !commentIdsToDelete.has(c.id),
+  );
+
+  const next: SecureFileTransfer = {
+    ...current,
+    comments: nextComments,
+    commentsCount: nextComments.length,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (usingDb) {
+    await upsertFileTransferRow(next);
+  } else {
+    const idx = transfers.findIndex(
+      (t) => t.id === transferId || t.shareId === transferId,
+    );
+
+    if (idx === -1) {
+      throw new Error('Post not found.');
+    }
+
+    transfers[idx] = next;
+    await writeJsonFile(fileTransfersPath, transfers);
+  }
+
+  return next;
+}
 export async function featureTransfer(
   transferId: string,
   plan: 'spotlight' | 'boost' | 'prime',

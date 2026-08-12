@@ -3611,6 +3611,11 @@ export default function UserProfilePage() {
                   <FileText className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline text-xs">Resume</span>
                 </a>
+                {/* Profile QR — individual accounts only. Placed before Exit so the
+                    action-button order stays Edit → Resume → QR → Exit. */}
+                {user.accountType !== 'business' && (
+                  <ProfileQRCode userId={user.id} userName={user.name} />
+                )}
                 <button
                   onClick={() => void signOut({ callbackUrl: '/onboarding' })}
                   className="flex items-center gap-2 h-9 px-3 rounded-[12px] border border-rose-500/20 bg-rose-500/[0.07] text-rose-400/80 text-sm hover:bg-rose-500/[0.14] hover:text-rose-400 transition-colors"
@@ -3675,10 +3680,11 @@ export default function UserProfilePage() {
                 )}
               </>
             ) : null}
-            {/* Profile QR — individual accounts only. Appended after the existing
-                actions so none of them shift position. The QR itself is fetched
-                lazily, on open, so this adds no request to the initial load. */}
-            {user.accountType !== 'business' && (
+            {/* Profile QR — individual accounts only. For the owner view it's rendered
+                inline above (before Exit); for visitors (signed in or logged out) it's
+                appended here so none of the other actions shift position. The QR itself
+                is fetched lazily, on open, so this adds no request to the initial load. */}
+            {!isOwnProfile && user.accountType !== 'business' && (
               <ProfileQRCode userId={user.id} userName={user.name} />
             )}
             </div>

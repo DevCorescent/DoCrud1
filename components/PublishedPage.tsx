@@ -48,6 +48,7 @@ import {
   Terminal,
   ThumbsUp,
   TrendingUp,
+  Trash2,
   User,
   Video,
   X,
@@ -1019,7 +1020,9 @@ function TrendingPanel({
                 <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
                   <span className="text-[11px] font-bold text-orange-400/40 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{item.title}</p>
+                    <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">
+                      {item.category === 'post' ? getBodySnippet(item.body, 60) : item.title}
+                    </p>
                     <div className="flex items-center gap-1 mt-0.5">
                       <TrendingUp className="h-3 w-3 text-orange-400/50" />
                       <span className="text-[10.5px] font-bold text-orange-400/60">{trends[item.id]?.count} trending</span>
@@ -1198,7 +1201,7 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
 
       {/* ── content ── */}
       <Link href={`/published/${item.id}`} className="block">
-        {!isJunkTitle(item) && (
+        {item.category !== 'post' && !isJunkTitle(item) && (
           <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
             {item.title}
           </h3>
@@ -1363,7 +1366,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
 
         {/* ── content ── */}
         <Link href={`/published/${item.id}`} className="block">
-          {!isJunkTitle(item) && (
+          {item.category !== 'post' && !isJunkTitle(item) && (
             <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
               {searchQuery ? highlight(item.title, searchQuery) : item.title}
             </h3>
@@ -1525,9 +1528,13 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
           </div>
         </div>
 
-        {/* inline comment panel */}
+      {/* inline comment panel */}
         {commentsOpen && item.isReal && (
-          <CardCommentPanel item={item} onClose={() => setCommentsOpen(false)} />
+          <CardCommentPanel
+            item={item}
+            onClose={() => setCommentsOpen(false)}
+            onCommentCountChange={setCommentCount}
+          />
         )}
       </article>
     </>
@@ -1740,184 +1747,851 @@ function GigCard({ item }: { item: PublishedItem }) {
 
 /* ─── inline comment panel (shared by both card types) ──────────── */
 type CardComment = {
-  id: string; author: string; text: string; createdAt: string;
-  userId?: string; parentId?: string | null;
-  likesCount: number; likedByViewer: boolean;
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  userId?: string;
+  parentId?: string | null;
+  likesCount: number;
+  likedByViewer: boolean;
+  isOwner?: boolean;
   replies?: CardComment[];
 };
 
-function CardCommentPanel({ item, onClose }: { item: PublishedItem; onClose: () => void }) {
-  const [comments, setComments]   = useState<CardComment[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [text, setText]           = useState('');
+function CardCommentPanel({
+  item,
+  onClose,
+  onCommentCountChange,
+}: {
+  item: PublishedItem;
+  onClose: () => void;
+  onCommentCountChange?: (count: number) => void;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const [comments, setComments] = useState<CardComment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [text, setText] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [replyTo, setReplyTo]     = useState<{ id: string; author: string } | null>(null);
+
+  const [replyTo, setReplyTo] = useState<{
+    id: string;
+    author: string;
+  } | null>(null);
+
   const [replyText, setReplyText] = useState('');
-  const inputRef  = useRef<HTMLInputElement>(null);
-  const panelRef  = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!item.isReal) { setLoading(false); return; }
-    fetch(`/api/public/published/${item.id}/comments`)
-      .then(r => r.ok ? r.json() : { comments: [] })
-      .then((d: { comments: CardComment[] }) => {
-        // nest replies under parents
-        const byId: Record<string, CardComment> = {};
-        const roots: CardComment[] = [];
-        d.comments.forEach(c => { byId[c.id] = { ...c, replies: [] }; });
-        Object.values(byId).forEach(c => {
-          if (c.parentId && byId[c.parentId]) byId[c.parentId].replies!.push(c);
-          else roots.push(c);
-        });
-        setComments(roots);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [item.id, item.isReal]);
+  const [deletingCommentId, setDeletingCommentId] =
+    useState<string | null>(null);
 
-  // close on outside click
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (panelRef.current && !panelRef.current.contains(e.target as Node)) onClose(); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [onClose]);
+  /*
+   * Convert flat comments from API into nested comments.
+   */
+const buildCommentTree = useCallback(
+    (items: CardComment[]): CardComment[] => {
+      const byId: Record<string, CardComment> = {};
+      const roots: CardComment[] = [];
 
-  const submitComment = async (parentId?: string) => {
-    const body = parentId ? replyText.trim() : text.trim();
-    if (!body) return;
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/public/published/${item.id}/comments`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ text: body, parentId }),
-      });
-      if (res.ok) {
-        const d = await res.json() as { comments: CardComment[] };
-        const byId: Record<string, CardComment> = {};
-        const roots: CardComment[] = [];
-        d.comments.forEach(c => { byId[c.id] = { ...c, replies: [] }; });
-        Object.values(byId).forEach(c => {
-          if (c.parentId && byId[c.parentId]) byId[c.parentId].replies!.push(c);
-          else roots.push(c);
-        });
-        setComments(roots);
-        if (parentId) { setReplyText(''); setReplyTo(null); }
-        else setText('');
+      for (const comment of items) {
+        byId[comment.id] = {
+          ...comment,
+          replies: [],
+        };
       }
-    } catch {} finally { setSubmitting(false); }
-  };
 
-  const likeComment = async (commentId: string, parentId?: string) => {
-    const toggle = (cs: CardComment[]): CardComment[] => cs.map(c => {
-      if (c.id === commentId) {
-        const next = !c.likedByViewer;
-        return { ...c, likedByViewer: next, likesCount: next ? c.likesCount + 1 : Math.max(0, c.likesCount - 1) };
+      for (const comment of Object.values(byId)) {
+        if (comment.parentId && byId[comment.parentId]) {
+          byId[comment.parentId].replies!.push(comment);
+        } else {
+          roots.push(comment);
+        }
       }
-      if (c.replies?.length) return { ...c, replies: toggle(c.replies) };
-      return c;
-    });
-    setComments(prev => toggle(prev));
-    try {
-      await fetch(`/api/public/published/${item.id}/comments/${commentId}/like`, { method: 'POST' });
-    } catch {}
-    void parentId;
-  };
 
-  const ago = (iso: string) => {
-    const d = Date.now() - new Date(iso).getTime();
-    if (d < 60000) return 'now';
-    if (d < 3600000) return `${Math.floor(d/60000)}m`;
-    if (d < 86400000) return `${Math.floor(d/3600000)}h`;
-    return `${Math.floor(d/86400000)}d`;
-  };
-
-  const renderComment = (c: CardComment, depth = 0) => (
-    <div key={c.id} className={depth > 0 ? 'ml-7 mt-2' : 'mt-3'}>
-      <div className="flex gap-2">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/60">
-          {c.author.slice(0,2).toUpperCase()}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[11px] font-semibold text-white/80">{c.author}</span>
-            <span className="text-[10px] text-white/25">{ago(c.createdAt)}</span>
-          </div>
-          <p className="text-[12px] text-white/65 leading-relaxed mt-0.5 break-words">{c.text}</p>
-          <div className="flex items-center gap-3 mt-1">
-            <button
-              type="button"
-              onClick={() => void likeComment(c.id)}
-              className={`flex items-center gap-1 text-[10px] font-semibold transition ${c.likedByViewer ? 'text-rose-400' : 'text-white/25 hover:text-rose-400'}`}
-            >
-              <Heart className={`h-3 w-3 ${c.likedByViewer ? 'fill-current' : ''}`} />
-              {c.likesCount > 0 && <span>{c.likesCount}</span>}
-            </button>
-            {depth === 0 && (
-              <button
-                type="button"
-                onClick={() => setReplyTo(replyTo?.id === c.id ? null : { id: c.id, author: c.author })}
-                className="text-[10px] text-white/25 hover:text-white/55 font-semibold transition"
-              >
-                Reply
-              </button>
-            )}
-          </div>
-          {replyTo?.id === c.id && (
-            <div className="flex items-center gap-1.5 mt-2">
-              <input
-                autoFocus
-                value={replyText}
-                onChange={e => setReplyText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submitComment(c.id); } if (e.key === 'Escape') { setReplyTo(null); setReplyText(''); } }}
-                placeholder={`Reply to ${c.author}…`}
-                className="flex-1 rounded-lg bg-white/[0.07] px-2.5 py-1.5 text-[11px] text-white placeholder-white/25 outline-none border border-white/[0.08] focus:border-white/20"
-              />
-              <button
-                type="button"
-                disabled={!replyText.trim() || submitting}
-                onClick={() => void submitComment(c.id)}
-                className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-white/50 hover:bg-white/20 disabled:opacity-30 transition"
-              >
-                <Send className="h-3 w-3" />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-      {c.replies?.map(r => renderComment(r, depth + 1))}
-    </div>
+      return roots;
+    },
+    [],
   );
 
-  return (
-    <div ref={panelRef} className="mt-3 rounded-2xl border border-white/[0.08] bg-[#0f0f14] p-4 space-y-0.5">
-      {/* comment list */}
-      <div className="max-h-52 overflow-y-auto pr-0.5 space-y-0.5 scrollbar-none">
-        {loading && <p className="text-[11px] text-white/30 py-3 text-center">Loading…</p>}
-        {!loading && comments.length === 0 && (
-          <p className="text-[11px] text-white/25 py-3 text-center">No comments yet. Be the first!</p>
+  /*
+   * Count all comments including nested replies.
+   */
+  const countAllComments = useCallback(
+    (list: CardComment[]): number => {
+      return list.reduce(
+        (total, comment) =>
+          total +
+          1 +
+          (comment.replies
+            ? countAllComments(comment.replies)
+            : 0),
+        0,
+      );
+    },
+    [],
+  );
+
+  /*
+   * Load comments.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!item.isReal) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    fetch(`/api/public/published/${item.id}/comments`, {
+      method: 'GET',
+      cache: 'no-store',
+    })
+      .then(async response => {
+        if (!response.ok) {
+          return { comments: [] };
+        }
+
+        return (await response.json()) as {
+          comments?: CardComment[];
+        };
+      })
+      .then(data => {
+        if (cancelled) return;
+
+        const incomingComments = Array.isArray(data.comments)
+          ? data.comments
+          : [];
+
+        setComments(buildCommentTree(incomingComments));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setComments([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, item.isReal, buildCommentTree]);
+
+  /*
+   * Close panel when clicking outside.
+   */
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target;
+
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    document.addEventListener(
+      'mousedown',
+      handleOutsideClick,
+    );
+
+    return () => {
+      document.removeEventListener(
+        'mousedown',
+        handleOutsideClick,
+      );
+    };
+  }, [onClose]);
+
+  /*
+   * Escape closes the panel.
+   */
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onClose]);
+
+  /*
+   * Submit comment or reply.
+   */
+  const submitComment = useCallback(
+    async (parentId?: string) => {
+      const body = parentId
+        ? replyText.trim()
+        : text.trim();
+
+      if (!body || submitting) {
+        return;
+      }
+
+      if (!item.isReal) {
+        toast(
+          'Comments are unavailable for this post.',
+          'info',
+        );
+        return;
+      }
+
+      setSubmitting(true);
+
+      try {
+        const response = await fetch(
+          `/api/public/published/${item.id}/comments`,
+          {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              text: body,
+              ...(parentId ? { parentId } : {}),
+            }),
+          },
+        );
+
+        const data = (await response
+          .json()
+          .catch(() => null)) as
+          | { comments?: CardComment[]; error?: string }
+          | null;
+
+        if (!response.ok) {
+          toast(
+            data?.error || 'Unable to add comment.',
+            'error',
+          );
+          return;
+        }
+
+       const updatedComments = Array.isArray(
+          data?.comments,
+        )
+          ? data.comments
+          : [];
+
+        const nextTree = buildCommentTree(updatedComments);
+        setComments(nextTree);
+        onCommentCountChange?.(
+          countAllComments(nextTree),
+        );
+
+        if (parentId) {
+          setReplyText('');
+          setReplyTo(null);
+        } else {
+          setText('');
+          inputRef.current?.focus();
+        }
+      } catch {
+        toast(
+          'Something went wrong while adding the comment.',
+          'error',
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+ [
+      buildCommentTree,
+      countAllComments,
+      item.id,
+      item.isReal,
+      onCommentCountChange,
+      replyText,
+      submitting,
+      text,
+    ],
+  );
+
+  /*
+   * Like/unlike comment.
+   */
+  const likeComment = useCallback(
+    async (commentId: string) => {
+      if (!item.isReal) {
+        return;
+      }
+
+      let previousLiked = false;
+
+      const updateComments = (
+        list: CardComment[],
+      ): CardComment[] => {
+        return list.map(comment => {
+          if (comment.id === commentId) {
+            previousLiked = comment.likedByViewer;
+
+            const nextLiked =
+              !comment.likedByViewer;
+
+            return {
+              ...comment,
+              likedByViewer: nextLiked,
+              likesCount: nextLiked
+                ? comment.likesCount + 1
+                : Math.max(
+                    0,
+                    comment.likesCount - 1,
+                  ),
+            };
+          }
+
+          if (comment.replies?.length) {
+            return {
+              ...comment,
+              replies: updateComments(
+                comment.replies,
+              ),
+            };
+          }
+
+          return comment;
+        });
+      };
+
+      setComments(prev => updateComments(prev));
+
+      try {
+        const response = await fetch(
+          `/api/public/published/${item.id}/comments/${commentId}/like`,
+          {
+            method: 'POST',
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error('Like request failed');
+        }
+
+        const data = (await response.json()) as {
+          liked?: boolean;
+          likesCount?: number;
+        };
+
+        if (
+          typeof data.liked === 'boolean' &&
+          typeof data.likesCount === 'number'
+        ) {
+          const syncComments = (
+            list: CardComment[],
+          ): CardComment[] => {
+            return list.map(comment => {
+              if (comment.id === commentId) {
+                return {
+                  ...comment,
+                  likedByViewer: data.liked!,
+                  likesCount: Math.max(
+                    0,
+                    data.likesCount!,
+                  ),
+                };
+              }
+
+              if (comment.replies?.length) {
+                return {
+                  ...comment,
+                  replies: syncComments(
+                    comment.replies,
+                  ),
+                };
+              }
+
+              return comment;
+            });
+          };
+
+          setComments(prev =>
+            syncComments(prev),
+          );
+        }
+      } catch {
+        // Revert optimistic update.
+        const revertComments = (
+          list: CardComment[],
+        ): CardComment[] => {
+          return list.map(comment => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                likedByViewer: previousLiked,
+                likesCount: previousLiked
+                  ? comment.likesCount + 1
+                  : Math.max(
+                      0,
+                      comment.likesCount - 1,
+                    ),
+              };
+            }
+
+            if (comment.replies?.length) {
+              return {
+                ...comment,
+                replies: revertComments(
+                  comment.replies,
+                ),
+              };
+            }
+
+            return comment;
+          });
+        };
+
+        setComments(prev =>
+          revertComments(prev),
+        );
+
+        toast(
+          'Unable to update comment like.',
+          'error',
+        );
+      }
+    },
+    [item.id, item.isReal],
+  );
+
+  /*
+   * Delete comment.
+   *
+   * Backend must verify ownership.
+   */
+  const deleteComment = useCallback(
+    async (commentId: string) => {
+      if (
+        deletingCommentId ||
+        !item.isReal
+      ) {
+        return;
+      }
+
+      const confirmed = window.confirm(
+        'Are you sure you want to delete this comment?',
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setDeletingCommentId(commentId);
+
+      try {
+        const response = await fetch(
+          `/api/public/published/${item.id}/comments/${commentId}`,
+          {
+            method: 'DELETE',
+          },
+        );
+
+        const data = (await response
+          .json()
+          .catch(() => null)) as
+          | {
+              error?: string;
+              comments?: CardComment[];
+            }
+          | null;
+
+        if (!response.ok) {
+          toast(
+            data?.error ||
+              'Unable to delete comment.',
+            'error',
+          );
+          return;
+        }
+
+        /*
+         * If backend returns updated comments,
+         * use them. Otherwise remove locally.
+         */
+      if (Array.isArray(data?.comments)) {
+          const nextTree = buildCommentTree(data.comments);
+          setComments(nextTree);
+          onCommentCountChange?.(
+            countAllComments(nextTree),
+          );
+        } else {
+          const removeComment = (
+            list: CardComment[],
+          ): CardComment[] => {
+            return list
+              .filter(
+                comment =>
+                  comment.id !== commentId,
+              )
+              .map(comment => ({
+                ...comment,
+                replies: comment.replies
+                  ? removeComment(
+                      comment.replies,
+                    )
+                  : [],
+              }));
+          };
+
+          setComments(prev => {
+            const next = removeComment(prev);
+            onCommentCountChange?.(
+              countAllComments(next),
+            );
+            return next;
+          });
+        }
+
+        /*
+         * Close reply box if deleting the
+         * comment currently being replied to.
+         */
+        if (replyTo?.id === commentId) {
+          setReplyTo(null);
+          setReplyText('');
+        }
+
+        toast(
+          'Comment deleted.',
+          'success',
+          '🗑️',
+        );
+      } catch {
+        toast(
+          'Something went wrong while deleting the comment.',
+          'error',
+        );
+      } finally {
+        setDeletingCommentId(null);
+      }
+    },
+       [
+      buildCommentTree,
+      countAllComments,
+      deletingCommentId,
+      item.id,
+      item.isReal,
+      onCommentCountChange,
+      replyTo?.id,
+    ],
+  );
+
+  /*
+   * Relative time.
+   */
+  const ago = useCallback((iso: string) => {
+    const timestamp = new Date(iso).getTime();
+
+    if (!Number.isFinite(timestamp)) {
+      return '';
+    }
+
+    const difference =
+      Math.max(0, Date.now() - timestamp);
+
+    if (difference < 60_000) {
+      return 'now';
+    }
+
+    if (difference < 3_600_000) {
+      return `${Math.floor(
+        difference / 60_000,
+      )}m`;
+    }
+
+    if (difference < 86_400_000) {
+      return `${Math.floor(
+        difference / 3_600_000,
+      )}h`;
+    }
+
+    return `${Math.floor(
+      difference / 86_400_000,
+    )}d`;
+  }, []);
+
+  /*
+   * Render one comment recursively.
+   */
+  const renderComment = (
+    comment: CardComment,
+    depth = 0,
+  ): React.ReactNode => {
+    return (
+      <div
+        key={comment.id}
+        className={
+          depth > 0
+            ? 'ml-7 mt-2'
+            : 'mt-3'
+        }
+      >
+        <div className="flex gap-2">
+          {/* Avatar */}
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/60">
+            {(comment.author || 'AN')
+              .slice(0, 2)
+              .toUpperCase()}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            {/* Header */}
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[11px] font-semibold text-white/80">
+                {comment.author}
+              </span>
+
+              <span className="text-[10px] text-white/25">
+                {ago(comment.createdAt)}
+              </span>
+            </div>
+
+            {/* Text */}
+            <p className="mt-0.5 break-words text-[12px] leading-relaxed text-white/65">
+              {comment.text}
+            </p>
+
+            {/* Actions */}
+            <div className="mt-1 flex items-center gap-3">
+              {/* Like */}
+              <button
+                type="button"
+                onClick={() =>
+                  void likeComment(comment.id)
+                }
+                className={`flex items-center gap-1 text-[10px] font-semibold transition ${
+                  comment.likedByViewer
+                    ? 'text-rose-400'
+                    : 'text-white/25 hover:text-rose-400'
+                }`}
+                aria-label={
+                  comment.likedByViewer
+                    ? 'Unlike comment'
+                    : 'Like comment'
+                }
+              >
+                <Heart
+                  className={`h-3 w-3 ${
+                    comment.likedByViewer
+                      ? 'fill-current'
+                      : ''
+                  }`}
+                />
+
+                {comment.likesCount > 0 && (
+                  <span>
+                    {comment.likesCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Reply */}
+              {depth === 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setReplyTo(
+                      replyTo?.id ===
+                        comment.id
+                        ? null
+                        : {
+                            id: comment.id,
+                            author:
+                              comment.author,
+                          },
+                    )
+                  }
+                  className="text-[10px] font-semibold text-white/25 transition hover:text-white/55"
+                >
+                  Reply
+                </button>
+              )}
+
+              {/* Delete — ONLY OWNER */}
+              {comment.isOwner && (
+                <button
+                  type="button"
+                  disabled={
+                    deletingCommentId ===
+                    comment.id
+                  }
+                  onClick={() =>
+                    void deleteComment(
+                      comment.id,
+                    )
+                  }
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold text-white/25 transition hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+                  title="Delete comment"
+                  aria-label="Delete comment"
+                >
+                  {deletingCommentId ===
+                  comment.id ? (
+                    <span className="h-3 w-3 animate-spin rounded-full border border-white/20 border-t-red-400" />
+                  ) : (
+                    <Trash2 className="h-3 w-3" />
+                  )}
+
+                  Delete
+                </button>
+              )}
+            </div>
+
+            {/* Reply input */}
+            {replyTo?.id === comment.id && (
+              <div className="mt-2 flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={replyText}
+                  onChange={event =>
+                    setReplyText(
+                      event.target.value,
+                    )
+                  }
+                  onKeyDown={event => {
+                    if (
+                      event.key ===
+                        'Enter' &&
+                      !event.shiftKey
+                    ) {
+                      event.preventDefault();
+
+                      void submitComment(
+                        comment.id,
+                      );
+                    }
+
+                    if (
+                      event.key ===
+                      'Escape'
+                    ) {
+                      setReplyTo(null);
+                      setReplyText('');
+                    }
+                  }}
+                  placeholder={`Reply to ${comment.author}…`}
+                  className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.07] px-2.5 py-1.5 text-[11px] text-white outline-none placeholder:text-white/25 focus:border-white/20"
+                />
+
+                <button
+                  type="button"
+                  disabled={
+                    !replyText.trim() ||
+                    submitting
+                  }
+                  onClick={() =>
+                    void submitComment(
+                      comment.id,
+                    )
+                  }
+                  className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-white/50 transition hover:bg-white/20 disabled:opacity-30"
+                  aria-label="Send reply"
+                >
+                  <Send className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Replies */}
+        {comment.replies?.map(reply =>
+          renderComment(
+            reply,
+            depth + 1,
+          ),
         )}
-        {!loading && comments.map(c => renderComment(c))}
+      </div>
+    );
+  };
+
+  return (
+    <div
+      ref={panelRef}
+      className="mt-3 space-y-0.5 rounded-2xl border border-white/[0.08] bg-[#0f0f14] p-4"
+    >
+      {/* Comment list */}
+      <div className="max-h-52 space-y-0.5 overflow-y-auto pr-0.5 scrollbar-none">
+        {loading && (
+          <p className="py-3 text-center text-[11px] text-white/30">
+            Loading…
+          </p>
+        )}
+
+        {!loading &&
+          comments.length === 0 && (
+            <p className="py-3 text-center text-[11px] text-white/25">
+              No comments yet. Be the
+              first!
+            </p>
+          )}
+
+        {!loading &&
+          comments.map(comment =>
+            renderComment(comment),
+          )}
       </div>
 
-      {/* divider */}
-      <div className="border-t border-white/[0.06] pt-3 mt-3">
+      {/* New comment */}
+      <div className="mt-3 border-t border-white/[0.06] pt-3">
         <div className="flex items-center gap-2">
           <input
             ref={inputRef}
             value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submitComment(); } }}
+            onChange={event =>
+              setText(event.target.value)
+            }
+            onKeyDown={event => {
+              if (
+                event.key === 'Enter' &&
+                !event.shiftKey
+              ) {
+                event.preventDefault();
+
+                void submitComment();
+              }
+            }}
             placeholder="Write a comment…"
-            className="flex-1 rounded-xl bg-white/[0.07] px-3 py-2 text-[12px] text-white placeholder-white/25 outline-none border border-white/[0.07] focus:border-white/20 transition"
+            disabled={
+              submitting || !item.isReal
+            }
+            className="flex-1 rounded-xl border border-white/[0.07] bg-white/[0.07] px-3 py-2 text-[12px] text-white outline-none transition placeholder:text-white/25 focus:border-white/20 disabled:cursor-not-allowed disabled:opacity-50"
           />
+
           <button
             type="button"
-            disabled={!text.trim() || submitting}
-            onClick={() => void submitComment()}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60 hover:bg-white/20 disabled:opacity-30 transition"
+            disabled={
+              !text.trim() ||
+              submitting ||
+              !item.isReal
+            }
+            onClick={() =>
+              void submitComment()
+            }
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-white/20 disabled:opacity-30"
+            aria-label="Send comment"
           >
-            <Send className="h-3.5 w-3.5" />
+            {submitting ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/20 border-t-white/70" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
       </div>
@@ -2019,13 +2693,13 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
 
       {/* caption */}
       <Link href={`/published/${item.id}`} className="block">
-        {!isJunkTitle(item) && (
+        {item.category !== 'post' && !isJunkTitle(item) && (
           <p className="text-[13.5px] font-semibold text-white leading-snug line-clamp-2 group-hover:text-white/85 transition-colors">
             {searchQuery ? highlight(item.title, searchQuery) : item.title}
           </p>
         )}
         {item.body && (
-          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${!isJunkTitle(item) ? 'mt-1.5' : ''}`}>
+          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${item.category !== 'post' && !isJunkTitle(item) ? 'mt-1.5' : ''}`}>
             {searchQuery ? highlight(getBodySnippet(item.body), searchQuery) : getBodySnippet(item.body)}
           </p>
         )}
@@ -2051,14 +2725,15 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
         </button>
       </div>
 
-      {/* inline comment panel */}
-      {commentsOpen && item.isReal && (
-        <CardCommentPanel
-          item={item}
-          onClose={() => setCommentsOpen(false)}
-        />
-      )}
-    </article>
+    {/* inline comment panel */}
+        {commentsOpen && item.isReal && (
+          <CardCommentPanel
+            item={item}
+            onClose={() => setCommentsOpen(false)}
+            onCommentCountChange={setCommentCount}
+          />
+        )}
+      </article>
   );
 }
 
@@ -3788,10 +4463,10 @@ export default function PublishedPage() {
                   {mixedFeed.slice(0, visibleCount).map(item =>
                     item.category === 'gig' && item.gigData
                       ? <GigCard key={item.id} item={item} />
-                      : item.featured
-                        ? <FeaturedCard key={item.id} item={item} />
-                        : item.category === 'post'
-                          ? <PostCard key={item.id} item={item} searchQuery="" />
+                      : item.category === 'post'
+                        ? <PostCard key={item.id} item={item} searchQuery="" />
+                        : item.featured
+                          ? <FeaturedCard key={item.id} item={item} />
                           : item.category === 'poll'
                             ? <PollCard key={item.id} item={item} />
                             : item.category === 'survey'

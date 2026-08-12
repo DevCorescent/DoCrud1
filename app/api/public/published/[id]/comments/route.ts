@@ -1,69 +1,90 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { addComment, getFileTransferById } from '@/lib/server/file-transfers';
-import { addSocialEvent } from '@/lib/server/social-events';
+import { deleteComment } from '@/lib/server/file-transfers';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  _request: NextRequest,
+  {
+    params,
+  }: {
+    params: Promise<{
+      id: string;
+      commentId: string;
+    }>;
+  },
+) {
   try {
-    const { id } = await params;
-    const session = await getAuthSession();
-    const viewerIdentifier = session?.user?.id || session?.user?.email || '';
-    const found = await getFileTransferById(id);
-    const t =
-      found && found.directoryVisibility === 'public' && !found.revokedAt ? found : null;
-    if (!t) return NextResponse.json({ comments: [] });
-    return NextResponse.json({
-      comments: (t.comments ?? []).map((c) => ({
-        id: c.id, author: c.userName, text: c.text,
-        createdAt: c.createdAt, userId: c.userId,
-        parentId: c.parentId ?? null,
-        likesCount: (c.likedBy ?? []).length,
-        likedByViewer: viewerIdentifier ? (c.likedBy ?? []).includes(viewerIdentifier) : false,
-      })),
-    });
-  } catch {
-    return NextResponse.json({ comments: [] });
-  }
-}
+    const { id, commentId } = await params;
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    const body = await request.json() as { text?: string; parentId?: string };
-    if (!body.text?.trim()) return NextResponse.json({ error: 'Comment text required' }, { status: 400 });
-
-    const session = await getAuthSession();
-    const userId = session?.user?.id || session?.user?.email || `anon-${Date.now()}`;
-    const userName = session?.user?.name || 'Anonymous';
-
-    const updated = await addComment(id, userId, userName, body.text.trim(), body.parentId ?? undefined);
-    const viewerIdentifier = userId;
-    const comments = (updated.comments ?? []).map((c) => ({
-      id: c.id, author: c.userName, text: c.text,
-      createdAt: c.createdAt, userId: c.userId,
-      parentId: c.parentId ?? null,
-      likesCount: (c.likedBy ?? []).length,
-      likedByViewer: (c.likedBy ?? []).includes(viewerIdentifier),
-    }));
-
-    // Fire social event if the commenter is not the post author
-    if (updated.uploadedByUserId && updated.uploadedByUserId !== userId) {
-      void addSocialEvent({
-        type: 'comment',
-        actorId: userId,
-        actorName: userName,
-        targetUserId: updated.uploadedByUserId,
-        resourceId: updated.id,
-        resourceTitle: updated.title || updated.fileName,
-        excerpt: body.text.trim().slice(0, 120),
-        href: `/published/${updated.shareId || id}`,
-      }).catch(() => {});
+    if (!id || !commentId) {
+      return NextResponse.json(
+        { error: 'Post ID and comment ID are required.' },
+        { status: 400 },
+      );
     }
 
-    return NextResponse.json({ comments });
+    const session = await getAuthSession();
+
+    const userId =
+      session?.user?.id ||
+      session?.user?.email ||
+      '';
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Sign in to delete your comment.' },
+        { status: 401 },
+      );
+    }
+
+    const updated = await deleteComment(
+      id,
+      commentId,
+      userId,
+    );
+
+    return NextResponse.json({
+      success: true,
+      deletedCommentId: commentId,
+      commentsCount: updated.commentsCount ?? 0,
+    });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed' }, { status: 500 });
+    console.error('[DELETE COMMENT]', error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : 'Failed to delete comment.';
+
+    if (message === 'Post not found.') {
+      return NextResponse.json(
+        { error: message },
+        { status: 404 },
+      );
+    }
+
+    if (message === 'Comment not found.') {
+      return NextResponse.json(
+        { error: message },
+        { status: 404 },
+      );
+    }
+
+    if (
+      message ===
+      'You can only delete your own comments.'
+    ) {
+      return NextResponse.json(
+        { error: message },
+        { status: 403 },
+      );
+    }
+
+    return NextResponse.json(
+      { error: message },
+      { status: 500 },
+    );
   }
 }

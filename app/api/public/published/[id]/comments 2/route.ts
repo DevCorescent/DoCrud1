@@ -16,13 +16,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
               !x.revokedAt,
     );
     if (!t) return NextResponse.json({ comments: [] });
-    return NextResponse.json({
+  return NextResponse.json({
       comments: (t.comments ?? []).map((c) => ({
         id: c.id, author: c.userName, text: c.text,
         createdAt: c.createdAt, userId: c.userId,
         parentId: c.parentId ?? null,
         likesCount: (c.likedBy ?? []).length,
         likedByViewer: viewerIdentifier ? (c.likedBy ?? []).includes(viewerIdentifier) : false,
+        isOwner: Boolean(viewerIdentifier && c.userId === viewerIdentifier),
       })),
     });
   } catch {
@@ -48,6 +49,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       parentId: c.parentId ?? null,
       likesCount: (c.likedBy ?? []).length,
       likedByViewer: (c.likedBy ?? []).includes(viewerIdentifier),
+      isOwner: c.userId === viewerIdentifier,
     }));
     return NextResponse.json({ comments });
   } catch (error) {

@@ -60,6 +60,28 @@ import {
 } from 'lucide-react';
 
 /* ─── types ─────────────────────────────────────────────────────── */
+/* ─── minimal toast (this file has no shared toast system) ──────── */
+function useSimpleToast() {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [tone, setTone] = useState<'success' | 'error'>('success');
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(() => setMsg(null), 2500);
+    return () => clearTimeout(t);
+  }, [msg]);
+  const show = useCallback((m: string, tn: 'success' | 'error' = 'success') => { setMsg(m); setTone(tn); }, []);
+  const node = msg && typeof document !== 'undefined' ? createPortal(
+    <div className="fixed bottom-6 right-4 z-[400] pointer-events-none">
+      <div className={`rounded-2xl border px-4 py-2.5 text-[12.5px] font-semibold shadow-2xl backdrop-blur-xl ${
+        tone === 'success' ? 'border-emerald-500/30 bg-[#0d1f14]/95 text-emerald-300' : 'border-red-500/30 bg-[#1f0d0d]/95 text-red-300'
+      }`}>{msg}</div>
+    </div>,
+    document.body
+  ) : null;
+  return { show, node };
+}
+
+/* ─── types ─────────────────────────────────────────────────────── */
 type PublishedItem = {
   id: string;
   shareId?: string;
@@ -124,7 +146,7 @@ type RawComment = {
   id: string; author: string; initials: string; color: string;
   text: string; timestamp: string; likes: number; parentId?: string;
 };
-type Comment = RawComment & { likedByMe: boolean; replies: Comment[] };
+type Comment = RawComment & { likedByMe: boolean; replies: Comment[]; isOwner?: boolean };
 
 const MOCK_COMMENTS: Record<string, RawComment[]> = {
   n1: [
@@ -402,10 +424,10 @@ function stableColor(seed: string): string {
   let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
-type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean };
+type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean; isOwner?: boolean };
 
 function apiCommentToComment(c: ApiComment): Comment {
-  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, replies:[] };
+  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, replies:[], isOwner:c.isOwner ?? false };
 }
 
 function buildCommentTree(flat: ApiComment[]): Comment[] {
@@ -757,8 +779,8 @@ function LiveTrendChart({ itemId, isReal, likeCount, trendCount, commentCount, v
   const commentRatio = commentCount / total;
 
   /* ── SVG geometry — fully responsive via viewBox ── */
-  const VW = 400; const VH = compact ? 110 : 150;
-  const PAD = { l: 36, r: 10, t: 12, b: 24 };
+const VW = 400; const VH = compact ? 110 : 150;
+  const PAD = useMemo(() => ({ l: 36, r: 10, t: 12, b: 24 }), []);
   const cW  = VW - PAD.l - PAD.r;
   const cH  = VH - PAD.t - PAD.b;
 
@@ -1263,6 +1285,8 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError,   setDeleteError]   = useState('');
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
+  const { show: showToast, node: toastNode } = useSimpleToast();
   const [showAnalytics, setShowAnalytics] = useState(false);
   const commentRef  = useRef<HTMLTextAreaElement>(null);
   const sharePanelRef = useRef<HTMLDivElement>(null);
@@ -1501,6 +1525,41 @@ export default function PublishedItemPage({ id }: { id: string }) {
       setComments(prev => { saveLocalComments(item.id, prev); return prev; });
     }
   };
+
+  /* ── delete comment (owner-only; server verifies) ── */
+  const removeCommentFromTree = useCallback((list: Comment[], commentId: string): Comment[] => {
+    return list
+      .filter(c => c.id !== commentId)
+      .map(c => ({ ...c, replies: removeCommentFromTree(c.replies, commentId) }));
+  }, []);
+
+  const deleteComment = useCallback(async (commentId: string) => {
+    if (!item || deletingCommentId || !isRealItem) return;
+    const confirmed = window.confirm('Are you sure you want to delete this comment?');
+    if (!confirmed) return;
+
+    setDeletingCommentId(commentId);
+    try {
+      const res = await fetch(`/api/public/published/${item.id}/comments/${commentId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => null) as { error?: string; comments?: ApiComment[] } | null;
+
+      if (!res.ok) {
+        showToast(data?.error || 'Unable to delete comment.', 'error');
+        return;
+      }
+
+      if (Array.isArray(data?.comments)) {
+        setComments(buildCommentTree(data.comments));
+      } else {
+        setComments(prev => removeCommentFromTree(prev, commentId));
+      }
+      showToast('Comment deleted.', 'success');
+    } catch {
+      showToast('Something went wrong while deleting the comment.', 'error');
+    } finally {
+      setDeletingCommentId(null);
+    }
+  }, [item, deletingCommentId, isRealItem, removeCommentFromTree, showToast]);
 
   /* loading skeleton */
   if (loading) {
@@ -2115,6 +2174,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
                     <p className="mt-3 text-sm text-white/25">No comments yet. Be the first.</p>
                   </div>
                 ) : (
+
                   comments.map(c => (
                     <CommentItem
                       key={c.id}
@@ -2126,6 +2186,10 @@ export default function PublishedItemPage({ id }: { id: string }) {
                       onReplyTextChange={setReplyText}
                       onSubmitReply={() => void submitReply(c.id)}
                       onLikeReply={rid => void likeComment(rid, c.id)}
+                      onDelete={() => void deleteComment(c.id)}
+                      deleting={deletingCommentId === c.id}
+                      onDeleteReply={rid => void deleteComment(rid)}
+                      deletingReplyId={deletingCommentId}
                     />
                   ))
                 )}
@@ -2270,6 +2334,8 @@ export default function PublishedItemPage({ id }: { id: string }) {
         />,
         document.body
       )}
+
+            {toastNode}
 
       {/* ── report modal ── */}
       {reportOpen && (
@@ -2555,12 +2621,15 @@ function SideShareBtn({ icon: Icon, label, onClick, accent }: { icon: React.Elem
 
 function CommentItem({
   comment: c, onLike, onReply, replyOpen, replyText,
-  onReplyTextChange, onSubmitReply, onLikeReply,
+  onReplyTextChange, onSubmitReply, onLikeReply, onDelete, deleting,
+  onDeleteReply, deletingReplyId,
 }: {
   comment: Comment; onLike: () => void; onReply: () => void;
   replyOpen: boolean; replyText: string;
   onReplyTextChange: (v: string) => void;
   onSubmitReply: () => void; onLikeReply: (id: string) => void;
+  onDelete?: () => void; deleting?: boolean;
+  onDeleteReply?: (id: string) => void; deletingReplyId?: string | null;
 }) {
   return (
     <div className="flex gap-3">
@@ -2579,6 +2648,23 @@ function CommentItem({
             {c.likes > 0 && <span className="tabular-nums">{c.likes}</span>}
           </button>
           <button type="button" onClick={onReply} className="text-[11px] font-semibold text-white/25 transition hover:text-white/65">Reply</button>
+          {c.isOwner && onDelete && (
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={onDelete}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-white/25 transition hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Delete comment"
+              aria-label="Delete comment"
+            >
+              {deleting ? (
+                <span className="h-3 w-3 animate-spin rounded-full border border-white/20 border-t-red-400" />
+              ) : (
+                <Trash2 className="h-3 w-3" />
+              )}
+              Delete
+            </button>
+          )}
         </div>
 
         {replyOpen && (
@@ -2615,14 +2701,33 @@ function CommentItem({
                     <span className="text-[10px] text-white/25">{timeAgo(r.timestamp)}</span>
                   </div>
                   <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
-                  <button
-                    type="button"
-                    onClick={() => onLikeReply(r.id)}
-                    className={`mt-1.5 inline-flex items-center gap-1 text-[10px] font-semibold transition ${r.likedByMe ? 'text-rose-400' : 'text-white/20 hover:text-white/55'}`}
-                  >
-                    <Heart className={`h-2.5 w-2.5 ${r.likedByMe ? 'fill-rose-400' : ''}`} />
-                    {r.likes > 0 && <span className="tabular-nums">{r.likes}</span>}
-                  </button>
+                  <div className="mt-1.5 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onLikeReply(r.id)}
+                      className={`inline-flex items-center gap-1 text-[10px] font-semibold transition ${r.likedByMe ? 'text-rose-400' : 'text-white/20 hover:text-white/55'}`}
+                    >
+                      <Heart className={`h-2.5 w-2.5 ${r.likedByMe ? 'fill-rose-400' : ''}`} />
+                      {r.likes > 0 && <span className="tabular-nums">{r.likes}</span>}
+                    </button>
+                    {r.isOwner && onDeleteReply && (
+                      <button
+                        type="button"
+                        disabled={deletingReplyId === r.id}
+                        onClick={() => onDeleteReply(r.id)}
+                        className="inline-flex items-center gap-1 text-[10px] font-semibold text-white/20 transition hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+                        title="Delete reply"
+                        aria-label="Delete reply"
+                      >
+                        {deletingReplyId === r.id ? (
+                          <span className="h-2.5 w-2.5 animate-spin rounded-full border border-white/20 border-t-red-400" />
+                        ) : (
+                          <Trash2 className="h-2.5 w-2.5" />
+                        )}
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

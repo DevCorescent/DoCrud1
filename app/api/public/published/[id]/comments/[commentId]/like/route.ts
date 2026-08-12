@@ -10,14 +10,37 @@ export async function POST(
 ) {
   try {
     const { id, commentId } = await params;
+
     const session = await getAuthSession();
-    const identifier = session?.user?.id || session?.user?.email || '';
+
+    const identifier =
+      session?.user?.id ||
+      session?.user?.email ||
+      '';
+
     if (!identifier) {
-      return NextResponse.json({ error: 'Sign in to like comments.' }, { status: 401 });
+      return NextResponse.json(
+        { error: 'Sign in to like comments.' },
+        { status: 401 }
+      );
     }
-    const result = await toggleCommentLike(id, commentId, identifier);
+
+    const result = await toggleCommentLike(
+      id,
+      commentId,
+      identifier
+    );
+
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed',
+      },
+      { status: 500 }
+    );
   }
 }

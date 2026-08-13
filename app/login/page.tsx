@@ -29,6 +29,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { requiredPolicyIds, policyDefinitions } from '@/lib/policies';
+import AnimatedLoginBackground from '@/components/AnimatedLoginBackground';
 
 /* ─────────────────────────────────────────────────────────────
    Feature showcase data
@@ -601,57 +602,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative h-[100dvh] overflow-hidden bg-[#070709] text-white">
+    <div className="relative h-[100dvh] overflow-hidden bg-[#060608] text-white">
 
-      {/* ── Ambient background ── */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
+      {/* ══ LAYER 1 — animated background reused from the onboarding splash ══
+           components/AnimatedLoginBackground.tsx — decorative only,
+           aria-hidden + pointer-events:none, so it never blocks the form. */}
+      <AnimatedLoginBackground className="z-0" />
 
-        {/* Orange-gold moving orbs */}
-        <div className="absolute -left-40 -top-40 h-[750px] w-[750px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(251,146,60,0.22) 0%, rgba(245,158,11,0.14) 35%, rgba(234,88,12,0.06) 60%, transparent 75%)',
-            filter: 'blur(90px)',
-            animation: 'obGoldDrift1 30s ease-in-out infinite',
-          }} />
-        <div className="absolute right-[-10%] top-[15%] h-[620px] w-[620px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(245,158,11,0.18) 0%, rgba(251,146,60,0.10) 40%, rgba(253,186,116,0.05) 65%, transparent 78%)',
-            filter: 'blur(80px)',
-            animation: 'obGoldDrift2 38s ease-in-out infinite 5s',
-          }} />
-        <div className="absolute bottom-[-10%] left-[30%] h-[550px] w-[550px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(234,88,12,0.16) 0%, rgba(245,158,11,0.12) 38%, rgba(251,146,60,0.05) 62%, transparent 76%)',
-            filter: 'blur(75px)',
-            animation: 'obGoldDrift3 34s ease-in-out infinite 10s',
-          }} />
+      {/* ══ LAYER 2 — subtle dark overlay, keeps the form legible over the cards ══ */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 z-[1]"
+        style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(5,5,8,0.55) 0%, rgba(5,5,8,0.30) 55%, rgba(5,5,8,0.10) 80%, transparent 100%)' }}
+      />
 
-        {/* Smaller accent orb — warm amber, floats center-right */}
-        <div className="absolute right-[20%] bottom-[20%] h-[320px] w-[320px] rounded-full"
-          style={{
-            background: 'radial-gradient(circle, rgba(253,186,116,0.12) 0%, rgba(245,158,11,0.07) 50%, transparent 72%)',
-            filter: 'blur(55px)',
-            animation: 'obGoldDrift1 22s ease-in-out infinite 8s',
-          }} />
-
-        {/* Glass noise / grain overlay */}
-        <div className="absolute inset-0 opacity-[0.028]"
-          style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundRepeat: 'repeat', backgroundSize: '180px 180px' }} />
-
-        {/* Micro-grid */}
-        <div className="absolute inset-0 opacity-[0.018]"
-          style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.55) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.55) 1px,transparent 1px)', backgroundSize: '52px 52px' }} />
-
-        {/* Warm top vignette */}
-        <div className="absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse 110% 70% at 50% -5%, rgba(245,158,11,0.07) 0%, transparent 55%)' }} />
-
-        {/* Edge darken to keep text readable */}
-        <div className="absolute inset-0"
-          style={{ background: 'radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.70) 100%)' }} />
-      </div>
-
-      <div className="mx-auto flex h-[100dvh] max-w-[1380px] flex-col lg:flex-row">
+      <div className="relative z-10 mx-auto flex h-[100dvh] max-w-[1380px] flex-col lg:flex-row">
 
         {/* ── Left panel ── TEMPORARILY DISABLED.
             The panel markup lives in the LeftPanel component above and is left fully
@@ -667,11 +632,27 @@ export default function LoginPage() {
         <div className="flex flex-1 flex-col items-center justify-center overflow-hidden px-4 py-3 sm:px-8 sm:py-6">
 
           {/* ── Form area ── */}
-          <div className="w-full max-w-[420px]"
+          <div className="relative w-full max-w-[420px]"
             style={{ animation: mounted ? 'obSlideUp 0.55s 0.15s ease both' : 'none', opacity: mounted ? undefined : 0 }}>
 
+            {/* Dark glass backdrop behind the login content — same treatment as onboarding */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: '-18px -16px',
+                backdropFilter: 'blur(22px)',
+                WebkitBackdropFilter: 'blur(22px)',
+                background: 'rgba(5, 5, 8, 0.32)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                borderRadius: 28,
+                boxShadow: '0 20px 70px rgba(0,0,0,0.45)',
+                pointerEvents: 'none',
+              }}
+            />
+
             {/* Heading */}
-            <div className="mb-4 sm:mb-6">
+            <div className="relative z-10 mb-4 sm:mb-6">
               {/* Mobile logo */}
               <div className="mb-4 flex items-center gap-2 lg:hidden">
                 <div className="flex h-7 w-7 items-center justify-center rounded-[9px] border border-white/[0.12] bg-white/[0.07]">
@@ -698,7 +679,16 @@ export default function LoginPage() {
             </div>
 
             {/* Form card */}
-            <div className="overflow-hidden rounded-[20px] border border-white/[0.07] bg-[#0d0d0f]/80 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_32px_80px_rgba(0,0,0,0.55)] backdrop-blur-2xl sm:rounded-[24px]">
+            <div
+              className="relative z-10 overflow-hidden rounded-[20px] sm:rounded-[24px]"
+              style={{
+                background: 'rgba(5, 5, 8, 0.32)',
+                backdropFilter: 'blur(22px)',
+                WebkitBackdropFilter: 'blur(22px)',
+                border: '1px solid rgba(255,255,255,0.07)',
+                boxShadow: '0 20px 70px rgba(0,0,0,0.45)',
+              }}
+            >
               <div className="p-4 sm:p-6">
                 <form onSubmit={e => void handleSubmit(e)} className="space-y-3">
 
@@ -793,7 +783,7 @@ export default function LoginPage() {
 
                   {/* Submit button */}
                   <button type="submit" disabled={isSubmitting}
-                    className="group relative flex h-9 w-full items-center justify-center gap-2 overflow-hidden rounded-[11px] bg-white text-[13px] font-black text-[#070709] shadow-[0_0_40px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.6)] transition hover:bg-white/93 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#070709] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:rounded-[13px] sm:text-[13.5px]">
+                    className="group relative flex h-9 w-full items-center justify-center gap-2 overflow-hidden rounded-[11px] bg-white text-[13px] font-black text-[#070709] shadow-[0_0_40px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.6)] transition hover:bg-white/93 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:rounded-[13px] sm:text-[13.5px]">
                     <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                     <span className="relative">{isSubmitting ? 'Signing in…' : 'Sign in'}</span>
                     {!isSubmitting && <ArrowRight className="relative h-3.5 w-3.5 transition group-hover:translate-x-0.5" />}
@@ -845,7 +835,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <p className="mt-3 text-center text-[10.5px] text-white/16 whitespace-nowrap overflow-hidden text-ellipsis">
+            <p className="relative z-10 mt-3 text-center text-[10.5px] text-white/16 whitespace-nowrap overflow-hidden text-ellipsis">
               Protected by enterprise-grade encryption · Docrud Platform
             </p>
           </div>

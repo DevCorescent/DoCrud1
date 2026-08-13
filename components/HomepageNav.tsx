@@ -545,7 +545,7 @@ export default function HomepageNav({
         }}
       >
         <Search className="h-[13px] w-[13px] shrink-0 text-white/40" />
-        <span className="text-[13px] font-medium text-white/32 truncate flex-1 text-left">Search people, gigs & docs…</span>
+        <span className="hp-sec text-[13px] font-medium text-white/32 truncate flex-1 text-left">Search people, gigs & docs…</span>
       </button>
 
       {/* ── RIGHT group: nav links + bell + avatar ── */}

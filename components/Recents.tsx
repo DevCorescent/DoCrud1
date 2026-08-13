@@ -1356,7 +1356,8 @@ export default function RecentsBar() {
         @media(min-width:768px){.rc-card{width:100px!important;height:148px!important;border-radius:15px!important}}
         @media(min-width:1280px){.rc-card{width:116px!important;height:170px!important;border-radius:16px!important}}
       `}</style>
-      <div style={{ display:'flex',gap:10,paddingBottom:4,overflowX:'auto',scrollbarWidth:'none' }}>
+      <div className="w-full min-w-0" style={{ display:'flex',gap:10,paddingBottom:4,overflowX:'auto',scrollbarWidth:'none' }}>
+        <div aria-hidden className="shrink-0" style={{ width: 6, height: 1, marginRight: -10 }} />
         {[...Array(6)].map((_,i) => (
           <div key={i} className="rc-card" style={{ background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.05)',flexShrink:0,animation:`rcSk 1.4s ${i*.12}s ease-in-out infinite` }} />
         ))}
@@ -1393,14 +1394,14 @@ export default function RecentsBar() {
           .rc-add-label{font-size:11px!important}
         }
       `}</style>
-      <div style={{ width:'100%',animation:'rcBarIn 0.30s cubic-bezier(0.22,1,0.36,1) both' }}>
+      <div className="w-full min-w-0" style={{ width:'100%',animation:'rcBarIn 0.30s cubic-bezier(0.22,1,0.36,1) both' }}>
         {/* Label row */}
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10 }}>
           <div style={{ display:'flex',alignItems:'center',gap:7 }}>
             <div style={{ width:1.5,height:12,borderRadius:99,background:'rgba(255,255,255,0.30)' }} />
-            <span style={{ fontSize:11,fontWeight:500,color:'rgba(255,255,255,0.32)',letterSpacing:'0.01em' }}>recents</span>
+            <span className="hp-sec" style={{ fontSize:11,fontWeight:500,color:'rgba(255,255,255,0.32)',letterSpacing:'0.01em' }}>recents</span>
           </div>
-          <a href="/recents" style={{ display:'flex',alignItems:'center',gap:4,fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.32)',textDecoration:'none',padding:'3px 8px',borderRadius:7,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.02)',transition:'all 140ms ease' }}
+          <a href="/recents" className="hp-sec" style={{ display:'flex',alignItems:'center',gap:4,fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.32)',textDecoration:'none',padding:'3px 8px',borderRadius:7,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.02)',transition:'all 140ms ease' }}
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color='rgba(255,255,255,0.60)';(e.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,0.14)';}}
             onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.color='rgba(255,255,255,0.32)';(e.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,0.07)';}}>
             View all
@@ -1408,8 +1409,9 @@ export default function RecentsBar() {
           </a>
         </div>
 
-        {/* Scroll row */}
-        <div ref={scrollRef} className="rc-scr" style={{ display:'flex',gap:10,overflowX:'auto',paddingBottom:4,scrollbarWidth:'none',WebkitOverflowScrolling:'touch' }}>
+        {/* Scroll row — leading 6px spacer (margin cancels flex gap): initial inset only; scrolls away */}
+        <div ref={scrollRef} className="rc-scr w-full min-w-0" style={{ display:'flex',gap:10,overflowX:'auto',paddingBottom:4,scrollbarWidth:'none',WebkitOverflowScrolling:'touch' }}>
+          <div aria-hidden className="shrink-0" style={{ width: 6, height: 1, marginRight: -10 }} />
 
           {/* Add button */}
           {isAuth && (

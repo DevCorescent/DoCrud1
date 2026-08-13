@@ -7950,12 +7950,12 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
             <div className="absolute inset-0" style={{ background: '#060608' }} />
             {/* Orbs — reduced to 35% opacity on mobile, full on sm+ */}
             <div className="absolute inset-0 opacity-[0.35] sm:opacity-100">
-            {/* Diagonal pinned orange glows */}
+            {/* // Diagonal pinned orange glows 
             <div className="absolute -top-48 -left-48 h-[700px] w-[700px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(249,115,22,0.04) 0%,rgba(234,88,12,0.02) 40%,transparent 70%)', filter: 'blur(140px)', willChange: 'transform', transform: 'translateZ(0)' }} />
             <div className="absolute -bottom-48 -right-48 h-[700px] w-[700px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(249,115,22,0.04) 0%,rgba(234,88,12,0.02) 40%,transparent 70%)', filter: 'blur(140px)', willChange: 'transform', transform: 'translateZ(0)' }} />
-            {/* Animated orange-gold orbs */}
+            // Animated orange-gold orbs 
             <div className="absolute -left-40 -top-40 h-[800px] w-[800px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(251,146,60,0.07) 0%,rgba(245,158,11,0.04) 38%,rgba(234,88,12,0.02) 62%,transparent 76%)', filter: 'blur(95px)', animation: 'obGoldDrift1 30s ease-in-out infinite', willChange: 'transform', transform: 'translateZ(0)' }} />
             <div className="absolute -right-32 top-[12%] h-[660px] w-[660px] rounded-full"
@@ -7963,7 +7963,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
             <div className="absolute bottom-[-8%] left-[28%] h-[580px] w-[580px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(234,88,12,0.05) 0%,rgba(245,158,11,0.03) 40%,rgba(251,146,60,0.01) 64%,transparent 76%)', filter: 'blur(80px)', animation: 'obGoldDrift3 34s ease-in-out infinite 10s', willChange: 'transform', transform: 'translateZ(0)' }} />
             <div className="absolute right-[18%] bottom-[22%] h-[340px] w-[340px] rounded-full"
-              style={{ background: 'radial-gradient(circle,rgba(253,186,116,0.04) 0%,rgba(245,158,11,0.02) 52%,transparent 72%)', filter: 'blur(60px)', animation: 'obGoldDrift1 22s ease-in-out infinite 8s', willChange: 'transform', transform: 'translateZ(0)' }} />
+            style={{ background: 'radial-gradient(circle,rgba(253,186,116,0.04) 0%,rgba(245,158,11,0.02) 52%,transparent 72%)', filter: 'blur(60px)', animation: 'obGoldDrift1 22s ease-in-out infinite 8s', willChange: 'transform', transform: 'translateZ(0)' }} /> */}
             {/* Particles */}
             {([
               { x: 8,  y:12, s:2,   d:'0s',   t:'obParticle 4.2s ease-in-out infinite',  warm:false },
@@ -7986,10 +7986,15 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
             {/* Micro-grid */}
             <div className="absolute inset-0 opacity-[0.016]"
               style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px)', backgroundSize: '64px 64px' }} />
-            {/* Warm top glow */}
-            <div className="absolute inset-0"
-              style={{ background: 'radial-gradient(ellipse 110% 60% at 50% -5%,rgba(245,158,11,0.06) 0%,transparent 55%)' }} />
-            {/* Edge darken */}
+               {/* Neutral top glow */}
+<div
+  className="absolute inset-0"
+  style={{
+    background:
+      'radial-gradient(ellipse 110% 60% at 50% -5%, rgba(255,255,255,0.015) 0%, transparent 55%)',
+  }}
+/> 
+{/* Edge darken */}            {/* Edge darken */}
             <div className="absolute inset-0"
               style={{ background: 'radial-gradient(ellipse at center,transparent 38%,rgba(5,5,8,0.82) 100%)' }} />
           </div>

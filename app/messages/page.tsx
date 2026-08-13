@@ -1,7 +1,6 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -308,11 +307,8 @@ function MessageBubble({
 }) {
   const [lightbox, setLightbox] = useState(false);
   const [menu, setMenu] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const lpRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!menu) return;
@@ -347,15 +343,11 @@ function MessageBubble({
 
   return (
     <>
-      {/* Portalled to <body>: the chat column is a transformed/animated
-          ancestor, which would otherwise become the containing block for
-          these fixed overlays and clip them to the column. */}
-      {mounted && lightbox && msg.attachmentUrl && createPortal(
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(24px)' }} onClick={() => setLightbox(false)}>
-          <button className="absolute h-9 w-9 rounded-full flex items-center justify-center transition-colors" style={{ top: 'max(16px, env(safe-area-inset-top))', right: 16, background: 'rgba(255,255,255,0.09)' }}><X style={{ width: 16, height: 16, color: '#fff' }} /></button>
-          <img src={msg.attachmentUrl} alt="" className="rounded-xl object-contain" style={{ maxHeight: 'min(88dvh, 100%)', maxWidth: '100%' }} />
-        </div>,
-        document.body
+      {lightbox && msg.attachmentUrl && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(24px)' }} onClick={() => setLightbox(false)}>
+          <button className="absolute top-4 right-4 h-9 w-9 rounded-full flex items-center justify-center transition-colors" style={{ background: 'rgba(255,255,255,0.09)' }}><X style={{ width: 16, height: 16, color: '#fff' }} /></button>
+          <img src={msg.attachmentUrl} alt="" className="rounded-xl object-contain" style={{ maxHeight: '88vh', maxWidth: '88vw' }} />
+        </div>
       )}
 
       <div
@@ -369,8 +361,8 @@ function MessageBubble({
       >
         {/* Bubble + inline action */}
         <div
-          className={`msg-bubble relative flex items-end ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
-          style={{ gap: 4 }}
+          className={`relative flex items-end ${isMine ? 'flex-row-reverse' : 'flex-row'}`}
+          style={{ maxWidth: '78%', minWidth: 0, gap: 4 }}
         >
           {/* Context menu trigger — only visible on hover/long-press */}
           <div ref={menuRef} className="relative flex-shrink-0 self-end" style={{ marginBottom: 3 }}>
@@ -409,8 +401,8 @@ function MessageBubble({
             )}
           </div>
 
-          {/* Mobile long-press menu — portalled for the same reason */}
-          {mounted && menu && createPortal(
+          {/* Mobile long-press menu (bottom sheet style) — rendered inline */}
+          {menu && (
             <div className="sm:hidden fixed inset-0 z-[60] flex flex-col justify-end" onClick={() => setMenu(false)}>
               <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.60)', backdropFilter: 'blur(6px)' }} />
               <div className="relative rounded-t-[24px] overflow-hidden" style={{ background: 'rgba(12,13,22,0.98)', border: '1px solid rgba(255,255,255,0.09)' }} onClick={e => e.stopPropagation()}>
@@ -437,8 +429,7 @@ function MessageBubble({
                 ))}
                 <div style={{ height: 'max(16px, env(safe-area-inset-bottom))' }} />
               </div>
-            </div>,
-            document.body
+            </div>
           )}
 
           {/* Bookmark pip */}
@@ -450,10 +441,10 @@ function MessageBubble({
 
           {/* Bubble */}
           {msg.type === 'image' && msg.attachmentUrl ? (
-            <div className="msg-img-bubble flex flex-col overflow-hidden">
+            <div className="flex flex-col overflow-hidden" style={{ maxWidth: 240 }}>
               {replyPreview && <div style={{ padding: '6px 6px 0 6px' }}>{replyPreview}</div>}
               <div className={`relative cursor-pointer overflow-hidden ${br}`} onClick={() => setLightbox(true)} style={isMine ? { boxShadow: '0 4px 20px rgba(59,130,246,0.28)' } : {}}>
-                <img src={msg.attachmentUrl} alt="" className="block object-cover rounded-[inherit]" style={{ maxHeight: 'min(220px, 34dvh)', maxWidth: '100%', width: 'auto' }} loading="lazy" />
+                <img src={msg.attachmentUrl} alt="" className="block object-cover rounded-[inherit]" style={{ maxHeight: 220, maxWidth: 240, width: 'auto' }} loading="lazy" />
                 <div className="absolute bottom-1.5 right-2 flex items-center gap-1 rounded-full px-1.5 py-0.5" style={{ background: 'rgba(0,0,0,0.50)', backdropFilter: 'blur(8px)' }}>
                   <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.82)' }}>{fmtTime(msg.sentAt)}</span>
                   <StatusIcon msg={msg} isMine={isMine} />
@@ -461,7 +452,7 @@ function MessageBubble({
               </div>
             </div>
           ) : msg.type === 'file' ? (
-            <div className={`msg-file-bubble ${br} overflow-hidden`} style={{ padding: '10px 12px', maxWidth: '100%', background: isMine ? 'linear-gradient(135deg,#3b82f6,#1d4ed8)' : recvBg, border: isMine ? 'none' : '1px solid rgba(255,255,255,0.09)', boxShadow: isMine ? '0 4px 20px rgba(59,130,246,0.28)' : 'none', color: '#fff' }}>
+            <div className={`${br} overflow-hidden`} style={{ padding: '10px 12px', minWidth: 160, maxWidth: '100%', background: isMine ? 'linear-gradient(135deg,#3b82f6,#1d4ed8)' : recvBg, border: isMine ? 'none' : '1px solid rgba(255,255,255,0.09)', boxShadow: isMine ? '0 4px 20px rgba(59,130,246,0.28)' : 'none', color: '#fff' }}>
               {replyPreview}
               <a href={msg.attachmentUrl} download={msg.attachmentName} target="_blank" rel="noreferrer" className="flex items-center gap-2.5">
                 <div className="flex-shrink-0 rounded-[10px] flex items-center justify-center" style={{ width: 34, height: 34, background: isMine ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)' }}>
@@ -1434,9 +1425,9 @@ function NewChatModal({ onClose, onStart }: { onClose: () => void; onStart: (u: 
   }
 
   if (selected) return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(20px)' }} onClick={onClose} />
-      <div className="relative w-full max-w-sm my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200" style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto', borderRadius: 26, border: '1px solid rgba(255,255,255,0.09)', background: '#0e0f16', boxShadow: '0 32px 96px rgba(0,0,0,0.95)' }}>
+      <div className="relative w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200" style={{ borderRadius: 26, border: '1px solid rgba(255,255,255,0.09)', background: '#0e0f16', boxShadow: '0 32px 96px rgba(0,0,0,0.95)' }}>
         <div className="absolute inset-x-0 top-0 h-24 pointer-events-none" style={{ background: 'linear-gradient(to bottom,rgba(59,130,246,0.07),transparent)' }} />
         <div className="flex items-center gap-2 px-5 pt-5 pb-4">
           <button onClick={() => setSelected(null)} className="h-7 w-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)' }}><ArrowLeft style={{ width: 13, height: 13, color: 'rgba(255,255,255,0.55)' }} /></button>
@@ -1496,7 +1487,7 @@ function NewChatModal({ onClose, onStart }: { onClose: () => void; onStart: (u: 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(20px)' }} onClick={onClose} />
-      <div className="relative w-full max-w-md flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" style={{ maxHeight: 'calc(100dvh - 32px)', borderRadius: 22, border: '1px solid rgba(255,255,255,0.09)', background: '#0e0f16', boxShadow: '0 24px 80px rgba(0,0,0,0.95)' }}>
+      <div className="relative w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200" style={{ borderRadius: 22, border: '1px solid rgba(255,255,255,0.09)', background: '#0e0f16', boxShadow: '0 24px 80px rgba(0,0,0,0.95)' }}>
         <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
           <h2 style={{ fontSize: 14.5, fontWeight: 700, color: '#fff' }}>New Message</h2>
           <button onClick={onClose} className="h-7 w-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)' }}><X style={{ width: 13, height: 13, color: 'rgba(255,255,255,0.55)' }} /></button>
@@ -1508,7 +1499,7 @@ function NewChatModal({ onClose, onStart }: { onClose: () => void; onStart: (u: 
             {query && <button onClick={() => setQuery('')}><X style={{ width: 11, height: 11, color: 'rgba(255,255,255,0.28)' }} /></button>}
           </div>
         </div>
-        <div style={{ flex: '1 1 auto', minHeight: 0, maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'none' }}>
+        <div style={{ maxHeight: 320, overflowY: 'auto', scrollbarWidth: 'none' }}>
           {!loading && !results.length && query && <div className="flex flex-col items-center gap-2 py-10" style={{ color: 'rgba(255,255,255,0.25)' }}><Users style={{ width: 30, height: 30 }} /><p style={{ fontSize: 12 }}>No users found</p></div>}
           {!loading && !results.length && !query && <div className="flex flex-col items-center gap-2 py-10" style={{ color: 'rgba(255,255,255,0.20)' }}><Search style={{ width: 30, height: 30 }} /><p style={{ fontSize: 12 }}>Search to find people</p></div>}
           {!loading && results.length > 0 && (
@@ -1548,28 +1539,6 @@ function MessagesPageInner() {
   const [serviceConvs, setServiceConvs] = useState<Conversation[]>([]);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
-
-  /* Keep the app box glued to the *visual* viewport so the composer stays
-     above the mobile keyboard and above browser chrome. Writes a CSS var
-     instead of state, so resizing never re-renders the message list. */
-  useEffect(() => {
-    const vv = window.visualViewport;
-    const root = document.documentElement;
-    const apply = () => {
-      const h = vv ? vv.height : window.innerHeight;
-      root.style.setProperty('--msg-vh', `${Math.round(h)}px`);
-    };
-    apply();
-    vv?.addEventListener('resize', apply);
-    vv?.addEventListener('scroll', apply);
-    window.addEventListener('orientationchange', apply);
-    return () => {
-      vv?.removeEventListener('resize', apply);
-      vv?.removeEventListener('scroll', apply);
-      window.removeEventListener('orientationchange', apply);
-      root.style.removeProperty('--msg-vh');
-    };
-  }, []);
   const [chatMetaMap, setChatMetaMap] = useState<Record<string, ChatMeta>>({});
   const [showChatSettings, setShowChatSettings] = useState(false);
   const [savingMeta, setSavingMeta] = useState(false);
@@ -2025,20 +1994,17 @@ function MessagesPageInner() {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
-    // Match the CSS cap: min(120px, 30dvh) — a short landscape phone must not
-    // let the composer eat the message list.
-    const cap = Math.min(120, Math.max(48, Math.round(window.innerHeight * 0.3)));
-    ta.style.height = `${Math.min(ta.scrollHeight, cap)}px`;
+    ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
   }
 
   /* ── Auth states ── */
   if (status === 'loading') return (
-    <div style={{ minHeight: '100vh', background: '#0D0D0F', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="min-h-screen bg-[#0D0D0F] text-white flex items-center justify-center">
       <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.10)', borderTopColor: 'rgba(255,255,255,0.55)' }} className="animate-spin" />
     </div>
   );
   if (status === 'unauthenticated') return (
-    <div style={{ minHeight: '100vh', background: '#0D0D0F', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+    <div className="min-h-screen bg-[#0D0D0F] text-white flex flex-col items-center justify-center gap-4">
       <div style={{ width: 56, height: 56, borderRadius: 18, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <MessageSquare style={{ width: 24, height: 24, color: 'rgba(255,255,255,0.55)' }} />
       </div>
@@ -2059,63 +2025,21 @@ function MessagesPageInner() {
   const desktopInfoOpen = showInfoPanel && !!activeConvId;
 
   return (
-    <>
+    /* Shell classes match global light-theme invert targets in globals.css
+       (same pattern as Home / People / Profile). Dark appearance unchanged. */
+    <div className="h-[100dvh] min-h-screen bg-[#0D0D0F] text-white relative overflow-hidden">
       {showInfinityModal && <InfinityUpgradeModal feature="chat" onClose={() => setShowInfinityModal(false)} returnTo="/messages" />}
       <style>{`
-        /* ══════════════════════════════════════════════════════════════
-           Messages — responsive system.
-           Three intentional breakpoints, fluid sizing inside each:
-             mobile  < 640px   list ⇄ chat as two screens
-             tablet  640–1023  two panes, side panels overlay
-             desktop ≥ 1024px  two panes + docked side panels
-           Every rule below is scoped to .msgs-root so nothing leaks into
-           portals, modals or other routes.
-           ══════════════════════════════════════════════════════════════ */
-        body { overflow: hidden; overscroll-behavior: none; }
-
-        /* --msg-vh tracks the *visual* viewport, so the composer stays put
-           when the mobile keyboard opens. Falls back to dvh, then vh. */
-        .msgs-root { height: 100vh; height: 100dvh; height: var(--msg-vh, 100dvh);
-                     width: 100%; max-width: 100%; overflow-x: hidden; position: relative; z-index: 1; }
-
-        /* iOS refuses to zoom a focused field only at >=16px */
-        .msgs-root input:not([type=range]), .msgs-root textarea { font-size: max(16px, 1em); max-width: 100%; }
-        /* Media never widens its container */
-        .msgs-root img, .msgs-root video { max-width: 100%; height: auto; }
-        /* Long words/URLs wrap instead of pushing the page sideways */
-        .msgs-root p, .msgs-root span { overflow-wrap: anywhere; }
-        .msgs-root .truncate { overflow-wrap: normal; }
-
-        .msg-header { min-height: calc(52px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top);
-                      z-index: 30; }
-
-        /* A global app rule styles .dark main / .dark header / .dark aside with
-           position:relative and z-index:1. It outranks the utility classes on
-           these two panes (0,1,1 vs 0,1,0), which dropped them out of their
-           intended overlay stack — below 640px they laid out side by side and
-           the chat pane sat entirely off-screen, leaving a blank chat view.
-           These two-class selectors restore the intended positioning. */
-        @media (max-width:639px){
-          .msgs-root .sidebar-panel,
-          .msgs-root .chat-main { position: absolute; inset: 0; z-index: 10; }
+        body { overflow: hidden; }
+        /* Prevent iOS Safari from zooming on input focus */
+        input:not([type=range]), textarea {
+          font-size: max(16px, 1em);
+          max-width: 100%;
+          box-sizing: border-box;
         }
-        @media (min-width:640px){
-          .msgs-root .sidebar-panel,
-          .msgs-root .chat-main { position: relative; inset: auto; }
-        }
-
-        .msg-sidebar { width: 100%; }
-        @media (min-width:640px)  { .msg-sidebar { width: clamp(224px, 30vw, 268px); } }
-        @media (min-width:1024px) { .msg-sidebar { width: clamp(260px, 23vw, 320px); } }
-
-        /* Bubbles: wide enough to read, capped so ultra-wide stays legible */
-        .msg-bubble { max-width: min(78%, 620px); min-width: 0; }
-        @media (max-width:400px) { .msg-bubble { max-width: 86%; } }
-        .msg-img-bubble { max-width: min(240px, 100%); }
-        .msg-file-bubble { min-width: min(160px, 100%); }
-
-        .msg-ta { max-height: min(120px, 30dvh); }
-
+        /* Hard stop on any horizontal bleed */
+        * { max-width: 100%; box-sizing: border-box; }
+        img, video { max-width: 100%; height: auto; }
         .typing-dot { display:inline-block; width:4.5px; height:4.5px; border-radius:50%; background:rgba(255,255,255,0.42); animation:tdot 1.3s infinite ease-in-out; }
         @keyframes tdot { 0%,60%,100%{transform:translateY(0);opacity:.32;} 30%{transform:translateY(-5px);opacity:1;} }
         .msg-in { animation: msgIn .18s cubic-bezier(0.22,1,0.36,1) both; }
@@ -2125,10 +2049,7 @@ function MessagesPageInner() {
         .cs { -webkit-overflow-scrolling:touch; overscroll-behavior:contain; }
         .cs::-webkit-scrollbar,[data-ns]::-webkit-scrollbar { display:none; }
         .cs,[data-ns] { scrollbar-width:none; }
-        /* Slide transition is mobile-only; will-change stays scoped there too,
-           since it would otherwise trap fixed-position descendants. */
-        .pslide { transition:transform .28s cubic-bezier(0.32,0.72,0,1); }
-        @media (max-width:639px) { .pslide { will-change:transform; } }
+        .pslide { transition:transform .28s cubic-bezier(0.32,0.72,0,1); will-change:transform; }
         @media (min-width:640px) { .sidebar-panel { transform:none !important; } .chat-main { transform:none !important; } }
         .chat-bg { background-color:transparent; background-image:radial-gradient(rgba(255,255,255,0.018) 1px,transparent 1px); background-size:24px 24px; }
         .info-slide { transition:width .25s cubic-bezier(0.32,0.72,0,1); overflow:hidden; }
@@ -2137,14 +2058,11 @@ function MessagesPageInner() {
         @keyframes drawerUp { from{transform:translateY(100%);} to{transform:translateY(0);} }
       `}</style>
 
-      {/* ── Solid black backdrop (matches homepage) ── */}
-      <div style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', background:'#0D0D0F' }} />
-
-      <div className="msgs-root flex flex-col overflow-hidden">
+      <div className="flex flex-col overflow-hidden relative z-[1] h-full w-full">
 
         {/* ── Top header ── */}
-        <header className="msg-header shrink-0 flex items-center gap-2 z-30"
-          style={{ paddingLeft: 12, paddingRight: 12, paddingBottom: 0, background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <header className="shrink-0 flex items-center gap-2 z-30"
+          style={{ height: 52, paddingLeft: 12, paddingRight: 12, paddingTop: 'env(safe-area-inset-top)', background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
 
           <Link href="/" className={`h-9 w-9 rounded-full flex items-center justify-center transition-all active:scale-90 ${showMobileChat ? 'hidden sm:flex' : 'flex'}`} style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)' }}>
             <ArrowLeft style={{ width: 15, height: 15, color: 'rgba(255,255,255,0.50)' }} />
@@ -2234,7 +2152,7 @@ function MessagesPageInner() {
 
           {/* Left sidebar */}
           <aside
-            className="msg-sidebar sidebar-panel pslide flex flex-col absolute inset-0 z-10 w-full sm:relative sm:inset-auto sm:translate-x-0 sm:z-auto"
+            className="sidebar-panel pslide flex flex-col absolute inset-0 z-10 w-full sm:relative sm:inset-auto sm:translate-x-0 sm:z-auto sm:w-[260px] lg:w-[290px]"
             style={{
               transform: showMobileChat ? 'translateX(-100%)' : 'translateX(0)',
               width: undefined,
@@ -2766,8 +2684,8 @@ function MessagesPageInner() {
                           onKeyDown={onKeyDown}
                           onFocus={() => setTimeout(() => scrollToBottom(true), 350)}
                           placeholder="Message…"
-                          className="msg-ta w-full min-w-0 placeholder:text-white/20 outline-none resize-none"
-                          style={{ background: 'transparent', fontSize: 16, color: '#fff', lineHeight: '1.5', minHeight: 22, display: 'block', boxSizing: 'border-box' }}
+                          className="w-full min-w-0 placeholder:text-white/20 outline-none resize-none"
+                          style={{ background: 'transparent', fontSize: 16, color: '#fff', lineHeight: '1.5', maxHeight: 120, minHeight: 22, display: 'block', boxSizing: 'border-box' }}
                           disabled={sending}
                         />
                       </div>
@@ -2810,8 +2728,8 @@ function MessagesPageInner() {
 
           {/* Chat Settings Panel (desktop slide-in) */}
           <div
-            className="info-slide hidden lg:flex flex-col flex-shrink-0 overflow-hidden"
-            style={{ width: showChatSettings && activeConvId ? 'clamp(232px, 22vw, 288px)' : 0, transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)' }}
+            className="info-slide hidden sm:flex flex-col flex-shrink-0 overflow-hidden"
+            style={{ width: showChatSettings && activeConvId ? 260 : 0, transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)' }}
           >
             {showChatSettings && activeConvId && (
               <ChatSettingsPanel
@@ -2835,8 +2753,8 @@ function MessagesPageInner() {
           {/* Right info panel */}
           {/* Desktop: slides open as a fixed-width column */}
           <div
-            className="info-slide hidden lg:flex flex-col flex-shrink-0"
-            style={{ width: desktopInfoOpen && !showChatSettings ? 'clamp(212px, 19vw, 264px)' : 0 }}
+            className="info-slide hidden sm:flex flex-col flex-shrink-0"
+            style={{ width: desktopInfoOpen && !showChatSettings ? 230 : 0 }}
           >
             {desktopInfoOpen && !showChatSettings && (
               <InfoPanel
@@ -2849,8 +2767,8 @@ function MessagesPageInner() {
 
           {/* Mobile: overlay from right */}
           {showInfoPanel && activeConvId && !showChatSettings && (
-            <div className="lg:hidden absolute inset-0 z-20 flex" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }} onClick={() => setShowInfoPanel(false)}>
-              <div className="ml-auto h-full" style={{ width: 'min(82%, 320px)' }} onClick={e => e.stopPropagation()}>
+            <div className="sm:hidden absolute inset-0 z-20 flex" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }} onClick={() => setShowInfoPanel(false)}>
+              <div className="ml-auto h-full" style={{ width: '82%', maxWidth: 300 }} onClick={e => e.stopPropagation()}>
                 <InfoPanel
                   messages={messages} indexedIds={indexedIds} currentUserId={currentUserId}
                   onScrollTo={(id) => { setShowInfoPanel(false); setTimeout(() => scrollToMsg(id), 200); }}
@@ -2861,8 +2779,8 @@ function MessagesPageInner() {
           )}
           {/* Mobile chat settings overlay */}
           {showChatSettings && activeConvId && (
-            <div className="lg:hidden absolute inset-0 z-20 flex" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }} onClick={() => setShowChatSettings(false)}>
-              <div className="ml-auto h-full" style={{ width: 'min(92%, 360px)' }} onClick={e => e.stopPropagation()}>
+            <div className="sm:hidden absolute inset-0 z-20 flex" style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }} onClick={() => setShowChatSettings(false)}>
+              <div className="ml-auto h-full" style={{ width: '92%', maxWidth: 340 }} onClick={e => e.stopPropagation()}>
                 <ChatSettingsPanel
                   convId={activeConvId}
                   meta={activeMeta}
@@ -3037,14 +2955,14 @@ function MessagesPageInner() {
       )}
 
       {showNewChat && <NewChatModal onClose={() => setShowNewChat(false)} onStart={handleNewChat} />}
-    </>
+    </div>
   );
 }
 
 export default function MessagesPage() {
   return (
     <Suspense fallback={
-      <div style={{ minHeight: '100vh', background: '#09090f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="min-h-screen bg-[#0D0D0F] text-white flex items-center justify-center">
         <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.12)', borderTopColor: 'rgba(59,130,246,0.65)' }} className="animate-spin" />
       </div>
     }>

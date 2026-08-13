@@ -653,8 +653,13 @@ export default function LoginPage() {
 
       <div className="mx-auto flex h-[100dvh] max-w-[1380px] flex-col lg:flex-row">
 
-        {/* ── Left panel ── */}
-        <LeftPanel activeFeature={activeFeature} setActiveFeature={setActiveFeature} mounted={mounted} />
+        {/* ── Left panel ── TEMPORARILY DISABLED.
+            The panel markup lives in the LeftPanel component above and is left fully
+            intact. It could not be wrapped in a JSX comment in place, because it
+            already contains nested JSX comments and those cannot nest, so it is
+            disabled here at the render site instead.
+            To restore: uncomment the line below. */}
+        {/* <LeftPanel activeFeature={activeFeature} setActiveFeature={setActiveFeature} mounted={mounted} /> */}
 
         {/* ════════════════════════════════════════════════════════
             RIGHT — FORM PANEL

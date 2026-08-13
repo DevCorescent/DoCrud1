@@ -1730,6 +1730,19 @@ html[data-ui-mode='light'] body {
   background: #f4f4f5 !important;
   color-scheme: light;
 }
+
+/*
+ * Secondary/muted copy is authored as low-opacity white for the dark UI.
+ * After invert, those values become too faint on light backgrounds.
+ * Boost opacity only in light mode (higher pre-invert white → darker post-invert).
+ * Dark theme is unchanged.
+ */
+html[data-ui-mode='light'] .hp-sec {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+html[data-ui-mode='light'] .hp-sec-strong {
+  color: rgba(255, 255, 255, 0.80) !important;
+}
 /* Cover homepage (main), /published & similar viewport shells, and min-h-screen dark pages */
 html[data-ui-mode='light'] main.h-\[100dvh\],
 html[data-ui-mode='light'] .h-\[100dvh\].text-white,
@@ -1762,4 +1775,8 @@ html[data-ui-mode='light'] .min-h-screen.bg-\[\#08090a\] [data-no-invert] {
 /* Bottom nav is portaled outside page shells — invert it too in light mode */
 html[data-ui-mode='light'] .gnb-bar {
   filter: invert(1) hue-rotate(180deg);
+}
+/* Inactive dock labels: slightly stronger pre-invert white → more readable after invert */
+html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
+  color: rgba(255, 255, 255, 0.68) !important;
 }

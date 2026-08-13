@@ -2605,7 +2605,7 @@ function HomepageLiveFeed() {
           {/* feed cards */}
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* mobile-only: sort row — hidden */}
-            <div className="hidden flex items-center gap-2 py-3 max-w-[600px] mx-auto w-full">
+            <div className="hidden flex items-center gap-2 py-3 max-w-3xl mx-auto w-full">
               <span className="text-[12px] font-semibold text-white/60 tracking-tight shrink-0">
                 {HP_TABS.find(t => t.id === activecat)?.label ?? 'All'}
               </span>
@@ -2645,7 +2645,7 @@ function HomepageLiveFeed() {
                 </button>
               </div>
             </div>
-            <div className="mx-auto w-full max-w-[600px] divide-y divide-white/[0.045]">
+            <div className="mx-auto w-full max-w-3xl divide-y divide-white/[0.045]">
               {loading
                 ? Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="py-5 space-y-3 animate-pulse">
@@ -4675,178 +4675,122 @@ function ContentDiscoveryStrip({ onPublish }: { onPublish: () => void }) {
 
   return (
     /* ── outer wrapper: pills (scrollable) + More button side-by-side ── */
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', minWidth: 0 }}>
+    <div className="w-full min-w-0" style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', minWidth: 0 }}>
       <style>{`
         @keyframes cds-tab-in { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
         @keyframes cds-panel  { from{opacity:0;transform:translateY(-5px) scale(0.98)} to{opacity:1;transform:none} }
-        .cds-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; flex:1 1 0; min-width:0; }
+        .cds-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; flex:1 1 0; min-width:0; width:100%; }
         .cds-scroll::-webkit-scrollbar { display:none; }
       `}</style>
 
-      {/* Scrollable pill row */}
-      <div
-  className="cds-scroll"
-  style={{
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    paddingBottom: 2,
-  }}
->
-  {CONTENT_TYPES.slice(0, isMobile ? undefined : CDS_VISIBLE_DESKTOP).map(
-    ({ id, label, count, Icon, color, rgb }, i) => {
-      const isActive = activeId === id;
-
-      return (
-        <React.Fragment key={id}>
-          <Link
-            href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
-            onClick={() => {
-              setActiveId(id);
-              setOpen(false);
-            }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              height: 31,
-              padding: '0 10px 0 7px',
-              borderRadius: 999,
-              textDecoration: 'none',
-              flexShrink: 0,
-              background: isActive
-                ? `rgba(${rgb},0.13)`
-                : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${
-                isActive
-                  ? `rgba(${rgb},0.28)`
-                  : 'rgba(255,255,255,0.07)'
-              }`,
-              boxShadow: isActive
-                ? `0 0 14px rgba(${rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.07)`
-                : 'none',
-              transition:
-                'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
-              animation: `cds-tab-in 0.26s ${
-                Math.min(i, 6) * 0.025
-              }s cubic-bezier(0.22,1,0.36,1) both`,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <div
-              style={{
-                width: 17,
-                height: 17,
-                borderRadius: 6,
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: isActive
-                  ? `rgba(${rgb},0.26)`
-                  : `rgba(${rgb},0.10)`,
+      {/* Scrollable pill row — leading 6px spacer (margin cancels flex gap): initial inset only; scrolls away */}
+      <div className="cds-scroll w-full min-w-0" style={{ display:'flex', alignItems:'center', gap: 6, paddingBottom: 2 }}>
+        <div aria-hidden className="shrink-0" style={{ width: 6, height: 1, marginRight: -6 }} />
+        {CONTENT_TYPES.slice(0, isMobile ? undefined : CDS_VISIBLE_DESKTOP).map(({ id, label, count, Icon, color, rgb }, i) => {
+          const isActive = activeId === id;
+          const commonStyle: React.CSSProperties = {
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            height: 31, padding: '0 10px 0 7px',
+            borderRadius: 999, textDecoration: 'none', flexShrink: 0,
+            background: isActive ? `rgba(${rgb},0.13)` : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${isActive ? `rgba(${rgb},0.28)` : 'rgba(255,255,255,0.07)'}`,
+            boxShadow: isActive ? `0 0 14px rgba(${rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.07)` : 'none',
+            transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+            animation: `cds-tab-in 0.26s ${Math.min(i, 6) * 0.025}s cubic-bezier(0.22,1,0.36,1) both`,
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+          };
+          const inner = (
+            <>
+              <div style={{
+                width: 17, height: 17, borderRadius: 6, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: isActive ? `rgba(${rgb},0.26)` : `rgba(${rgb},0.10)`,
                 transition: 'background 160ms ease',
-              }}
-            >
-              <Icon
-                style={{
-                  width: 9.5,
-                  height: 9.5,
-                  color: isActive ? color : `rgba(${rgb},0.65)`,
-                }}
-              />
-            </div>
-
-            <span
-              style={{
-                fontSize: 11.5,
-                fontWeight: isActive ? 700 : 500,
-                letterSpacing: '-0.01em',
-                color: isActive
-                  ? 'rgba(255,255,255,0.90)'
-                  : 'rgba(255,255,255,0.44)',
-                transition: 'color 160ms ease',
-              }}
-            >
-              {label}
-            </span>
-
-            {isActive && count > 0 && (
-              <span
-                style={{
-                  fontSize: 9,
-                  fontVariantNumeric: 'tabular-nums',
-                  fontWeight: 700,
-                  color,
-                  opacity: 0.68,
-                  marginLeft: 1,
-                }}
-              >
-                {count}
-              </span>
-            )}
-          </Link>
-
-          {/* Publish immediately after All */}
-          {id === 'all' && (
-            <button
-              type="button"
-              onClick={onPublish}
-              className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                height: 31,
-                padding: '0 10px 0 7px',
-                borderRadius: 999,
-                flexShrink: 0,
-                background: 'rgba(250,204,21,0.13)',
-                border: '1px solid rgba(250,204,21,0.28)',
-                boxShadow:
-                  '0 0 14px rgba(250,204,21,0.12), inset 0 1px 0 rgba(255,255,255,0.07)',
-                transition:
-                  'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
-                whiteSpace: 'nowrap',
-                cursor: 'pointer',
-                color: 'rgba(255,255,255,0.90)',
-                fontSize: 11.5,
-                fontWeight: 700,
-                letterSpacing: '-0.01em',
-                animation:
-                  'cds-tab-in 0.26s 0.025s cubic-bezier(0.22,1,0.36,1) both',
-              }}
-            >
-              <div
-                style={{
-                  width: 17,
-                  height: 17,
-                  borderRadius: 6,
-                  flexShrink: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(250,204,21,0.26)',
-                  transition: 'background 160ms ease',
-                }}
-              >
-                <Plus
-                  style={{
-                    width: 9.5,
-                    height: 9.5,
-                    color: '#facc15',
-                  }}
-                />
+              }}>
+                <Icon style={{ width: 9.5, height: 9.5, color: isActive ? color : `rgba(${rgb},0.65)` }} />
               </div>
+              <span
+                className={isActive ? undefined : 'hp-sec'}
+                style={{
+                fontSize: 11.5, fontWeight: isActive ? 700 : 500, letterSpacing: '-0.01em',
+                color: isActive ? 'rgba(255,255,255,0.90)' : 'rgba(255,255,255,0.44)',
+                transition: 'color 160ms ease',
+              }}>{label}</span>
+              {isActive && count > 0 && (
+                <span style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fontWeight: 700, color, opacity: 0.68, marginLeft: 1 }}>{count}</span>
+              )}
+            </>
+          );
+          return (
+            <React.Fragment key={id}>
+              <Link
+                href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
+                onClick={() => { setActiveId(id); setOpen(false); }}
+                style={commonStyle}
+              >
+                {inner}
+              </Link>
 
-              <span>Publish</span>
-            </button>
-          )}
-        </React.Fragment>
-      );
-    }
-  )}
-</div>
+              {/* Publish immediately after All */}
+              {id === 'all' && (
+                <button
+                  type="button"
+                  onClick={onPublish}
+                  className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    height: 31,
+                    padding: '0 10px 0 7px',
+                    borderRadius: 999,
+                    flexShrink: 0,
+                    background: 'rgba(250,204,21,0.13)',
+                    border: '1px solid rgba(250,204,21,0.28)',
+                    boxShadow:
+                      '0 0 14px rgba(250,204,21,0.12), inset 0 1px 0 rgba(255,255,255,0.07)',
+                    transition:
+                      'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    color: 'rgba(255,255,255,0.90)',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    letterSpacing: '-0.01em',
+                    animation:
+                      'cds-tab-in 0.26s 0.025s cubic-bezier(0.22,1,0.36,1) both',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 17,
+                      height: 17,
+                      borderRadius: 6,
+                      flexShrink: 0,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'rgba(250,204,21,0.26)',
+                      transition: 'background 160ms ease',
+                    }}
+                  >
+                    <Plus
+                      style={{
+                        width: 9.5,
+                        height: 9.5,
+                        color: '#facc15',
+                      }}
+                    />
+                  </div>
+
+                  <span>Publish</span>
+                </button>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
 
       {/* More button — OUTSIDE the scroll div so dropdown isn't clipped by overflow */}
       {!isMobile && (
@@ -4873,7 +4817,7 @@ function ContentDiscoveryStrip({ onPublish }: { onPublish: () => void }) {
                 </div>
               );
             })()}
-            <span style={{ fontSize: 11, fontWeight: 600, color: activeInHidden ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.32)', letterSpacing: '-0.01em' }}>
+            <span className={activeInHidden ? undefined : 'hp-sec'} style={{ fontSize: 11, fontWeight: 600, color: activeInHidden ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.32)', letterSpacing: '-0.01em' }}>
               {activeInHidden ? CONTENT_TYPES.find(t => t.id === activeId)!.label : 'More'}
             </span>
             <ChevronDown style={{
@@ -5595,7 +5539,7 @@ function AdBannerSlider() {
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex items-center gap-2">
           <span
-            className="text-[11px] font-semibold tracking-[0.10em] uppercase"
+            className="hp-sec text-[11px] font-semibold tracking-[0.10em] uppercase"
             style={{ color: 'rgba(255,255,255,0.28)' }}
           >
             {displayHeading}
@@ -6075,7 +6019,7 @@ function NewHomepageContent({
         )}
 
         {/* ── Recents (stories bar) ── */}
-        <div style={{ marginBottom: 16 }}>
+        <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
           <RecentsBar />
         </div>
 
@@ -6340,20 +6284,19 @@ function NewHomepageContent({
         {/* ── Ad banner slider ── */}
         {hpSections.adBanners && <AdBannerSlider />}
 
-        {/* ── Publish heading + content discovery + feed cards + gig slider (grouped) ── */}
-        <div className="flex flex-col" style={{ gap: 14 }}>
-         
-        <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
+        {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
+        <div className="flex flex-col w-full min-w-0" style={{ gap: 14 }}>
+          <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
         </div>
 
         {/* ── Gigs grid ── */}
         {hpSections.gigsGrid && <div>
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-semibold tracking-[0.08em] uppercase" style={{ color: 'rgba(255,255,255,0.28)', letterSpacing: '0.10em' }}>Gigs</span>
+              <span className="hp-sec text-[11px] font-semibold tracking-[0.08em] uppercase" style={{ color: 'rgba(255,255,255,0.28)', letterSpacing: '0.10em' }}>Gigs</span>
               {liveGigs.length > 0 && <span className="rounded-[5px] px-1.5 py-[2px] text-[8.5px] font-semibold tabular-nums" style={{ background: 'rgba(52,211,153,0.08)', color: 'rgba(52,211,153,0.65)', border: '1px solid rgba(52,211,153,0.14)' }}>{liveGigs.length} live</span>}
             </div>
-            <Link href="/gigs" className="inline-flex items-center gap-1 rounded-[7px] border border-white/[0.07] px-2.5 py-1 text-[10.5px] font-medium text-white/30 transition hover:border-white/[0.14] hover:text-white/55">
+            <Link href="/gigs" className="hp-sec inline-flex items-center gap-1 rounded-[7px] border border-white/[0.07] px-2.5 py-1 text-[10.5px] font-medium text-white/30 transition hover:border-white/[0.14] hover:text-white/55">
               See all <ArrowRight className="h-2.5 w-2.5" />
             </Link>
           </div>

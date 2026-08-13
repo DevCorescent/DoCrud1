@@ -544,6 +544,391 @@ function Viewer({ recents, startIdx, uid, onClose, onDelete }: {
   );
 }
 
+// ─── Story-creator stylesheet ─────────────────────────────────────────────────
+// Single source of truth for the creator's responsive rules. Layout is driven by
+// three states only — compact (drawer), short-landscape (split) and wide (split)
+// — so no two media queries fight over the same property.
+
+// ─── Story frames ─────────────────────────────────────────────────────────────
+// A frame is one complete draft. Frames live entirely in the creator; each one
+// is published through the existing single-recent endpoint.
+
+interface Frame {
+  id: string;
+  mediaMode: 'text' | 'image' | 'video';
+  mediaUrl: string | null;
+  localBlob: string | null;
+  pendingFile: File | null;
+  uploadErr: string;
+  caption: string;
+  subtitle: string;
+  bg: typeof BG_PRESETS[0];
+  fontId: string;
+  fontSize: number;
+  textColor: string;
+  textAlign: TextAlign;
+  textPos: TextPosition;
+  imgFilter: ImageFilter;
+  vignette: boolean;
+  grain: boolean;
+  innerBorder: boolean;
+}
+
+function blankFrame(id: string): Frame {
+  return {
+    id, mediaMode:'text', mediaUrl:null, localBlob:null, pendingFile:null, uploadErr:'',
+    caption:'', subtitle:'', bg:BG_PRESETS[0], fontId:'sans', fontSize:24,
+    textColor:'#ffffff', textAlign:'center', textPos:'center', imgFilter:'none',
+    vignette:false, grain:false, innerBorder:false,
+  };
+}
+
+function frameHasContent(f: Frame) {
+  return f.mediaMode === 'text' ? f.caption.trim().length > 0 : !!(f.mediaUrl || f.localBlob);
+}
+
+const CREATOR_CSS = `
+@keyframes rcSheet{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}
+@keyframes rcFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes rcSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ══ Shared primitives ══ */
+.sc-root .rc-scrl::-webkit-scrollbar{display:none}
+.sc-root .rc-scrl{scrollbar-width:none}
+.sc-root .rc-ta::placeholder,.sc-root .rc-inp::placeholder{color:rgba(255,255,255,0.18)}
+.sc-root .rc-ta:focus,.sc-root .rc-inp:focus{outline:none!important;border-color:rgba(139,92,246,0.45)!important;background:rgba(139,92,246,0.06)!important;box-shadow:0 0 0 3px rgba(139,92,246,0.08)!important}
+.sc-root input[type=range]{accent-color:#a78bfa;cursor:pointer;width:100%}
+.sc-root .rc-preset-card{transition:transform 180ms cubic-bezier(0.34,1.56,0.64,1),box-shadow 180ms ease,border-color 180ms ease,opacity 180ms ease}
+.sc-root .rc-preset-card:active{transform:scale(0.96)!important;opacity:0.85}
+@media(hover:hover){.rc-preset-card:hover{transform:translateY(-3px) scale(1.03)!important;box-shadow:0 16px 40px rgba(0,0,0,0.65)!important}}
+.sc-root .rc-opt-btn,.sc-root .rc-cat-chip,.sc-root .rc-toggle{-webkit-tap-highlight-color:transparent;transition:all 150ms ease}
+.sc-root .rc-opt-btn:active{transform:scale(0.97)}
+
+/* ══ Shell ══ */
+.sc-root{
+  position:fixed;inset:0;z-index:99998;
+  height:100svh;height:100dvh;
+  display:flex;align-items:stretch;justify-content:center;
+  background:rgba(4,3,12,0.82);
+  -webkit-backdrop-filter:blur(24px) saturate(150%);backdrop-filter:blur(24px) saturate(150%);
+  overscroll-behavior:contain;
+  -webkit-tap-highlight-color:transparent;
+}
+.sc-root .sc-shell{
+  --pad:clamp(8px,2.4vw,18px);
+  --gap:clamp(6px,1.6vw,12px);
+  position:relative;box-sizing:border-box;
+  display:flex;flex-direction:column;
+  width:100%;min-width:0;min-height:0;max-width:100%;
+  background:#0b0b0e;color:#fff;overflow:hidden;
+  font-family:inherit;
+  padding-top:env(safe-area-inset-top);
+  padding-left:env(safe-area-inset-left);
+  padding-right:env(safe-area-inset-right);
+  animation:rcSheet .3s cubic-bezier(.22,1,.36,1) both;
+}
+.sc-root .sc-main{position:relative;flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+
+/* ══ Header ══ */
+.sc-root .sc-head{flex:0 0 auto;display:flex;align-items:center;gap:10px;min-width:0;
+  padding:clamp(7px,2vw,13px) var(--pad);border-bottom:1px solid rgba(255,255,255,.07)}
+.sc-root .sc-headTitle{flex:1 1 auto;min-width:0;overflow:hidden}
+.sc-root .sc-headT{margin:0;font-size:clamp(13px,3.4vw,15px);font-weight:700;letter-spacing:-.02em;
+  color:rgba(255,255,255,.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-root .sc-headS{margin:1px 0 0;font-size:10.5px;color:rgba(255,255,255,.30);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none}
+.sc-root .sc-headBtn{width:34px;height:34px;flex:0 0 auto;border-radius:10px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);
+  color:rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;transition:all 140ms ease}
+@media(hover:hover){.sc-headBtn:hover{background:rgba(255,255,255,.09);color:rgba(255,255,255,.85)}}
+.sc-root .sc-steps{display:flex;align-items:center;gap:3px;flex:0 0 auto}
+.sc-root .sc-steps span{height:3px;width:6px;border-radius:99px;background:rgba(255,255,255,.14);
+  transition:all 280ms cubic-bezier(.22,1,.36,1)}
+.sc-root .sc-steps span[data-active="true"]{width:20px;background:rgba(255,255,255,.8)}
+
+/* ══ Stage column ══ */
+.sc-root .sc-stagecol{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column;
+  gap:var(--gap);padding:var(--pad);box-sizing:border-box}
+.sc-root .sc-stage{flex:1 1 auto;min-height:0;min-width:0;display:flex;align-items:center;justify-content:center;
+  container-type:size}
+
+/* 9:16, always — never distorted, never larger than the space it is given */
+.sc-root .sc-canvas{
+  position:relative;flex:0 0 auto;overflow:hidden;isolation:isolate;
+  width:min(100cqw, calc(100cqh * 9 / 16), 460px);
+  aspect-ratio:9/16;
+  container-type:size;
+  border-radius:clamp(12px,3cqw,24px);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 18px 50px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.08);
+}
+@supports not (width:1cqw){
+  .sc-root .sc-canvas{width:auto;height:100%;max-width:100%;border-radius:18px}
+}
+
+.sc-root .sc-prog{position:absolute;top:2.6cqw;left:2.6cqw;right:2.6cqw;z-index:20;display:flex;gap:.8cqw;pointer-events:none}
+.sc-root .sc-prog span{flex:1;height:max(2px,.55cqw);border-radius:99px}
+.sc-root .sc-cvTop{position:absolute;top:6.6cqw;left:2.6cqw;right:2.6cqw;z-index:20;display:flex;align-items:center;gap:1.4cqw}
+.sc-root .sc-cvTools{display:flex;align-items:center;gap:1.4cqw;margin-left:auto;min-width:0}
+.sc-root .sc-tool{
+  width:clamp(20px,11cqw,44px);height:clamp(20px,11cqw,44px);flex:0 0 auto;box-sizing:border-box;
+  padding:clamp(4px,2.6cqw,11px);border-radius:50%;cursor:pointer;color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(255,255,255,.10);background:rgba(0,0,0,.55);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  transition:background 160ms ease,transform 160ms ease,border-color 160ms ease;
+}
+.sc-root .sc-tool[data-active="true"]{background:rgba(167,139,250,.38);border-color:rgba(167,139,250,.55)}
+.sc-root .sc-tool:active{transform:scale(.93)}
+@media(hover:hover){.sc-tool:hover{background:rgba(0,0,0,.78)}}
+.sc-root .sc-toolTxt{font-size:clamp(11px,5cqw,20px);font-weight:700;line-height:1}
+
+.sc-root .sc-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.sc-root .sc-scrim{position:absolute;inset:0;z-index:1;pointer-events:none}
+.sc-root .sc-grain{position:absolute;inset:0;z-index:1;opacity:.16;mix-blend-mode:overlay;pointer-events:none;
+  background-size:180px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E")}
+.sc-root .sc-cap{position:absolute;left:5cqw;right:5cqw;z-index:3;pointer-events:none}
+.sc-root .sc-inner{position:absolute;inset:2.4cqw;border-radius:3cqw;border:1px solid rgba(255,255,255,.18);z-index:4;pointer-events:none}
+
+.sc-root .sc-empty{position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:.35em;padding:0;background:none;border:none;cursor:pointer;text-align:center;
+  color:rgba(255,255,255,.62)}
+.sc-root .sc-emptyPlus{font-size:clamp(22px,9cqw,40px);line-height:1}
+.sc-root .sc-emptyT{font-size:clamp(11px,3.6cqw,16px);font-weight:600}
+.sc-root .sc-emptyS{font-size:clamp(9px,2.8cqw,13px);color:rgba(255,255,255,.30)}
+
+.sc-root .sc-uploading{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;background:rgba(0,0,0,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  font-size:11px;font-weight:600;letter-spacing:.04em;color:rgba(255,255,255,.62)}
+.sc-root .sc-spin{display:inline-block;width:26px;height:26px;border-radius:50%;
+  border:2.5px solid rgba(255,255,255,.15);border-top-color:rgba(255,255,255,.8);
+  animation:rcSpin .75s linear infinite}
+.sc-root .sc-spinSm{width:13px;height:13px;border-width:2px;border-color:rgba(0,0,0,.18);border-top-color:#000}
+
+/* ══ Colour / filter strip ══ */
+.sc-root .sc-strip{flex:0 0 auto;display:flex;align-items:center;gap:clamp(6px,1.8vw,10px);
+  overflow-x:auto;overflow-y:hidden;padding:1px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.sc-root .sc-strip::-webkit-scrollbar{display:none}
+.sc-root .sc-dot{flex:0 0 auto;width:clamp(24px,7vw,34px);height:clamp(24px,7vw,34px);border-radius:50%;padding:0;
+  cursor:pointer;border:2px solid rgba(255,255,255,.22);transition:transform 160ms ease,border-color 160ms ease}
+.sc-root .sc-dot[data-active="true"]{border-color:#fff;transform:scale(1.08)}
+.sc-root .sc-dotSep{flex:0 0 auto;width:1px;height:20px;background:rgba(255,255,255,.12)}
+.sc-root .sc-dotWrap{position:relative;display:inline-flex;flex:0 0 auto}
+.sc-root .sc-dotPick{border-color:rgba(255,255,255,.55);box-shadow:0 0 0 2px rgba(255,255,255,.08)}
+.sc-root .sc-colorInput{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:none;padding:0;cursor:pointer}
+.sc-root .sc-chip{flex:0 0 auto;padding:7px 14px;border-radius:99px;cursor:pointer;font-size:12px;font-weight:600;
+  border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:rgba(255,255,255,.45);
+  transition:all 150ms ease;white-space:nowrap}
+.sc-root .sc-chip[data-active="true"]{border-color:rgba(255,255,255,.32);background:rgba(255,255,255,.10);color:rgba(255,255,255,.92)}
+
+/* ══ Frame rail ══ */
+.sc-root .sc-rail{flex:0 0 auto;display:flex;align-items:center;gap:clamp(5px,1.6vw,10px);
+  overflow-x:auto;overflow-y:hidden;padding:1px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.sc-root .sc-rail::-webkit-scrollbar{display:none}
+.sc-root .sc-frame{position:relative;flex:0 0 auto;width:clamp(34px,9.5vw,50px);aspect-ratio:9/16;
+  border-radius:9px;overflow:hidden;cursor:pointer;padding:3px;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;
+  border:1.5px solid rgba(255,255,255,.12);transition:border-color 150ms ease,transform 150ms ease}
+.sc-root .sc-frame[data-active="true"]{border-color:#fff;transform:translateY(-2px)}
+.sc-root .sc-frameTxt{font-size:6.5px;line-height:1.15;text-align:center;overflow:hidden;max-height:76%}
+.sc-root .sc-frameNo{position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+  width:13px;height:13px;border-radius:50%;background:rgba(0,0,0,.62);color:rgba(255,255,255,.8);
+  font-size:7.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sc-root .sc-frameAdd{background:rgba(255,255,255,.03);border-style:dashed;color:rgba(255,255,255,.45);
+  font-size:17px;font-weight:300;line-height:1}
+.sc-root .sc-frameWrap{position:relative;flex:0 0 auto;display:inline-flex}
+.sc-root .sc-frameMedia{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.sc-root .sc-frameBusy{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.55)}
+.sc-root .sc-spinTiny{width:14px;height:14px;border-width:2px}
+.sc-root .sc-frameErr{position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;
+  background:#f87171;box-shadow:0 0 0 2px rgba(0,0,0,.5)}
+.sc-root .sc-frameDel{position:absolute;top:2px;right:2px;z-index:2;width:16px;height:16px;padding:0;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:50%;cursor:pointer;line-height:1;font-size:12px;
+  border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.72);color:rgba(255,255,255,.75);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+@media(hover:hover){.sc-root .sc-frameDel:hover{background:#f87171;color:#fff;border-color:#f87171}}
+
+.sc-root .sc-retry{position:absolute;inset:0;z-index:30;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:6px;padding:8cqw;cursor:pointer;text-align:center;
+  border:none;background:rgba(0,0,0,.62);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  color:rgba(255,255,255,.9)}
+.sc-root .sc-retryIcon{width:clamp(20px,9cqw,34px);height:clamp(20px,9cqw,34px);color:#f87171}
+.sc-root .sc-retryT{font-size:clamp(10px,3.2cqw,14px);font-weight:700;color:#fca5a5;line-height:1.3}
+.sc-root .sc-retryS{font-size:clamp(9px,2.6cqw,12px);color:rgba(255,255,255,.55)}
+.sc-root .sc-stage[data-drag="true"] .sc-canvas{border-color:rgba(96,165,250,.6);
+  box-shadow:0 0 0 3px rgba(96,165,250,.18),0 18px 50px rgba(0,0,0,.75)}
+.sc-root .sc-noteErr{border-color:rgba(248,113,113,.35);color:#fca5a5}
+
+/* ══ Bottom nav ══ */
+.sc-root .sc-nav{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:clamp(2px,1.2vw,10px)}
+.sc-root .sc-navBtn{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;padding:4px 2px;border:none;border-radius:10px;background:none;cursor:pointer;
+  color:rgba(255,255,255,.55);transition:color 150ms ease,background 150ms ease}
+@media(hover:hover){.sc-navBtn:hover{color:#fff;background:rgba(255,255,255,.06)}}
+.sc-root .sc-navBtn:active{transform:scale(.96)}
+.sc-root .sc-navIcon{display:block;width:clamp(16px,5vw,22px);height:clamp(16px,5vw,22px)}
+.sc-root .sc-navLabel{max-width:100%;font-size:clamp(8px,2.4vw,11px);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-root .sc-shutter{flex:0 0 auto;width:clamp(42px,13vw,58px);height:clamp(42px,13vw,58px);border-radius:50%;
+  padding:0;cursor:pointer;background:transparent;border:3px solid rgba(255,255,255,.9);
+  display:flex;align-items:center;justify-content:center;transition:transform 150ms ease}
+.sc-root .sc-shutter span{width:78%;height:78%;border-radius:50%;background:rgba(255,255,255,.07)}
+.sc-root .sc-shutter:active{transform:scale(.93)}
+
+.sc-root .sc-err{flex:0 0 auto;margin:0;font-size:11px;line-height:1.4;color:#f87171;text-align:center}
+
+/* ══ Tools / settings column — drawer by default ══ */
+.sc-root .sc-scrimTap{position:absolute;inset:0;z-index:30;background:rgba(0,0,0,.5);opacity:0;
+  pointer-events:none;transition:opacity 250ms ease}
+.sc-root .sc-scrimTap[data-open="true"]{opacity:1;pointer-events:auto}
+.sc-root .sc-side{
+  position:absolute;left:0;right:0;bottom:0;z-index:40;
+  display:flex;flex-direction:column;min-height:0;box-sizing:border-box;
+  max-height:min(64svh,540px);
+  background:#101014;border-top:1px solid rgba(255,255,255,.10);
+  border-radius:20px 20px 0 0;box-shadow:0 -20px 60px rgba(0,0,0,.6);
+  transform:translateY(102%);pointer-events:none;
+  transition:transform 300ms cubic-bezier(.22,1,.36,1);
+}
+.sc-root .sc-side[data-open="true"]{transform:none;pointer-events:auto}
+.sc-root .sc-side[data-full="true"]{top:0;max-height:none;border-radius:0}
+.sc-root .sc-grab{flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+  padding:9px 0 7px;border:none;background:none;cursor:pointer;width:100%}
+.sc-root .sc-grab span{width:38px;height:4px;border-radius:99px;background:rgba(255,255,255,.18)}
+.sc-root .sc-tabs{flex:0 0 auto;display:flex;gap:2px;padding:0 6px;
+  border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.015)}
+.sc-root .sc-tab{flex:1 1 0;min-width:0;padding:11px 4px 10px;cursor:pointer;border:none;background:none;
+  font-size:clamp(11px,3vw,12.5px);font-weight:500;color:rgba(255,255,255,.38);
+  border-bottom:2px solid transparent;transition:color 140ms ease,border-color 140ms ease;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-root .sc-tab[data-active="true"]{color:rgba(255,255,255,.94);font-weight:700;border-bottom-color:rgba(255,255,255,.7)}
+.sc-root .sc-panelBody{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+  padding:clamp(12px,3vw,18px) clamp(12px,3.4vw,20px) max(20px,env(safe-area-inset-bottom));
+  animation:rcFadeIn .16s ease both}
+.sc-root .sc-panelBody::-webkit-scrollbar{display:none}
+.sc-root .sc-lbl{margin:0 0 9px;font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.12em;color:rgba(255,255,255,.30)}
+.sc-root .sc-modeRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.sc-root .sc-modeBtn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  min-width:0;padding:9px 4px;border-radius:11px;cursor:pointer;transition:all 150ms ease;
+  font-size:9px;font-weight:700;letter-spacing:.04em}
+.sc-root .sc-tplGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:clamp(7px,2vw,10px)}
+.sc-root .sc-fontGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:6px}
+
+/* ══ Footer ══ */
+.sc-root .sc-foot{flex:0 0 auto;z-index:50;display:flex;align-items:center;gap:8px;
+  padding:clamp(8px,2vw,12px) var(--pad);
+  padding-bottom:max(clamp(8px,2vw,12px),env(safe-area-inset-bottom));
+  border-top:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.20)}
+.sc-root .sc-footBack{flex:0 0 auto;width:44px;height:44px;border-radius:12px;cursor:pointer;
+  border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:rgba(255,255,255,.45);
+  display:flex;align-items:center;justify-content:center;transition:all 140ms ease}
+@media(hover:hover){.sc-footBack:hover{background:rgba(255,255,255,.09);color:rgba(255,255,255,.85)}}
+.sc-root .sc-cta{flex:1 1 auto;min-width:0;height:44px;border-radius:12px;border:none;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  font-size:clamp(12px,3.4vw,14px);font-weight:700;letter-spacing:-.01em;
+  background:rgba(255,255,255,.05);color:rgba(255,255,255,.22);cursor:not-allowed;
+  transition:all 180ms ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-root .sc-cta[data-on="true"]{cursor:pointer;color:#060608;
+  background:linear-gradient(135deg,rgba(255,255,255,.96),rgba(240,240,255,.88));
+  box-shadow:0 4px 24px rgba(255,255,255,.14),inset 0 1px 0 rgba(255,255,255,.15)}
+
+.sc-root .sc-note{position:absolute;left:50%;bottom:calc(var(--pad) + 76px);transform:translateX(-50%);z-index:60;
+  max-width:min(92%,420px);padding:10px 14px;border-radius:12px;text-align:center;
+  background:rgba(20,20,24,.95);border:1px solid rgba(255,255,255,.12);
+  color:rgba(255,255,255,.78);font-size:12px;line-height:1.4;
+  box-shadow:0 12px 40px rgba(0,0,0,.6);animation:rcFadeIn .2s ease both}
+
+/* ══ Touch targets ══ */
+@media(pointer:coarse){
+  .sc-root .sc-tap{min-width:44px;min-height:44px}
+  .sc-root .sc-navBtn{min-height:48px}
+}
+
+/* ══ Very small phones — trim spacing before the canvas ══ */
+@media(max-width:360px){
+  .sc-root .sc-shell{--pad:8px;--gap:5px}
+  .sc-root .sc-headBtn{width:32px;height:32px}
+  .sc-root .sc-frame{width:32px}
+  .sc-root .sc-strip{gap:6px}
+}
+@media(max-height:640px) and (orientation:portrait){
+  .sc-root .sc-head{padding-top:6px;padding-bottom:6px}
+  .sc-root .sc-frame{width:clamp(30px,8vw,40px)}
+}
+
+/* ══ Tablet portrait — centred controls, wider drawer ══ */
+@media(min-width:700px) and (max-width:899px){
+  .sc-root .sc-shell{--pad:clamp(14px,2.4vw,22px)}
+  .sc-root .sc-headS{display:block}
+  .sc-root .sc-strip,.sc-root .sc-rail,.sc-root .sc-nav{width:100%;max-width:620px;margin-left:auto;margin-right:auto;justify-content:center}
+  .sc-root .sc-nav{justify-content:space-between}
+  .sc-root .sc-side{left:50%;right:auto;width:min(700px,100%);border-radius:24px 24px 0 0;
+    max-height:min(58svh,560px);transform:translate(-50%,102%)}
+  .sc-root .sc-side[data-open="true"]{transform:translate(-50%,0)}
+}
+
+/* ══ Short landscape (phones on their side) — split workspace ══ */
+@media(orientation:landscape) and (max-height:560px){
+  .sc-root .sc-shell{--pad:clamp(6px,1.4vw,12px);--gap:5px}
+  .sc-root .sc-head{padding-top:5px;padding-bottom:5px}
+  .sc-root .sc-headS{display:none}
+  .sc-root .sc-main{flex-direction:row}
+  .sc-root .sc-stagecol{flex:1 1 auto}
+  .sc-root .sc-scrimTap{display:none}
+  .sc-root .sc-side{position:static;flex:0 0 auto;width:min(52%,380px);max-height:none;
+    transform:none;pointer-events:auto;border-radius:0;border-top:none;
+    border-left:1px solid rgba(255,255,255,.10);box-shadow:none;background:rgba(255,255,255,.015)}
+  .sc-root .sc-side[data-full="true"]{width:min(64%,460px)}
+  .sc-root .sc-grab{display:none}
+  .sc-root .sc-frame{width:clamp(24px,4.2vw,32px)}
+  .sc-root .sc-navLabel{display:none}
+  .sc-root .sc-shutter{width:38px;height:38px;border-width:2.5px}
+  .sc-root .sc-foot{padding-top:6px;padding-bottom:max(6px,env(safe-area-inset-bottom))}
+  .sc-root .sc-cta,.sc-root .sc-footBack{height:40px}
+  .sc-root .sc-footBack{width:40px}
+}
+
+/* ══ Split layouts — controls stand beside the canvas so height goes to 9:16 ══ */
+@media(min-width:900px),(orientation:landscape) and (max-height:560px){
+  .sc-root .sc-stagecol{flex-direction:row;align-items:stretch}
+  .sc-root .sc-strip,.sc-root .sc-rail{flex-direction:column;flex:0 0 auto;width:auto;
+    overflow-x:hidden;overflow-y:auto;justify-content:flex-start}
+  .sc-root .sc-nav{flex-direction:column;justify-content:center;flex:0 0 auto;width:auto;
+    gap:clamp(4px,0.8vh,10px)}
+  .sc-root .sc-navBtn{flex:0 0 auto;width:100%}
+  .sc-root .sc-frame{width:clamp(30px,3.2vw,40px)}
+  .sc-root .sc-err{writing-mode:vertical-rl}
+}
+/* A capture button only earns its place on devices with a camera */
+@media(hover:hover) and (pointer:fine){
+  .sc-root .sc-shutter{display:none}
+}
+
+/* ══ Laptop / desktop / ultra-wide — centred workspace ══ */
+@media(min-width:900px){
+  .sc-root{padding:clamp(16px,3vh,40px);align-items:center;justify-content:center}
+  .sc-root .sc-shell{--pad:clamp(14px,1.6vw,24px);
+    width:min(1180px,100%);height:min(100%,940px);
+    border-radius:24px;border:1px solid rgba(255,255,255,.09);
+    box-shadow:0 40px 120px rgba(0,0,0,.80)}
+  .sc-root .sc-headS{display:block}
+  .sc-root .sc-main{flex-direction:row}
+  .sc-root .sc-stagecol{flex:1 1 auto}
+  .sc-root .sc-scrimTap{display:none}
+  .sc-root .sc-side{position:static;flex:0 0 auto;width:clamp(300px,32%,400px);max-height:none;
+    transform:none;pointer-events:auto;border-radius:0;border-top:none;
+    border-left:1px solid rgba(255,255,255,.09);box-shadow:none;background:rgba(255,255,255,.015)}
+  .sc-root .sc-side[data-full="true"]{width:clamp(340px,36%,460px)}
+  .sc-root .sc-grab{display:none}
+  .sc-root .sc-note{bottom:calc(var(--pad) + 90px)}
+}
+`;
+
 // ─── Creator ──────────────────────────────────────────────────────────────────
 
 function Creator({ onClose, onCreated }: { onClose(): void; onCreated(r: Recent): void }) {
@@ -571,30 +956,100 @@ function Creator({ onClose, onCreated }: { onClose(): void; onCreated(r: Recent)
   const [ctaLabel,    setCtaLabel]   = useState('');
   const [ctaUrl,      setCtaUrl]     = useState('');
   const [expiry,      setExpiry]     = useState(24);
-  const [uploading,   setUploading]  = useState(false);
   const [uploadErr,   setUploadErr]  = useState('');
+  const [publishErr,  setPublishErr] = useState('');
   const [submitting,  setSubmitting] = useState(false);
   const [dragOver,    setDragOver]   = useState(false);
   const [panel,       setPanel]      = useState<'presets'|'style'|'text'|'effects'>('presets');
+  const [pendingFile, setPendingFile] = useState<File|null>(null);   // kept for retry
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function uploadFile(file: File) {
-    setUploadErr('');
+  // ── Frames ────────────────────────────────────────────────────────────────
+  // Every frame is a complete draft. The live state above is always the active
+  // frame; `frames` stores the rest. Each frame publishes through the existing
+  // single-recent API, so the backend contract is unchanged.
+  const frameSeq  = useRef(1);
+  const [frames,    setFrames]    = useState<Frame[]>(() => [blankFrame('f0')]);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [uploadingIds, setUploadingIds] = useState<string[]>([]);
+
+  const activeId    = frames[activeIdx]?.id ?? 'f0';
+  const activeIdRef = useRef(activeId);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  const snapshot = useCallback((): Frame => ({
+    id: activeId, mediaMode, mediaUrl, localBlob, pendingFile, uploadErr,
+    caption, subtitle, bg, fontId, fontSize, textColor, textAlign, textPos,
+    imgFilter, vignette, grain, innerBorder,
+  }), [activeId, mediaMode, mediaUrl, localBlob, pendingFile, uploadErr, caption, subtitle,
+       bg, fontId, fontSize, textColor, textAlign, textPos, imgFilter, vignette, grain, innerBorder]);
+
+  function restore(f: Frame) {
+    setMediaMode(f.mediaMode); setMediaUrl(f.mediaUrl); setLocalBlob(f.localBlob);
+    setPendingFile(f.pendingFile); setUploadErr(f.uploadErr);
+    setCaption(f.caption); setSubtitle(f.subtitle); setBg(f.bg);
+    setFontId(f.fontId); setFontSize(f.fontSize); setTextColor(f.textColor);
+    setTextAlign(f.textAlign); setTextPos(f.textPos); setImgFilter(f.imgFilter);
+    setVignette(f.vignette); setGrain(f.grain); setInnerBorder(f.innerBorder);
+  }
+
+  /** All frames with the active one refreshed from live state. */
+  const allFrames = frames.map((f, i) => (i === activeIdx ? snapshot() : f));
+
+  function gotoFrame(i: number) {
+    if (i === activeIdx || !frames[i]) return;
+    const fs = allFrames;
+    setFrames(fs); restore(fs[i]); setActiveIdx(i);
+  }
+  function addFrame() {
+    const nf = blankFrame(`f${frameSeq.current++}`);
+    setFrames([...allFrames, nf]); restore(nf); setActiveIdx(allFrames.length);
+    setTimeout(() => fileRef.current?.click(), 40);
+  }
+  function removeFrame(i: number) {
+    if (frames.length <= 1) return;
+    const fs = allFrames.filter((_, j) => j !== i);
+    const next = Math.min(activeIdx > i ? activeIdx - 1 : activeIdx, fs.length - 1);
+    setFrames(fs); restore(fs[next]); setActiveIdx(next);
+  }
+
+  /** Media fields land on the active frame, or on its stored copy if the user moved on. */
+  function patchFrame(id: string, p: Partial<Frame>) {
+    if (id === activeIdRef.current) {
+      if (p.mediaMode   !== undefined) setMediaMode(p.mediaMode);
+      if (p.mediaUrl    !== undefined) setMediaUrl(p.mediaUrl);
+      if (p.localBlob   !== undefined) setLocalBlob(p.localBlob);
+      if (p.pendingFile !== undefined) setPendingFile(p.pendingFile);
+      if (p.uploadErr   !== undefined) setUploadErr(p.uploadErr);
+    } else {
+      setFrames(fs => fs.map(f => (f.id === id ? { ...f, ...p } : f)));
+    }
+  }
+
+  // ── Upload — one implementation for every entry point ──────────────────────
+  async function uploadFile(file: File, targetId: string = activeIdRef.current) {
+    if (uploadingIds.includes(targetId)) return;              // no duplicate uploads
     const isVid = file.type.startsWith('video/');
-    setMediaMode(isVid ? 'video' : 'image');
-    const blob = URL.createObjectURL(file);
-    setLocalBlob(blob); setMediaUrl(null); setUploading(true);
+    const blob  = URL.createObjectURL(file);
+    patchFrame(targetId, {
+      mediaMode: isVid ? 'video' : 'image',
+      localBlob: blob, mediaUrl: null, pendingFile: file, uploadErr: '',
+    });
+    setUploadingIds(ids => [...ids, targetId]);
     try {
       const fd = new FormData(); fd.append('file', file);
       const res = await fetch('/api/recents/upload', { method:'POST', body:fd });
-      if (!res.ok) throw new Error('Upload failed');
+      if (!res.ok) throw new Error(res.status === 401 ? 'Sign in to upload media' : 'Upload failed');
       const d = await res.json() as { url?: string; type?: string; error?: string };
-      if (d.url) { setMediaUrl(d.url); setLocalBlob(null); URL.revokeObjectURL(blob); }
-      else throw new Error(d.error ?? 'Upload failed');
+      if (!d.url) throw new Error(d.error ?? 'Upload failed');
+      patchFrame(targetId, { mediaUrl: d.url, localBlob: null, pendingFile: null, uploadErr: '' });
+      URL.revokeObjectURL(blob);
     } catch (e) {
-      setUploadErr(e instanceof Error ? e.message : 'Upload failed');
-      setLocalBlob(null); setMediaUrl(null); URL.revokeObjectURL(blob);
-    } finally { setUploading(false); }
+      // Keep the local preview and the file so the user can retry without re-picking.
+      patchFrame(targetId, { uploadErr: e instanceof Error ? e.message : 'Upload failed' });
+    } finally {
+      setUploadingIds(ids => ids.filter(x => x !== targetId));
+    }
   }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -604,6 +1059,8 @@ function Creator({ onClose, onCreated }: { onClose(): void; onCreated(r: Recent)
     e.preventDefault(); setDragOver(false);
     const f = e.dataTransfer.files[0]; if (f) uploadFile(f);
   }
+  function pickMedia() { if (!uploading) fileRef.current?.click(); }
+  function retryUpload() { if (pendingFile) uploadFile(pendingFile, activeId); }
   function applyPreset(p: typeof PRESETS[0]) {
     setBg({ id:p.id, label:p.label, value:p.bg, text:p.text });
     setTextColor(p.text); setFontId(p.font); setFontSize(p.size);
@@ -612,26 +1069,40 @@ function Creator({ onClose, onCreated }: { onClose(): void; onCreated(r: Recent)
     setMediaMode('text'); setPanel('text');
   }
   async function submit() {
-    setSubmitting(true);
+    // Publish oldest-last so frame 1 ends up newest — the feed sorts newest first,
+    // which lands the sequence back in the order the user arranged it.
+    const queue = allFrames.filter(frameHasContent).reverse();
+    if (!queue.length) return;
+    setSubmitting(true); setPublishErr('');
+    const created: Recent[] = [];
     try {
-      const res = await fetch('/api/recents', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          type: mediaMode, mediaUrl: mediaUrl ?? null,
-          caption: caption||null,
-          bgGradient: mediaMode==='text' ? bg.value : undefined,
-          textColor, fontStyle:fontId, fontSize,
-          ctaLabel: ctaLabel||undefined, ctaUrl: ctaUrl||undefined,
-          category, visibility, expiryHours: expiry,
-        }),
-      });
-      const d = await res.json() as { recent?: Recent };
-      if (d.recent) onCreated(d.recent);
+      for (const f of queue) {
+        const res = await fetch('/api/recents', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            type: f.mediaMode, mediaUrl: f.mediaUrl ?? null,
+            caption: f.caption||null,
+            bgGradient: f.mediaMode==='text' ? f.bg.value : undefined,
+            textColor: f.textColor, fontStyle:f.fontId, fontSize:f.fontSize,
+            ctaLabel: ctaLabel||undefined, ctaUrl: ctaUrl||undefined,
+            category, visibility, expiryHours: expiry,
+          }),
+        });
+        if (!res.ok) throw new Error(res.status === 401 ? 'Sign in to publish' : 'Publish failed');
+        const d = await res.json() as { recent?: Recent };
+        if (d.recent) created.push(d.recent);
+      }
+    } catch (e) {
+      setPublishErr(e instanceof Error ? e.message : 'Publish failed');
     } finally { setSubmitting(false); }
+    created.forEach(onCreated);   // parent closes the creator once these land
   }
 
-  const canPublish  = mediaMode==='text' ? caption.trim().length>0 : !!(mediaUrl||localBlob);
-  const previewSrc  = localBlob ?? mediaUrl;
+  const uploading    = uploadingIds.includes(activeId);
+  const anyUploading = uploadingIds.length > 0;
+  const canPublish   = allFrames.some(frameHasContent);
+  const publishCount = allFrames.filter(frameHasContent).length;
+  const previewSrc   = localBlob ?? mediaUrl;
   const font        = FONT_STYLES.find(f=>f.id===fontId) ?? FONT_STYLES[0];
   const filterCss   = IMAGE_FILTERS.find(f=>f.id===imgFilter)?.css ?? '';
   const textPosStyle: React.CSSProperties =
@@ -648,670 +1119,780 @@ function Creator({ onClose, onCreated }: { onClose(): void; onCreated(r: Recent)
     boxSizing:'border-box', outline:'none',
   };
 
-  const LivePreview = () => (
-    <div style={{position:'relative',width:'100%',aspectRatio:'9/16',borderRadius:16,overflow:'hidden',
-      background:mediaMode==='text'?bg.value:'#060608',
-      border:'1px solid rgba(255,255,255,0.12)',
-      boxShadow:'0 16px 48px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 1px 0 rgba(255,255,255,0.10) inset'}}>
-      {mediaMode==='image'&&previewSrc&&
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={previewSrc} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',filter:filterCss||undefined}}/>}
-      {mediaMode==='video'&&previewSrc&&
-        <video src={previewSrc} autoPlay muted loop playsInline style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',filter:filterCss||undefined}}/>}
-      {(vignette||(mediaMode!=='text'&&previewSrc))&&
-        <div style={{position:'absolute',inset:0,background:vignette?'radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,0.75) 100%)':'linear-gradient(to top,rgba(0,0,0,0.70) 0%,transparent 55%)'}}/>}
-      {grain&&<div style={{position:'absolute',inset:0,opacity:0.16,
-        backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E\")",
-        backgroundSize:'180px',mixBlendMode:'overlay'}}/>}
-      {(caption||subtitle)&&(
-        <div style={{position:'absolute',left:12,right:12,textAlign:textAlign,zIndex:2,...textPosStyle}}>
-          {caption&&<p style={{margin:0,fontSize:Math.round(fontSize*0.44),color:textColor,lineHeight:1.3,wordBreak:'break-word',
-            textShadow:mediaMode!=='text'&&previewSrc?'0 1px 10px rgba(0,0,0,0.60)':'none',...font.style}}>{caption}</p>}
-          {subtitle&&<p style={{margin:'3px 0 0',fontSize:Math.round(fontSize*0.28),color:textColor,opacity:0.60,lineHeight:1.4,wordBreak:'break-word',fontFamily:'system-ui',fontWeight:400}}>{subtitle}</p>}
+  // ── Story-editor UI state (view-only; no backend impact) ───────────────────
+  const camRef  = useRef<HTMLInputElement>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [note,      setNote]      = useState<string|null>(null);
+
+  const openTool = useCallback((p: 'presets'|'style'|'text'|'effects') => {
+    setPanel(p); setPanelOpen(true);
+  }, []);
+
+  function showNote(msg: string) {
+    setNote(msg);
+    setTimeout(() => setNote(n => (n === msg ? null : n)), 2600);
+  }
+
+  // Tool buttons rendered over the canvas (mirrors the story-composer chrome)
+  const TOOL_BTNS = [
+    { id:'text'    as const, label:'Text',     node:<span className="sc-toolTxt">Aa</span> },
+    { id:'presets' as const, label:'Stickers', node:(
+      <svg viewBox="0 0 18 18" fill="none" width="100%" height="100%">
+        <rect x="2.2" y="2.2" width="13.6" height="13.6" rx="3" stroke="currentColor" strokeWidth="1.3"/>
+        <circle cx="6.2" cy="6.2" r="1.3" fill="currentColor"/>
+        <path d="M3 13l3.5-3.5 2.6 2.6 2-2 3.9 3.9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>) },
+    { id:'style'   as const, label:'Draw',     node:(
+      <svg viewBox="0 0 18 18" fill="none" width="100%" height="100%">
+        <path d="M3 13.8c2.2-3.1 4.4-1.2 5.6-4.7C9.5 6.3 11.4 3 14.5 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+        <path d="M3 13.8c.7.9 1.8 1.2 2.6.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>) },
+    { id:'effects' as const, label:'Effects',  node:<span className="sc-toolTxt">✦</span> },
+  ];
+
+  // ── Canvas (9:16, always) ──────────────────────────────────────────────────
+  function renderCanvas() {
+    return (
+      <div className="sc-canvas" style={{ background: mediaMode === 'text' ? bg.value : '#060608' }}>
+
+        {/* progress segments */}
+        <div className="sc-prog">
+          {[0,1,2,3,4,5,6,7].map(i => (
+            <span key={i} style={{ background: i === 0 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.26)' }} />
+          ))}
         </div>
-      )}
-      {innerBorder&&<div style={{position:'absolute',inset:8,borderRadius:12,border:'1px solid rgba(255,255,255,0.18)',pointerEvents:'none',zIndex:3}}/>}
-      {uploading&&(
-        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.55)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10,zIndex:10,backdropFilter:'blur(8px)'}}>
-          <div style={{width:28,height:28,borderRadius:'50%',border:'2.5px solid rgba(255,255,255,0.15)',borderTopColor:'rgba(255,255,255,0.80)',animation:'rcSpin 0.75s linear infinite'}}/>
-          <span style={{fontSize:11,color:'rgba(255,255,255,0.60)',fontWeight:600,letterSpacing:'0.04em'}}>Uploading…</span>
-        </div>
-      )}
-    </div>
-  );
 
-  return createPortal(
-    <div style={{position:'fixed',inset:0,zIndex:99998,
-        background:'rgba(4,3,12,0.72)',
-        backdropFilter:'blur(28px) saturate(160%)',
-        WebkitBackdropFilter:'blur(28px) saturate(160%)',
-        display:'flex',alignItems:'flex-end',justifyContent:'center'}}
-      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <style>{`
-        @keyframes rcSheet{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes rcFadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
-        @keyframes rcSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-        @keyframes rcGlow{0%,100%{opacity:0.45}50%{opacity:1}}
-        @keyframes rcPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
-        .rc-ta::placeholder,.rc-inp::placeholder{color:rgba(255,255,255,0.18)}
-        .rc-ta:focus,.rc-inp:focus{outline:none!important;border-color:rgba(139,92,246,0.45)!important;background:rgba(139,92,246,0.06)!important;box-shadow:0 0 0 3px rgba(139,92,246,0.08)!important}
-        .rc-scrl::-webkit-scrollbar{display:none}
-        .rc-scrl{scrollbar-width:none}
-        input[type=range]{accent-color:#a78bfa;cursor:pointer;width:100%}
-        .rc-preset-card{transition:transform 180ms cubic-bezier(0.34,1.56,0.64,1),box-shadow 180ms ease,border-color 180ms ease,opacity 180ms ease}
-        .rc-preset-card:active{transform:scale(0.96)!important;opacity:0.85}
-        @media(hover:hover){.rc-preset-card:hover{transform:translateY(-3px) scale(1.03)!important;box-shadow:0 16px 40px rgba(0,0,0,0.65)!important}}
-        .rc-mode-btn{transition:all 150ms ease;-webkit-tap-highlight-color:transparent}
-        .rc-tab-btn{transition:color 140ms ease,border-color 140ms ease;-webkit-tap-highlight-color:transparent}
-        .rc-opt-btn{transition:all 150ms ease;-webkit-tap-highlight-color:transparent}
-        .rc-opt-btn:active{transform:scale(0.97)!important}
-        .rc-cat-chip{-webkit-tap-highlight-color:transparent;transition:all 150ms ease}
-        .rc-toggle{-webkit-tap-highlight-color:transparent}
-        /* ── Desktop: centred card ── */
-        @media(min-width:640px){
-          .rc-root{align-items:center!important;padding:16px!important}
-          .rc-modal{border-radius:26px!important;max-height:91svh!important;max-width:700px!important;width:100%!important;align-self:center!important}
-          .rc-body{flex-direction:row!important}
-          .rc-preview-col{width:204px!important;flex-shrink:0!important;padding:18px 14px!important;
-            border-right:1px solid rgba(255,255,255,0.07)!important;border-bottom:none!important}
-          .rc-preview-wrap{aspect-ratio:9/16!important;width:100%!important;height:auto!important}
-          .rc-controls{flex:1!important;min-width:0!important;overflow:hidden!important;display:flex!important;flex-direction:column!important}
-          .rc-tpl-grid{grid-template-columns:repeat(3,1fr)!important}
-        }
-        /* ── Mobile: bottom sheet, preview always visible ── */
-        @media(max-width:639px){
-          .rc-root{align-items:flex-end!important;padding:0!important}
-          .rc-modal{width:100%!important;border-radius:28px 28px 0 0!important;max-height:93svh!important}
-          .rc-body{flex-direction:row!important;overflow:hidden!important;flex:1!important;min-height:0!important}
-          .rc-preview-col{width:126px!important;flex-shrink:0!important;padding:12px 10px 12px 12px!important;
-            border-right:1px solid rgba(255,255,255,0.06)!important;border-bottom:none!important;gap:8px!important}
-          .rc-preview-wrap{aspect-ratio:9/16!important;width:100%!important;height:auto!important}
-          .rc-controls{flex:1!important;min-width:0!important;min-height:0!important;overflow:hidden!important;display:flex!important;flex-direction:column!important}
-          .rc-panel-content{padding:12px 12px 16px!important}
-          .rc-tpl-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}
-          .rc-pub-step{padding:16px 14px!important}
-          .rc-footer{padding:10px 12px!important;padding-bottom:max(10px,env(safe-area-inset-bottom))!important}
-        }
-      `}</style>
-
-      <div className="rc-root" onClick={e=>e.stopPropagation()} style={{
-        width:'100%',display:'flex',flexDirection:'column',alignItems:'flex-end',justifyContent:'flex-end',
-      }}>
-      <div className="rc-modal" onClick={e=>e.stopPropagation()} style={{
-        width:'100%',
-        display:'flex', flexDirection:'column',
-        background:'#0D0D0F',
-        border:'1px solid rgba(255,255,255,0.09)',
-        boxShadow:'0 -24px 60px rgba(0,0,0,0.5), 0 40px 100px rgba(0,0,0,0.90)',
-        animation:'rcSheet 0.32s cubic-bezier(0.22,1,0.36,1) both',
-        overflow:'hidden',
-      }}>
-
-        {/* ══ MOBILE DRAG HANDLE ══ */}
-        <div style={{display:'flex',justifyContent:'center',paddingTop:10,flexShrink:0}}>
-          <div style={{width:38,height:4,borderRadius:99,background:'rgba(255,255,255,0.16)'}}/>
-        </div>
-        <style>{`@media(min-width:640px){.rc-modal>.rc-handle-wrap{display:none!important}}`}</style>
-
-        {/* ══ HEADER ══ */}
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 16px 12px',
-          borderBottom:'1px solid rgba(255,255,255,0.07)',flexShrink:0}}>
-          {step==='publish'&&(
-            <button type="button" onClick={()=>setStep('design')}
-              style={{width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.08)',
-                background:'rgba(255,255,255,0.04)',display:'flex',alignItems:'center',justifyContent:'center',
-                cursor:'pointer',color:'rgba(255,255,255,0.48)',flexShrink:0,transition:'all 140ms ease'}}>
-              <svg width="12" height="11" viewBox="0 0 14 12" fill="none"><path d="M9 2L4 6l5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          )}
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <p style={{margin:0,fontSize:14.5,fontWeight:700,color:'rgba(255,255,255,0.90)',letterSpacing:'-0.02em'}}>
-                {step==='design' ? 'New Recent' : 'Publish Settings'}
-              </p>
-            </div>
-            <p style={{margin:'1px 0 0',fontSize:10.5,color:'rgba(255,255,255,0.28)',fontWeight:400}}>
-              {step==='design' ? 'Design your card — template, media or text' : 'Set audience, expiry & call-to-action'}
-            </p>
-          </div>
-          {/* Step progress pills */}
-          <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
-            {['design','publish'].map((s,i)=>(
-              <div key={s} style={{
-                height:3, borderRadius:99,
-                width: step===s ? 20 : 6,
-                background: step===s ? 'rgba(255,255,255,0.80)' : 'rgba(255,255,255,0.14)',
-                transition:'all 280ms cubic-bezier(0.22,1,0.36,1)',
-              }}/>
-            ))}
-          </div>
-          <button type="button" onClick={onClose}
-            style={{width:32,height:32,borderRadius:10,border:'1px solid rgba(255,255,255,0.08)',
-              background:'rgba(255,255,255,0.03)',display:'flex',alignItems:'center',justifyContent:'center',
-              cursor:'pointer',color:'rgba(255,255,255,0.38)',flexShrink:0,transition:'all 140ms ease'}}>
-            <svg width="10" height="10" viewBox="0 0 11 11" fill="none"><path d="M1 1l9 9M10 1 1 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        {/* toolbar */}
+        <div className="sc-cvTop">
+          <button type="button" aria-label="Close" onClick={onClose} className="sc-tool">
+            <svg viewBox="0 0 15 15" fill="none" width="100%" height="100%">
+              <path d="M2.6 2.6l9.8 9.8M12.4 2.6l-9.8 9.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+            </svg>
           </button>
+          <div className="sc-cvTools">
+            {TOOL_BTNS.map(t => (
+              <button key={t.id} type="button" aria-label={t.label} title={t.label}
+                onClick={() => openTool(t.id)}
+                className="sc-tool" data-active={panel === t.id && panelOpen ? 'true' : 'false'}>
+                {t.node}
+              </button>
+            ))}
+            <button type="button" aria-label="More" title="More settings"
+              onClick={() => { if (canPublish) setStep('publish'); else openTool('presets'); }}
+              className="sc-tool"><span className="sc-toolTxt">…</span></button>
+          </div>
         </div>
 
-        {/* ══ DESIGN STEP ══ */}
-        {step==='design'&&(
-          <div className="rc-body" style={{display:'flex',flex:1,overflow:'hidden',minHeight:0}}>
+        {/* media */}
+        {mediaMode === 'image' && previewSrc &&
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewSrc} alt="" className="sc-media" style={{ filter: filterCss || undefined }} />}
+        {mediaMode === 'video' && previewSrc &&
+          <video src={previewSrc} autoPlay muted loop playsInline className="sc-media" style={{ filter: filterCss || undefined }} />}
 
-            {/* ── LEFT: preview column ── */}
-            <div className="rc-preview-col" style={{
-              flexShrink:0, display:'flex', flexDirection:'column', gap:12,
-            }}>
-              <div className="rc-preview-wrap">
-                <LivePreview/>
-              </div>
+        {/* overlays */}
+        {(vignette || (mediaMode !== 'text' && previewSrc)) && (
+          <div className="sc-scrim" style={{ background: vignette
+            ? 'radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,0.75) 100%)'
+            : 'linear-gradient(to top,rgba(0,0,0,0.70) 0%,transparent 55%)' }} />
+        )}
+        {grain && <div className="sc-grain" />}
 
-              {/* Media type toggle */}
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
-                {([
-                  {m:'text'  as MediaMode, label:'Text',  color:'#a78bfa',
-                   icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 3h10M2 7h6M2 11h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
-                  {m:'image' as MediaMode, label:'Photo', color:'#60a5fa',
-                   icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="11" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.3"/><circle cx="5" cy="5" r="1.2" fill="currentColor"/><path d="M1.5 9.5l3-3 2.5 2.5 1.5-1.5L12 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>},
-                  {m:'video' as MediaMode, label:'Video', color:'#f87171',
-                   icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="3" width="8" height="8" rx="1.8" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 5.5l3-1.5v5l-3-1.5v-2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>},
-                ] as const).map(({m,label,icon,color})=>{
-                  const active = mediaMode===m;
-                  return (
-                  <button key={m} type="button" className="rc-mode-btn"
+        {/* caption */}
+        {(caption || subtitle) && (
+          <div className="sc-cap" style={{ textAlign: textAlign, ...textPosStyle }}>
+            {caption && (
+              <p style={{
+                margin:0, fontSize:`${(fontSize * 0.26).toFixed(2)}cqw`, color:textColor,
+                lineHeight:1.3, wordBreak:'break-word',
+                textShadow: mediaMode !== 'text' && previewSrc ? '0 1px 10px rgba(0,0,0,0.60)' : 'none',
+                ...font.style,
+              }}>{caption}</p>
+            )}
+            {subtitle && (
+              <p style={{
+                margin:'0.7cqw 0 0', fontSize:`${(fontSize * 0.165).toFixed(2)}cqw`, color:textColor,
+                opacity:0.6, lineHeight:1.4, wordBreak:'break-word',
+                fontFamily:'system-ui', fontWeight:400,
+              }}>{subtitle}</p>
+            )}
+          </div>
+        )}
+
+        {innerBorder && <div className="sc-inner" />}
+
+        {/* empty state — the whole canvas opens the picker */}
+        {!previewSrc && !caption && !uploading && (
+          <button type="button" className="sc-empty" aria-label="Add your story" onClick={pickMedia}>
+            <span className="sc-emptyPlus">+</span>
+            <span className="sc-emptyT">Add your story</span>
+            <span className="sc-emptyS">Add a photo, video or text</span>
+          </button>
+        )}
+
+        {/* uploading — the chosen media stays visible underneath */}
+        {uploading && (
+          <div className="sc-uploading">
+            <div className="sc-spin" />
+            <span>Uploading…</span>
+          </div>
+        )}
+
+        {/* failed upload — local preview kept, one tap retries the same file */}
+        {!uploading && uploadErr && pendingFile && (
+          <button type="button" className="sc-retry" onClick={retryUpload}>
+            <span className="sc-retryIcon">
+              <svg viewBox="0 0 20 20" fill="none" width="100%" height="100%">
+                <path d="M16 6.5A7 7 0 1 0 17 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                <path d="M16.5 2.5v4.2h-4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </span>
+            <span className="sc-retryT">{uploadErr}</span>
+            <span className="sc-retryS">Tap to retry</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // ── Colour / filter strip (under the canvas, like the reference) ───────────
+  function renderSwatches() {
+    if (mediaMode !== 'text') {
+      return (
+        <div className="sc-strip rc-scrl" role="group" aria-label="Filters">
+          {IMAGE_FILTERS.map(f => (
+            <button key={f.id} type="button" className="sc-chip sc-tap"
+              data-active={imgFilter === f.id} onClick={() => setImgFilter(f.id)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <div className="sc-strip rc-scrl" role="group" aria-label="Backgrounds">
+        {BG_PRESETS.map(g => (
+          <button key={g.id} type="button" aria-label={g.label} title={g.label}
+            className="sc-dot sc-tap" data-active={bg.id === g.id}
+            style={{ background:g.value }}
+            onClick={() => { setBg(g); setTextColor(g.text); }} />
+        ))}
+        <span className="sc-dotSep" />
+        <span className="sc-dotWrap">
+          <span className="sc-dot sc-dotPick" style={{ background:textColor }} aria-hidden />
+          <input type="color" aria-label="Text colour" value={textColor}
+            onChange={e => setTextColor(e.target.value)} className="sc-colorInput" />
+        </span>
+      </div>
+    );
+  }
+
+  // ── Frame rail ─────────────────────────────────────────────────────────────
+  function renderRail() {
+    return (
+      <div className="sc-rail rc-scrl" role="group" aria-label="Story frames">
+        {allFrames.map((f, i) => {
+          const src = f.localBlob ?? f.mediaUrl;
+          const active = i === activeIdx;
+          return (
+            <div key={f.id} className="sc-frameWrap">
+              <button type="button" className="sc-frame sc-tap" data-active={active}
+                onClick={() => gotoFrame(i)} title={`Frame ${i + 1}`}
+                aria-label={`Frame ${i + 1}${active ? ' (editing)' : ''}`}
+                style={{ background: f.mediaMode === 'text' ? f.bg.value : '#08080b' }}>
+                {f.mediaMode === 'video' && src
+                  ? <video src={src} muted playsInline preload="metadata" className="sc-frameMedia" />
+                  : f.mediaMode === 'image' && src
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={src} alt="" className="sc-frameMedia" />
+                  : f.caption
+                    ? <span className="sc-frameTxt" style={{ color:f.textColor }}>{f.caption.slice(0, 16)}</span>
+                    : <span className="sc-frameTxt" style={{ color:'rgba(255,255,255,0.28)' }}>empty</span>}
+                {uploadingIds.includes(f.id) && (
+                  <span className="sc-frameBusy"><span className="sc-spin sc-spinTiny" /></span>
+                )}
+                {!uploadingIds.includes(f.id) && f.uploadErr && <span className="sc-frameErr" />}
+                <span className="sc-frameNo">{i + 1}</span>
+              </button>
+              {active && frames.length > 1 && (
+                <button type="button" className="sc-frameDel" aria-label={`Remove frame ${i + 1}`}
+                  title="Remove frame" onClick={() => removeFrame(i)}>×</button>
+              )}
+            </div>
+          );
+        })}
+        <button type="button" className="sc-frame sc-frameAdd sc-tap"
+          onClick={addFrame} aria-label="Add story frame" title="Add frame">+</button>
+      </div>
+    );
+  }
+
+  // ── Bottom nav ─────────────────────────────────────────────────────────────
+  function renderNav() {
+    const item = (key: string, label: string, icon: React.ReactNode, onClick: () => void) => (
+      <button key={key} type="button" className="sc-navBtn sc-tap" onClick={onClick}>
+        <span className="sc-navIcon">{icon}</span>
+        <span className="sc-navLabel">{label}</span>
+      </button>
+    );
+    return (
+      <nav className="sc-nav" aria-label="Story sources">
+        {item('gallery','Gallery',
+          <svg viewBox="0 0 20 20" fill="none" width="100%" height="100%">
+            <rect x="2.5" y="3.5" width="15" height="13" rx="3" stroke="currentColor" strokeWidth="1.4"/>
+            <circle cx="7" cy="8" r="1.4" fill="currentColor"/>
+            <path d="M3 14l4-4 3 3 2.5-2.5L17 15" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>,
+          pickMedia)}
+
+        {item('camera','Camera',
+          <svg viewBox="0 0 20 20" fill="none" width="100%" height="100%">
+            <path d="M3 6.5h2.6L7 4.5h6l1.4 2H17a1.5 1.5 0 0 1 1.5 1.5v6.5A1.5 1.5 0 0 1 17 16H3a1.5 1.5 0 0 1-1.5-1.5V8A1.5 1.5 0 0 1 3 6.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+            <circle cx="10" cy="11" r="3" stroke="currentColor" strokeWidth="1.4"/>
+          </svg>,
+          () => camRef.current?.click())}
+
+        <button type="button" className="sc-shutter sc-tap" aria-label="Capture"
+          onClick={() => camRef.current?.click()}><span /></button>
+
+        {item('layout','Layout',
+          <svg viewBox="0 0 20 20" fill="none" width="100%" height="100%">
+            <rect x="2.5" y="2.5" width="15" height="15" rx="3" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M10 2.5v15M2.5 10h7.5" stroke="currentColor" strokeWidth="1.4"/>
+          </svg>,
+          () => openTool('text'))}
+
+        {item('music','Music',
+          <svg viewBox="0 0 20 20" fill="none" width="100%" height="100%">
+            <path d="M7.5 14.5V5l8-1.5v9" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+            <circle cx="5.6" cy="14.6" r="1.9" stroke="currentColor" strokeWidth="1.4"/>
+            <circle cx="13.6" cy="12.6" r="1.9" stroke="currentColor" strokeWidth="1.4"/>
+          </svg>,
+          () => showNote('Audio tracks aren’t supported for recents yet — try Effects for a mood instead.'))}
+      </nav>
+    );
+  }
+
+  // ── Tool panel body (all existing controls, unchanged) ─────────────────────
+  function renderPanelBody() {
+    return (
+      <div className="rc-scrl sc-panelBody" key={panel}>
+
+        {/* ══ PRESETS ══ */}
+        {panel==='presets'&&(
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+
+            {/* Story type — text / photo / video */}
+            <div className="sc-modeRow">
+              {([
+                {m:'text'  as MediaMode, label:'Text',  color:'#a78bfa',
+                 icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 3h10M2 7h6M2 11h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>},
+                {m:'image' as MediaMode, label:'Photo', color:'#60a5fa',
+                 icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="11" height="11" rx="2.5" stroke="currentColor" strokeWidth="1.3"/><circle cx="5" cy="5" r="1.2" fill="currentColor"/><path d="M1.5 9.5l3-3 2.5 2.5 1.5-1.5L12 11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+                {m:'video' as MediaMode, label:'Video', color:'#f87171',
+                 icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="3" width="8" height="8" rx="1.8" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 5.5l3-1.5v5l-3-1.5v-2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>},
+              ] as const).map(({m,label,icon,color})=>{
+                const active = mediaMode===m;
+                return (
+                  <button key={m} type="button" className="sc-modeBtn sc-tap"
                     onClick={()=>{ setMediaMode(m); if(m!=='text') setTimeout(()=>fileRef.current?.click(),50); }}
                     style={{
-                      display:'flex', flexDirection:'column', alignItems:'center', gap:4,
-                      padding:'9px 4px', borderRadius:11,
                       border: active ? `1px solid ${color}44` : '1px solid rgba(255,255,255,0.07)',
-                      background: active ? `rgba(${color === '#a78bfa' ? '167,139,250' : color === '#60a5fa' ? '96,165,250' : '248,113,113'},0.10)` : 'rgba(255,255,255,0.03)',
-                      cursor:'pointer',
+                      background: active ? `rgba(${color==='#a78bfa'?'167,139,250':color==='#60a5fa'?'96,165,250':'248,113,113'},0.10)` : 'rgba(255,255,255,0.03)',
                       color: active ? color : 'rgba(255,255,255,0.32)',
                       boxShadow: active ? `0 0 14px ${color}18, inset 0 1px 0 rgba(255,255,255,0.06)` : 'none',
                     }}>
                     {icon}
-                    <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.04em'}}>{label}</span>
+                    <span>{label}</span>
                   </button>
-                )})}
-              </div>
-              <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:'none'}} onChange={onFile}/>
-              {uploadErr&&<p style={{margin:0,fontSize:10,color:'#f87171',textAlign:'center',lineHeight:1.4}}>{uploadErr}</p>}
+                );
+              })}
             </div>
 
-            {/* ── RIGHT: tabs + panel ── */}
-            <div className="rc-controls" style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minWidth:0}}>
-
-              {/* Horizontal tabs */}
-              <div style={{display:'flex',borderBottom:'1px solid rgba(255,255,255,0.06)',flexShrink:0,
-                padding:'0 4px',background:'rgba(255,255,255,0.015)',gap:2}}>
-                {([
-                  {id:'presets' as const, label:'Presets', emoji:'✦'},
-                  {id:'style'   as const, label:'Style',   emoji:'◈'},
-                  {id:'text'    as const, label:'Text',    emoji:'Aa'},
-                  {id:'effects' as const, label:'Effects', emoji:'✺'},
-                ]).map(t=>{
-                  const active = panel===t.id;
-                  return (
-                  <button key={t.id} type="button" className="rc-tab-btn"
-                    onClick={()=>setPanel(t.id)}
-                    style={{
-                      flex:1, padding:'10px 4px 9px', fontSize:11.5, fontWeight:active?700:500,
-                      border:'none', background:'none', cursor:'pointer',
-                      color:active?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.35)',
-                      borderBottom:`2px solid ${active?'rgba(255,255,255,0.70)':'transparent'}`,
-                      transition:'all 140ms ease',
-                      letterSpacing: active ? '-0.01em' : '0',
-                    }}>
-                    {t.label}
-                  </button>
-                )})}
+            {/* Upload zone */}
+            <div
+              onDragOver={e=>{e.preventDefault();setDragOver(true);}}
+              onDragLeave={()=>setDragOver(false)}
+              onDrop={onDrop}
+              onClick={pickMedia}
+              style={{
+                borderRadius:16, padding:'14px 16px', cursor:'pointer',
+                border:`1.5px dashed ${dragOver?'rgba(96,165,250,0.55)':'rgba(255,255,255,0.10)'}`,
+                background: dragOver
+                  ? 'rgba(96,165,250,0.07)'
+                  : previewSrc ? 'rgba(16,185,129,0.05)' : 'rgba(255,255,255,0.02)',
+                display:'flex', alignItems:'center', gap:12,
+                transition:'all 180ms ease',
+                boxShadow: dragOver ? '0 0 0 4px rgba(96,165,250,0.08)' : 'none',
+              }}>
+              <div style={{
+                width:40, height:40, borderRadius:12, flexShrink:0,
+                background: previewSrc ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.06)',
+                border: `1px solid ${previewSrc ? 'rgba(16,185,129,0.20)' : 'rgba(255,255,255,0.09)'}`,
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}>
+                {uploading
+                  ? <div style={{width:16,height:16,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.12)',borderTopColor:'rgba(255,255,255,0.80)',animation:'rcSpin 0.75s linear infinite'}}/>
+                  : previewSrc
+                    ? <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M2 12l4-4 3 3 3-3 4 4" stroke="rgba(52,211,153,0.80)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="6" r="1.5" fill="rgba(52,211,153,0.60)"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M9 3v9M5 7l4-4 4 4" stroke="rgba(255,255,255,0.52)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 15h12" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeLinecap="round"/></svg>}
               </div>
-
-              {/* Panel content */}
-              <div className="rc-scrl rc-panel-content" key={panel}
-                style={{flex:1,overflowY:'auto',padding:'16px 18px',scrollbarWidth:'none',animation:'rcFadeIn 0.16s ease both'}}>
-
-                {/* ══ PRESETS ══ */}
-                {panel==='presets'&&(
-                  <div style={{display:'flex',flexDirection:'column',gap:16}}>
-
-                    {/* Upload zone */}
-                    <div
-                      onDragOver={e=>{e.preventDefault();setDragOver(true);}}
-                      onDragLeave={()=>setDragOver(false)}
-                      onDrop={onDrop}
-                      onClick={()=>!uploading&&fileRef.current?.click()}
-                      style={{
-                        borderRadius:16, padding:'14px 16px', cursor:'pointer',
-                        border:`1.5px dashed ${dragOver?'rgba(96,165,250,0.55)':'rgba(255,255,255,0.10)'}`,
-                        background: dragOver
-                          ? 'rgba(96,165,250,0.07)'
-                          : previewSrc ? 'rgba(16,185,129,0.05)' : 'rgba(255,255,255,0.02)',
-                        display:'flex', alignItems:'center', gap:12,
-                        transition:'all 180ms ease',
-                        boxShadow: dragOver ? '0 0 0 4px rgba(96,165,250,0.08)' : 'none',
-                      }}>
-                      <div style={{
-                        width:40, height:40, borderRadius:12, flexShrink:0,
-                        background: previewSrc ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.06)',
-                        border: `1px solid ${previewSrc ? 'rgba(16,185,129,0.20)' : 'rgba(255,255,255,0.09)'}`,
-                        display:'flex', alignItems:'center', justifyContent:'center',
-                      }}>
-                        {uploading
-                          ? <div style={{width:16,height:16,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.12)',borderTopColor:'rgba(255,255,255,0.80)',animation:'rcSpin 0.75s linear infinite'}}/>
-                          : previewSrc
-                            ? <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M2 12l4-4 3 3 3-3 4 4" stroke="rgba(52,211,153,0.80)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="6" r="1.5" fill="rgba(52,211,153,0.60)"/></svg>
-                            : <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M9 3v9M5 7l4-4 4 4" stroke="rgba(255,255,255,0.52)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 15h12" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-                      </div>
-                      <div style={{minWidth:0,flex:1}}>
-                        <p style={{margin:0,fontSize:12.5,fontWeight:600,
-                          color: previewSrc ? 'rgba(52,211,153,0.85)' : 'rgba(255,255,255,0.65)'}}>
-                          {uploading ? 'Uploading…' : previewSrc ? 'Media ready · tap to replace' : 'Upload photo or video'}
-                        </p>
-                        <p style={{margin:'2px 0 0',fontSize:10,color:'rgba(255,255,255,0.25)'}}>
-                          {previewSrc ? 'JPG · PNG · MP4 · MOV' : 'Drag & drop or click · up to 50 MB'}
-                        </p>
-                      </div>
-                      {previewSrc && !uploading && (
-                        <div style={{width:6,height:6,borderRadius:'50%',background:'#10b981',flexShrink:0}}/>
-                      )}
-                    </div>
-
-                    {/* Divider */}
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <div style={{flex:1,height:1,background:'rgba(255,255,255,0.06)'}}/>
-                      <span style={{fontSize:10,fontWeight:700,letterSpacing:'0.10em',color:'rgba(255,255,255,0.22)',textTransform:'uppercase' as const}}>or pick a template</span>
-                      <div style={{flex:1,height:1,background:'rgba(255,255,255,0.06)'}}/>
-                    </div>
-
-                    {/* Template grid — 3 cols desktop, 2 cols mobile */}
-                    <div className="rc-tpl-grid" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
-                      {PRESETS.map(p=>(
-                        <button key={p.id} type="button" className="rc-preset-card" onClick={()=>applyPreset(p)}
-                          style={{
-                            position:'relative', aspectRatio:'3/4', borderRadius:13, overflow:'hidden',
-                            background:p.bg, cursor:'pointer',
-                            border:`1.5px solid ${bg.id===p.id?'rgba(255,255,255,0.65)':'rgba(255,255,255,0.07)'}`,
-                            display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center',
-                            padding:'10px 8px',
-                            boxShadow:bg.id===p.id?'0 0 0 2px rgba(255,255,255,0.12)':'none',
-                          }}>
-                          {/* Sample text */}
-                          <p style={{
-                            margin:0, textAlign:'center',
-                            fontSize: Math.round(p.size * 0.32),
-                            color:p.text, lineHeight:1.25,
-                            fontWeight:p.font==='display'||p.font==='bold'?800:p.font==='light'?300:600,
-                            fontFamily:p.font==='serif'?"Georgia,serif":p.font==='mono'?"'Courier New',monospace":'system-ui',
-                            textShadow:'0 1px 4px rgba(0,0,0,0.40)',
-                            wordBreak:'break-word',
-                          }}>
-                            {p.sample.slice(0,22)}
-                          </p>
-                          {/* Label */}
-                          <div style={{
-                            position:'absolute', bottom:0, left:0, right:0,
-                            padding:'12px 6px 5px',
-                            background:'linear-gradient(to top,rgba(0,0,0,0.72),transparent)',
-                          }}>
-                            <p style={{margin:0,fontSize:8.5,fontWeight:700,textAlign:'center',
-                              color:'rgba(255,255,255,0.60)',letterSpacing:'0.08em',textTransform:'uppercase' as const}}>
-                              {p.label}
-                            </p>
-                          </div>
-                          {/* Selected check */}
-                          {bg.id===p.id&&(
-                            <div style={{position:'absolute',top:6,right:6,width:16,height:16,borderRadius:'50%',background:'rgba(255,255,255,0.92)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                              <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3l2 2 4-4" stroke="#000" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ══ STYLE ══ */}
-                {panel==='style'&&(
-                  <div style={{display:'flex',flexDirection:'column',gap:20}}>
-                    {mediaMode==='text'&&(
-                      <div>
-                        <p style={{margin:'0 0 10px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Background</p>
-                        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
-                          {BG_PRESETS.map(g=>(
-                            <button key={g.id} type="button" onClick={()=>{setBg(g);setTextColor(g.text);}}
-                              style={{width:36,height:36,borderRadius:10,background:g.value,
-                                border:inB(bg.id===g.id),
-                                cursor:'pointer',position:'relative',flexShrink:0,transition:'border-color 140ms, transform 130ms',
-                                transform:bg.id===g.id?'scale(1.08)':'none'}}>
-                              {bg.id===g.id&&<svg style={{position:'absolute',inset:0,margin:'auto'}} width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 3L9 1" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {mediaMode==='text'&&(
-                      <div>
-                        <p style={{margin:'0 0 10px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Text colour</p>
-                        <div style={{display:'flex',alignItems:'center',gap:10}}>
-                          <div style={{position:'relative',width:38,height:38}}>
-                            <div style={{width:38,height:38,borderRadius:10,background:textColor,border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',boxShadow:'inset 0 0 0 1px rgba(0,0,0,0.20)'}}
-                              onClick={()=>(document.getElementById('rc-clr') as HTMLInputElement)?.click()}/>
-                            <input id="rc-clr" type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{position:'absolute',opacity:0,inset:0,cursor:'pointer'}}/>
-                          </div>
-                          <input className="rc-inp" value={textColor} onChange={e=>setTextColor(e.target.value)} maxLength={9}
-                            style={{...inp,width:100,fontFamily:'ui-monospace,monospace',fontSize:12.5}}/>
-                        </div>
-                      </div>
-                    )}
-                    {mediaMode!=='text'&&(
-                      <div>
-                        <p style={{margin:'0 0 10px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Media</p>
-                        <div onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={onDrop}
-                          onClick={()=>!uploading&&fileRef.current?.click()}
-                          style={{borderRadius:13,padding:'18px',border:`1.5px dashed ${dragOver?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.11)'}`,
-                            background:dragOver?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.02)',cursor:'pointer',
-                            display:'flex',flexDirection:'column',alignItems:'center',gap:9,transition:'all 160ms ease'}}>
-                          {uploading
-                            ? <><div style={{width:22,height:22,borderRadius:'50%',border:'2.5px solid rgba(255,255,255,0.12)',borderTopColor:'rgba(255,255,255,0.75)',animation:'rcSpin 0.75s linear infinite'}}/><p style={{margin:0,fontSize:12,color:'rgba(255,255,255,0.45)'}}>Uploading…</p></>
-                            : <><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4v10M7 9l4-5 4 5" stroke="rgba(255,255,255,0.45)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 18h14" stroke="rgba(255,255,255,0.25)" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                              <p style={{margin:0,fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.55)',textAlign:'center'}}>{previewSrc?'Replace media':'Drop or click to upload'}</p>
-                              <p style={{margin:0,fontSize:10.5,color:'rgba(255,255,255,0.28)'}}>Photo or video · up to 50MB</p></>}
-                        </div>
-                        {uploadErr&&<p style={{margin:'8px 0 0',fontSize:11,color:'#f87171'}}>{uploadErr}</p>}
-                      </div>
-                    )}
-                    {mediaMode!=='text'&&previewSrc&&(
-                      <div>
-                        <p style={{margin:'0 0 10px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Filter</p>
-                        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                          {IMAGE_FILTERS.map(f=>(
-                            <button key={f.id} type="button" className="rc-opt-btn" onClick={()=>setImgFilter(f.id)}
-                              style={{borderRadius:9,padding:'6px 12px',fontSize:12,fontWeight:imgFilter===f.id?700:500,
-                                border:inB(imgFilter===f.id),background:inBg(imgFilter===f.id),
-                                color:imgFilter===f.id?'rgba(255,255,255,0.90)':'rgba(255,255,255,0.42)',cursor:'pointer'}}>
-                              {f.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ══ TEXT ══ */}
-                {panel==='text'&&(
-                  <div style={{display:'flex',flexDirection:'column',gap:20}}>
-                    <div>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
-                        <p style={{margin:0,fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Main text</p>
-                        <span style={{fontSize:10,color:'rgba(255,255,255,0.25)'}}>{caption.length}/220</span>
-                      </div>
-                      <textarea className="rc-ta" value={caption} onChange={e=>setCaption(e.target.value)} maxLength={220} rows={3}
-                        placeholder="What's on your mind?"
-                        style={{...inp,resize:'none',lineHeight:1.6,fontSize:14}}/>
-                    </div>
-                    <div>
-                      <p style={{margin:'0 0 9px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Subtitle <span style={{textTransform:'none',fontSize:9,letterSpacing:'normal',color:'rgba(255,255,255,0.20)',fontWeight:400}}>optional</span></p>
-                      <input className="rc-inp" value={subtitle} onChange={e=>setSubtitle(e.target.value)} maxLength={100}
-                        placeholder="A supporting line…" style={inp}/>
-                    </div>
-                    <div>
-                      <p style={{margin:'0 0 9px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Font</p>
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6}}>
-                        {FONT_STYLES.map(f=>(
-                          <button key={f.id} type="button" className="rc-opt-btn" onClick={()=>setFontId(f.id)}
-                            style={{padding:'10px 6px',borderRadius:10,border:inB(fontId===f.id),background:inBg(fontId===f.id),cursor:'pointer',textAlign:'center'}}>
-                            <p style={{margin:0,fontSize:16,...f.style,color:fontId===f.id?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.40)'}}>Aa</p>
-                            <p style={{margin:'3px 0 0',fontSize:8.5,color:'rgba(255,255,255,0.30)',fontFamily:'system-ui'}}>{f.label}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:9}}>
-                        <p style={{margin:0,fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Size</p>
-                        <span style={{fontSize:10.5,fontWeight:600,color:'rgba(255,255,255,0.35)'}}>{fontSize}px</span>
-                      </div>
-                      <input type="range" min={12} max={52} value={fontSize} onChange={e=>setFontSize(+e.target.value)}/>
-                    </div>
-                    <div>
-                      <p style={{margin:'0 0 9px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Alignment &amp; position</p>
-                      <div style={{display:'flex',gap:5,marginBottom:7}}>
-                        {([
-                          {id:'left' as const,icon:<svg width="14" height="12" viewBox="0 0 14 12" fill="none"><path d="M1 2h12M1 6h8M1 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>},
-                          {id:'center' as const,icon:<svg width="14" height="12" viewBox="0 0 14 12" fill="none"><path d="M1 2h12M3 6h8M2 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>},
-                          {id:'right' as const,icon:<svg width="14" height="12" viewBox="0 0 14 12" fill="none"><path d="M1 2h12M5 6h8M3 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>},
-                        ]).map(({id,icon})=>(
-                          <button key={id} type="button" className="rc-opt-btn" onClick={()=>setTextAlign(id)}
-                            style={{flex:1,padding:'9px',borderRadius:9,border:inB(textAlign===id),background:inBg(textAlign===id),
-                              cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
-                              color:textAlign===id?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.32)'}}>
-                            {icon}
-                          </button>
-                        ))}
-                      </div>
-                      <div style={{display:'flex',gap:5}}>
-                        {([{id:'top' as const,l:'Top'},{id:'center' as const,l:'Middle'},{id:'bottom' as const,l:'Bottom'}]).map(({id,l})=>(
-                          <button key={id} type="button" className="rc-opt-btn" onClick={()=>setTextPos(id)}
-                            style={{flex:1,padding:'8px',borderRadius:9,fontSize:12,fontWeight:textPos===id?700:500,
-                              border:inB(textPos===id),background:inBg(textPos===id),
-                              cursor:'pointer',color:textPos===id?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.38)'}}>
-                            {l}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ══ EFFECTS ══ */}
-                {panel==='effects'&&(
-                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                    <p style={{margin:'0 0 4px',fontSize:9.5,fontWeight:700,textTransform:'uppercase' as const,
-                      letterSpacing:'0.14em',color:'rgba(255,255,255,0.26)'}}>Overlays &amp; Finish</p>
-                    {([
-                      {label:'Vignette',    sub:'Dark gradient around edges',      val:vignette,    set:setVignette,    accent:'#a78bfa'},
-                      {label:'Film Grain',  sub:'Cinematic noise overlay',          val:grain,       set:setGrain,       accent:'#fb923c'},
-                      {label:'Inner Frame', sub:'Inset border for editorial look',  val:innerBorder, set:setInnerBorder, accent:'#60a5fa'},
-                    ] as const).map(t=>(
-                      <div key={t.label} style={{
-                        display:'flex', alignItems:'center', gap:12,
-                        padding:'13px 14px', borderRadius:13,
-                        background: t.val ? `rgba(${t.accent==='#a78bfa'?'167,139,250':t.accent==='#fb923c'?'251,146,60':'96,165,250'},0.07)` : 'rgba(255,255,255,0.025)',
-                        border: `1px solid ${t.val ? `rgba(${t.accent==='#a78bfa'?'167,139,250':t.accent==='#fb923c'?'251,146,60':'96,165,250'},0.20)` : 'rgba(255,255,255,0.06)'}`,
-                        transition:'all 200ms ease',
-                      }}>
-                        <div style={{flex:1}}>
-                          <p style={{margin:0,fontSize:13,fontWeight:600,color: t.val ? 'rgba(255,255,255,0.90)' : 'rgba(255,255,255,0.72)'}}>{t.label}</p>
-                          <p style={{margin:'2px 0 0',fontSize:10.5,color:'rgba(255,255,255,0.30)'}}>{t.sub}</p>
-                        </div>
-                        <button type="button" className="rc-toggle" onClick={()=>t.set(!t.val)}
-                          style={{width:42,height:24,borderRadius:99,border:'none',cursor:'pointer',flexShrink:0,
-                            background:t.val?t.accent:'rgba(255,255,255,0.10)',
-                            position:'relative',transition:'background 220ms ease',
-                            boxShadow: t.val ? `0 0 10px ${t.accent}44` : 'none'}}>
-                          <div style={{
-                            position:'absolute', top:4, width:16, height:16, borderRadius:'50%',
-                            left: t.val ? 22 : 4,
-                            background:t.val?'#fff':'rgba(255,255,255,0.55)',
-                            transition:'left 220ms cubic-bezier(0.22,1,0.36,1)',
-                            boxShadow:'0 1px 4px rgba(0,0,0,0.35)',
-                          }}/>
-                        </button>
-                      </div>
-                    ))}
-
-                    {/* Overlay opacity (image/video only) */}
-                    {mediaMode!=='text'&&previewSrc&&(
-                      <div style={{marginTop:4,padding:'13px 14px',borderRadius:13,
-                        background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.06)'}}>
-                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
-                          <p style={{margin:0,fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.72)'}}>Scrim darkness</p>
-                          <span style={{fontSize:10.5,fontWeight:600,color:'rgba(255,255,255,0.35)'}}>for text legibility</span>
-                        </div>
-                        <input type="range" min={0} max={80} defaultValue={40}
-                          style={{width:'100%',accentColor:'rgba(255,255,255,0.65)'}}/>
-                      </div>
-                    )}
-
-                    {/* Backdrop blur (text mode) */}
-                    {mediaMode==='text'&&(
-                      <div style={{marginTop:4,padding:'13px 14px',borderRadius:13,
-                        background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.06)'}}>
-                        <p style={{margin:'0 0 10px',fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.72)'}}>Background intensity</p>
-                        <input type="range" min={50} max={100} defaultValue={100}
-                          style={{width:'100%',accentColor:'rgba(255,255,255,0.65)'}}/>
-                        <p style={{margin:'6px 0 0',fontSize:10,color:'rgba(255,255,255,0.22)'}}>Adjust gradient vibrancy</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
+              <div style={{minWidth:0,flex:1}}>
+                <p style={{margin:0,fontSize:12.5,fontWeight:600,
+                  color: previewSrc ? 'rgba(52,211,153,0.85)' : 'rgba(255,255,255,0.65)'}}>
+                  {uploading ? 'Uploading…' : previewSrc ? 'Media ready · tap to replace' : 'Upload photo or video'}
+                </p>
+                <p style={{margin:'2px 0 0',fontSize:10,color:'rgba(255,255,255,0.25)'}}>
+                  {previewSrc ? 'JPG · PNG · MP4 · MOV' : 'Drag & drop or click · up to 50 MB'}
+                </p>
               </div>
+              {previewSrc && !uploading && (
+                <div style={{width:6,height:6,borderRadius:'50%',background:'#10b981',flexShrink:0}}/>
+              )}
+            </div>
+
+            {/* Divider */}
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <div style={{flex:1,height:1,background:'rgba(255,255,255,0.06)'}}/>
+              <span style={{fontSize:10,fontWeight:700,letterSpacing:'0.10em',color:'rgba(255,255,255,0.22)',textTransform:'uppercase' as const}}>or pick a template</span>
+              <div style={{flex:1,height:1,background:'rgba(255,255,255,0.06)'}}/>
+            </div>
+
+            {/* Template grid */}
+            <div className="sc-tplGrid">
+              {PRESETS.map(p=>(
+                <button key={p.id} type="button" className="rc-preset-card" onClick={()=>applyPreset(p)}
+                  style={{
+                    position:'relative', aspectRatio:'3/4', borderRadius:13, overflow:'hidden',
+                    background:p.bg, cursor:'pointer',
+                    border:`1.5px solid ${bg.id===p.id?'rgba(255,255,255,0.65)':'rgba(255,255,255,0.07)'}`,
+                    display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center',
+                    padding:'10px 8px',
+                    boxShadow:bg.id===p.id?'0 0 0 2px rgba(255,255,255,0.12)':'none',
+                  }}>
+                  <p style={{
+                    margin:0, textAlign:'center',
+                    fontSize: Math.round(p.size * 0.32),
+                    color:p.text, lineHeight:1.25,
+                    fontWeight:p.font==='display'||p.font==='wide'?800:p.font==='light'?300:600,
+                    fontFamily:p.font==='serif'?"Georgia,serif":p.font==='mono'?"'Courier New',monospace":'system-ui',
+                    textShadow:'0 1px 4px rgba(0,0,0,0.40)',
+                    wordBreak:'break-word',
+                  }}>
+                    {p.sample.slice(0,22)}
+                  </p>
+                  <div style={{
+                    position:'absolute', bottom:0, left:0, right:0,
+                    padding:'12px 6px 5px',
+                    background:'linear-gradient(to top,rgba(0,0,0,0.72),transparent)',
+                  }}>
+                    <p style={{margin:0,fontSize:8.5,fontWeight:700,textAlign:'center',
+                      color:'rgba(255,255,255,0.60)',letterSpacing:'0.08em',textTransform:'uppercase' as const}}>
+                      {p.label}
+                    </p>
+                  </div>
+                  {bg.id===p.id&&(
+                    <div style={{position:'absolute',top:6,right:6,width:16,height:16,borderRadius:'50%',background:'rgba(255,255,255,0.92)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 3l2 2 4-4" stroke="#000" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         )}
 
-        {/* ══ PUBLISH STEP ══ */}
-        {step==='publish'&&(
-          <div className="rc-scrl rc-pub-step" style={{flex:1,overflowY:'auto',padding:'18px 18px',scrollbarWidth:'none',display:'flex',flexDirection:'column',gap:20}}>
-
-            <div>
-              <p style={{margin:'0 0 11px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Category</p>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                {CATEGORIES.map(c=>{
-                  const badge=CAT_BADGE[c]??DEFAULT_BADGE;
-                  return (
-                    <button key={c} type="button" className="rc-cat-chip" onClick={()=>setCategory(c)}
-                      style={{
-                        borderRadius:99, padding:'6px 14px', fontSize:12, fontWeight:600, cursor:'pointer',
-                        transition:'all 140ms ease',
-                        border:`1px solid ${category===c?badge.border:'rgba(255,255,255,0.08)'}`,
-                        background:category===c?badge.bg:'rgba(255,255,255,0.02)',
-                        color:category===c?badge.text:'rgba(255,255,255,0.42)',
-                      }}>
-                      {c}
+        {/* ══ STYLE ══ */}
+        {panel==='style'&&(
+          <div style={{display:'flex',flexDirection:'column',gap:20}}>
+            {mediaMode==='text'&&(
+              <div>
+                <p className="sc-lbl">Background</p>
+                <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+                  {BG_PRESETS.map(g=>(
+                    <button key={g.id} type="button" onClick={()=>{setBg(g);setTextColor(g.text);}}
+                      style={{width:36,height:36,borderRadius:10,background:g.value,
+                        border:inB(bg.id===g.id),
+                        cursor:'pointer',position:'relative',flexShrink:0,transition:'border-color 140ms, transform 130ms',
+                        transform:bg.id===g.id?'scale(1.08)':'none'}}>
+                      {bg.id===g.id&&<svg style={{position:'absolute',inset:0,margin:'auto'}} width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 3L9 1" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-
-            <div>
-              <p style={{margin:'0 0 11px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Visibility</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                {([
-                  {id:'public'  as const,icon:<svg width="15" height="14" viewBox="0 0 16 14" fill="none"><circle cx="8" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1C8 1 6 3.5 6 7s2 6 2 6M8 1c0 0 2 2.5 2 6s-2 6-2 6M2 7h12" stroke="currentColor" strokeWidth="1.3"/></svg>,label:'Public',sub:'Visible to everyone'},
-                  {id:'private' as const,icon:<svg width="13" height="15" viewBox="0 0 12 15" fill="none"><rect x="1.5" y="6" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 6V4a3.5 3.5 0 0 1 7 0v2" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>,label:'Only me',sub:'Stays private'},
-                ]).map(({id,icon,label,sub})=>(
-                  <button key={id} type="button" className="rc-opt-btn" onClick={()=>setVisibility(id)}
-                    style={{
-                      borderRadius:14, padding:'16px',
-                      border:inB(visibility===id), background:inBg(visibility===id),
-                      cursor:'pointer', display:'flex', flexDirection:'column', gap:9, textAlign:'left',
-                    }}>
-                    <span style={{color:visibility===id?'rgba(255,255,255,0.80)':'rgba(255,255,255,0.30)'}}>{icon}</span>
-                    <p style={{margin:0,fontSize:13.5,fontWeight:700,color:visibility===id?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.48)'}}>{label}</p>
-                    <p style={{margin:0,fontSize:11,color:'rgba(255,255,255,0.28)'}}>{sub}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p style={{margin:'0 0 11px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>Expires after</p>
-              <div style={{display:'flex',gap:8}}>
-                {[6,12,24,48].map(h=>(
-                  <button key={h} type="button" className="rc-opt-btn" onClick={()=>setExpiry(h)}
-                    style={{
-                      flex:1, padding:'11px', borderRadius:12,
-                      border:inB(expiry===h), background:inBg(expiry===h),
-                      cursor:'pointer', fontSize:13.5, fontWeight:700,
-                      color:expiry===h?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.40)',
-                    }}>
-                    {h}h
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <p style={{margin:'0 0 11px',fontSize:10,fontWeight:700,textTransform:'uppercase' as const,letterSpacing:'0.12em',color:'rgba(255,255,255,0.30)'}}>
-                Call-to-action <span style={{textTransform:'none',fontSize:9,letterSpacing:'normal',color:'rgba(255,255,255,0.22)',fontWeight:400,marginLeft:4}}>optional</span>
-              </p>
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                <input className="rc-inp" value={ctaLabel} onChange={e=>setCtaLabel(e.target.value)} placeholder="Button label — e.g. Read more" maxLength={50} style={inp}/>
-                <input className="rc-inp" type="url" value={ctaUrl} onChange={e=>setCtaUrl(e.target.value)} placeholder="https://…" style={inp}/>
-                {ctaLabel&&ctaUrl&&(
-                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)'}}>
-                    <span style={{fontSize:11,color:'rgba(255,255,255,0.32)'}}>Preview</span>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 13px',borderRadius:99,background:'rgba(255,255,255,0.90)',color:'#000',fontSize:12,fontWeight:700}}>
-                      {ctaLabel}<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M8 2H3.5M8 2v4.5" stroke="#000" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </span>
+            )}
+            {mediaMode==='text'&&(
+              <div>
+                <p className="sc-lbl">Text colour</p>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <div style={{position:'relative',width:38,height:38}}>
+                    <div style={{width:38,height:38,borderRadius:10,background:textColor,border:'1px solid rgba(255,255,255,0.15)',cursor:'pointer',boxShadow:'inset 0 0 0 1px rgba(0,0,0,0.20)'}}
+                      onClick={()=>(document.getElementById('rc-clr') as HTMLInputElement)?.click()}/>
+                    <input id="rc-clr" type="color" value={textColor} onChange={e=>setTextColor(e.target.value)} style={{position:'absolute',opacity:0,inset:0,cursor:'pointer'}}/>
                   </div>
-                )}
+                  <input className="rc-inp" value={textColor} onChange={e=>setTextColor(e.target.value)} maxLength={9}
+                    style={{...inp,width:100,fontFamily:'ui-monospace,monospace',fontSize:12.5}}/>
+                </div>
               </div>
-            </div>
-
+            )}
+            {mediaMode!=='text'&&(
+              <div>
+                <p className="sc-lbl">Media</p>
+                <div onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)} onDrop={onDrop}
+                  onClick={pickMedia}
+                  style={{borderRadius:13,padding:'18px',border:`1.5px dashed ${dragOver?'rgba(255,255,255,0.45)':'rgba(255,255,255,0.11)'}`,
+                    background:dragOver?'rgba(255,255,255,0.05)':'rgba(255,255,255,0.02)',cursor:'pointer',
+                    display:'flex',flexDirection:'column',alignItems:'center',gap:9,transition:'all 160ms ease'}}>
+                  {uploading
+                    ? <><div style={{width:22,height:22,borderRadius:'50%',border:'2.5px solid rgba(255,255,255,0.12)',borderTopColor:'rgba(255,255,255,0.75)',animation:'rcSpin 0.75s linear infinite'}}/><p style={{margin:0,fontSize:12,color:'rgba(255,255,255,0.45)'}}>Uploading…</p></>
+                    : <><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 4v10M7 9l4-5 4 5" stroke="rgba(255,255,255,0.45)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 18h14" stroke="rgba(255,255,255,0.25)" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                      <p style={{margin:0,fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.55)',textAlign:'center'}}>{previewSrc?'Replace media':'Drop or click to upload'}</p>
+                      <p style={{margin:0,fontSize:10.5,color:'rgba(255,255,255,0.28)'}}>Photo or video · up to 50MB</p></>}
+                </div>
+                {uploadErr&&<p style={{margin:'8px 0 0',fontSize:11,color:'#f87171'}}>{uploadErr}</p>}
+              </div>
+            )}
+            {mediaMode!=='text'&&previewSrc&&(
+              <div>
+                <p className="sc-lbl">Filter</p>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {IMAGE_FILTERS.map(f=>(
+                    <button key={f.id} type="button" className="rc-opt-btn" onClick={()=>setImgFilter(f.id)}
+                      style={{borderRadius:9,padding:'6px 12px',fontSize:12,fontWeight:imgFilter===f.id?700:500,
+                        border:inB(imgFilter===f.id),background:inBg(imgFilter===f.id),
+                        color:imgFilter===f.id?'rgba(255,255,255,0.90)':'rgba(255,255,255,0.42)',cursor:'pointer'}}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
+
+        {/* ══ TEXT ══ */}
+        {panel==='text'&&(
+          <div style={{display:'flex',flexDirection:'column',gap:20}}>
+            <div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
+                <p className="sc-lbl" style={{margin:0}}>Main text</p>
+                <span style={{fontSize:10,color:'rgba(255,255,255,0.25)'}}>{caption.length}/220</span>
+              </div>
+              <textarea className="rc-ta" value={caption} onChange={e=>setCaption(e.target.value)} maxLength={220} rows={3}
+                placeholder="What's on your mind?"
+                style={{...inp,resize:'none',lineHeight:1.6,fontSize:14}}/>
+            </div>
+            <div>
+              <p className="sc-lbl">Subtitle <span style={{textTransform:'none',fontSize:9,letterSpacing:'normal',color:'rgba(255,255,255,0.20)',fontWeight:400}}>optional</span></p>
+              <input className="rc-inp" value={subtitle} onChange={e=>setSubtitle(e.target.value)} maxLength={100}
+                placeholder="A supporting line…" style={inp}/>
+            </div>
+            <div>
+              <p className="sc-lbl">Font</p>
+              <div className="sc-fontGrid">
+                {FONT_STYLES.map(f=>(
+                  <button key={f.id} type="button" className="rc-opt-btn" onClick={()=>setFontId(f.id)}
+                    style={{padding:'10px 6px',borderRadius:10,border:inB(fontId===f.id),background:inBg(fontId===f.id),cursor:'pointer',textAlign:'center'}}>
+                    <p style={{margin:0,fontSize:16,...f.style,color:fontId===f.id?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.40)'}}>Aa</p>
+                    <p style={{margin:'3px 0 0',fontSize:8.5,color:'rgba(255,255,255,0.30)',fontFamily:'system-ui'}}>{f.label}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:9}}>
+                <p className="sc-lbl" style={{margin:0}}>Size</p>
+                <span style={{fontSize:10.5,fontWeight:600,color:'rgba(255,255,255,0.35)'}}>{fontSize}px</span>
+              </div>
+              <input type="range" min={12} max={52} value={fontSize} onChange={e=>setFontSize(+e.target.value)}/>
+            </div>
+            <div>
+              <p className="sc-lbl">Alignment &amp; position</p>
+              <div style={{display:'flex',gap:5,marginBottom:7}}>
+                {([
+                  {id:'left' as const,icon:<svg width="14" height="12" viewBox="0 0 14 12" fill="none"><path d="M1 2h12M1 6h8M1 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>},
+                  {id:'center' as const,icon:<svg width="14" height="12" viewBox="0 0 14 12" fill="none"><path d="M1 2h12M3 6h8M2 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>},
+                  {id:'right' as const,icon:<svg width="14" height="12" viewBox="0 0 14 12" fill="none"><path d="M1 2h12M5 6h8M3 10h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>},
+                ]).map(({id,icon})=>(
+                  <button key={id} type="button" className="rc-opt-btn sc-tap" onClick={()=>setTextAlign(id)}
+                    style={{flex:1,padding:'9px',borderRadius:9,border:inB(textAlign===id),background:inBg(textAlign===id),
+                      cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+                      color:textAlign===id?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.32)'}}>
+                    {icon}
+                  </button>
+                ))}
+              </div>
+              <div style={{display:'flex',gap:5}}>
+                {([{id:'top' as const,l:'Top'},{id:'center' as const,l:'Middle'},{id:'bottom' as const,l:'Bottom'}]).map(({id,l})=>(
+                  <button key={id} type="button" className="rc-opt-btn sc-tap" onClick={()=>setTextPos(id)}
+                    style={{flex:1,padding:'8px',borderRadius:9,fontSize:12,fontWeight:textPos===id?700:500,
+                      border:inB(textPos===id),background:inBg(textPos===id),
+                      cursor:'pointer',color:textPos===id?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.38)'}}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ EFFECTS ══ */}
+        {panel==='effects'&&(
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <p className="sc-lbl">Overlays &amp; Finish</p>
+            {([
+              {label:'Vignette',    sub:'Dark gradient around edges',      val:vignette,    set:setVignette,    accent:'#a78bfa'},
+              {label:'Film Grain',  sub:'Cinematic noise overlay',          val:grain,       set:setGrain,       accent:'#fb923c'},
+              {label:'Inner Frame', sub:'Inset border for editorial look',  val:innerBorder, set:setInnerBorder, accent:'#60a5fa'},
+            ] as const).map(t=>(
+              <div key={t.label} style={{
+                display:'flex', alignItems:'center', gap:12,
+                padding:'13px 14px', borderRadius:13,
+                background: t.val ? `rgba(${t.accent==='#a78bfa'?'167,139,250':t.accent==='#fb923c'?'251,146,60':'96,165,250'},0.07)` : 'rgba(255,255,255,0.025)',
+                border: `1px solid ${t.val ? `rgba(${t.accent==='#a78bfa'?'167,139,250':t.accent==='#fb923c'?'251,146,60':'96,165,250'},0.20)` : 'rgba(255,255,255,0.06)'}`,
+                transition:'all 200ms ease',
+              }}>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{margin:0,fontSize:13,fontWeight:600,color: t.val ? 'rgba(255,255,255,0.90)' : 'rgba(255,255,255,0.72)'}}>{t.label}</p>
+                  <p style={{margin:'2px 0 0',fontSize:10.5,color:'rgba(255,255,255,0.30)'}}>{t.sub}</p>
+                </div>
+                <button type="button" className="rc-toggle" onClick={()=>t.set(!t.val)}
+                  style={{width:42,height:24,borderRadius:99,border:'none',cursor:'pointer',flexShrink:0,
+                    background:t.val?t.accent:'rgba(255,255,255,0.10)',
+                    position:'relative',transition:'background 220ms ease',
+                    boxShadow: t.val ? `0 0 10px ${t.accent}44` : 'none'}}>
+                  <div style={{
+                    position:'absolute', top:4, width:16, height:16, borderRadius:'50%',
+                    left: t.val ? 22 : 4,
+                    background:t.val?'#fff':'rgba(255,255,255,0.55)',
+                    transition:'left 220ms cubic-bezier(0.22,1,0.36,1)',
+                    boxShadow:'0 1px 4px rgba(0,0,0,0.35)',
+                  }}/>
+                </button>
+              </div>
+            ))}
+
+            {mediaMode!=='text'&&previewSrc&&(
+              <div style={{marginTop:4,padding:'13px 14px',borderRadius:13,
+                background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:10,gap:8}}>
+                  <p style={{margin:0,fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.72)'}}>Scrim darkness</p>
+                  <span style={{fontSize:10.5,fontWeight:600,color:'rgba(255,255,255,0.35)'}}>for text legibility</span>
+                </div>
+                <input type="range" min={0} max={80} defaultValue={40}
+                  style={{width:'100%',accentColor:'rgba(255,255,255,0.65)'}}/>
+              </div>
+            )}
+
+            {mediaMode==='text'&&(
+              <div style={{marginTop:4,padding:'13px 14px',borderRadius:13,
+                background:'rgba(255,255,255,0.025)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                <p style={{margin:'0 0 10px',fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.72)'}}>Background intensity</p>
+                <input type="range" min={50} max={100} defaultValue={100}
+                  style={{width:'100%',accentColor:'rgba(255,255,255,0.65)'}}/>
+                <p style={{margin:'6px 0 0',fontSize:10,color:'rgba(255,255,255,0.22)'}}>Adjust gradient vibrancy</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Publish settings (all existing controls, unchanged) ────────────────────
+  function renderPublish() {
+    return (
+      <div className="rc-scrl sc-panelBody" style={{display:'flex',flexDirection:'column',gap:20}}>
+
+        <div>
+          <p className="sc-lbl">Category</p>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+            {CATEGORIES.map(c=>{
+              const badge=CAT_BADGE[c]??DEFAULT_BADGE;
+              return (
+                <button key={c} type="button" className="rc-cat-chip sc-tap" onClick={()=>setCategory(c)}
+                  style={{
+                    borderRadius:99, padding:'6px 14px', fontSize:12, fontWeight:600, cursor:'pointer',
+                    transition:'all 140ms ease',
+                    border:`1px solid ${category===c?badge.border:'rgba(255,255,255,0.08)'}`,
+                    background:category===c?badge.bg:'rgba(255,255,255,0.02)',
+                    color:category===c?badge.text:'rgba(255,255,255,0.42)',
+                  }}>
+                  {c}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <p className="sc-lbl">Visibility</p>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
+            {([
+              {id:'public'  as const,icon:<svg width="15" height="14" viewBox="0 0 16 14" fill="none"><circle cx="8" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1C8 1 6 3.5 6 7s2 6 2 6M8 1c0 0 2 2.5 2 6s-2 6-2 6M2 7h12" stroke="currentColor" strokeWidth="1.3"/></svg>,label:'Public',sub:'Visible to everyone'},
+              {id:'private' as const,icon:<svg width="13" height="15" viewBox="0 0 12 15" fill="none"><rect x="1.5" y="6" width="9" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 6V4a3.5 3.5 0 0 1 7 0v2" stroke="currentColor" strokeWidth="1.3" fill="none"/></svg>,label:'Only me',sub:'Stays private'},
+            ]).map(({id,icon,label,sub})=>(
+              <button key={id} type="button" className="rc-opt-btn sc-tap" onClick={()=>setVisibility(id)}
+                style={{
+                  borderRadius:14, padding:'16px',
+                  border:inB(visibility===id), background:inBg(visibility===id),
+                  cursor:'pointer', display:'flex', flexDirection:'column', gap:9, textAlign:'left',
+                }}>
+                <span style={{color:visibility===id?'rgba(255,255,255,0.80)':'rgba(255,255,255,0.30)'}}>{icon}</span>
+                <p style={{margin:0,fontSize:13.5,fontWeight:700,color:visibility===id?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.48)'}}>{label}</p>
+                <p style={{margin:0,fontSize:11,color:'rgba(255,255,255,0.28)'}}>{sub}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="sc-lbl">Expires after</p>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {[6,12,24,48].map(h=>(
+              <button key={h} type="button" className="rc-opt-btn sc-tap" onClick={()=>setExpiry(h)}
+                style={{
+                  flex:'1 1 64px', padding:'11px', borderRadius:12,
+                  border:inB(expiry===h), background:inBg(expiry===h),
+                  cursor:'pointer', fontSize:13.5, fontWeight:700,
+                  color:expiry===h?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.40)',
+                }}>
+                {h}h
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="sc-lbl">
+            Call-to-action <span style={{textTransform:'none',fontSize:9,letterSpacing:'normal',color:'rgba(255,255,255,0.22)',fontWeight:400,marginLeft:4}}>optional</span>
+          </p>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <input className="rc-inp" value={ctaLabel} onChange={e=>setCtaLabel(e.target.value)} placeholder="Button label — e.g. Read more" maxLength={50} style={inp}/>
+            <input className="rc-inp" type="url" value={ctaUrl} onChange={e=>setCtaUrl(e.target.value)} placeholder="https://…" style={inp}/>
+            {ctaLabel&&ctaUrl&&(
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',borderRadius:11,background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.07)',flexWrap:'wrap'}}>
+                <span style={{fontSize:11,color:'rgba(255,255,255,0.32)'}}>Preview</span>
+                <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 13px',borderRadius:99,background:'rgba(255,255,255,0.90)',color:'#000',fontSize:12,fontWeight:700,maxWidth:'100%',overflow:'hidden'}}>
+                  <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctaLabel}</span>
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0}}><path d="M2 8L8 2M8 2H3.5M8 2v4.5" stroke="#000" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const sideOpen = step === 'publish' ? true : panelOpen;
+
+  return createPortal(
+    <div className="sc-root" onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <style>{CREATOR_CSS}</style>
+
+      <div className="sc-shell" onClick={e=>e.stopPropagation()}>
+
+        {/* ══ HEADER ══ */}
+        <div className="sc-head">
+          {step==='publish' && (
+            <button type="button" className="sc-headBtn sc-tap" aria-label="Back" onClick={()=>setStep('design')}>
+              <svg width="12" height="11" viewBox="0 0 14 12" fill="none"><path d="M9 2L4 6l5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+          )}
+          <div className="sc-headTitle">
+            <p className="sc-headT">{step==='design' ? 'New Recent' : 'Publish Settings'}</p>
+            <p className="sc-headS">{step==='design' ? 'Design your story — template, media or text' : 'Set audience, expiry & call-to-action'}</p>
+          </div>
+          <div className="sc-steps" aria-hidden>
+            {['design','publish'].map(s=>(
+              <span key={s} data-active={step===s} />
+            ))}
+          </div>
+          <button type="button" className="sc-headBtn sc-tap" aria-label="Close" onClick={onClose}>
+            <svg width="10" height="10" viewBox="0 0 11 11" fill="none"><path d="M1 1l9 9M10 1 1 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* ══ MAIN ══ */}
+        <div className="sc-main">
+
+          {/* ── Stage column ── */}
+          <div className="sc-stagecol">
+            <div className="sc-stage"
+              onDragOver={e=>{e.preventDefault();setDragOver(true);}}
+              onDragLeave={()=>setDragOver(false)}
+              onDrop={onDrop}
+              data-drag={dragOver}>{renderCanvas()}</div>
+            {renderSwatches()}
+            {renderRail()}
+            {renderNav()}
+            {uploadErr && <p className="sc-err">{uploadErr}</p>}
+          </div>
+
+          {/* ── Drawer scrim (compact viewports only) ── */}
+          <div className="sc-scrimTap" data-open={sideOpen} onClick={()=>{ if(step==='design') setPanelOpen(false); }} />
+
+          {/* ── Tools / settings column ── */}
+          <div className="sc-side" data-open={sideOpen} data-full={step==='publish'}>
+            <button type="button" className="sc-grab" aria-label="Close panel"
+              onClick={()=>{ step==='publish' ? setStep('design') : setPanelOpen(false); }}><span /></button>
+
+            {step==='design' ? (
+              <>
+                <div className="sc-tabs" role="tablist">
+                  {([
+                    {id:'presets' as const, label:'Presets'},
+                    {id:'style'   as const, label:'Style'},
+                    {id:'text'    as const, label:'Text'},
+                    {id:'effects' as const, label:'Effects'},
+                  ]).map(t=>(
+                    <button key={t.id} type="button" role="tab" aria-selected={panel===t.id}
+                      className="sc-tab sc-tap" data-active={panel===t.id}
+                      onClick={()=>setPanel(t.id)}>{t.label}</button>
+                  ))}
+                </div>
+                {renderPanelBody()}
+              </>
+            ) : renderPublish()}
+          </div>
+        </div>
 
         {/* ══ FOOTER ══ */}
-        <div className="rc-footer" style={{
-          display:'flex', gap:8, padding:'12px 16px',
-          borderTop:'1px solid rgba(255,255,255,0.07)',
-          flexShrink:0,
-          background:'rgba(0,0,0,0.10)',
-          paddingBottom:'max(12px, env(safe-area-inset-bottom))',
-        }}>
-          <button type="button" onClick={step==='design'?onClose:()=>setStep('design')}
-            style={{width:44,height:44,borderRadius:12,border:'1px solid rgba(255,255,255,0.08)',
-              background:'rgba(255,255,255,0.04)',cursor:'pointer',display:'flex',alignItems:'center',
-              justifyContent:'center',color:'rgba(255,255,255,0.42)',flexShrink:0,transition:'all 140ms ease'}}>
+        <div className="sc-foot">
+          <button type="button" className="sc-footBack sc-tap"
+            onClick={step==='design'?onClose:()=>setStep('design')}
+            aria-label={step==='design'?'Cancel':'Back'}>
             {step==='design'
               ? <svg width="10" height="10" viewBox="0 0 11 11" fill="none"><path d="M1 1l9 9M10 1 1 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
               : <svg width="12" height="11" viewBox="0 0 14 12" fill="none"><path d="M9 2L4 6l5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
           </button>
-          {step==='design'?(
-            <button type="button" onClick={()=>setStep('publish')} disabled={!canPublish}
-              style={{
-                flex:1, height:44, borderRadius:12, border:'none',
-                cursor:canPublish?'pointer':'not-allowed',
-                background:canPublish
-                  ? 'linear-gradient(135deg,rgba(255,255,255,0.96),rgba(240,240,255,0.88))'
-                  : 'rgba(255,255,255,0.05)',
-                fontSize:13.5, fontWeight:700, letterSpacing:'-0.01em',
-                color:canPublish?'#060608':'rgba(255,255,255,0.20)',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:7,
-                transition:'all 180ms ease',
-                boxShadow:canPublish?'0 4px 24px rgba(255,255,255,0.14), 0 1px 0 rgba(255,255,255,0.15) inset':'none',
-              }}>
-              {canPublish ? <>Continue <svg width="12" height="11" viewBox="0 0 14 12" fill="none"><path d="M5 2l5 4-5 4" stroke="#060608" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></> : 'Add content to continue'}
+
+          {step==='design' ? (
+            <button type="button" className="sc-cta" onClick={()=>setStep('publish')} disabled={!canPublish} data-on={canPublish}>
+              {canPublish
+                ? <>Next <svg width="13" height="12" viewBox="0 0 14 12" fill="none"><path d="M2 6h9M8 2l4 4-4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></>
+                : 'Add content to continue'}
             </button>
-          ):(
-            <button type="button" onClick={submit} disabled={submitting||uploading}
-              style={{
-                flex:1, height:44, borderRadius:12, border:'none',
-                cursor:submitting||uploading?'not-allowed':'pointer',
-                background:submitting||uploading
-                  ? 'rgba(255,255,255,0.06)'
-                  : 'linear-gradient(135deg,rgba(255,255,255,0.96),rgba(240,240,255,0.88))',
-                fontSize:13.5, fontWeight:700, letterSpacing:'-0.01em',
-                color:submitting||uploading?'rgba(255,255,255,0.25)':'#060608',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:7,
-                transition:'all 180ms ease',
-                boxShadow:(!submitting&&!uploading)?'0 4px 24px rgba(255,255,255,0.14), 0 1px 0 rgba(255,255,255,0.15) inset':'none',
-              }}>
-              {uploading
-                ? <><div style={{width:13,height:13,borderRadius:'50%',border:'2px solid rgba(0,0,0,0.15)',borderTopColor:'#000',animation:'rcSpin 0.8s linear infinite'}}/>Uploading…</>
+          ) : (
+            <button type="button" className="sc-cta" onClick={submit} disabled={submitting||anyUploading} data-on={!submitting&&!anyUploading}>
+              {anyUploading
+                ? <><span className="sc-spin sc-spinSm" />Uploading…</>
                 : submitting
-                  ? <><div style={{width:13,height:13,borderRadius:'50%',border:'2px solid rgba(0,0,0,0.15)',borderTopColor:'#000',animation:'rcSpin 0.8s linear infinite'}}/>Publishing…</>
-                  : <>Publish <svg width="13" height="12" viewBox="0 0 14 12" fill="none"><path d="M2 6h10M8 2l4 4-4 4" stroke="#060608" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></>}
+                  ? <><span className="sc-spin sc-spinSm" />Publishing…</>
+                  : <>Share{publishCount > 1 ? ` ${publishCount} frames` : ''} <svg width="13" height="12" viewBox="0 0 14 12" fill="none"><path d="M2 6h10M8 2l4 4-4 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg></>}
             </button>
           )}
-        </div>{/* footer */}
-      </div>{/* rc-modal */}
-      </div>{/* rc-root */}
+        </div>
+
+        {publishErr && <div className="sc-note sc-noteErr" role="alert">{publishErr}</div>}
+
+        {note && <div className="sc-note" role="status">{note}</div>}
+
+        {/* hidden inputs — upload flow unchanged */}
+        <input ref={fileRef} type="file" accept="image/*,video/*" style={{display:'none'}} onChange={onFile}/>
+        <input ref={camRef} type="file" accept="image/*,video/*" capture="environment" style={{display:'none'}} onChange={onFile}/>
+      </div>
     </div>,
     document.body
   );

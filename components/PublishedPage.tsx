@@ -1213,7 +1213,7 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
       {item.thumbnailUrl && (
         <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
+          <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
         </Link>
       )}
 
@@ -1378,7 +1378,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         {item.thumbnailUrl && (
           <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
+            <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
           </Link>
         )}
 
@@ -2702,7 +2702,7 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
           <img
             src={thumbUrl}
             alt=""
-            className="w-full max-h-[480px] object-cover"
+            className="w-full h-auto"
             loading="lazy"
             decoding="async"
           />

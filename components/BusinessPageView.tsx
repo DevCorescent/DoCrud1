@@ -253,10 +253,17 @@ function VerifyBusinessBanner({ pageId }: { pageId: string }) {
       const res = await fetch(`/api/business-pages/${pageId}/verify`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
       });
-      const data = await res.json() as { verification?: VerifRecord; error?: string };
-      if (res.ok && data.verification) { setVerif(data.verification); setOpen(false); toast('Verification request submitted!'); }
-      else toast(data.error ?? 'Submission failed', 'error');
-    } catch { toast('Submission failed', 'error'); }
+      const data = await res.json().catch(() => ({})) as { verification?: VerifRecord; error?: string };
+      if (res.ok && data.verification) {
+        setVerif(data.verification); setOpen(false); toast('Verification request submitted!');
+      } else if (res.status === 409 && data.verification) {
+        // Already pending/approved — reflect the real status instead of leaving a stale banner.
+        setVerif(data.verification); setOpen(false);
+        toast(data.error ?? 'Verification already submitted', 'error');
+      } else {
+        toast(data.error ?? `Submission failed (${res.status})`, 'error');
+      }
+    } catch { toast('Submission failed — please check your connection', 'error'); }
     finally { setSubmitting(false); }
   }
 

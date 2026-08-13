@@ -2009,7 +2009,7 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
 
   return (
     <article
-      className="group py-5 cursor-pointer"
+      className="group py-5 px-4 sm:px-0 cursor-pointer"
       role="link"
       tabIndex={0}
       onClick={() => router.push(postHref)}
@@ -2057,18 +2057,18 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
         </button>
       </div>
 
-      {/* thumbnail */}
+      {/* thumbnail — full-bleed on mobile (matches /published feed) */}
       {item.thumbnailUrl && (
-        <div className="mb-3.5 -mx-4 overflow-hidden sm:-mx-0">
-  {/* eslint-disable-next-line @next/next/no-img-element */}
-  <img
-    src={item.thumbnailUrl}
-    alt={item.category === 'post' || hpIsJunkTitle(item) ? '' : item.title}
-    className="block w-full h-auto object-cover transition-transform duration-500 group-hover:scale-[1.01]"
-    loading="lazy"
-    decoding="async"
-  />
-</div>
+        <div className="mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.thumbnailUrl}
+            alt={item.category === 'post' || hpIsJunkTitle(item) ? '' : item.title}
+            className="w-full max-h-[380px] object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+            loading="lazy"
+            decoding="async"
+          />
+        </div>
       )}
 
       {/* content — photo posts: caption = body only; never show auto title/filename */}
@@ -2423,7 +2423,7 @@ function HomepageLiveFeed() {
       ` }} />
 
       {/* ── outer premium frame ── */}
-      <div className="relative -mx-4 sm:-mx-6 lg:-mx-10 xl:-mx-12 mt-2 mb-6"
+      <div className="relative sm:-mx-6 lg:-mx-10 xl:-mx-12 mt-2 mb-6"
         style={{
           overflow: 'clip',
           borderRadius: 'clamp(12px, 1.5vw, 24px)',
@@ -2603,7 +2603,7 @@ function HomepageLiveFeed() {
           </div>
 
           {/* feed cards */}
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex-1 overflow-y-auto px-0 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* mobile-only: sort row — hidden */}
             <div className="hidden flex items-center gap-2 py-3 max-w-3xl mx-auto w-full">
               <span className="text-[12px] font-semibold text-white/60 tracking-tight shrink-0">
@@ -4540,11 +4540,15 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
         @keyframes ph-row { from { opacity:0; transform:translateX(-4px); } to { opacity:1; transform:none; } }
       `}</style>
 
+      {/* Single flex row — never wraps */}
       <div
         className="flex items-center justify-between gap-2"
         style={{ animation: 'ph-row 0.45s 0.04s cubic-bezier(0.22,1,0.36,1) both' }}
       >
+        {/* ── Headline (no-wrap) ── */}
         <div className="flex items-center gap-0 min-w-0 overflow-hidden" style={{ flex: '1 1 0' }}>
+
+          {/* "Publish" */}
           <span style={{
             fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
             letterSpacing: '-0.03em', lineHeight: 1,
@@ -4553,12 +4557,14 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
             Publish
           </span>
 
+          {/* Separator › */}
           <span style={{
             fontSize: 'clamp(13px,3vw,19px)', fontWeight: 400,
             color: 'rgba(255,255,255,0.18)', margin: '0 clamp(5px,1.2vw,9px)',
             flexShrink: 0, lineHeight: 1,
           }}>›</span>
 
+          {/* Animated rotating word */}
           <span
             key={idx}
             style={{
@@ -4580,6 +4586,7 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
             {current.label}
           </span>
 
+          {/* "& more." */}
           <span style={{
             fontSize: 'clamp(14px,3.4vw,21px)', fontWeight: 800,
             letterSpacing: '-0.03em', lineHeight: 1,
@@ -4590,6 +4597,7 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
           </span>
         </div>
 
+        {/* ── Publish CTA ── */}
         <button
           type="button"
           onClick={onPublish}
@@ -4620,11 +4628,12 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
    ContentDiscoveryStrip — find-by-type stats bar
 ───────────────────────────────────────────────────────────── */
 const CONTENT_TYPES = [
-  { id: 'all',          label: 'All',         count: 125, Icon: LayoutGrid,  color: '#a78bfa', rgb: '167,139,250'  },
+  { id: 'publish',      label: 'Publish',      count:   0, Icon: Send,         color: '#fb923c', rgb: '251,146,60'   },
   { id: 'news',         label: 'News',         count:   9, Icon: Newspaper,   color: '#60a5fa', rgb: '96,165,250'   },
   { id: 'article',      label: 'Articles',     count:   7, Icon: BookOpen,    color: '#818cf8', rgb: '129,140,248'  },
   { id: 'document',     label: 'Docs',         count:   6, Icon: FileText,    color: '#22d3ee', rgb: '34,211,238'   },
   { id: 'portfolio',    label: 'Portfolio',    count:   4, Icon: Layers,      color: '#f472b6', rgb: '244,114,182'  },
+  { id: 'all',          label: 'All',         count: 125, Icon: LayoutGrid,  color: '#a78bfa', rgb: '167,139,250'  },
   { id: 'announcement', label: 'Announce',     count:   5, Icon: Megaphone,   color: '#fb923c', rgb: '251,146,60'   },
   { id: 'job',          label: 'Jobs',         count:   5, Icon: Briefcase,   color: '#34d399', rgb: '52,211,153'   },
   { id: 'resume',       label: 'Resumes',      count:   3, Icon: User,        color: '#2dd4bf', rgb: '45,212,191'   },
@@ -4645,9 +4654,9 @@ const CONTENT_TYPES = [
 const CDS_VISIBLE_MOBILE = 3; // tabs shown on mobile
 const CDS_VISIBLE_DESKTOP = 7; // tabs shown on desktop
 
-function ContentDiscoveryStrip({ onPublish }: { onPublish: () => void }) {
+function ContentDiscoveryStrip({ onPublish }: { onPublish?: () => void }) {
   const [open, setOpen]       = React.useState(false);
-  const [activeId, setActiveId] = React.useState('all');
+  const [activeId, setActiveId] = React.useState('news');
   const [isMobile, setIsMobile] = React.useState(false);
   const dropRef               = React.useRef<HTMLDivElement>(null);
 
@@ -4722,72 +4731,27 @@ function ContentDiscoveryStrip({ onPublish }: { onPublish: () => void }) {
               )}
             </>
           );
-          return (
-            <React.Fragment key={id}>
-              <Link
-                href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
-                onClick={() => { setActiveId(id); setOpen(false); }}
-                style={commonStyle}
+          if (id === 'publish') {
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => { setActiveId(id); setOpen(false); onPublish?.(); }}
+                style={{ ...commonStyle, font: 'inherit' }}
               >
                 {inner}
-              </Link>
-
-              {/* Publish immediately after All */}
-              {id === 'all' && (
-                <button
-                  type="button"
-                  onClick={onPublish}
-                  className="shrink-0 flex items-center gap-1.5 font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-[0.96]"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 5,
-                    height: 31,
-                    padding: '0 10px 0 7px',
-                    borderRadius: 999,
-                    flexShrink: 0,
-                    background: 'rgba(250,204,21,0.13)',
-                    border: '1px solid rgba(250,204,21,0.28)',
-                    boxShadow:
-                      '0 0 14px rgba(250,204,21,0.12), inset 0 1px 0 rgba(255,255,255,0.07)',
-                    transition:
-                      'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                    color: 'rgba(255,255,255,0.90)',
-                    fontSize: 11.5,
-                    fontWeight: 700,
-                    letterSpacing: '-0.01em',
-                    animation:
-                      'cds-tab-in 0.26s 0.025s cubic-bezier(0.22,1,0.36,1) both',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 17,
-                      height: 17,
-                      borderRadius: 6,
-                      flexShrink: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'rgba(250,204,21,0.26)',
-                      transition: 'background 160ms ease',
-                    }}
-                  >
-                    <Plus
-                      style={{
-                        width: 9.5,
-                        height: 9.5,
-                        color: '#facc15',
-                      }}
-                    />
-                  </div>
-
-                  <span>Publish</span>
-                </button>
-              )}
-            </React.Fragment>
+              </button>
+            );
+          }
+          return (
+            <Link
+              key={id}
+              href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
+              onClick={() => { setActiveId(id); setOpen(false); }}
+              style={commonStyle}
+            >
+              {inner}
+            </Link>
           );
         })}
       </div>
@@ -4843,7 +4807,7 @@ function ContentDiscoveryStrip({ onPublish }: { onPublish: () => void }) {
                 <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.11em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.20)' }}>All categories</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, padding: 5 }}>
-                {CONTENT_TYPES.slice(CDS_VISIBLE_DESKTOP).map(({ id, label, count, Icon, color, rgb }) => {
+                {CONTENT_TYPES.slice(CDS_VISIBLE_DESKTOP).filter(t => t.id !== 'publish').map(({ id, label, count, Icon, color, rgb }) => {
                   const isActive = activeId === id;
                   return (
                     <Link
@@ -5181,11 +5145,6 @@ function LiveLeaderboards() {
             <Trophy className="h-3.5 w-3.5 text-amber-400/60" />
           </div>
           <h2 className="text-[14px] font-bold tracking-tight text-white">Live Leaderboards</h2>
-          {/* LIVE badge */}
-          <span className="flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2.5 py-0.5 text-[9px] font-semibold text-white/40">
-            <span className={`h-1.5 w-1.5 rounded-full ${ticking ? 'bg-emerald-400 animate-ping' : 'bg-white/40 animate-pulse'}`} />
-            LIVE
-          </span>
           {lastUpdated && (
             <span className="hidden sm:inline text-[10px] text-white/18 tabular-nums">
               {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -5897,7 +5856,7 @@ function NewHomepageContent({
       className="flex flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y scrollbar-minimal pb-[env(safe-area-inset-bottom,0px)] [padding-bottom:max(180px,calc(180px+env(safe-area-inset-bottom,0px)))] md:[padding-bottom:max(176px,calc(176px+env(safe-area-inset-bottom,0px)))]"
       style={{ WebkitOverflowScrolling: 'touch', transform: 'translateZ(0)', willChange: 'scroll-position', contain: 'layout style' }}
     >
-      <div className="mx-auto w-full max-w-[1440px] space-y-6 sm:space-y-8 lg:space-y-10 px-4 sm:px-6 lg:px-10 xl:px-12 pt-5 sm:pt-7 lg:pt-8">
+      <div className="mx-auto w-full max-w-[1440px] space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-6 lg:px-10 xl:px-12 pt-5 sm:pt-7 lg:pt-8">
 
         {/* ── All-features bottom sheet (mobile only) ── */}
         {showAllFeatures && typeof document !== 'undefined' && createPortal(
@@ -6438,7 +6397,7 @@ function NewHomepageContent({
           ];
 
           return (
-            <section className="hero-banners-section -mx-4 sm:mx-0 px-4 sm:px-0 lg:px-0 flex lg:grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory no-scrollbar scroll-px-4 sm:scroll-px-0 [scroll-behavior:smooth] [&_.hero-banner]:snap-start [&_.hero-banner]:shrink-0 [&_.hero-banner]:min-w-[88%] sm:[&_.hero-banner]:min-w-[72%] lg:[&_.hero-banner]:min-w-0 lg:[&_.hero-banner]:snap-none">
+            <section className="hero-banners-section mx-0 sm:mx-0 px-0 sm:px-0 lg:px-0 flex lg:grid lg:grid-cols-2 gap-3 sm:gap-4 overflow-x-auto lg:overflow-visible snap-x snap-mandatory no-scrollbar scroll-px-0 sm:scroll-px-0 [scroll-behavior:smooth] [&_.hero-banner]:snap-start [&_.hero-banner]:shrink-0 [&_.hero-banner]:min-w-[88%] sm:[&_.hero-banner]:min-w-[72%] lg:[&_.hero-banner]:min-w-0 lg:[&_.hero-banner]:snap-none">
               <style dangerouslySetInnerHTML={{ __html: `
                 @keyframes __unused_hiringPulse {
                   0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.55); }
@@ -6620,10 +6579,10 @@ function NewHomepageContent({
         {false && <div className="cv-auto"><LiveLeaderboards /></div>}
 
         {/* ── Row 7: Built in India ──────────────────────────────── */}
-        {hpSections.builtInIndia && <div className="-mx-4 sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><BuiltInIndia /></div>}
+        {hpSections.builtInIndia && <div className="sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><BuiltInIndia /></div>}
 
         {/* ── Footer ───────────────────────────────────────────────── */}
-        {hpSections.footer && <div className="-mx-4 sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><PremiumFooter /></div>}
+        {hpSections.footer && <div className="sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><PremiumFooter /></div>}
 
       </div>
     </div>
@@ -7991,12 +7950,12 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
             <div className="absolute inset-0" style={{ background: '#060608' }} />
             {/* Orbs — reduced to 35% opacity on mobile, full on sm+ */}
             <div className="absolute inset-0 opacity-[0.35] sm:opacity-100">
-            {/* // Diagonal pinned orange glows 
+            {/* Diagonal pinned orange glows */}
             <div className="absolute -top-48 -left-48 h-[700px] w-[700px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(249,115,22,0.04) 0%,rgba(234,88,12,0.02) 40%,transparent 70%)', filter: 'blur(140px)', willChange: 'transform', transform: 'translateZ(0)' }} />
             <div className="absolute -bottom-48 -right-48 h-[700px] w-[700px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(249,115,22,0.04) 0%,rgba(234,88,12,0.02) 40%,transparent 70%)', filter: 'blur(140px)', willChange: 'transform', transform: 'translateZ(0)' }} />
-            // Animated orange-gold orbs 
+            {/* Animated orange-gold orbs */}
             <div className="absolute -left-40 -top-40 h-[800px] w-[800px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(251,146,60,0.07) 0%,rgba(245,158,11,0.04) 38%,rgba(234,88,12,0.02) 62%,transparent 76%)', filter: 'blur(95px)', animation: 'obGoldDrift1 30s ease-in-out infinite', willChange: 'transform', transform: 'translateZ(0)' }} />
             <div className="absolute -right-32 top-[12%] h-[660px] w-[660px] rounded-full"
@@ -8004,7 +7963,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
             <div className="absolute bottom-[-8%] left-[28%] h-[580px] w-[580px] rounded-full"
               style={{ background: 'radial-gradient(circle,rgba(234,88,12,0.05) 0%,rgba(245,158,11,0.03) 40%,rgba(251,146,60,0.01) 64%,transparent 76%)', filter: 'blur(80px)', animation: 'obGoldDrift3 34s ease-in-out infinite 10s', willChange: 'transform', transform: 'translateZ(0)' }} />
             <div className="absolute right-[18%] bottom-[22%] h-[340px] w-[340px] rounded-full"
-              style={{ background: 'radial-gradient(circle,rgba(253,186,116,0.04) 0%,rgba(245,158,11,0.02) 52%,transparent 72%)', filter: 'blur(60px)', animation: 'obGoldDrift1 22s ease-in-out infinite 8s', willChange: 'transform', transform: 'translateZ(0)' }} /> */}
+              style={{ background: 'radial-gradient(circle,rgba(253,186,116,0.04) 0%,rgba(245,158,11,0.02) 52%,transparent 72%)', filter: 'blur(60px)', animation: 'obGoldDrift1 22s ease-in-out infinite 8s', willChange: 'transform', transform: 'translateZ(0)' }} />
             {/* Particles */}
             {([
               { x: 8,  y:12, s:2,   d:'0s',   t:'obParticle 4.2s ease-in-out infinite',  warm:false },
@@ -8027,14 +7986,10 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
             {/* Micro-grid */}
             <div className="absolute inset-0 opacity-[0.016]"
               style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px)', backgroundSize: '64px 64px' }} />
-           {/* Neutral top glow */}
-<div
-  className="absolute inset-0"
-  style={{
-    background:
-      'radial-gradient(ellipse 110% 60% at 50% -5%, rgba(255,255,255,0.015) 0%, transparent 55%)',
-  }}
-/> {/* Edge darken */}
+            {/* Warm top glow */}
+            <div className="absolute inset-0"
+              style={{ background: 'radial-gradient(ellipse 110% 60% at 50% -5%,rgba(245,158,11,0.06) 0%,transparent 55%)' }} />
+            {/* Edge darken */}
             <div className="absolute inset-0"
               style={{ background: 'radial-gradient(ellipse at center,transparent 38%,rgba(5,5,8,0.82) 100%)' }} />
           </div>

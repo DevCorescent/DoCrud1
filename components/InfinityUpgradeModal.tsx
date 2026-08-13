@@ -97,12 +97,12 @@ export default function InfinityUpgradeModal({ feature, onClose, returnTo }: Pro
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto px-4 py-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       {/* Card */}
-      <div className={`relative w-full max-w-md rounded-3xl border border-violet-500/20 bg-[#0e0e1a] overflow-hidden ${meta.glow}`}>
+      <div className={`relative w-full max-w-md my-auto rounded-3xl border border-violet-500/20 bg-[#0e0e1a] overflow-hidden ${meta.glow}`}>
         {/* Close */}
         <button
           onClick={onClose}
@@ -130,7 +130,7 @@ export default function InfinityUpgradeModal({ feature, onClose, returnTo }: Pro
         {/* Body */}
         <div className="px-6 py-5">
           <p className="text-xs text-zinc-500 font-semibold uppercase tracking-widest mb-3">Everything included</p>
-          <div className="grid grid-cols-2 gap-2 mb-6">
+          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2 mb-6">
             {PERKS.map((p) => (
               <div key={p.label} className="flex items-center gap-2 text-xs text-zinc-300">
                 <div className="w-5 h-5 rounded-full bg-violet-500/15 flex items-center justify-center text-violet-400 flex-shrink-0">

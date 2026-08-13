@@ -1999,12 +1999,12 @@ function MessagesPageInner() {
 
   /* ── Auth states ── */
   if (status === 'loading') return (
-    <div style={{ minHeight: '100vh', background: '#0D0D0F', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div className="min-h-screen bg-[#0D0D0F] text-white flex items-center justify-center">
       <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.10)', borderTopColor: 'rgba(255,255,255,0.55)' }} className="animate-spin" />
     </div>
   );
   if (status === 'unauthenticated') return (
-    <div style={{ minHeight: '100vh', background: '#0D0D0F', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+    <div className="min-h-screen bg-[#0D0D0F] text-white flex flex-col items-center justify-center gap-4">
       <div style={{ width: 56, height: 56, borderRadius: 18, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <MessageSquare style={{ width: 24, height: 24, color: 'rgba(255,255,255,0.55)' }} />
       </div>
@@ -2025,7 +2025,9 @@ function MessagesPageInner() {
   const desktopInfoOpen = showInfoPanel && !!activeConvId;
 
   return (
-    <>
+    /* Shell classes match global light-theme invert targets in globals.css
+       (same pattern as Home / People / Profile). Dark appearance unchanged. */
+    <div className="h-[100dvh] min-h-screen bg-[#0D0D0F] text-white relative overflow-hidden">
       {showInfinityModal && <InfinityUpgradeModal feature="chat" onClose={() => setShowInfinityModal(false)} returnTo="/messages" />}
       <style>{`
         body { overflow: hidden; }
@@ -2056,10 +2058,7 @@ function MessagesPageInner() {
         @keyframes drawerUp { from{transform:translateY(100%);} to{transform:translateY(0);} }
       `}</style>
 
-      {/* ── Solid black backdrop (matches homepage) ── */}
-      <div style={{ position:'fixed', inset:0, zIndex:0, pointerEvents:'none', background:'#0D0D0F' }} />
-
-      <div className="flex flex-col overflow-hidden" style={{ height:'100dvh', width:'100%', position:'relative', zIndex:1 }}>
+      <div className="flex flex-col overflow-hidden relative z-[1] h-full w-full">
 
         {/* ── Top header ── */}
         <header className="shrink-0 flex items-center gap-2 z-30"
@@ -2956,14 +2955,14 @@ function MessagesPageInner() {
       )}
 
       {showNewChat && <NewChatModal onClose={() => setShowNewChat(false)} onStart={handleNewChat} />}
-    </>
+    </div>
   );
 }
 
 export default function MessagesPage() {
   return (
     <Suspense fallback={
-      <div style={{ minHeight: '100vh', background: '#09090f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="min-h-screen bg-[#0D0D0F] text-white flex items-center justify-center">
         <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.12)', borderTopColor: 'rgba(59,130,246,0.65)' }} className="animate-spin" />
       </div>
     }>

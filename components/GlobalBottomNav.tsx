@@ -35,58 +35,122 @@ export default function GlobalBottomNav() {
   const pathname  = usePathname() ?? '/';
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(true);
+  const [inChat,  setInChat]  = useState(false);
   const lastY     = useRef(0);
   const ticking   = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
 
-  /* scroll-hide / scroll-show */
+
+  /* ── scroll-hide / scroll-show ──
+     Works for the window scroller on normal pages and for internal scrollers
+     (the /messages chat list, its conversation list, the mobile drawer).
+     Each scroller keeps its own last position — a single shared value would
+     mix the chat list's scrollTop with window.scrollY and flip the bar at
+     random whenever focus moved between them. */
   useEffect(() => {
-  const onScroll = () => {
-    if (ticking.current) return;
+    const THRESHOLD = 6;                       // ignore sub-pixel / jitter scrolls
+    const WINDOW_KEY = document.documentElement;
+    const lastTops = new WeakMap<Element, number>();
+    // Seed the window baseline now, so the very first page scroll is measured
+    // rather than being spent establishing a baseline. Internal scrollers have
+    // no knowable start position, so they baseline on their first event.
+    lastTops.set(WINDOW_KEY, window.scrollY);
+    let pending: { key: Element; top: number } | null = null;
 
-    ticking.current = true;
+    // Text fields scroll internally once their content overflows. Typing in
+    // the composer must not read as list scrolling.
+    const isTextField = (el: HTMLElement) =>
+      el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable;
 
-    requestAnimationFrame(() => {
-      const y = window.scrollY;
-      const previousY = lastY.current;
-      const diff = y - previousY;
+    const handleScroll = (event: Event) => {
+      const target = event.target;
+      let key: Element;
+      let top: number;
 
-      // Initialize the scroll position
-      if (previousY === 0) {
-        lastY.current = y;
+      if (
+        target === document ||
+        target === document.documentElement ||
+        target === document.body ||
+        target === window ||
+        !(target instanceof HTMLElement)
+      ) {
+        key = WINDOW_KEY;
+        top = window.scrollY;
+      } else {
+        if (isTextField(target)) return;
+        // Purely horizontal rails (and non-scrollable nodes) never move the bar.
+        if (target.scrollHeight - target.clientHeight <= 0) return;
+        key = target;
+        top = target.scrollTop;
+      }
+
+      // Always keep the newest position; coalesce to one read per frame.
+      pending = { key, top };
+      if (ticking.current) return;
+      ticking.current = true;
+
+      requestAnimationFrame(() => {
         ticking.current = false;
-        return;
-      }
+        const p = pending;
+        pending = null;
+        if (!p) return;
 
-      // Ignore tiny movements
-      if (Math.abs(diff) > 4) {
-        if (diff > 0) {
-          // Scrolling DOWN
-          setVisible(false);
-        } else {
-          // Scrolling UP
-          setVisible(true);
-        }
+        const prev = lastTops.get(p.key);
+        if (prev === undefined) { lastTops.set(p.key, p.top); return; }  // first sample = baseline
 
-        lastY.current = y;
-      }
+        const diff = p.top - prev;
+        if (Math.abs(diff) <= THRESHOLD) return;   // keep baseline so small moves accumulate
 
-      ticking.current = false;
+        lastTops.set(p.key, p.top);
+        lastY.current = p.top;
+        setVisible(diff < 0 || p.top <= 0);        // down → hide, up (or at top) → show
+      });
+    };
+
+    // Capture phase catches nested scrollers, whose scroll events do not bubble.
+    document.addEventListener('scroll', handleScroll, { passive: true, capture: true });
+    // Belt-and-braces for the window scroller on normal pages.
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+      document.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  /* Every route starts with the bar visible. */
+  useEffect(() => { setVisible(true); }, [pathname]);
+
+  /* ── Hide entirely inside an open conversation ──
+     The chat screen owns the bottom of the viewport with its own composer,
+     so the floating bar would sit on top of it. The messages scroll area
+     ([data-ns] inside .msgs-root) is rendered only while a conversation is
+     open, which makes it an exact signal — and keeps this change confined to
+     the nav, with no edits to the messages page. */
+  useEffect(() => {
+    if (!pathname.startsWith('/messages')) { setInChat(false); return; }
+
+    let raf = 0;
+    const check = () => {
+      const open = !!document.querySelector('.msgs-root [data-ns]');
+      setInChat(prev => (prev === open ? prev : open));
+    };
+    check();
+
+    const observer = new MutationObserver(() => {
+      if (raf) return;                       // one check per frame, at most
+      raf = requestAnimationFrame(() => { raf = 0; check(); });
     });
-  };
+    observer.observe(document.body, { childList: true, subtree: true });
 
-  // Start from the current position
-  lastY.current = window.scrollY;
+    return () => { observer.disconnect(); if (raf) cancelAnimationFrame(raf); };
+  }, [pathname]);
 
-  window.addEventListener('scroll', onScroll, { passive: true });
+  /* Leaving a conversation always restores the bar, whatever the scroll left it as. */
+  useEffect(() => { if (!inChat) setVisible(true); }, [inChat]);
 
-  return () => {
-    window.removeEventListener('scroll', onScroll);
-  };
-}, []);
-
-  if (!mounted || !shouldShow(pathname)) return null;
+  if (!mounted || !shouldShow(pathname) || inChat) return null;
 
   const nav = (
     <>

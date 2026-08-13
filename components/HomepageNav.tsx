@@ -194,20 +194,39 @@ export default function HomepageNav({
   const [navVisible, setNavVisible] = useState(true);
   const navLastY = useRef(0);
   const navTicking = useRef(false);
-  const [notifOpen, setNotifOpen] = useState(false);
-  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
-  const notifRef = useRef<HTMLDivElement>(null);
-  const notifPanelRef = useRef<HTMLDivElement>(null);
+ const [notifOpen, setNotifOpen] = useState(false);
+const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
+
+const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+const previousNotificationIdsRef = useRef<Set<string>>(new Set());
+const notificationsInitializedRef = useRef(false);
+
+const notifRef = useRef<HTMLDivElement>(null);
+const notifPanelRef = useRef<HTMLDivElement>(null);
   const [badge, setBadge] = useState<{ docrudGo: boolean; avatarUrl: string | null } | null>(null);
   const [msgUnread, setMsgUnread] = useState(0);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
   const [profileOpen, setProfileOpen] = useState(false);
 const profileTriggerRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    setIsMounted(true);
-    setColorMode(getStoredColorMode());
-  }, []);
+ useEffect(() => {
+  setIsMounted(true);
+  setColorMode(getStoredColorMode());
+}, []);
+
+useEffect(() => {
+  const audio = new Audio('/sounds/notification.mp3');
+
+  audio.preload = 'auto';
+  audio.volume = 0.35;
+
+  notificationAudioRef.current = audio;
+
+  return () => {
+    audio.pause();
+    notificationAudioRef.current = null;
+  };
+}, []);
 
   function toggleColorMode() {
     const next: ColorMode = colorMode === 'dark' ? 'light' : 'dark';
@@ -315,6 +334,36 @@ const profileTriggerRef = useRef<HTMLButtonElement>(null);
   }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  useEffect(() => {
+  const currentIds = new Set(
+    notifications.map((notification) => notification.id)
+  );
+
+  // First load: remember existing notifications, but don't play sound.
+  if (!notificationsInitializedRef.current) {
+    previousNotificationIdsRef.current = currentIds;
+    notificationsInitializedRef.current = true;
+    return;
+  }
+
+  const hasNewNotification = notifications.some(
+    (notification) =>
+      !previousNotificationIdsRef.current.has(notification.id)
+  );
+
+  if (hasNewNotification) {
+    const audio = notificationAudioRef.current;
+
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {
+        // Browser may block audio until user interaction.
+      });
+    }
+  }
+
+  previousNotificationIdsRef.current = currentIds;
+}, [notifications]);
 
   const fetchNotifications = useCallback(async () => {
     try {

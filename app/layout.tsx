@@ -21,7 +21,7 @@ const manrope = Manrope({
 
 const siteUrl = getPublicAppBaseUrl()
 const metadataBase = new URL(siteUrl)
-const googleAnalyticsId = 'G-DK5LP1JM9W'
+const googleAnalyticsId = 'G-C3WEQ82QWE'
 
 const siteTitle = 'Docrud — Connecting Talent, Work & Opportunity'
 const siteTitleFull = 'Docrud — Connecting Talent, Work & Opportunity | Professional Platform for Careers, Networking & Documents'

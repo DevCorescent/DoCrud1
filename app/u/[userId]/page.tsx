@@ -2493,7 +2493,25 @@ export default function UserProfilePage() {
   const params = useParams();
   const userId = params?.userId as string | undefined;
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+
+  /**
+   * Back navigation for the profile header.
+   *
+   * This route serves two audiences: the signed-in owner (redirected here from
+   * /profile) and public visitors who arrived from a shared link or QR scan.
+   * A visitor from a QR code, WhatsApp or Instagram has no Docrud history, so
+   * router.back() would leave them stranded or bounce them off the site.
+   * For those visitors send them to the onboarding start screen instead.
+   * Signed-in navigation is deliberately left as-is.
+   */
+  const handleProfileBack = useCallback(() => {
+    if (sessionStatus === 'unauthenticated') {
+      router.push('/onboarding');
+      return;
+    }
+    router.back();
+  }, [sessionStatus, router]);
 
   const [data, setData] = useState<ProfileResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -3191,7 +3209,9 @@ export default function UserProfilePage() {
       {/* ─── sticky header ─── */}
       <header className="sticky top-0 z-40 bg-[#0D0D0F]/80 backdrop-blur-xl border-b border-white/[0.05] h-14 flex items-center px-4 sm:px-6 lg:px-8 gap-3">
         <button
-          onClick={() => router.back()}
+          type="button"
+          onClick={handleProfileBack}
+          aria-label={sessionStatus === 'unauthenticated' ? 'Back to Docrud' : 'Go back'}
           className="h-8 w-8 rounded-full border border-white/[0.08] bg-white/[0.04] flex items-center justify-center hover:bg-white/[0.08] transition-colors shrink-0"
         >
           <ArrowLeft className="h-4 w-4 text-white/70" />

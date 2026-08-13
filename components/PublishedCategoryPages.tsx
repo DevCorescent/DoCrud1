@@ -152,7 +152,7 @@ export function ImageSlider({ images }: { images: string[] }) {
     return (
       <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-black cursor-zoom-in" onClick={() => setLightbox(true)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={images[0]} alt="Post image" className="w-full max-h-[520px] object-contain" />
+        <img src={images[0]} alt="Post image" className="w-full h-auto" />
         {lightbox && (
           <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center" onClick={() => setLightbox(false)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -171,18 +171,15 @@ export function ImageSlider({ images }: { images: string[] }) {
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
       >
-        {/* Main image */}
-        <div className="relative" style={{ aspectRatio: '16/10' }}>
-          {images.map((src, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={i}
-              src={src}
-              alt={`Image ${i + 1}`}
-              className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 cursor-zoom-in ${i === index ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-              onClick={() => setLightbox(true)}
-            />
-          ))}
+        {/* Main image — natural aspect ratio (no fixed crop box) */}
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={images[index]}
+            alt={`Image ${index + 1}`}
+            className="w-full h-auto cursor-zoom-in"
+            onClick={() => setLightbox(true)}
+          />
           {/* Gradient overlays for arrows */}
           <div className="absolute inset-y-0 left-0 w-16 bg-gradient-to-r from-black/50 to-transparent pointer-events-none rounded-l-2xl" />
           <div className="absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-black/50 to-transparent pointer-events-none rounded-r-2xl" />
@@ -282,14 +279,14 @@ export function PostDetailContent({
       {isSingleImage ? (
         <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.dataUrl} alt="" className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
+          <img src={item.dataUrl} alt="" className="w-full h-auto" loading="lazy" decoding="async" />
         </div>
       ) : isGallery && galleryImages.length > 0 ? (
         <ImageSlider images={galleryImages} />
       ) : fallbackThumb ? (
         <div className="overflow-hidden sm:rounded-2xl sm:border sm:border-white/[0.08] bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={fallbackThumb} alt="" className="w-full max-h-[520px] object-contain" loading="lazy" decoding="async" />
+          <img src={fallbackThumb} alt="" className="w-full h-auto" loading="lazy" decoding="async" />
         </div>
       ) : (
         /* fallback gradient placeholder */

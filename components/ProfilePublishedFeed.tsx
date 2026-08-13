@@ -649,7 +649,7 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
           <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-0 rounded-xl overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={item.thumbnailUrl} alt={item.category === 'post' ? '' : item.title}
-              className="w-full max-h-[420px] object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
+              className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]" />
           </Link>
         )}
 

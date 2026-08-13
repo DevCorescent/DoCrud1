@@ -2064,7 +2064,7 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
           <img
             src={item.thumbnailUrl}
             alt={item.category === 'post' || hpIsJunkTitle(item) ? '' : item.title}
-            className="w-full max-h-[380px] object-cover transition-transform duration-500 group-hover:scale-[1.01]"
+            className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]"
             loading="lazy"
             decoding="async"
           />

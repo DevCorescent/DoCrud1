@@ -1,10 +1,32 @@
 import { redirect } from 'next/navigation';
+import { Dancing_Script } from 'next/font/google';
 import { getAuthSession } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { buildPageMetadata } from '@/lib/seo';
 import OnboardingFlow from '@/components/OnboardingFlow';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Script face for the "Share your story" heading only. Declared here rather
+ * than in the root layout so it is fetched on this route alone — the rest of
+ * the app keeps loading Manrope by itself.
+ */
+const scriptFont = Dancing_Script({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['600', '700'],
+  variable: '--font-docrud-script',
+  fallback: ['Georgia', 'serif'],
+});
+
+/** First name for the welcome greeting, with the fallbacks the session offers. */
+function greetingName(name?: string | null, organization?: string | null, email?: string | null) {
+  const source = name?.trim() || organization?.trim() || email?.split('@')[0]?.trim() || '';
+  const first = source.split(/[\s._-]+/).filter(Boolean)[0] ?? '';
+  if (!first) return '';
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
 
 export const metadata = buildPageMetadata({
   title: 'Get Started | Docrud',
@@ -39,5 +61,11 @@ export default async function OnboardingStartPage() {
     redirect('/');
   }
 
-  return <OnboardingFlow initialInterests={Array.isArray(profile.interests) ? profile.interests : []} />;
+  return (
+    <OnboardingFlow
+      initialInterests={Array.isArray(profile.interests) ? profile.interests : []}
+      userName={greetingName(session.user.name, session.user.organizationName, session.user.email)}
+      scriptFontClass={scriptFont.variable}
+    />
+  );
 }

@@ -450,6 +450,68 @@ export async function createJob(data: { id: string; pageId: string; title: strin
   return newJob;
 }
 
+/**
+ * Bulk accessors for search.
+ *
+ * Jobs, products and events each live in their own collection keyed by
+ * `pageId`, so many pages can be served by a single `$in` query — no per-page
+ * round trip. These read the same collections and reuse the same strip
+ * functions as the per-page getters above; they add no new storage logic.
+ * Callers must pass the page ids they are already allowed to see.
+ */
+export async function listJobsForPages(pageIds: string[], status = 'open'): Promise<BusinessJob[]> {
+  const ids = Array.from(new Set(pageIds.filter(Boolean)));
+  if (!ids.length) return [];
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const filter: Record<string, unknown> = { pageId: { $in: ids } };
+      if (status) filter.status = status;
+      const docs = await db.collection<JobDoc>('business_page_jobs')
+        .find(filter).sort({ createdAt: -1 }).limit(500).toArray();
+      return docs.map(stripJob);
+    }
+  }
+  const store = await readStore();
+  const idSet = new Set(ids);
+  return store.jobs
+    .filter((j) => idSet.has(j.pageId) && (!status || j.status === status))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 500);
+}
+
+export async function listProductsForPages(pageIds: string[]): Promise<BusinessProduct[]> {
+  const ids = Array.from(new Set(pageIds.filter(Boolean)));
+  if (!ids.length) return [];
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<ProductDoc>('business_page_products')
+        .find({ pageId: { $in: ids } }).sort({ sortOrder: 1, createdAt: -1 }).limit(500).toArray();
+      return docs.map(stripProduct);
+    }
+  }
+  const store = await readStore();
+  const idSet = new Set(ids);
+  return store.products.filter((p) => idSet.has(p.pageId)).slice(0, 500);
+}
+
+export async function listEventsForPages(pageIds: string[]): Promise<BusinessEvent[]> {
+  const ids = Array.from(new Set(pageIds.filter(Boolean)));
+  if (!ids.length) return [];
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<EventDoc>('business_page_events')
+        .find({ pageId: { $in: ids } }).sort({ startAt: 1 }).limit(500).toArray();
+      return docs.map(stripEvent);
+    }
+  }
+  const store = await readStore();
+  const idSet = new Set(ids);
+  return store.events.filter((e) => idSet.has(e.pageId)).slice(0, 500);
+}
+
 export async function getPageProducts(pageId: string): Promise<BusinessProduct[]> {
   if (getDbPool()) {
     const db = await getMongoDb();

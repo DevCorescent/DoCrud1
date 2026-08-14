@@ -53,6 +53,8 @@ export interface SearchMeta {
 }
 
 export interface DbSearchResult {
+  /** Entity type from intelligent search (person/service/business/job/…). */
+  entity?: string;
   id: string;
   title: string;
   description: string;
@@ -158,8 +160,8 @@ function badgeColor(badge?: string): string {
     case 'SOURCE':  return 'rgba(129,140,248,0.80)';
     case 'FILE':
     case 'PUBLIC':
-    case 'PRIVATE': return 'rgba(255,255,255,0.35)';
-    default:        return 'rgba(255,255,255,0.30)';
+    case 'PRIVATE': return 'var(--gs-w350)';
+    default:        return 'var(--gs-w300)';
   }
 }
 
@@ -176,7 +178,7 @@ function getIconDef(r: DbSearchResult): IconDef {
   if (b === 'SOURCE') return { Icon: Globe,          bg: 'rgba(129,140,248,0.13)', fg: 'rgba(165,180,252,0.88)' };
   if (r.type === 'feature' || b === 'FREE' || b === 'NEW')
                       return { Icon: Sparkles,       bg: 'rgba(167,139,250,0.14)', fg: 'rgba(196,181,253,0.88)' };
-  return               { Icon: File,                 bg: 'rgba(255,255,255,0.07)', fg: 'rgba(255,255,255,0.45)' };
+  return               { Icon: File,                 bg: 'var(--gs-w070)', fg: 'var(--gs-w450)' };
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -208,9 +210,9 @@ function Avatar({ src, name, size = 32, gradient }: { src?: string | null; name?
 function RelevanceBar({ score }: { score?: number }) {
   if (typeof score !== 'number' || score <= 0) return null;
   const w = Math.max(10, Math.min(100, score));
-  const color = score >= 80 ? 'rgba(251,146,60,0.55)' : score >= 50 ? 'rgba(255,255,255,0.20)' : 'rgba(255,255,255,0.10)';
+  const color = score >= 80 ? 'rgba(251,146,60,0.55)' : score >= 50 ? 'var(--gs-w200)' : 'var(--gs-w100)';
   return (
-    <div style={{ width: 28, height: 3, borderRadius: 99, background: 'rgba(255,255,255,0.07)', overflow: 'hidden', flexShrink: 0 }}>
+    <div style={{ width: 28, height: 3, borderRadius: 99, background: 'var(--gs-w070)', overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ width: `${w}%`, height: '100%', background: color, borderRadius: 99 }} />
     </div>
   );
@@ -255,7 +257,7 @@ function RelatedChips({ r, query }: { r: DbSearchResult; query: string }) {
   return (
     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
       {chips.map((c) => (
-        <span key={c} style={{ fontSize: 9.5, fontWeight: 500, padding: '1px 6px', borderRadius: 20, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.38)' }}>
+        <span key={c} style={{ fontSize: 9.5, fontWeight: 500, padding: '1px 6px', borderRadius: 20, background: 'var(--gs-w050)', border: '1px solid var(--gs-w080)', color: 'var(--gs-w380)' }}>
           {c}
         </span>
       ))}
@@ -298,14 +300,14 @@ function ResultRow({ r, onClose, idx, query }: { r: DbSearchResult; onClose: () 
         <Avatar src={r.meta?.avatarUrl} name={r.title} size={34}
           gradient="linear-gradient(135deg,rgba(139,92,246,0.75),rgba(99,102,241,0.75))" />
       ) : (
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1px solid var(--gs-w060)' }}>
           <Icon style={{ width: 15, height: 15, color: fg }} />
         </div>
       )}
 
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.88)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--gs-w880)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
             <Highlight text={r.title} query={query} />
           </span>
           {isGig && r.meta?.urgent && (
@@ -315,15 +317,15 @@ function ResultRow({ r, onClose, idx, query }: { r: DbSearchResult; onClose: () 
             <span style={{ fontSize: 9.5, fontWeight: 650, color: 'rgba(253,186,116,0.85)', background: 'rgba(251,146,60,0.09)', border: '1px solid rgba(251,146,60,0.16)', borderRadius: 20, padding: '1.5px 6px', flexShrink: 0 }}>{r.meta.budget}</span>
           )}
         </div>
-        <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.32)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
+        <div style={{ fontSize: 11.5, color: 'var(--gs-w320)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>
           <Highlight text={r.meta?.headline || r.description} query={query} />
-          {isPerson && r.meta?.location && <span style={{ color: 'rgba(255,255,255,0.22)', marginLeft: 6 }}>{r.meta.location}</span>}
+          {isPerson && r.meta?.location && <span style={{ color: 'var(--gs-w220)', marginLeft: 6 }}>{r.meta.location}</span>}
         </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
         <span style={{ fontSize: 9.5, fontWeight: 600, color: bColor, letterSpacing: '0.04em', opacity: 0.70 }}>{r.category}</span>
-        <ChevronRight style={{ width: 11, height: 11, color: 'rgba(255,255,255,0.14)' }} />
+        <ChevronRight style={{ width: 11, height: 11, color: 'var(--gs-w140)' }} />
       </div>
     </a>
   );
@@ -344,36 +346,92 @@ function LocalRow({ item, onClose, idx }: { item: LocalSearchResult; onClose: ()
         animation: `gsRowIn 0.18s ${idx * 0.022}s cubic-bezier(0.22,1,0.36,1) both`,
       }}
     >
-      <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--gs-w050)', border: '1px solid var(--gs-w070)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <item.Icon className="h-3.5 w-3.5 text-white/45" />
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.82)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{item.title}</p>
-        {item.subtitle && <p style={{ margin: 0, fontSize: 11, color: 'rgba(255,255,255,0.30)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{item.subtitle}</p>}
+        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--gs-w820)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{item.title}</p>
+        {item.subtitle && <p style={{ margin: 0, fontSize: 11, color: 'var(--gs-w300)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }}>{item.subtitle}</p>}
       </div>
-      <ChevronRight style={{ width: 11, height: 11, color: 'rgba(255,255,255,0.14)', flexShrink: 0 }} />
+      <ChevronRight style={{ width: 11, height: 11, color: 'var(--gs-w140)', flexShrink: 0 }} />
     </button>
   );
 }
 
 // ─── Group label ──────────────────────────────────────────────────────────────
 
-const GROUP_ORDER = ['People', 'Gigs', 'Documents', 'Feed & Articles', 'Knowledge', 'Web Sources', 'Features & Pages'];
+const GROUP_ORDER = ['People', 'Services', 'Businesses', 'Jobs', 'Gigs', 'Products', 'Events', 'Documents', 'Feed & Articles', 'Knowledge', 'Web Sources', 'Features & Pages'];
+
+/* Entity type from intelligent search wins; the badge rules stay as the
+   fallback so classic-mode responses group exactly as they did before. */
+const ENTITY_GROUP: Record<string, string> = {
+  person: 'People', service: 'Services', business: 'Businesses',
+  job: 'Jobs', gig: 'Gigs', product: 'Products', event: 'Events',
+  post: 'Feed & Articles', file: 'Documents', feature: 'Features & Pages',
+};
 
 function groupResults(results: DbSearchResult[]) {
   const map: Record<string, DbSearchResult[]> = {};
   for (const r of results) {
     const b = (r.badge ?? '').toUpperCase();
-    let label = 'Features & Pages';
-    if (b === 'PERSON')                                    label = 'People';
-    else if (b === 'GIG')                                  label = 'Gigs';
-    else if (b === 'DOC' || b === 'SIGNED' || b === 'TPL') label = 'Documents';
-    else if (b === 'BLOG' || r.type === 'article')         label = 'Feed & Articles';
-    else if (b === 'KB')                                   label = 'Knowledge';
-    else if (b === 'SOURCE')                               label = 'Web Sources';
+    let label = r.entity ? ENTITY_GROUP[r.entity] ?? 'Features & Pages' : 'Features & Pages';
+    if (!r.entity) {
+      if (b === 'PERSON')                                    label = 'People';
+      else if (b === 'GIG')                                  label = 'Gigs';
+      else if (b === 'DOC' || b === 'SIGNED' || b === 'TPL') label = 'Documents';
+      else if (b === 'BLOG' || r.type === 'article')         label = 'Feed & Articles';
+      else if (b === 'KB')                                   label = 'Knowledge';
+      else if (b === 'SOURCE')                               label = 'Web Sources';
+    }
     (map[label] ??= []).push(r);
   }
   return GROUP_ORDER.filter((k) => map[k]).map((k) => ({ label: k, items: map[k] }));
+}
+
+/* Chip order mirrors GROUP_ORDER so chips and sections read the same way. */
+const ENTITY_CHIP_ORDER: Array<{ id: string; label: string }> = [
+  { id: 'person',   label: 'People' },
+  { id: 'service',  label: 'Services' },
+  { id: 'business', label: 'Businesses' },
+  { id: 'job',      label: 'Jobs' },
+  { id: 'gig',      label: 'Gigs' },
+  { id: 'product',  label: 'Products' },
+  { id: 'event',    label: 'Events' },
+  { id: 'post',     label: 'Feed' },
+  { id: 'file',     label: 'Documents' },
+  { id: 'feature',  label: 'Features' },
+];
+
+function EntityChips({ chips, counts, active, onChange, total }: {
+  chips: Array<{ id: string; label: string }>;
+  counts: Map<string, number>;
+  active: string;
+  onChange: (id: string) => void;
+  total: number;
+}) {
+  const all = [{ id: 'all', label: 'All' }, ...chips];
+  return (
+    <div style={{ display: 'flex', gap: 4, overflowX: 'auto', scrollbarWidth: 'none', padding: '0 12px 10px' }}>
+      {all.map((c) => {
+        const on = active === c.id;
+        const n = c.id === 'all' ? total : counts.get(c.id) ?? 0;
+        return (
+          <button key={c.id} type="button" onClick={() => onChange(c.id)} style={{
+            flexShrink: 0, borderRadius: 20, padding: '4px 11px',
+            fontSize: 11, fontWeight: on ? 600 : 500,
+            background: on ? 'var(--gs-w100)' : 'transparent',
+            border: `1px solid ${on ? 'var(--gs-w160)' : 'var(--gs-w060)'}`,
+            color: on ? 'var(--gs-w880)' : 'var(--gs-w320)',
+            cursor: 'pointer', transition: 'all 140ms ease', letterSpacing: '-0.005em',
+            whiteSpace: 'nowrap',
+          }}>
+            {c.label}
+            <span style={{ marginLeft: 5, opacity: 0.55, fontVariantNumeric: 'tabular-nums' }}>{n}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Filter chips — minimal pill tabs ────────────────────────────────────────
@@ -387,9 +445,9 @@ function FilterChips({ active, onChange }: { active: SearchFilter; onChange: (f:
           <button key={f.id} type="button" onClick={() => onChange(f.id)} style={{
             flexShrink: 0, borderRadius: 20, padding: '4px 11px',
             fontSize: 11, fontWeight: on ? 600 : 500,
-            background: on ? 'rgba(255,255,255,0.10)' : 'transparent',
-            border: `1px solid ${on ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.06)'}`,
-            color: on ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.32)',
+            background: on ? 'var(--gs-w100)' : 'transparent',
+            border: `1px solid ${on ? 'var(--gs-w160)' : 'var(--gs-w060)'}`,
+            color: on ? 'var(--gs-w880)' : 'var(--gs-w320)',
             cursor: 'pointer', transition: 'all 140ms ease',
             letterSpacing: '-0.005em',
           }}>{f.label}</button>
@@ -427,25 +485,25 @@ function DiscoveryRow({
       style={{
         display: 'flex', alignItems: 'center', gap: 11, width: '100%',
         padding: '8px 12px', borderRadius: 12, border: 'none',
-        background: active ? 'rgba(255,255,255,0.055)' : 'none',
+        background: active ? 'var(--gs-w055)' : 'none',
         textAlign: 'left', cursor: 'pointer', transition: 'background 120ms ease',
         animation: `gsRowIn 0.18s ${idx * 0.02}s cubic-bezier(0.22,1,0.36,1) both`,
       }}
     >
       <div style={{
         width: 28, height: 28, borderRadius: 9, flexShrink: 0,
-        background: kind === 'trending' ? 'rgba(251,146,60,0.11)' : 'rgba(255,255,255,0.05)',
-        border: `1px solid ${kind === 'trending' ? 'rgba(251,146,60,0.16)' : 'rgba(255,255,255,0.07)'}`,
+        background: kind === 'trending' ? 'rgba(251,146,60,0.11)' : 'var(--gs-w050)',
+        border: `1px solid ${kind === 'trending' ? 'rgba(251,146,60,0.16)' : 'var(--gs-w070)'}`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <Icon style={{ width: 13, height: 13, color: kind === 'trending' ? 'rgba(253,186,116,0.80)' : 'rgba(255,255,255,0.40)' }} />
+        <Icon style={{ width: 13, height: 13, color: kind === 'trending' ? 'rgba(253,186,116,0.80)' : 'var(--gs-w400)' }} />
       </div>
       <span style={{
         flex: 1, minWidth: 0, fontSize: 13, fontWeight: 550,
-        color: 'rgba(255,255,255,0.82)', letterSpacing: '-0.01em',
+        color: 'var(--gs-w820)', letterSpacing: '-0.01em',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{label}</span>
-      <ArrowUpLeft style={{ width: 12, height: 12, color: 'rgba(255,255,255,0.16)', flexShrink: 0 }} />
+      <ArrowUpLeft style={{ width: 12, height: 12, color: 'var(--gs-w160)', flexShrink: 0 }} />
     </button>
   );
 }
@@ -453,8 +511,8 @@ function DiscoveryRow({
 function SectionHeading({ label, action }: { label: string; action?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 8px 4px' }}>
-      <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'rgba(255,255,255,0.22)', whiteSpace: 'nowrap' }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
+      <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--gs-w220)', whiteSpace: 'nowrap' }}>{label}</span>
+      <div style={{ flex: 1, height: 1, background: 'var(--gs-w050)' }} />
       {action}
     </div>
   );
@@ -462,7 +520,7 @@ function SectionHeading({ label, action }: { label: string; action?: React.React
 
 function EmptyLine({ text }: { text: string }) {
   return (
-    <p style={{ margin: '2px 12px 8px', fontSize: 11.5, color: 'rgba(255,255,255,0.24)', letterSpacing: '-0.005em' }}>{text}</p>
+    <p style={{ margin: '2px 12px 8px', fontSize: 11.5, color: 'var(--gs-w240)', letterSpacing: '-0.005em' }}>{text}</p>
   );
 }
 
@@ -502,10 +560,10 @@ function DiscoveryPanel({ trending, recent, activeIdx, onRun, onHover, onClearRe
             style={{
               border: 'none', background: 'none', cursor: 'pointer', padding: '0 2px',
               fontSize: 10, fontWeight: 600, letterSpacing: '0.02em',
-              color: 'rgba(255,255,255,0.30)', transition: 'color 120ms ease',
+              color: 'var(--gs-w300)', transition: 'color 120ms ease',
             }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.65)'; }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.30)'; }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--gs-w650)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--gs-w300)'; }}
           >
             Clear
           </button>
@@ -533,20 +591,48 @@ interface DropdownProps {
   onFilterChange: (f: SearchFilter) => void;
   onClose: () => void;
   intentHint: { filter: SearchFilter; label: string } | null;
+  relaxed?: boolean;
+  searchError?: boolean;
 }
 
-function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, onFilterChange, onClose, intentHint }: DropdownProps) {
-  const grouped = useMemo(() => groupResults(dbResults), [dbResults]);
+function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, onFilterChange, onClose, intentHint, relaxed, searchError }: DropdownProps) {
+  /* Entity filters are derived from what actually came back, so a category with
+     zero results is never offered. Filtering is client-side over the results
+     already fetched — no extra request, no extra latency. */
+  const [entityFilter, setEntityFilter] = useState<string>('all');
+  const entityCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of dbResults) if (r.entity) counts.set(r.entity, (counts.get(r.entity) ?? 0) + 1);
+    return counts;
+  }, [dbResults]);
+  const entityChips = useMemo(
+    () => ENTITY_CHIP_ORDER.filter((e) => (entityCounts.get(e.id) ?? 0) > 0),
+    [entityCounts],
+  );
+  // Reset when a new query changes the available categories.
+  useEffect(() => {
+    if (entityFilter !== 'all' && !entityCounts.has(entityFilter)) setEntityFilter('all');
+  }, [entityCounts, entityFilter]);
+
+  const visibleResults = useMemo(
+    () => (entityFilter === 'all' ? dbResults : dbResults.filter((r) => r.entity === entityFilter)),
+    [dbResults, entityFilter],
+  );
+  const grouped = useMemo(() => groupResults(visibleResults), [visibleResults]);
   const hasLocal = localResults.length > 0;
-  const hasDb    = dbResults.length > 0;
+  const hasDb    = visibleResults.length > 0;
   const hasQuery = query.trim().length > 0;
   let rowIdx = 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
 
-      {/* Filter chips */}
-      <FilterChips active={activeFilter} onChange={onFilterChange} />
+      {/* Filter chips — dynamic for intelligent results, classic otherwise */}
+      {entityChips.length > 1 ? (
+        <EntityChips chips={entityChips} counts={entityCounts} active={entityFilter} onChange={setEntityFilter} total={dbResults.length} />
+      ) : (
+        <FilterChips active={activeFilter} onChange={onFilterChange} />
+      )}
 
       {/* Intent hint — very subtle */}
       {intentHint && hasDb && activeFilter === 'all' && (
@@ -554,20 +640,47 @@ function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, 
           style={{
             display: 'flex', alignItems: 'center', gap: 8, margin: '0 10px 8px',
             borderRadius: 10, padding: '7px 12px',
-            border: '1px solid rgba(255,255,255,0.07)',
-            background: 'rgba(255,255,255,0.04)', cursor: 'pointer', textAlign: 'left',
+            border: '1px solid var(--gs-w070)',
+            background: 'var(--gs-w040)', cursor: 'pointer', textAlign: 'left',
             transition: 'background 120ms ease',
             animation: 'gsRowIn 0.22s cubic-bezier(0.22,1,0.36,1) both',
           }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.07)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--gs-w070)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--gs-w040)'; }}
         >
-          <Sparkles style={{ width: 11, height: 11, color: 'rgba(255,255,255,0.35)', flexShrink: 0 }} />
-          <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.50)', flex: 1 }}>
-            Refine by <strong style={{ fontWeight: 650, color: 'rgba(255,255,255,0.70)' }}>{intentHint.label}</strong>
+          <Sparkles style={{ width: 11, height: 11, color: 'var(--gs-w350)', flexShrink: 0 }} />
+          <span style={{ fontSize: 11.5, color: 'var(--gs-w500)', flex: 1 }}>
+            Refine by <strong style={{ fontWeight: 650, color: 'var(--gs-w700)' }}>{intentHint.label}</strong>
           </span>
-          <ChevronRight style={{ width: 11, height: 11, color: 'rgba(255,255,255,0.22)' }} />
+          <ChevronRight style={{ width: 11, height: 11, color: 'var(--gs-w220)' }} />
         </button>
+      )}
+
+      {/* Error notice — plain language only */}
+      {searchError && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 7, margin: '0 10px 8px',
+          borderRadius: 10, padding: '7px 12px',
+          border: '1px solid var(--gs-w140)', background: 'var(--gs-w050)',
+        }}>
+          <span style={{ fontSize: 11.5, color: 'var(--gs-w550)', lineHeight: 1.4 }}>
+            Search is temporarily unavailable. Please try again.
+          </span>
+        </div>
+      )}
+
+      {/* Relaxed-match notice — the user is told when nothing matched exactly */}
+      {relaxed && hasDb && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 7, margin: '0 10px 8px',
+          borderRadius: 10, padding: '7px 12px',
+          border: '1px solid rgba(251,191,36,0.16)', background: 'rgba(251,191,36,0.06)',
+        }}>
+          <Sparkles style={{ width: 11, height: 11, color: 'rgba(251,191,36,0.75)', flexShrink: 0 }} />
+          <span style={{ fontSize: 11.5, color: 'var(--gs-w550)', lineHeight: 1.4 }}>
+            No exact matches found. Showing related results.
+          </span>
+        </div>
       )}
 
       {/* Results */}
@@ -575,7 +688,7 @@ function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, 
 
         {hasLocal && (
           <div style={{ marginBottom: hasDb ? 6 : 0 }}>
-            <p style={{ margin: '0 8px 4px', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'rgba(255,255,255,0.20)' }}>Navigation</p>
+            <p style={{ margin: '0 8px 4px', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: 'var(--gs-w200)' }}>Navigation</p>
             {localResults.map((item) => <LocalRow key={item.id} item={item} onClose={onClose} idx={rowIdx++} />)}
           </div>
         )}
@@ -583,9 +696,9 @@ function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, 
         {hasDb && grouped.map(({ label, items }, gi) => (
           <div key={label} style={{ marginBottom: gi < grouped.length - 1 ? 8 : 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 8px 4px' }}>
-              <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.22)', whiteSpace: 'nowrap' }}>{label}</span>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.05)' }} />
-              <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.18)', fontVariantNumeric: 'tabular-nums' }}>{items.length}</span>
+              <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--gs-w220)', whiteSpace: 'nowrap' }}>{label}</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--gs-w050)' }} />
+              <span style={{ fontSize: 9.5, color: 'var(--gs-w180)', fontVariantNumeric: 'tabular-nums' }}>{items.length}</span>
             </div>
             {items.map((r) => <ResultRow key={r.id} r={r} onClose={onClose} idx={rowIdx++} query={query} />)}
           </div>
@@ -593,22 +706,22 @@ function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, 
 
         {hasQuery && !hasLocal && !hasDb && !loading && (
           <div style={{ padding: '28px 16px', textAlign: 'center' }}>
-            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.38)', letterSpacing: '-0.01em' }}>No results for &ldquo;{query}&rdquo;</p>
-            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'rgba(255,255,255,0.20)', lineHeight: 1.6 }}>Try a different keyword or name</p>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: 'var(--gs-w380)', letterSpacing: '-0.01em' }}>No results for &ldquo;{query}&rdquo;</p>
+            <p style={{ margin: '6px 0 0', fontSize: 11.5, color: 'var(--gs-w200)', lineHeight: 1.6 }}>Try a different keyword or name</p>
           </div>
         )}
 
         {!hasQuery && !hasLocal && (
           <div style={{ padding: '22px 16px', textAlign: 'center' }}>
-            <p style={{ margin: 0, fontSize: 12, color: 'rgba(255,255,255,0.22)', letterSpacing: '-0.005em' }}>Search people, gigs, docs, feeds & more</p>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--gs-w220)', letterSpacing: '-0.005em' }}>Search people, gigs, docs, feeds & more</p>
           </div>
         )}
       </div>
 
       {/* Refresh sweep */}
       {loading && hasDb && (
-        <div style={{ flexShrink: 0, height: 1.5, overflow: 'hidden', background: 'rgba(255,255,255,0.04)' }}>
-          <div style={{ width: '30%', height: '100%', background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent)', animation: 'gsSweep 1.1s ease-in-out infinite' }} />
+        <div style={{ flexShrink: 0, height: 1.5, overflow: 'hidden', background: 'var(--gs-w040)' }}>
+          <div style={{ width: '30%', height: '100%', background: 'linear-gradient(90deg,transparent,var(--gs-w280),transparent)', animation: 'gsSweep 1.1s ease-in-out infinite' }} />
         </div>
       )}
     </div>
@@ -684,7 +797,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
       if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; }
 
       const trimmed = q.trim();
-      if (!trimmed) { setDbResults([]); setLoading(false); return; }
+      if (!trimmed) { setDbResults([]); setRelaxed(false); setLoading(false); return; }
 
       const key = `${trimmed}::${filter}`;
       const hit = getCached(key);
@@ -698,18 +811,58 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
         try {
           const badges = FILTERS.find((f) => f.id === filter)?.badges ?? [];
           const bp = badges.length ? `&badge=${badges.join(',')}` : '';
-          const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=24${bp}`, {
+          /* Natural-language mode. The query is understood server-side (intent,
+             skills, location, related concepts) before ranking, so a whole
+             sentence works as well as a keyword. `ai` is deliberately absent —
+             the optional LLM expansion never runs on a keystroke. */
+          const res = await fetch(`/api/search?q=${encodeURIComponent(trimmed)}&limit=24&mode=intelligent${bp}`, {
             signal: abortRef.current.signal,
           });
           if (!res.ok) throw new Error('search failed');
-          const data = await res.json() as { results?: DbSearchResult[] };
-          const results = data.results ?? [];
+          setSearchError(false);
+          const data = await res.json() as {
+            results?: Array<Partial<DbSearchResult> & {
+              url?: string; subtitle?: string; why?: string; score?: number;
+              image?: string | null; location?: string | null;
+            }>;
+            relaxed?: boolean;
+          };
+          /* Map the unified result model onto the shape this panel already
+             renders. Falls back cleanly if the endpoint returned classic rows. */
+          const LEGACY_TYPE: Record<string, DbSearchResult['type']> = {
+            person: 'page', business: 'page', service: 'page', job: 'page',
+            gig: 'page', post: 'article', file: 'file', feature: 'feature',
+          };
+          setRelaxed(Boolean(data.relaxed));
+          const results: DbSearchResult[] = (data.results ?? []).map((r) => ({
+            entity: typeof r.type === 'string' ? r.type : undefined,
+            id: String(r.id ?? r.url ?? r.href ?? ''),
+            title: String(r.title ?? ''),
+            description: String(r.description || r.subtitle || ''),
+            href: String(r.url ?? r.href ?? '#'),
+            type: LEGACY_TYPE[String(r.type)] ?? (r.type as DbSearchResult['type']) ?? 'page',
+            category: String(r.subtitle || r.category || ''),
+            badge: r.badge,
+            relevance: typeof r.score === 'number' ? r.score : r.relevance,
+            meta: {
+              ...(r.meta ?? {}),
+              ...(r.location ? { location: r.location } : {}),
+              ...(r.image ? { avatarUrl: r.image } : {}),
+              // Keep the existing headline when there is one; otherwise the
+              // match reason is the most useful second line.
+              ...((r.meta as { headline?: string } | undefined)?.headline
+                ? {}
+                : r.why ? { headline: r.why } : {}),
+            },
+          }));
           setCache(key, results);
           setDbResults(results);
           trackSearch(trimmed, results.length);
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') return;
-          // keep previous results on error — don't blank the list
+          // Keep whatever is on screen, but tell the user plainly. No status
+          // codes, no database or provider details.
+          setSearchError(true);
         } finally {
           clearTimeout(loadingTimer);
           setLoading(false);
@@ -720,6 +873,11 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
     }, []);
 
     const trackSearch = useSearchTracker(SEARCH_CONTEXTS.GLOBAL);
+    /* True when the backend relaxed its matching — the user is told, not hidden from. */
+    const [relaxed, setRelaxed] = useState(false);
+    /* Set only when the request itself failed. The API already falls back to
+       the lexical engine internally, so this means both paths were unusable. */
+    const [searchError, setSearchError] = useState(false);
 
     const handleQueryChange = useCallback((value: string) => {
       setQuery(value);
@@ -893,7 +1051,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
     const activePlaceholder = placeholder ?? cycle[cycleIdx];
     const dropProps: DropdownProps = {
       query, localResults, dbResults: filteredDbResults, loading, activeFilter,
-      onFilterChange: handleFilterChange, onClose: handleResultOpen, intentHint,
+      onFilterChange: handleFilterChange, onClose: handleResultOpen, intentHint, relaxed, searchError,
     };
 
     const discoveryProps: DiscoveryProps = {
@@ -905,22 +1063,22 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
     const inputBorder = loading
       ? '1px solid rgba(251,146,60,0.35)'
       : desktopOpen
-        ? '1px solid rgba(255,255,255,0.18)'
-        : '1px solid rgba(255,255,255,0.09)';
+        ? '1px solid var(--gs-w180)'
+        : '1px solid var(--gs-w090)';
 
     const inputShadow = loading
-      ? '0 0 0 3px rgba(251,146,60,0.08), 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)'
+      ? '0 0 0 3px rgba(251,146,60,0.08), 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 var(--gs-w050)'
       : desktopOpen
-        ? '0 0 0 3px rgba(255,255,255,0.04), 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.05)'
-        : '0 2px 10px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)';
+        ? '0 0 0 3px var(--gs-w040), 0 4px 20px rgba(0,0,0,0.35), inset 0 1px 0 var(--gs-w050)'
+        : '0 2px 10px rgba(0,0,0,0.22), inset 0 1px 0 var(--gs-w040)';
 
     return (
       <>
         {/* Global styles + keyframes */}
         {isMounted && (
           <style>{`
-            .gs-row:hover { background: rgba(255,255,255,0.055) !important; }
-            .gs-row:active { background: rgba(255,255,255,0.038) !important; }
+            .gs-row:hover { background: var(--gs-w055) !important; }
+            .gs-row:active { background: var(--gs-w038) !important; }
             @keyframes gsRowIn  { from { opacity:0; transform: translateY(4px); } to { opacity:1; transform:none; } }
             @keyframes gsSweep  { 0%,100%{transform:translateX(-100%)} 50%{transform:translateX(400%)} }
             @keyframes gsPulse  { 0%,100%{opacity:0.4} 50%{opacity:1} }
@@ -943,7 +1101,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               style={{
                 position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
                 width: 14, height: 14, pointerEvents: 'none', zIndex: 10,
-                color: loading ? 'rgba(251,146,60,0.60)' : desktopOpen ? 'rgba(255,255,255,0.50)' : 'rgba(255,255,255,0.32)',
+                color: loading ? 'rgba(251,146,60,0.60)' : desktopOpen ? 'var(--gs-w500)' : 'var(--gs-w320)',
                 transition: 'color 200ms ease',
               }}
             />
@@ -956,14 +1114,14 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               onFocus={() => setDesktopOpen(true)}
               onKeyDown={handleInputKeyDown}
               placeholder={activePlaceholder}
-              className="[&::placeholder]:text-white/35"
+              className="[&::placeholder]:text-[color:var(--gs-w350)]"
               style={{
                 height: 38, width: '100%', borderRadius: 999,
                 paddingLeft: 38, paddingRight: 72,
                 fontSize: 13, fontWeight: 500,
-                color: 'rgba(255,255,255,0.85)',
+                color: 'var(--gs-w850)',
                 outline: 'none',
-                background: (desktopOpen || loading) ? 'rgba(255,255,255,0.065)' : 'rgba(255,255,255,0.045)',
+                background: (desktopOpen || loading) ? 'var(--gs-w065)' : 'var(--gs-w045)',
                 border: inputBorder,
                 backdropFilter: 'blur(28px) saturate(1.5)',
                 WebkitBackdropFilter: 'blur(28px) saturate(1.5)',
@@ -977,7 +1135,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               <div style={{
                 position: 'absolute', bottom: 0, left: 14, right: 14,
                 height: 1.5, borderRadius: 99, overflow: 'hidden',
-                background: 'rgba(255,255,255,0.06)',
+                background: 'var(--gs-w060)',
               }}>
                 <div style={{
                   position: 'absolute', width: '40%', height: '100%',
@@ -991,7 +1149,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
             <div style={{
               position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
               display: 'flex', alignItems: 'center', gap: 2.5,
-              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)',
+              background: 'var(--gs-w050)', border: '1px solid var(--gs-w070)',
               borderRadius: 999, padding: '3px 8px',
             }}>
               {loading ? (
@@ -1005,8 +1163,8 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                 ))
               ) : (
                 <>
-                  <span style={{ fontSize: 9.5, fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.04em' }}>⌘</span>
-                  <span style={{ fontSize: 9.5, fontWeight: 600, color: 'rgba(255,255,255,0.28)', letterSpacing: '0.04em' }}>K</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gs-w280)', letterSpacing: '0.04em' }}>⌘</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gs-w280)', letterSpacing: '0.04em' }}>K</span>
                 </>
               )}
             </div>
@@ -1043,11 +1201,11 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                 zIndex: 9980,
                 borderRadius: 18,
                 overflow: 'hidden',
-                background: 'rgba(14,14,17,0.78)',
-                border: '1px solid rgba(255,255,255,0.10)',
+                background: 'var(--gs-panel-bg)',
+                border: '1px solid var(--gs-w100)',
                 backdropFilter: 'blur(64px) saturate(2)',
                 WebkitBackdropFilter: 'blur(64px) saturate(2)',
-                boxShadow: '0 24px 64px rgba(0,0,0,0.70), 0 4px 16px rgba(0,0,0,0.40), inset 0 1px 0 rgba(255,255,255,0.07)',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.70), 0 4px 16px rgba(0,0,0,0.40), inset 0 1px 0 var(--gs-w070)',
                 animation: 'gsFadeIn 0.18s cubic-bezier(0.22,1,0.36,1) both',
                 paddingTop: 10,
               }}
@@ -1066,13 +1224,13 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               @keyframes gsm-panel    { from{opacity:0;transform:translateY(-12px) scale(0.98)} to{opacity:1;transform:none} }
               @keyframes gsm-row      { from{opacity:0;transform:translateX(-6px)} to{opacity:1;transform:none} }
               .gsm-row { transition: background 0.12s ease; -webkit-tap-highlight-color: transparent; }
-              .gsm-row:active { background: rgba(255,255,255,0.07) !important; transform: scale(0.985); transition-duration:0.06s; }
+              .gsm-row:active { background: var(--gs-w070) !important; transform: scale(0.985); transition-duration:0.06s; }
             `}</style>
 
             {/* Backdrop */}
             <div
               onClick={closeAll}
-              style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,0.68)', backdropFilter:'blur(10px)', WebkitBackdropFilter:'blur(10px)', animation:'gsm-backdrop 0.18s ease both' }}
+              style={{ position:'fixed', inset:0, zIndex:9998, background:'var(--gs-scrim)', backdropFilter:'blur(10px)', WebkitBackdropFilter:'blur(10px)', animation:'gsm-backdrop 0.18s ease both' }}
             />
 
             {/* Panel — drops from just below the nav bar */}
@@ -1081,24 +1239,24 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                 position: 'fixed', left: 0, right: 0, top: 56,
                 bottom: 'env(safe-area-inset-bottom, 0px)',
                 zIndex: 9999, display: 'flex', flexDirection: 'column',
-                background: 'rgba(7,7,10,0.97)',
+                background: 'var(--gs-panel-bg-solid)',
                 backdropFilter: 'blur(52px) saturate(1.8)',
                 WebkitBackdropFilter: 'blur(52px) saturate(1.8)',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                borderBottom: '1px solid var(--gs-w060)',
                 boxShadow: '0 32px 80px rgba(0,0,0,0.85)',
                 animation: 'gsm-panel 0.22s cubic-bezier(0.22,1,0.36,1) both',
                 overflow: 'hidden',
               }}
             >
               {/* Thin amber progress bar */}
-              <div style={{ height: 2, flexShrink: 0, background: 'rgba(255,255,255,0.04)', overflow: 'hidden' }}>
+              <div style={{ height: 2, flexShrink: 0, background: 'var(--gs-w040)', overflow: 'hidden' }}>
                 {loading && <div style={{ height: '100%', width: '40%', background: 'linear-gradient(90deg,transparent,rgba(251,146,60,0.80),transparent)', animation: 'gsBarSweep 0.9s cubic-bezier(0.4,0,0.6,1) infinite' }} />}
               </div>
 
               {/* Search input row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 12, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Search style={{ width: 15, height: 15, color: loading ? 'rgba(251,146,60,0.70)' : 'rgba(255,255,255,0.40)' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderBottom: '1px solid var(--gs-w060)', flexShrink: 0 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--gs-w050)', border: '1px solid var(--gs-w080)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Search style={{ width: 15, height: 15, color: loading ? 'rgba(251,146,60,0.70)' : 'var(--gs-w400)' }} />
                 </div>
                 <input
                   ref={inputMobileRef}
@@ -1110,10 +1268,10 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                   autoCapitalize="off"
                   spellCheck={false}
                   onKeyDown={handleInputKeyDown}
-                  className="[&::placeholder]:text-white/35"
+                  className="[&::placeholder]:text-[color:var(--gs-w350)]"
                   style={{
                     flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                    fontSize: 17, fontWeight: 500, color: 'rgba(255,255,255,0.90)',
+                    fontSize: 17, fontWeight: 500, color: 'var(--gs-w900)',
                     caretColor: 'rgba(251,146,60,0.80)', fontFamily: 'inherit', letterSpacing: '-0.01em',
                   }}
                 />
@@ -1121,7 +1279,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                   <button
                     type="button"
                     onClick={() => handleQueryChange('')}
-                    style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: 'rgba(255,255,255,0.45)' }}
+                    style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'var(--gs-w070)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: 'var(--gs-w450)' }}
                   >
                     <X style={{ width: 12, height: 12 }} />
                   </button>
@@ -1129,7 +1287,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                 <button
                   type="button"
                   onClick={closeAll}
-                  style={{ height: 34, borderRadius: 9, border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.04)', padding: '0 12px', cursor: 'pointer', flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.45)', letterSpacing: '-0.01em' }}
+                  style={{ height: 34, borderRadius: 9, border: '1px solid var(--gs-w090)', background: 'var(--gs-w040)', padding: '0 12px', cursor: 'pointer', flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'var(--gs-w450)', letterSpacing: '-0.01em' }}
                 >
                   Cancel
                 </button>
@@ -1140,12 +1298,15 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                 {/* Loading skeleton */}
                 {loading && !dbResults.length && query.trim().length > 0 && (
                   <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {/* Skeleton rows: fixed heights so nothing jumps when the
+                        real rows arrive. Tint comes from theme tokens; the
+                        per-row fade is opacity, which works in both themes. */}
                     {[1, 0.8, 0.6].map((op, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 38, height: 38, borderRadius: 11, background: `rgba(255,255,255,${op * 0.06})`, flexShrink: 0 }} />
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, opacity: op }}>
+                        <div style={{ width: 38, height: 38, borderRadius: 11, background: 'var(--gs-w060)', flexShrink: 0 }} />
                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <div style={{ height: 13, borderRadius: 5, background: `rgba(255,255,255,${op * 0.07})`, width: `${60 + i * 12}%` }} />
-                          <div style={{ height: 10, borderRadius: 4, background: `rgba(255,255,255,${op * 0.04})`, width: `${40 + i * 8}%` }} />
+                          <div style={{ height: 13, borderRadius: 5, background: 'var(--gs-w070)', width: `${60 + i * 12}%` }} />
+                          <div style={{ height: 10, borderRadius: 4, background: 'var(--gs-w040)', width: `${40 + i * 8}%` }} />
                         </div>
                       </div>
                     ))}
@@ -1170,9 +1331,9 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
 
               {/* Bottom hint */}
               {!query.trim() && (
-                <div style={{ padding: '10px 16px', borderTop: '1px solid rgba(255,255,255,0.05)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <Search style={{ width: 10, height: 10, color: 'rgba(255,255,255,0.18)' } as React.CSSProperties} />
-                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.20)', letterSpacing: '0.02em' }}>Search documents, people, gigs and more</span>
+                <div style={{ padding: '10px 16px', borderTop: '1px solid var(--gs-w050)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Search style={{ width: 10, height: 10, color: 'var(--gs-w180)' } as React.CSSProperties} />
+                  <span style={{ fontSize: 11, color: 'var(--gs-w200)', letterSpacing: '0.02em' }}>Search documents, people, gigs and more</span>
                 </div>
               )}
             </div>

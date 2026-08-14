@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserNames } from '@/lib/server/users';
 import { getFileTransferById, updateFileTransfer } from '@/lib/server/file-transfers';
 import { getAuthSession } from '@/lib/server/auth';
 
@@ -52,7 +53,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const cat = t.directoryCategory?.toLowerCase() || 'document';
-    const authorName = t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
+    /* Same canonical-name resolution as the feed, so opening an item never
+       shows a different byline than the list it was opened from. Single id →
+       one lookup against the cached user list. */
+    const canonicalName = t.uploadedByUserId
+      ? (await getUserNames([t.uploadedByUserId]).catch(() => new Map<string, string>())).get(t.uploadedByUserId)
+      : undefined;
+    const authorName = canonicalName || t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
     return NextResponse.json({
       id: t.id,
       shareId: t.shareId,

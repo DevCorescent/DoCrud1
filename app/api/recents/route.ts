@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getRecents, createRecent } from '@/lib/server/recents';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
+import { getUserNames } from '@/lib/server/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,15 +32,20 @@ export async function GET() {
      provider picture do not regress. */
   const ownerIds = Array.from(new Set(visible.map((r) => r.userId).filter(Boolean)));
   let avatars = new Map<string, string | null>();
+  let names = new Map<string, string>();
   try {
-    avatars = await getProfileAvatars(ownerIds);
+    // Two bulk lookups for the whole feed — never one per story.
+    [avatars, names] = await Promise.all([getProfileAvatars(ownerIds), getUserNames(ownerIds)]);
   } catch {
-    // Enrichment is best-effort: fall back to the stored value rather than
+    // Enrichment is best-effort: fall back to the stored values rather than
     // failing the whole feed.
   }
 
   const recents = visible.map((r) => ({
     ...r,
+    // `userName` is also a creation-time snapshot, so it goes stale when the
+    // owner renames their account. Canonical name wins; snapshot is fallback.
+    userName: names.get(r.userId) || r.userName,
     userAvatar: avatars.get(r.userId) || r.userAvatar || null,
   }));
 

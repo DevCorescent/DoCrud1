@@ -6,6 +6,7 @@ import { buildBillingThreshold } from '@/lib/server/billing';
 import { getUserUsageSummary } from '@/lib/server/saas';
 import { getVisibleDealRooms } from '@/lib/server/deal-rooms';
 import { getDeduplicatedSocialEventsForUser } from '@/lib/server/social-events';
+import { getUserNames } from '@/lib/server/users';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
 import { hasInfinity } from '@/lib/server/infinity';
 import { getDbPool, getMongoDb } from '@/lib/server/database';
@@ -310,9 +311,12 @@ async function buildSocialNotifications(user: User, state: NotificationState): P
   // exactly as it is in /api/profile/activity. Without the entitlement the owner
   // sees "Someone ..." and no avatar or profile link — the identity never
   // reaches the response. Fetched alongside the avatars, so no extra latency.
-  const [canSeeIdentity, avatarRows] = await Promise.all([
+  const [canSeeIdentity, avatarRows, nameRows] = await Promise.all([
     hasInfinity(user.id).catch(() => false),
     getProfileAvatars(actorIds).catch(() => new Map<string, string | null>()),
+    // `actorName` is snapshotted when the event is written, so it goes stale
+    // after a rename. Resolved in the same batch — no extra round trip.
+    getUserNames(actorIds).catch(() => new Map<string, string>()),
   ]);
   const avatarByActorId = new Map(
     actorIds.map((id) => [id, canSeeIdentity ? avatarRows.get(id) || undefined : undefined]),
@@ -321,7 +325,8 @@ async function buildSocialNotifications(user: User, state: NotificationState): P
   return events.map((rawEvent) => {
     // Redact before any title/href is built, so nothing downstream can leak it.
     const e = canSeeIdentity
-      ? rawEvent
+      // Canonical name replaces the snapshot; redaction below is unchanged.
+      ? { ...rawEvent, actorName: nameRows.get(rawEvent.actorId) || rawEvent.actorName }
       : { ...rawEvent, actorName: 'Someone', actorId: '', actorHeadline: undefined, href: undefined };
     const notificationId = `social-${rawEvent.id}`;
     const toneMap: Record<string, WorkspaceNotification['tone']> = {

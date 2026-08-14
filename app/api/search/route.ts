@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { runGlobalSearch } from '@/lib/server/global-search';
+import { runIntelligentSearch } from '@/lib/server/intelligent-search';
+import type { SearchEntityType } from '@/lib/server/search-intelligence';
+
+const ENTITY_TYPES: SearchEntityType[] = ['person', 'service', 'business', 'job', 'gig', 'post', 'file', 'feature', 'product', 'event'];
 
 function parseCsv(value: string | null) {
   if (!value) return [];
@@ -43,16 +47,46 @@ export async function GET(request: Request) {
   const badges = parseCsv(searchParams.get('badge')).map(normalizeBadge).filter(Boolean) as string[];
 
   const session = await getAuthSession();
+  const sessionUser = session?.user?.id
+    ? {
+        id: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        permissions: session.user.permissions,
+      }
+    : null;
+
+  /* Intelligent mode — natural-language understanding, business/job entities,
+     hybrid ranking, grouping. Opt-in via `mode=intelligent` so every existing
+     caller of this endpoint keeps its exact current behaviour and shape.
+     `ai=1` additionally allows the optional Groq query expansion (never on a
+     keystroke — the caller decides). */
+  const mode = (searchParams.get('mode') || '').trim().toLowerCase();
+  if (mode === 'intelligent' || mode === 'nl') {
+    const requestedTypes = parseCsv(searchParams.get('type'))
+      .map((t) => t.trim().toLowerCase())
+      .filter((t): t is SearchEntityType => (ENTITY_TYPES as string[]).includes(t));
+    try {
+      const payload = await runIntelligentSearch({
+        query,
+        user: sessionUser,
+        limit: Number.isFinite(limit as number) ? (limit as number) : 24,
+        types: requestedTypes.length ? requestedTypes : undefined,
+        viewerLocation: searchParams.get('location'),
+        useAi: searchParams.get('ai') === '1',
+      });
+      // `results` is kept at the top level so a client can consume this response
+      // with the same reader it uses for the classic mode.
+      return NextResponse.json(payload, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    } catch {
+      // Any failure in the intelligent layer falls through to the proven
+      // lexical engine below rather than surfacing an error to the user.
+    }
+  }
+
   const results = await runGlobalSearch({
     query,
-    user: session?.user?.id
-      ? {
-          id: session.user.id,
-          email: session.user.email,
-          role: session.user.role,
-          permissions: session.user.permissions,
-        }
-      : null,
+    user: sessionUser,
     limit: Number.isFinite(limit as number) ? (limit as number) : 12,
     filters: {
       scopes: scopes.length ? scopes : undefined,

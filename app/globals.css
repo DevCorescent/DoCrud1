@@ -1809,3 +1809,92 @@ html[data-ui-mode='light'] .gnb-bar {
 html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
   color: rgba(255, 255, 255, 0.68) !important;
 }
+
+/* ── Global search panel tokens ──────────────────────────────────────────────
+   The search UI was authored against a dark surface with literal rgba values.
+   Each literal now resolves through a token: the .dark values below are byte
+   -identical to what shipped, so dark mode is unchanged, while :root supplies
+   ink-on-white equivalents so the same markup reads correctly in light mode. */
+:root {
+    --gs-w038: rgba(15,23,42,0.028);
+    --gs-w040: rgba(15,23,42,0.03);
+    --gs-w045: rgba(15,23,42,0.034);
+    --gs-w050: rgba(15,23,42,0.038);
+    --gs-w055: rgba(15,23,42,0.041);
+    --gs-w060: rgba(15,23,42,0.045);
+    --gs-w065: rgba(15,23,42,0.049);
+    --gs-w070: rgba(15,23,42,0.053);
+    --gs-w080: rgba(15,23,42,0.06);
+    --gs-w090: rgba(15,23,42,0.068);
+    --gs-w100: rgba(15,23,42,0.075);
+    --gs-w140: rgba(15,23,42,0.119);
+    --gs-w160: rgba(15,23,42,0.136);
+    --gs-w180: rgba(15,23,42,0.282);
+    --gs-w200: rgba(15,23,42,0.3);
+    --gs-w220: rgba(15,23,42,0.318);
+    --gs-w240: rgba(15,23,42,0.336);
+    --gs-w280: rgba(15,23,42,0.372);
+    --gs-w300: rgba(15,23,42,0.35);
+    --gs-w320: rgba(15,23,42,0.368);
+    --gs-w350: rgba(15,23,42,0.395);
+    --gs-w380: rgba(15,23,42,0.422);
+    --gs-w400: rgba(15,23,42,0.44);
+    --gs-w450: rgba(15,23,42,0.485);
+    --gs-w500: rgba(15,23,42,0.53);
+    --gs-w550: rgba(15,23,42,0.575);
+    --gs-w650: rgba(15,23,42,0.65);
+    --gs-w700: rgba(15,23,42,0.7);
+    --gs-w820: rgba(15,23,42,0.82);
+    --gs-w850: rgba(15,23,42,0.85);
+    --gs-w880: rgba(15,23,42,0.88);
+    --gs-w900: rgba(15,23,42,0.9);
+    --gs-panel-bg: rgba(255,255,255,0.94);
+    --gs-panel-bg-solid: rgba(252,252,253,0.98);
+    --gs-panel-border: rgba(15,23,42,0.10);
+    --gs-panel-shadow: 0 18px 60px rgba(15,23,42,0.16);
+    --gs-scrim: rgba(15,23,42,0.28);
+    --gs-row-hover: rgba(15,23,42,0.045);
+    --gs-input-bg: rgba(15,23,42,0.035);
+}
+
+.dark {
+    --gs-w038: rgba(255,255,255,0.038);
+    --gs-w040: rgba(255,255,255,0.04);
+    --gs-w045: rgba(255,255,255,0.045);
+    --gs-w050: rgba(255,255,255,0.05);
+    --gs-w055: rgba(255,255,255,0.055);
+    --gs-w060: rgba(255,255,255,0.06);
+    --gs-w065: rgba(255,255,255,0.065);
+    --gs-w070: rgba(255,255,255,0.07);
+    --gs-w080: rgba(255,255,255,0.08);
+    --gs-w090: rgba(255,255,255,0.09);
+    --gs-w100: rgba(255,255,255,0.1);
+    --gs-w140: rgba(255,255,255,0.14);
+    --gs-w160: rgba(255,255,255,0.16);
+    --gs-w180: rgba(255,255,255,0.18);
+    --gs-w200: rgba(255,255,255,0.2);
+    --gs-w220: rgba(255,255,255,0.22);
+    --gs-w240: rgba(255,255,255,0.24);
+    --gs-w280: rgba(255,255,255,0.28);
+    --gs-w300: rgba(255,255,255,0.3);
+    --gs-w320: rgba(255,255,255,0.32);
+    --gs-w350: rgba(255,255,255,0.35);
+    --gs-w380: rgba(255,255,255,0.38);
+    --gs-w400: rgba(255,255,255,0.4);
+    --gs-w450: rgba(255,255,255,0.45);
+    --gs-w500: rgba(255,255,255,0.5);
+    --gs-w550: rgba(255,255,255,0.55);
+    --gs-w650: rgba(255,255,255,0.65);
+    --gs-w700: rgba(255,255,255,0.7);
+    --gs-w820: rgba(255,255,255,0.82);
+    --gs-w850: rgba(255,255,255,0.85);
+    --gs-w880: rgba(255,255,255,0.88);
+    --gs-w900: rgba(255,255,255,0.9);
+    --gs-panel-bg: rgba(14,14,17,0.78);
+    --gs-panel-bg-solid: rgba(7,7,10,0.97);
+    --gs-panel-border: rgba(255,255,255,0.08);
+    --gs-panel-shadow: 0 18px 60px rgba(0,0,0,0.55);
+    --gs-scrim: rgba(0,0,0,0.68);
+    --gs-row-hover: rgba(255,255,255,0.05);
+    --gs-input-bg: rgba(255,255,255,0.05);
+}

@@ -31,11 +31,18 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { profile?: Partial<UserProfileData> };
     const profilePayload = body.profile ?? {};
 
-    await updateProfileData(actor.id, {
-      ...profilePayload,
-      onboardingDone: true,
-      profileSetupDone: true,
-    });
+    // `profileSetupDone` still marks "this user filled in their profile", which is
+    // what every caller of this endpoint does. `onboardingDone` is the narrower
+    // first-run flag the /onboarding/start flow owns, so it is only written when a
+    // caller asks for it — never cleared, so re-running any flow is safe.
+    const patch: Partial<UserProfileData> = { ...profilePayload, profileSetupDone: true };
+    if (profilePayload.onboardingDone === true) {
+      patch.onboardingDone = true;
+    } else {
+      delete patch.onboardingDone;
+    }
+
+    await updateProfileData(actor.id, patch);
 
     return NextResponse.json({ done: true });
   } catch (error) {

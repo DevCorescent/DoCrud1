@@ -27,6 +27,22 @@ export interface Message {
   editedAt?: string;
   deleted?: boolean;
   deletedAt?: string;
+  /* WhatsApp-style message actions. All optional — messages written before
+     these existed simply have them undefined, and every reader treats
+     undefined as "not set", so existing records stay valid. */
+  deletedForEveryone?: boolean;   // tombstone: record kept, content cleared
+  hiddenFor?: string[];           // "delete for me" — user ids that no longer see it
+  reactions?: Record<string, string>; // userId → emoji (one reaction per user)
+  pinnedAt?: string;
+  pinnedBy?: string;
+}
+
+/** Edit / delete-for-everyone window, in milliseconds. Enforced server-side. */
+export const MESSAGE_MUTATION_WINDOW_MS = 60_000;
+
+export function withinMutationWindow(sentAt: string, now = Date.now()): boolean {
+  const t = new Date(sentAt).getTime();
+  return Number.isFinite(t) && now - t <= MESSAGE_MUTATION_WINDOW_MS;
 }
 
 export interface Conversation {
@@ -273,17 +289,20 @@ export async function getConversations(userId: string): Promise<Conversation[]> 
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
-export async function getMessages(conversationId: string): Promise<Message[]> {
+export async function getMessages(conversationId: string, forUserId?: string): Promise<Message[]> {
+  // `forUserId` only filters out messages that user hid via "delete for me".
+  // Omitting it preserves the original behaviour for existing callers.
+  const visibleTo = (m: Message) => !forUserId || !m.hiddenFor?.includes(forUserId);
   if (getDbPool()) {
     const db = await getMongoDb();
     if (db) {
       const docs = await db.collection<MsgDoc>('messages')
         .find({ conversationId, deleted: { $ne: true } }).sort({ sentAt: 1 }).toArray();
-      return docs.map(stripMsg);
+      return docs.map(stripMsg).filter(visibleTo);
     }
   }
   const data = await getData();
-  return (data.messages[conversationId] ?? []).filter((m) => !m.deleted);
+  return (data.messages[conversationId] ?? []).filter((m) => !m.deleted).filter(visibleTo);
 }
 
 export async function markAsRead(conversationId: string, userId: string): Promise<void> {
@@ -753,4 +772,185 @@ export async function deleteMessage(conversationId: string, messageId: string, u
   msg.deleted = true;
   msg.deletedAt = now;
   await saveData(data);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Message mutations — edit / delete-for-everyone / delete-for-me / react / pin
+
+   Every one of these re-reads the stored message and authorises against it:
+   ownership and the 60-second window are checked here, on the server, so a
+   hand-crafted API request cannot bypass what the UI hides. Conversation
+   membership is checked by the route before these are called.
+───────────────────────────────────────────────────────────────────────────── */
+
+/** Load a single message from whichever backend is active. */
+async function findMessage(conversationId: string, messageId: string): Promise<Message | null> {
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const doc = await db.collection<MsgDoc>('messages').findOne({ _id: messageId, conversationId });
+      return doc ? stripMsg(doc) : null;
+    }
+  }
+  const data = await getData();
+  return (data.messages[conversationId] ?? []).find((m) => m.id === messageId) ?? null;
+}
+
+/** Apply a patch to a single message in whichever backend is active. */
+async function patchMessage(conversationId: string, messageId: string, patch: Partial<Message>): Promise<Message> {
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      // Keys explicitly set to undefined mean "clear this field" — express that
+      // as $unset so Mongo drops them rather than storing nulls.
+      const $set: Record<string, unknown> = {};
+      const $unset: Record<string, ''> = {};
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === undefined) $unset[k] = ''; else $set[k] = v;
+      }
+      const update: Record<string, unknown> = {};
+      if (Object.keys($set).length) update.$set = $set;
+      if (Object.keys($unset).length) update.$unset = $unset;
+      if (Object.keys(update).length) {
+        await db.collection('messages').updateOne({ _id: messageId as any }, update);
+      }
+      const doc = await db.collection<MsgDoc>('messages').findOne({ _id: messageId, conversationId });
+      if (!doc) throw new Error('Message not found');
+      return stripMsg(doc);
+    }
+  }
+  const data = await getData();
+  const msgs = data.messages[conversationId];
+  if (!msgs) throw new Error('Conversation not found');
+  const idx = msgs.findIndex((m) => m.id === messageId);
+  if (idx < 0) throw new Error('Message not found');
+  msgs[idx] = { ...msgs[idx], ...patch };
+  await saveData(data);
+  return msgs[idx];
+}
+
+/** Keep the conversation preview in step when the newest message changes. */
+async function syncLastMessagePreview(conversationId: string, messageId: string, content: string): Promise<void> {
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const [latest] = await db.collection<MsgDoc>('messages')
+        .find({ conversationId, deleted: { $ne: true } }).sort({ sentAt: -1 }).limit(1).toArray();
+      if (latest && latest._id === messageId) {
+        await db.collection('conversations').updateOne(
+          { _id: conversationId as any },
+          { $set: { 'lastMessage.content': content } },
+        );
+      }
+      return;
+    }
+  }
+  const data = await getData();
+  const msgs = (data.messages[conversationId] ?? []).filter((m) => !m.deleted);
+  const latest = msgs[msgs.length - 1];
+  const conv = data.conversations[conversationId];
+  if (latest && latest.id === messageId && conv?.lastMessage) {
+    conv.lastMessage.content = content;
+    await saveData(data);
+  }
+}
+
+/** Edit own message — sender only, text only, within the 60-second window. */
+export async function editMessage(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  content: string,
+): Promise<Message> {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error('Content required');
+
+  const msg = await findMessage(conversationId, messageId);
+  if (!msg) throw new Error('Message not found');
+  if (msg.senderId !== userId) throw new Error('Not your message');
+  if (msg.deleted || msg.deletedForEveryone) throw new Error('Message was deleted');
+  if (msg.type !== 'text') throw new Error('Only text messages can be edited');
+  if (!withinMutationWindow(msg.sentAt)) throw new Error('Edit window has expired');
+
+  const updated = await patchMessage(conversationId, messageId, {
+    content: trimmed, edited: true, editedAt: new Date().toISOString(),
+  });
+  await syncLastMessagePreview(conversationId, messageId, trimmed);
+  return updated;
+}
+
+/** Delete own message for both participants — sender only, within 60 seconds. */
+export async function deleteMessageForEveryone(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+): Promise<Message> {
+  const msg = await findMessage(conversationId, messageId);
+  if (!msg) throw new Error('Message not found');
+  if (msg.senderId !== userId) throw new Error('Not your message');
+  if (msg.deleted) throw new Error('Message was deleted');
+  if (msg.deletedForEveryone) return msg;
+  if (!withinMutationWindow(msg.sentAt)) throw new Error('Delete-for-everyone window has expired');
+
+  // Soft delete: the record and its place in the thread survive, the payload does not.
+  const updated = await patchMessage(conversationId, messageId, {
+    deletedForEveryone: true,
+    deletedAt: new Date().toISOString(),
+    content: '',
+    attachmentUrl: undefined,
+    attachmentName: undefined,
+    attachmentSize: undefined,
+    attachmentMimeType: undefined,
+    reactions: {},
+    pinnedAt: undefined,
+    pinnedBy: undefined,
+  });
+  await syncLastMessagePreview(conversationId, messageId, 'This message was deleted');
+  return updated;
+}
+
+/** Hide a message from one participant's own view only. */
+export async function hideMessageForUser(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+): Promise<void> {
+  const msg = await findMessage(conversationId, messageId);
+  if (!msg) throw new Error('Message not found');
+  const hiddenFor = msg.hiddenFor ?? [];
+  if (hiddenFor.includes(userId)) return;
+  await patchMessage(conversationId, messageId, { hiddenFor: [...hiddenFor, userId] });
+}
+
+/** Set, change or clear the caller's reaction. One reaction per user, per message. */
+export async function setMessageReaction(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  emoji: string | null,
+): Promise<Message> {
+  const msg = await findMessage(conversationId, messageId);
+  if (!msg) throw new Error('Message not found');
+  if (msg.deleted || msg.deletedForEveryone) throw new Error('Message was deleted');
+
+  const reactions = { ...(msg.reactions ?? {}) };
+  if (emoji) reactions[userId] = emoji;
+  else delete reactions[userId];
+  return patchMessage(conversationId, messageId, { reactions });
+}
+
+/** Pin or unpin a message. Either participant may pin within their conversation. */
+export async function setMessagePin(
+  conversationId: string,
+  messageId: string,
+  userId: string,
+  pinned: boolean,
+): Promise<Message> {
+  const msg = await findMessage(conversationId, messageId);
+  if (!msg) throw new Error('Message not found');
+  if (msg.deleted || msg.deletedForEveryone) throw new Error('Message was deleted');
+
+  return patchMessage(conversationId, messageId, pinned
+    ? { pinnedAt: new Date().toISOString(), pinnedBy: userId }
+    : { pinnedAt: undefined, pinnedBy: undefined });
 }

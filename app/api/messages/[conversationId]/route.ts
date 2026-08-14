@@ -2,7 +2,10 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
-import { getConversations, getMessages, sendMessage, deleteMessage, triggerAutoReply } from '@/lib/server/messages';
+import {
+  getConversations, getMessages, sendMessage, deleteMessage, triggerAutoReply,
+  editMessage, deleteMessageForEveryone, hideMessageForUser, setMessageReaction, setMessagePin,
+} from '@/lib/server/messages';
 
 // GET /api/messages/[conversationId] — get messages
 export async function GET(
@@ -26,8 +29,66 @@ export async function GET(
     return NextResponse.json({ error: 'Request was rejected' }, { status: 403 });
   }
 
-  const messages = await getMessages(params.conversationId);
+  const messages = await getMessages(params.conversationId, session.user.id);
   return NextResponse.json({ messages });
+}
+
+// PATCH /api/messages/[conversationId] — act on a single message.
+// One handler, discriminated by `action`, so the existing GET/POST/DELETE
+// contracts are untouched. Every branch is authorised server-side.
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: { conversationId: string } }
+) {
+  const session = await getAuthSession();
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const userId = session.user.id;
+
+  // Conversation membership — getConversations only returns the caller's own.
+  const conversations = await getConversations(userId);
+  const conv = conversations.find((conversation) => conversation.id === params.conversationId);
+  if (!conv) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (conv.status === 'rejected') return NextResponse.json({ error: 'Conversation is rejected' }, { status: 403 });
+
+  const body = await req.json() as {
+    action: 'edit' | 'delete-for-everyone' | 'delete-for-me' | 'react' | 'pin';
+    messageId: string;
+    content?: string;
+    emoji?: string | null;
+    pinned?: boolean;
+  };
+  if (!body?.messageId) return NextResponse.json({ error: 'messageId required' }, { status: 400 });
+
+  try {
+    switch (body.action) {
+      case 'edit': {
+        const message = await editMessage(params.conversationId, body.messageId, userId, body.content ?? '');
+        return NextResponse.json({ message });
+      }
+      case 'delete-for-everyone': {
+        const message = await deleteMessageForEveryone(params.conversationId, body.messageId, userId);
+        return NextResponse.json({ message });
+      }
+      case 'delete-for-me': {
+        await hideMessageForUser(params.conversationId, body.messageId, userId);
+        return NextResponse.json({ ok: true });
+      }
+      case 'react': {
+        const message = await setMessageReaction(params.conversationId, body.messageId, userId, body.emoji ?? null);
+        return NextResponse.json({ message });
+      }
+      case 'pin': {
+        const message = await setMessagePin(params.conversationId, body.messageId, userId, Boolean(body.pinned));
+        return NextResponse.json({ message });
+      }
+      default:
+        return NextResponse.json({ error: 'Unsupported action' }, { status: 400 });
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Error';
+    const status = msg === 'Message not found' ? 404 : 403;
+    return NextResponse.json({ error: msg }, { status });
+  }
 }
 
 // POST /api/messages/[conversationId] — send a message

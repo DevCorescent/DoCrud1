@@ -635,58 +635,15 @@ export default function LoginPage() {
           <div className="relative w-full max-w-[420px]"
             style={{ animation: mounted ? 'obSlideUp 0.55s 0.15s ease both' : 'none', opacity: mounted ? undefined : 0 }}>
 
-            {/* Dark glass backdrop behind the login content — same treatment as onboarding */}
+            {/* Form card — the single primary glass surface */}
             <div
-              aria-hidden="true"
+              className="relative z-10 overflow-hidden rounded-[22px]"
               style={{
-                position: 'absolute',
-                inset: '-18px -16px',
-                backdropFilter: 'blur(22px)',
-                WebkitBackdropFilter: 'blur(22px)',
-                background: 'rgba(5, 5, 8, 0.32)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                borderRadius: 28,
-                boxShadow: '0 20px 70px rgba(0,0,0,0.45)',
-                pointerEvents: 'none',
-              }}
-            />
-
-            {/* Heading */}
-            <div className="relative z-10 mb-4 sm:mb-6">
-              {/* Mobile logo */}
-              <div className="mb-4 flex items-center gap-2 lg:hidden">
-                <div className="flex h-7 w-7 items-center justify-center rounded-[9px] border border-white/[0.12] bg-white/[0.07]">
-                  <div className="h-3 w-3 rotate-45 rounded-[2px] bg-gradient-to-br from-white via-slate-100 to-white/80" />
-                </div>
-                <span className="text-[15px] font-black tracking-[-0.04em] text-white">Docrud</span>
-              </div>
-
-              {/* "Welcome back" pill */}
-              <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.03] px-3 py-1">
-                <div className="h-1.5 w-1.5 rounded-full bg-white/40" />
-                <span className="text-[10px] font-semibold uppercase tracking-[0.28em] text-white/28">Welcome back</span>
-              </div>
-
-              {/* Single-line heading */}
-              <h2 className="whitespace-nowrap text-[clamp(1.35rem,4.5vw,2rem)] font-black tracking-[-0.05em] text-white leading-[1.1]">
-                Sign in to your{' '}
-                <span className="bg-gradient-to-r from-white/90 via-white/55 to-white/25 bg-clip-text text-transparent">workspace.</span>
-              </h2>
-
-              <p className="mt-1.5 text-[12px] text-white/30 sm:text-[13px]">
-                Access your docs, signatures, AI tools and network.
-              </p>
-            </div>
-
-            {/* Form card */}
-            <div
-              className="relative z-10 overflow-hidden rounded-[20px] sm:rounded-[24px]"
-              style={{
-                background: 'rgba(5, 5, 8, 0.32)',
-                backdropFilter: 'blur(22px)',
-                WebkitBackdropFilter: 'blur(22px)',
-                border: '1px solid rgba(255,255,255,0.07)',
-                boxShadow: '0 20px 70px rgba(0,0,0,0.45)',
+                background: 'rgba(20, 20, 24, 0.42)',
+                backdropFilter: 'blur(28px) saturate(115%)',
+                WebkitBackdropFilter: 'blur(28px) saturate(115%)',
+                border: '1px solid rgba(255,255,255,0.09)',
+                boxShadow: '0 24px 80px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05)',
               }}
             >
               <div className="p-4 sm:p-6">

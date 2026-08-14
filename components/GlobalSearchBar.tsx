@@ -55,6 +55,8 @@ export interface SearchMeta {
 export interface DbSearchResult {
   /** Entity type from intelligent search (person/service/business/job/…). */
   entity?: string;
+  /** Absolute 0–100 relevance of this result to the current query. */
+  matchPercent?: number;
   id: string;
   title: string;
   description: string;
@@ -218,6 +220,27 @@ function RelevanceBar({ score }: { score?: number }) {
   );
 }
 
+/* How well this result matches the CURRENT QUERY — not a quality, confidence
+   or profile score. Number is always rendered as text, never colour alone. */
+function MatchBadge({ percent }: { percent?: number }) {
+  if (typeof percent !== 'number' || percent <= 0) return null;
+  return (
+    <span
+      aria-label={`${percent} percent match for this search`}
+      title={`${percent}% match for this search`}
+      style={{
+        flexShrink: 0, whiteSpace: 'nowrap', borderRadius: 99,
+        padding: '1.5px 6px', fontSize: 9.5, fontWeight: 700,
+        fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em',
+        color: 'var(--gs-w550)', background: 'var(--gs-w050)',
+        border: '1px solid var(--gs-w080)',
+      }}
+    >
+      {percent}% match
+    </span>
+  );
+}
+
 // ─── Keyword highlighter ─────────────────────────────────────────────────────
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -324,7 +347,8 @@ function ResultRow({ r, onClose, idx, query }: { r: DbSearchResult; onClose: () 
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-        <span style={{ fontSize: 9.5, fontWeight: 600, color: bColor, letterSpacing: '0.04em', opacity: 0.70 }}>{r.category}</span>
+        <MatchBadge percent={r.matchPercent} />
+        <span className="hidden sm:inline" style={{ fontSize: 9.5, fontWeight: 600, color: bColor, letterSpacing: '0.04em', opacity: 0.70 }}>{r.category}</span>
         <ChevronRight style={{ width: 11, height: 11, color: 'var(--gs-w140)' }} />
       </div>
     </a>
@@ -803,10 +827,14 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
       const hit = getCached(key);
       if (hit) { setDbResults(hit); setLoading(false); return; }
 
-      // Only show loading after 120ms — avoids flash for cache hits and very fast responses
-      const loadingTimer = setTimeout(() => setLoading(true), 120);
+      // The spinner belongs to an actual in-flight request, so the timer starts
+      // when the debounced call fires — not while the user is still typing.
+      // Intermediate keystrokes therefore never flash the loading state.
+      let loadingTimer: ReturnType<typeof setTimeout> | undefined;
 
       debounceRef.current = setTimeout(async () => {
+        // Only show loading after 120ms — avoids a flash for very fast responses.
+        loadingTimer = setTimeout(() => setLoading(true), 120);
         abortRef.current = new AbortController();
         try {
           const badges = FILTERS.find((f) => f.id === filter)?.badges ?? [];
@@ -823,7 +851,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
           const data = await res.json() as {
             results?: Array<Partial<DbSearchResult> & {
               url?: string; subtitle?: string; why?: string; score?: number;
-              image?: string | null; location?: string | null;
+              matchPercent?: number; image?: string | null; location?: string | null;
             }>;
             relaxed?: boolean;
           };
@@ -836,6 +864,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
           setRelaxed(Boolean(data.relaxed));
           const results: DbSearchResult[] = (data.results ?? []).map((r) => ({
             entity: typeof r.type === 'string' ? r.type : undefined,
+            matchPercent: typeof r.matchPercent === 'number' ? r.matchPercent : undefined,
             id: String(r.id ?? r.url ?? r.href ?? ''),
             title: String(r.title ?? ''),
             description: String(r.description || r.subtitle || ''),
@@ -868,8 +897,6 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
           setLoading(false);
         }
       }, 180); // 180ms debounce — reduces in-flight requests without feeling sluggish
-
-      return () => clearTimeout(loadingTimer);
     }, []);
 
     const trackSearch = useSearchTracker(SEARCH_CONTEXTS.GLOBAL);

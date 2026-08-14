@@ -164,6 +164,10 @@ function getFontStyle(fontStyle?: string) {
 
 function Av({ src, name, size = 28 }: { src?: string | null; name?: string; size?: number }) {
   const [err, setErr] = useState(false);
+  /* The header avatar is one reused instance as the viewer moves between
+     stories, so a failure on one owner's photo must not leave the next owner
+     stuck on the initial fallback. */
+  useEffect(() => { setErr(false); }, [src]);
   if (src && !err) return (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={src} alt={name ?? ''} onError={() => setErr(true)}

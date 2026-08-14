@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getRecents, createRecent } from '@/lib/server/recents';
+import { getProfileAvatars } from '@/lib/server/user-profiles';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,32 @@ export async function GET() {
 
   visible.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  return NextResponse.json({ recents: visible });
+  /* Resolve each story's avatar from ITS OWN owner's profile.
+     `userAvatar` on the stored record is a snapshot taken at creation time from
+     the OAuth session image (see POST below), so it is null for anyone who did
+     not sign in with a provider that supplies a picture, and it never reflects
+     a profile photo uploaded to Docrud afterwards. Resolving on read keyed by
+     `r.userId` makes every story show its own owner's current photo.
+
+     One bulk query for all owners — getProfileAvatars() exists precisely to
+     avoid the per-author N+1 this would otherwise be. The stored snapshot is
+     kept as a fallback so stories from users with no Docrud avatar but a
+     provider picture do not regress. */
+  const ownerIds = Array.from(new Set(visible.map((r) => r.userId).filter(Boolean)));
+  let avatars = new Map<string, string | null>();
+  try {
+    avatars = await getProfileAvatars(ownerIds);
+  } catch {
+    // Enrichment is best-effort: fall back to the stored value rather than
+    // failing the whole feed.
+  }
+
+  const recents = visible.map((r) => ({
+    ...r,
+    userAvatar: avatars.get(r.userId) || r.userAvatar || null,
+  }));
+
+  return NextResponse.json({ recents });
 }
 
 export async function POST(req: Request) {

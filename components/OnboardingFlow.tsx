@@ -14,7 +14,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, BarChart3, BrainCircuit, Briefcase, Check, Code2, FolderOpen,
-  GraduationCap, Globe, Heart, ImageIcon, LineChart, Loader2, Megaphone,
+  GraduationCap, Globe, Hand, Heart, ImageIcon, LineChart, Loader2, Megaphone,
   MoreHorizontal, Palette, PenLine, Plus, Sparkles, X,
 } from 'lucide-react';
 
@@ -122,7 +122,14 @@ function StepDots({ step }: { step: number }) {
   );
 }
 
-function HeroBadge({ children, delay = '0.05s' }: { children: React.ReactNode; delay?: string }) {
+function HeroBadge({
+  children, delay = '0.05s', ring = false,
+}: {
+  children: React.ReactNode;
+  delay?: string;
+  /** Soft ambient rings that breathe outward from the badge. */
+  ring?: boolean;
+}) {
   return (
     <div className="relative inline-flex" style={{ animation: `obScaleIn 0.6s ${delay} cubic-bezier(.22,1,.36,1) both` }}>
       <span
@@ -133,6 +140,14 @@ function HeroBadge({ children, delay = '0.05s' }: { children: React.ReactNode; d
           animation: 'obGlow 4.5s ease-in-out infinite',
         }}
       />
+      {ring && [0, 1.8].map((offset) => (
+        <span
+          key={offset}
+          aria-hidden="true"
+          className="absolute inset-0 rounded-full border border-white/[0.16]"
+          style={{ animation: `obRingPulse 3.6s ${offset}s cubic-bezier(.22,1,.36,1) infinite` }}
+        />
+      ))}
       <span className="relative flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.055] text-white sm:h-14 sm:w-14 lg:h-16 lg:w-16">
         {children}
       </span>
@@ -140,10 +155,12 @@ function HeroBadge({ children, delay = '0.05s' }: { children: React.ReactNode; d
   );
 }
 
-function Heading({ children }: { children: React.ReactNode }) {
+function Heading({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <h1
-      className="text-balance text-[1.72rem] font-black leading-[1.12] tracking-[-0.035em] text-white sm:text-[2rem] lg:text-[2.05rem] xl:text-[2.3rem]"
+      className={`text-balance font-black leading-[1.14] tracking-[-0.035em] text-white ${
+        className || 'text-[1.72rem] sm:text-[2rem] lg:text-[2.05rem] xl:text-[2.3rem]'
+      }`}
       style={{ animation: 'obSlideUp 0.55s 0.12s cubic-bezier(.22,1,.36,1) both' }}
     >
       {children}
@@ -166,12 +183,13 @@ function PrimaryButton({
   onClick, busy, disabled, children,
 }: { onClick: () => void; busy?: boolean; disabled?: boolean; children: React.ReactNode }) {
   return (
+    // Compact rather than full-bleed, but still well past the 44px tap target.
     <button
       type="button"
       onClick={onClick}
       disabled={busy || disabled}
-      className={`flex h-[52px] w-full items-center justify-center gap-2 rounded-[15px] bg-white text-[14.5px] font-black tracking-[-0.01em] text-[#08090a] transition-all duration-200 hover:bg-white/90 active:scale-[0.985] disabled:cursor-not-allowed disabled:bg-white/25 disabled:text-white/50 disabled:active:scale-100 ${FOCUS_RING}`}
-      style={{ boxShadow: busy || disabled ? 'none' : '0 6px 30px rgba(255,255,255,0.14)' }}
+      className={`group inline-flex h-[46px] min-w-[196px] items-center justify-center gap-2 rounded-full bg-white px-7 text-[13.5px] font-extrabold tracking-[0.005em] text-[#08090a] transition-all duration-200 hover:bg-white/92 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:translate-y-0 disabled:bg-white/[0.22] disabled:text-white/55 disabled:shadow-none disabled:active:scale-100 ${FOCUS_RING}`}
+      style={{ boxShadow: busy || disabled ? 'none' : '0 4px 18px rgba(255,255,255,0.13), 0 0 0 1px rgba(255,255,255,0.08)' }}
     >
       {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : children}
     </button>
@@ -250,10 +268,18 @@ function WelcomeVisual() {
 
 export default function OnboardingFlow({
   initialInterests,
+  userName = '',
+  scriptFontClass = '',
 }: {
   initialInterests: string[];
+  /** First name from the session — greeting falls back to "there" without it. */
+  userName?: string;
+  /** next/font variable class for the step-3 script heading. */
+  scriptFontClass?: string;
 }) {
   const router = useRouter();
+  // Empty without a resolvable name, which degrades to "Hello, Welcome to Docrud."
+  const greetName = userName.trim();
 
   const [step, setStep] = useState(0);
   const [interests, setInterests] = useState<string[]>(initialInterests.slice(0, MAX_INTERESTS));
@@ -489,7 +515,13 @@ export default function OnboardingFlow({
       disabled={skipping || (step === 2 && !canPublish)}
     >
       {step === 2 ? (
-        <>Publish Post <ArrowRight className="h-4 w-4" aria-hidden="true" /></>
+        <>
+          Publish Post
+          <ArrowRight
+            className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-[3px]"
+            aria-hidden="true"
+          />
+        </>
       ) : 'Continue'}
     </PrimaryButton>
   );
@@ -499,24 +531,70 @@ export default function OnboardingFlow({
     if (step === 0) {
       return (
         <>
-          <Heading>Welcome to Docrud.</Heading>
-          <Description>Your space to create, organize and share what matters to you.</Description>
+          <HeroBadge ring>
+            {/* Waving hand — pivots at the wrist so the gesture reads as "hi". */}
+            <Hand
+              className="h-6 w-6 lg:h-[26px] lg:w-[26px]"
+              strokeWidth={1.7}
+              aria-hidden="true"
+              style={{ transformOrigin: '60% 85%', animation: 'obWave 3.6s 0.75s ease-in-out infinite' }}
+            />
+          </HeroBadge>
+          <div className="mt-4 lg:mt-5">
+            {/* Sized down a step from the other headings so the greeting keeps
+                to one line wherever the column is wide enough for it. */}
+            <Heading className="text-[1.5rem] sm:text-[1.78rem] lg:text-[1.72rem] xl:text-[1.95rem]">
+              <span className="font-extrabold text-white/55">Hello{greetName ? ` ${greetName}` : ''},</span>{' '}
+              <span className="whitespace-nowrap">Welcome to Docrud.</span>
+            </Heading>
+            <p
+              className="mt-3.5 text-[14.5px] font-bold leading-[1.4] tracking-[-0.015em] text-white/85 sm:text-[15.5px]"
+              style={{ animation: 'obSlideUp 0.55s 0.2s cubic-bezier(.22,1,.36,1) both' }}
+            >
+              One connection can change everything !
+            </p>
+            <p
+              className="mt-2 max-w-[38ch] text-[13px] leading-[1.6] text-white/45 sm:text-[13.5px] lg:max-w-[46ch]"
+              style={{ animation: 'obSlideUp 0.55s 0.28s cubic-bezier(.22,1,.36,1) both' }}
+            >
+              Docrud connects talent with opportunities, businesses with the right people, and
+              professionals with networks that open doors.
+            </p>
+            <p
+              className="mt-2.5 text-[12.5px] font-extrabold uppercase tracking-[0.16em] text-white/70 sm:text-[13px]"
+              style={{ animation: 'obSlideUp 0.55s 0.36s cubic-bezier(.22,1,.36,1) both' }}
+            >
+              Connect. Discover. Grow.
+            </p>
+          </div>
         </>
       );
     }
     if (step === 1) {
       return (
         <>
-          <HeroBadge><Heart className="h-6 w-6" strokeWidth={1.8} aria-hidden="true" /></HeroBadge>
+          <HeroBadge ring>
+            <Heart
+              className="h-6 w-6"
+              strokeWidth={1.8}
+              aria-hidden="true"
+              style={{ animation: 'obHeartBeat 3.2s 0.7s ease-in-out infinite' }}
+            />
+          </HeroBadge>
           <div className="mt-4 lg:mt-5">
-            <Heading>What are you interested in?</Heading>
+            <Heading className="text-[1.62rem] sm:text-[1.9rem] lg:text-[1.95rem] xl:text-[2.15rem]">
+              What are you interested in?
+            </Heading>
             <Description>Choose up to 3 topics to personalize your Docrud experience.</Description>
           </div>
           <div
-            className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/[0.09] bg-white/[0.04] px-3.5 py-1.5"
-            style={{ animation: 'obSlideUp 0.5s 0.28s cubic-bezier(.22,1,.36,1) both' }}
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/[0.11] bg-white/[0.045] px-3.5 py-1.5 transition-all duration-300"
+            style={{
+              animation: 'obSlideUp 0.5s 0.28s cubic-bezier(.22,1,.36,1) both',
+              boxShadow: interests.length > 0 ? '0 0 18px rgba(255,255,255,0.09)' : 'none',
+            }}
           >
-            <span className="text-[12px] font-bold tabular-nums text-white/75" aria-live="polite">
+            <span className="text-[11.5px] font-bold tabular-nums tracking-[0.02em] text-white/75" aria-live="polite">
               {interests.length}/{MAX_INTERESTS} selected
             </span>
           </div>
@@ -525,9 +603,31 @@ export default function OnboardingFlow({
     }
     return (
       <>
-        <HeroBadge><PenLine className="h-6 w-6" strokeWidth={1.8} aria-hidden="true" /></HeroBadge>
+        <HeroBadge ring>
+          <PenLine
+            className="h-6 w-6"
+            strokeWidth={1.8}
+            aria-hidden="true"
+            style={{ animation: 'obPenWrite 4s 0.8s ease-in-out infinite' }}
+          />
+        </HeroBadge>
         <div className="mt-5">
-          <Heading>Let&apos;s create your first post.</Heading>
+          <h1
+            className={`${scriptFontClass} text-[2.9rem] leading-[1.05] text-white sm:text-[3.4rem] lg:text-[3.5rem] xl:text-[3.9rem]`}
+            style={{
+              fontFamily: 'var(--font-docrud-script), Georgia, serif',
+              fontWeight: 700,
+              backgroundImage: 'linear-gradient(105deg, #ffffff 12%, rgba(255,255,255,0.72) 62%, rgba(199,205,255,0.85) 100%)',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              color: 'transparent',
+              // Descenders on the script face clip against a tight line-box.
+              paddingBottom: '0.12em',
+              animation: 'obSlideUp 0.6s 0.12s cubic-bezier(.22,1,.36,1) both',
+            }}
+          >
+            Share your story
+          </h1>
           <Description>Start with an idea. We&apos;ll help you publish it.</Description>
         </div>
       </>
@@ -559,19 +659,19 @@ export default function OnboardingFlow({
                   aria-disabled={blocked}
                   className={[
                     'group flex min-h-[46px] items-center gap-2 rounded-full border px-3 py-2.5 text-left',
-                    'transition-all duration-200 active:scale-[0.98] sm:px-3.5',
+                    'transition-all duration-200 [transition-timing-function:cubic-bezier(.22,1,.36,1)] active:scale-[0.98] sm:px-3.5',
                     FOCUS_RING,
                     selected
-                      ? 'border-white/85 bg-white text-[#08090a]'
+                      ? 'border-white/85 bg-white text-[#08090a] shadow-[0_4px_16px_rgba(255,255,255,0.14)]'
                       : blocked
                         ? 'cursor-not-allowed border-white/[0.05] bg-white/[0.015] text-white/25'
-                        : 'border-white/[0.09] bg-white/[0.03] text-white/75 hover:border-white/25 hover:bg-white/[0.06]',
+                        : 'border-white/[0.09] bg-white/[0.03] text-white/75 hover:-translate-y-[1px] hover:border-white/25 hover:bg-white/[0.06] hover:text-white',
                   ].join(' ')}
                   title={blocked ? `You can choose up to ${MAX_INTERESTS} topics` : undefined}
                   style={{ animation: `obSlideUp 0.45s ${0.32 + i * 0.035}s cubic-bezier(.22,1,.36,1) both` }}
                 >
                   <Icon className="h-[15px] w-[15px] shrink-0" strokeWidth={1.8} aria-hidden="true" />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold sm:text-[13px]">{label}</span>
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold tracking-[-0.005em] sm:text-[13px]">{label}</span>
                   <span
                     aria-hidden="true"
                     className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-all duration-200"
@@ -807,9 +907,12 @@ export default function OnboardingFlow({
         >
           <section className={`flex flex-col items-center text-center lg:items-start lg:text-left ${step === 0 ? 'order-2 lg:order-1' : 'order-1'}`}>
             {copy}
-            <div className="mt-9 hidden w-full max-w-[320px] lg:block">
+            <div
+              className="mt-8 hidden w-full max-w-[320px] lg:block"
+              style={{ animation: 'obSlideUp 0.5s 0.46s cubic-bezier(.22,1,.36,1) both' }}
+            >
               {dots}
-              <div className="mt-4 lg:mt-5">{cta}</div>
+              <div className="mt-4 flex justify-start lg:mt-5">{cta}</div>
             </div>
           </section>
 
@@ -834,9 +937,12 @@ export default function OnboardingFlow({
           sets `overflow-x: hidden` on <body>, which makes body its own scroll
           container and stops sticky from resolving against the viewport. */}
       <footer className="fixed inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#08090a] via-[#08090a] to-transparent px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-5 sm:px-8 lg:hidden">
-        <div className="mx-auto w-full max-w-[460px]">
+        <div
+          className="mx-auto w-full max-w-[460px]"
+          style={{ animation: 'obSlideUp 0.5s 0.46s cubic-bezier(.22,1,.36,1) both' }}
+        >
           {dots}
-          <div className="mt-4">{cta}</div>
+          <div className="mt-4 flex justify-center">{cta}</div>
         </div>
       </footer>
     </div>

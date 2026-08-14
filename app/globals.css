@@ -202,6 +202,35 @@
   0%, 100% { transform: scale(1);    opacity: 1;   }
   50%       { transform: scale(1.04); opacity: 0.85; }
 }
+/* Onboarding hero micro-interactions — one gesture per step.
+   Each waits out most of its cycle so the motion reads as a greeting
+   rather than a loop. */
+@keyframes obWave {
+  0%, 62%, 100% { transform: rotate(0deg);   }
+  8%             { transform: rotate(15deg);  }
+  17%            { transform: rotate(-9deg);  }
+  26%            { transform: rotate(14deg);  }
+  35%            { transform: rotate(-6deg);  }
+  44%            { transform: rotate(11deg);  }
+  53%            { transform: rotate(-2deg);  }
+}
+@keyframes obHeartBeat {
+  0%, 70%, 100% { transform: scale(1);    }
+  12%            { transform: scale(1.12); }
+  24%            { transform: scale(1);    }
+  36%            { transform: scale(1.07); }
+}
+@keyframes obPenWrite {
+  0%, 70%, 100% { transform: translate(0, 0)      rotate(0deg);   }
+  15%            { transform: translate(1.5px, -1.5px) rotate(-7deg); }
+  30%            { transform: translate(-1.5px, 1px)   rotate(5deg);  }
+  45%            { transform: translate(1.5px, -1px)   rotate(-4deg); }
+}
+@keyframes obRingPulse {
+  0%   { transform: scale(0.92); opacity: 0.55; }
+  70%  { opacity: 0;             }
+  100% { transform: scale(1.5);  opacity: 0;    }
+}
 @keyframes obCountUp {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0);   }

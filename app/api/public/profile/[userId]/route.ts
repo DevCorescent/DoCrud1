@@ -7,6 +7,7 @@ import {
 import { getProfileData, getFollowCounts, isFollowing as checkIsFollowing } from '@/lib/server/user-profiles';
 import { getPublicGigListingsForUser } from '@/lib/server/gigs';
 import { getPublicAnalyticsForUser } from '@/lib/server/file-transfers';
+import { calculateProfileScore } from '@/lib/profile-score';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,9 +71,15 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       createdAt: found.createdAt,
     };
 
+    /* Computed server-side from the stored profile on every request, so the
+       client never supplies it and it cannot drift from the source data.
+       Additive field — existing consumers of this response are unaffected. */
+    const profileScore = calculateProfileScore(profile);
+
     return NextResponse.json({
       user: safeUser,
       profile: safeProfile,
+      profileScore,
       stats: {
         followers: counts.followers,
         following: counts.following,

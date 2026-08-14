@@ -67,11 +67,11 @@ const SECTIONS: Array<{
   id: ProfileSectionId; label: string; weight: number; field: string;
   isComplete: (p: ScorableProfile) => boolean;
 }> = [
-  { id: 'photo',      label: 'Profile photo', weight: 10, field: 'avatarUrl',
+  { id: 'photo',      label: 'Profile Photo', weight: 10, field: 'avatarUrl',
     isComplete: (p) => filled(p.avatarUrl) },
   { id: 'headline',   label: 'Headline',      weight: 10, field: 'headline',
     isComplete: (p) => filled(p.headline, 3) },
-  { id: 'bio',        label: 'About',         weight: 10, field: 'bio',
+  { id: 'bio',        label: 'About/Bio',         weight: 10, field: 'bio',
     // A one-word bio adds nothing to discovery; ask for a real sentence.
     isComplete: (p) => filled(p.bio, 40) },
   { id: 'skills',     label: 'Skills',        weight: 15, field: 'skills',
@@ -86,7 +86,7 @@ const SECTIONS: Array<{
     isComplete: (p) => hasItems(p.interests, 2) },
   { id: 'portfolio',  label: 'Portfolio',     weight: 5,  field: 'achievements',
     isComplete: (p) => hasItems(p.achievements) },
-  { id: 'links',      label: 'Professional links', weight: 5, field: 'socialLinks | website',
+  { id: 'links',      label: 'Professional Links', weight: 5, field: 'socialLinks | website',
     isComplete: (p) => Object.values(p.socialLinks ?? {}).some((v) => filled(v)) || filled(p.website, 4) },
 ];
 
@@ -132,6 +132,6 @@ export function calculateProfileScore(profile: ScorableProfile | null | undefine
 }
 
 export const PROFILE_COMPLETION_CTA =
-  'Complete your profile to build your presence on Docrud and match with opportunities.';
+  'Complete your profile to build your presence on Docrud and match with relevant opportunities.';
 export const PROFILE_COMPLETE_SUBTITLE =
   "You're ready to build your presence and match with opportunities.";

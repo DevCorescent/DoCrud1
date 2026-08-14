@@ -19,6 +19,10 @@ const ProfilePublishedFeed      = dynamic(() => import('@/components/ProfilePubl
 const PublishAnythingDialog     = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import {
+  calculateProfileScore, PROFILE_COMPLETION_CTA,
+  type ProfileScoreResult, type ProfileSectionResult,
+} from '@/lib/profile-score';
+import {
   ArrowLeft,
   BarChart3,
   ChevronDown,
@@ -234,6 +238,9 @@ interface UserProfileData {
   experience?: Array<{ title: string; company: string; period: string; desc?: string }>;
   education?: Array<{ degree: string; school: string; year?: string }>;
   achievements?: Array<{ title: string; desc?: string }>;
+  /* Present in the stored schema (lib/server/user-profiles.ts) — mirrored here
+     so the Interests editor and the profile score can read it. */
+  interests?: string[];
   socialLinks?: {
     twitter?: string;
     linkedin?: string;
@@ -1345,11 +1352,24 @@ interface EditModalProps {
   userName: string;
   onClose: () => void;
   onSaved: (updated: UserProfileData) => void;
+  /** Optional section to scroll to on open (data-edit-section attribute). */
+  focusSection?: string | null;
 }
 
-function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProps) {
+function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }: EditModalProps) {
   const [form, setForm] = useState<UserProfileData>({ ...profile });
   const [skillInput, setSkillInput] = useState('');
+  const [interestInput, setInterestInput] = useState('');
+  /* Scroll the requested section into view once the modal has painted. Purely
+     additive: with no focusSection the modal behaves exactly as before. */
+  useEffect(() => {
+    if (!focusSection) return;
+    const id = requestAnimationFrame(() => {
+      document.querySelector(`[data-edit-section="${focusSection}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [focusSection]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [adjustTarget, setAdjustTarget] = useState<ImageAdjustTarget | null>(null);
@@ -1479,6 +1499,28 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
 
   function set<K extends keyof UserProfileData>(key: K, value: UserProfileData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function addInterest() {
+    const trimmed = interestInput.trim();
+    if (!trimmed) return;
+    const current = form.interests ?? [];
+    if (!current.some((i) => i.toLowerCase() === trimmed.toLowerCase()) && current.length < 20) {
+      set('interests', [...current, trimmed]);
+    }
+    setInterestInput('');
+  }
+  function removeInterest(value: string) {
+    set('interests', (form.interests ?? []).filter((i) => i !== value));
+  }
+  function addAchievement() {
+    set('achievements', [...(form.achievements ?? []), { title: '', desc: '' }]);
+  }
+  function updateAchievement(idx: number, patch: Partial<{ title: string; desc: string }>) {
+    set('achievements', (form.achievements ?? []).map((a, i) => i === idx ? { ...a, ...patch } : a));
+  }
+  function removeAchievement(idx: number) {
+    set('achievements', (form.achievements ?? []).filter((_, i) => i !== idx));
   }
 
   function addSkill() {
@@ -1698,7 +1740,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
         <div className="overflow-y-auto px-6 py-5 space-y-7 flex-1">
 
           {/* Photo uploads */}
-          <section>
+          <section data-edit-section="photo">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Photos</p>
             {/* Banner */}
             <div
@@ -2038,7 +2080,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
           </section>
 
           {/* Basic */}
-          <section>
+          <section data-edit-section="basic">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Basic</p>
             <div className="space-y-3">
               <div>
@@ -2159,7 +2201,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
           </section>
 
           {/* Skills */}
-          <section>
+          <section data-edit-section="skills">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Skills</p>
             <div className="flex gap-2 mb-3">
               <input
@@ -2193,8 +2235,41 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
             )}
           </section>
 
+          {/* Interests — same chip pattern as Skills, saved through the same
+              PATCH (the handler accepts any UserProfileData field). */}
+          <section data-edit-section="interests">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Interests</p>
+            <div className="flex gap-2 mb-3">
+              <input
+                value={interestInput}
+                onChange={(e) => setInterestInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterest())}
+                placeholder="Type an interest and press Enter"
+                className="h-11 flex-1 min-w-0 rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+              />
+              <button
+                onClick={addInterest}
+                className="h-11 shrink-0 px-4 rounded-[13px] bg-white/[0.08] hover:bg-white/[0.12] text-white text-sm transition-colors"
+              >
+                Add
+              </button>
+            </div>
+            {(form.interests ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {(form.interests ?? []).map((i) => (
+                  <span key={i} className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/[0.10] bg-white/[0.05] text-sm text-white/70">
+                    {i}
+                    <button onClick={() => removeInterest(i)} className="hover:text-white transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+
           {/* Experience */}
-          <section>
+          <section data-edit-section="experience">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Experience</p>
               <button
@@ -2302,7 +2377,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
           </section>
 
           {/* Education */}
-          <section>
+          <section data-edit-section="education">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Education</p>
               <button
@@ -2350,8 +2425,51 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
             </div>
           </section>
 
+          {/* Portfolio — stored in the existing `achievements` field */}
+          <section data-edit-section="portfolio">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Portfolio</p>
+              <button
+                onClick={addAchievement}
+                className="h-8 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs transition-colors"
+              >
+                Add item
+              </button>
+            </div>
+            {(form.achievements ?? []).length === 0 && (
+              <p className="text-xs text-white/30">Add projects, work samples or achievements you want people to see.</p>
+            )}
+            <div className="space-y-3">
+              {(form.achievements ?? []).map((entry, idx) => (
+                <div key={idx} className="rounded-[13px] border border-white/[0.07] bg-white/[0.02] p-3 space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      value={entry.title ?? ''}
+                      onChange={(e) => updateAchievement(idx, { title: e.target.value })}
+                      placeholder="Title (e.g. Built an ecommerce platform)"
+                      className="h-10 flex-1 min-w-0 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                    />
+                    <button
+                      onClick={() => removeAchievement(idx)}
+                      aria-label="Remove portfolio item"
+                      className="h-10 w-10 shrink-0 rounded-[11px] bg-white/[0.06] hover:bg-white/[0.10] flex items-center justify-center transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5 text-white/60" />
+                    </button>
+                  </div>
+                  <input
+                    value={entry.desc ?? ''}
+                    onChange={(e) => updateAchievement(idx, { desc: e.target.value })}
+                    placeholder="Short description or link (optional)"
+                    className="h-10 w-full rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+
           {/* Social links */}
-          <section>
+          <section data-edit-section="links">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Social Links</p>
             <div className="space-y-3">
               {(
@@ -2404,17 +2522,143 @@ function EditProfileModal({ profile, userName, onClose, onSaved }: EditModalProp
   );
 }
 
-/* ─── profile strength helper ────────────────────────────────────────── */
+/* ─── profile strength helper ──────────────────────────────────────────
+   Delegates to the shared calculation in lib/profile-score.ts so the Insights
+   card, the header card and the server all report the same number. */
 function profileStrength(profile: UserProfileData): number {
-  let score = 0;
-  if (profile.headline) score += 20;
-  if (profile.bio) score += 20;
-  if ((profile.skills ?? []).length > 0) score += 15;
-  if ((profile.experience ?? []).length > 0) score += 15;
-  if ((profile.education ?? []).length > 0) score += 10;
-  if ((profile.achievements ?? []).length > 0) score += 10;
-  if (Object.values(profile.socialLinks ?? {}).some(Boolean)) score += 10;
-  return Math.min(score, 100);
+  return calculateProfileScore(profile).score;
+}
+
+/* ─── Profile completion card (owner-only, main profile page) ─────────
+   A surfaced, actionable view of the SAME score the Insights tab shows —
+   both call calculateProfileScore() from lib/profile-score.ts, so the two
+   can never disagree. Nothing is recalculated here.
+
+   Sections the Edit Profile modal can actually edit are rendered as buttons
+   that open it scrolled to that section; the rest stay informational. */
+const EDIT_SECTION_FOR: Partial<Record<ProfileSectionResult['id'], string>> = {
+  photo: 'photo',
+  headline: 'basic',
+  bio: 'basic',
+  location: 'basic',
+  skills: 'skills',
+  experience: 'experience',
+  education: 'education',
+  links: 'links',
+  interests: 'interests',
+  portfolio: 'portfolio',
+};
+
+function ProfileCompletionCard({
+  result, onComplete,
+}: {
+  result: ProfileScoreResult;
+  onComplete: (focusSection?: string | null) => void;
+}) {
+  const { score, sections } = result;
+  const missing = sections.filter((s) => !s.complete);
+  const done = sections.filter((s) => s.complete);
+  const isComplete = score >= 100;
+  const almost = score >= 80 && score < 100;
+  const R = 30, C = 2 * Math.PI * R;
+
+  /* 100%: no warning, no CTA, no missing list — just a quiet confirmation. */
+  if (isComplete) {
+    return (
+      <div className="mb-6 flex items-center gap-2.5 rounded-[16px] border border-emerald-400/[0.18] bg-emerald-400/[0.05] px-4 py-3">
+        <span aria-hidden className="text-[13px] text-emerald-300/90">&#10003;</span>
+        <p className="text-[12.5px] text-white/60">
+          <span className="font-semibold text-white/85">Profile complete</span>
+          {' · '}Your profile is ready to help you build your presence and discover opportunities.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-6 overflow-hidden rounded-[20px] border border-white/[0.07] bg-white/[0.03] shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
+      <div className="flex flex-col gap-5 p-4 sm:flex-row sm:items-start sm:gap-6 sm:p-5">
+
+        {/* Score ring */}
+        <div className="flex items-center gap-4 sm:block sm:shrink-0">
+          <div className="relative" style={{ width: 72, height: 72 }}>
+            <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden>
+              <circle cx="36" cy="36" r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
+              <circle
+                cx="36" cy="36" r={R} fill="none"
+                stroke={almost ? 'rgba(52,211,153,0.80)' : 'rgba(255,255,255,0.55)'}
+                strokeWidth="5" strokeLinecap="round"
+                strokeDasharray={C}
+                strokeDashoffset={C - (C * Math.min(100, Math.max(0, score))) / 100}
+                transform="rotate(-90 36 36)"
+                style={{ transition: 'stroke-dashoffset 700ms cubic-bezier(0.22,1,0.36,1)' }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-[17px] font-black tracking-[-0.02em] text-white" role="status"
+                aria-label={`Profile strength ${score} percent`}>{score}%</span>
+            </div>
+          </div>
+          <p className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/30 sm:mt-2 sm:text-center">
+            Profile strength
+          </p>
+        </div>
+
+        {/* Copy */}
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[14px] font-bold tracking-[-0.01em] text-white/90">
+            {almost ? "You're almost there." : 'Complete your profile'}
+          </h3>
+          <p className="mt-1.5 text-[12.5px] leading-[1.6] text-white/45">
+            {almost
+              ? 'Finish the remaining sections to strengthen your presence and improve opportunity matching.'
+              : PROFILE_COMPLETION_CTA}
+          </p>
+          <p className="mt-1.5 text-[11.5px] leading-[1.55] text-white/28">
+            Profiles 80%+ complete can strengthen visibility and improve opportunity matching.
+          </p>
+
+          {/* Missing sections — actionable where the editor supports it */}
+          {missing.length > 0 && (
+            <div className="mt-3.5">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/25">
+                Missing from your profile
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {missing.map((sec) => (
+                  <button
+                    key={sec.id}
+                    type="button"
+                    onClick={() => onComplete(EDIT_SECTION_FOR[sec.id] ?? null)}
+                    className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-[11.5px] text-white/50 transition hover:border-white/[0.16] hover:bg-white/[0.06] hover:text-white/85 active:scale-[0.98]"
+                  >
+                    <span aria-hidden className="text-white/25 group-hover:text-white/50">&#9675;</span>
+                    Add {sec.label}
+                    <span className="text-[10px] font-semibold text-emerald-300/55">+{sec.weight}%</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Completed — subtle, not a checklist wall */}
+          {done.length > 0 && (
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/25">
+              <span aria-hidden className="text-emerald-300/50">&#10003;</span>
+              {done.map((s) => s.label).join(' · ')}
+            </p>
+          )}
+
+          <button
+            onClick={() => onComplete(null)}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-[11px] border border-white/[0.12] bg-white/[0.07] px-4 py-2 text-[12.5px] font-semibold text-white/80 transition hover:bg-white/[0.11] hover:text-white active:scale-[0.98]"
+          >
+            Complete Profile <span aria-hidden>&rarr;</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ─── main page ──────────────────────────────────────────────────────── */
@@ -2520,6 +2764,7 @@ export default function UserProfilePage() {
   const [publishedView, setPublishedView] = useState<'feed' | 'tracker'>('feed');
   const [openSection, setOpenSection] = useState<string>('account');
   const [editOpen, setEditOpen] = useState(false);
+  const [editFocusSection, setEditFocusSection] = useState<string | null>(null);
   const [followLoading, setFollowLoading] = useState(false);
   const [followingState, setFollowingState] = useState(false);
   const [followersCount, setFollowersCount] = useState(0);
@@ -3744,6 +3989,14 @@ export default function UserProfilePage() {
             <StatItem label="Total likes" value={liveStats?.totalLikes ?? stats.totalLikes ?? 0} onClick={isOwnProfile ? () => setTab('published') : undefined} />
           </div>
         </div>
+
+        {/* Profile strength — own profile only, and only where it is useful */}
+        {isOwnProfile && (
+          <ProfileCompletionCard
+            result={calculateProfileScore(profile)}
+            onComplete={(focus) => { setEditFocusSection(focus ?? null); setEditOpen(true); }}
+          />
+        )}
 
         {/* Tabs */}
         <div className="relative flex gap-0 mb-7 md:mb-9 overflow-x-auto [scrollbar-width:none] border-b border-white/[0.06]">
@@ -6758,7 +7011,8 @@ export default function UserProfilePage() {
         <EditProfileModal
           profile={profile}
           userName={user.name}
-          onClose={() => setEditOpen(false)}
+          focusSection={editFocusSection}
+          onClose={() => { setEditOpen(false); setEditFocusSection(null); }}
           onSaved={(updated) => {
             setData((prev) => prev ? { ...prev, profile: updated } : prev);
           }}

@@ -264,24 +264,54 @@ function urlDomain(url: string): string {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
 }
 
-/* ─── Avatar ─────────────────────────────────────────────── */
+/* ─── Avatar ─────────────────────────────────────────────────
+   Photo source is `otherUser.avatarUrl` — the field the messages API already
+   returns (enrichConversations in /api/messages, getEnrichedProfile in the
+   poll route, and /api/messages/search-users all read it from the user's
+   profile). No new field, no extra request.
+
+   The initial is shown only when there is genuinely no usable photo: the
+   profile has none, or the URL fails to load. */
 function Avatar({ user, size = 9, ring = true }: { user: OtherUser | null; size?: number; ring?: boolean }) {
   const px = size * 4;
   const fs = size <= 7 ? 9 : size <= 9 ? 11 : size <= 11 ? 12 : 14;
   const cls = `rounded-full flex-shrink-0 ${ring ? 'ring-[1.5px] ring-white/[0.09]' : ''}`;
+
+  // Blank/whitespace URLs count as "no photo" rather than a broken image.
+  const src = user?.avatarUrl?.trim() ? user.avatarUrl.trim() : null;
+  const [broken, setBroken] = useState(false);
+  // A different photo (or a profile that just loaded) gets a fresh attempt.
+  useEffect(() => { setBroken(false); }, [src]);
+
   if (!user) return <div className={cls} style={{ width: px, height: px, background: 'rgba(255,255,255,0.06)' }} />;
-  if (user.avatarUrl)
-    return (
-      <div className={`${cls} overflow-hidden`} style={{ width: px, height: px }}>
-        <img src={user.avatarUrl} alt={user.name} className="h-full w-full object-cover" />
-      </div>
-    );
-  return (
+
+  const fallback = (
     <div
       className={`${cls} flex items-center justify-center font-bold text-white/75`}
       style={{ width: px, height: px, fontSize: fs, background: 'linear-gradient(135deg,rgba(59,130,246,0.38),rgba(139,92,246,0.38))' }}
     >
       {initials(user.name)}
+    </div>
+  );
+
+  if (!src || broken) return fallback;
+
+  return (
+    <div className={`${cls} overflow-hidden`} style={{ width: px, height: px }}>
+      <img
+        src={src}
+        alt={user.name}
+        width={px}
+        height={px}
+        loading="lazy"
+        decoding="async"
+        // Some avatar hosts (Google/OAuth CDNs) reject requests that carry a
+        // referrer — without this they 404 and every photo falls back.
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(true)}
+        className="h-full w-full object-cover"
+        style={{ display: 'block', width: px, height: px, objectFit: 'cover' }}
+      />
     </div>
   );
 }

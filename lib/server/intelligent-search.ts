@@ -36,7 +36,9 @@ export interface SearchResultItem {
   description: string;
   image: string | null;
   location: string | null;
-  score: number;              // 0–100
+  score: number;              // 0–100, relative to the best result in this response
+  /** How well this result matches THIS query, on an absolute 0–100 scale. */
+  matchPercent: number;
   matchedFields: string[];
   /** Short, plain-language reason. Never AI-generated prose. */
   why: string;
@@ -209,6 +211,45 @@ function combine(parts: {
   ) * 100;
 }
 
+/**
+ * Turn the internal relevance score into a user-facing "% match".
+ *
+ * combine() returns an absolute value: each component is capped, divided by
+ * its cap and weighted, and the weights sum to 1. But those caps are tuned for
+ * *ranking*, not for reading as a percentage — real lexical scores land far
+ * below the cap, so raw values for genuinely good matches cluster around
+ * 25–40 rather than near 100. Reporting raw directly told the user a strong
+ * "React developer in Delhi" hit was a 37% match, which is misleading in the
+ * opposite direction.
+ *
+ * So raw is mapped onto a human scale through the fixed anchor table below.
+ * Two properties matter:
+ *   • It is STRICTLY MONOTONIC, so the displayed order can never disagree with
+ *     the ranking order. Nothing about ranking changes.
+ *   • It is ABSOLUTE, not relative to the best hit in the response. A mediocre
+ *     top result reports ~55–65%; it is never promoted to 100% for placing
+ *     first, and a weak relaxed/fuzzy match stays low because its raw is low.
+ *
+ * Anchors were calibrated against real Docrud data (see the report), not
+ * chosen to make numbers look good. Adjust the table if the corpus changes.
+ */
+const MATCH_ANCHORS: Array<[raw: number, percent: number]> = [
+  [0, 0], [5, 30], [10, 45], [18, 60], [25, 72], [32, 82], [45, 92], [70, 100],
+];
+
+export function normalizeSearchMatchScore(raw: number): number {
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  for (let i = 1; i < MATCH_ANCHORS.length; i++) {
+    const [x1, y1] = MATCH_ANCHORS[i - 1];
+    const [x2, y2] = MATCH_ANCHORS[i];
+    if (raw <= x2) {
+      const t = (raw - x1) / (x2 - x1);
+      return Math.max(1, Math.min(100, Math.round(y1 + t * (y2 - y1))));
+    }
+  }
+  return 100;
+}
+
 function explain(u: QueryUnderstanding, matched: string[], conceptHits: string[], loc: string | null, locScore = 0): string {
   const bits: string[] = [];
   const skills = u.skills.filter((s) => conceptHits.some((h) => h.includes(s)) || matched.includes('skills'));
@@ -280,6 +321,7 @@ function scorePeople(
         image: p.avatarUrl ?? null,
         location: p.location ?? null,
         score: 0,
+        matchPercent: 0,
         matchedFields: Array.from(lex.matched),
         why: explain(u, Array.from(lex.matched), con.hits, p.location ?? null, loc),
         url: `/u/${user.id}`,
@@ -329,6 +371,7 @@ function scoreServices(store: Record<string, Service[]>, u: QueryUnderstanding, 
           image: s.imageUrl ?? null,
           location: providerLocation,
           score: 0,
+          matchPercent: 0,
           matchedFields: Array.from(lex.matched),
           why: explain(u, Array.from(lex.matched), con.hits, providerLocation, loc),
           url: `/u/${s.userId}?tab=services`,
@@ -378,6 +421,7 @@ function scoreBusinesses(pages: Awaited<ReturnType<typeof listBusinessPages>>['p
         image: b.logoUrl ?? null,
         location: where,
         score: 0,
+        matchPercent: 0,
         matchedFields: Array.from(lex.matched),
         why: explain(u, Array.from(lex.matched), con.hits, where, loc),
         url: `/businesses/${b.slug}`,
@@ -431,6 +475,7 @@ function scoreJobs(jobs: Awaited<ReturnType<typeof getPublishedHiringJobs>>, u: 
         image: null,
         location: j.location ?? null,
         score: 0,
+        matchPercent: 0,
         matchedFields: Array.from(lex.matched),
         why: explain(u, Array.from(lex.matched), con.hits, j.location ?? null, loc),
         url: j.shareUrl || `/jobs/${j.id}`,
@@ -491,6 +536,7 @@ function scoreBusinessContent(
         image: null,
         location: r.location,
         score: 0,
+        matchPercent: 0,
         matchedFields: Array.from(lex.matched),
         why: explain(u, Array.from(lex.matched), con.hits, r.location, loc),
         url: `/businesses/${r.slug}`,
@@ -547,6 +593,7 @@ function adaptLegacy(entry: GlobalSearchResult, u: QueryUnderstanding, expanded:
       image: typeof meta.avatarUrl === 'string' ? meta.avatarUrl : null,
       location,
       score: 0,
+      matchPercent: 0,
       matchedFields: [],
       why: explain(u, ['title'], con.hits, location, loc),
       url: entry.href,
@@ -724,7 +771,14 @@ export async function runIntelligentSearch(params: IntelligentSearchParams): Pro
   picked.sort((a, b) => b.raw - a.raw);
   const top = picked.slice(0, limit);
   const max = top.length ? Math.max(...top.map((r) => r.raw)) : 1;
-  const results = top.map((r) => ({ ...r.item, score: Math.max(1, Math.round((r.raw / (max || 1)) * 100)) }));
+  const results = top.map((r) => ({
+    ...r.item,
+    // `score` keeps its existing meaning (relative to the best hit) so nothing
+    // that already consumes it changes; `matchPercent` is the honest absolute
+    // figure shown to the user. Ordering is by `raw` and is untouched.
+    score: Math.max(1, Math.round((r.raw / (max || 1)) * 100)),
+    matchPercent: normalizeSearchMatchScore(r.raw),
+  }));
 
   const groups: Record<string, SearchResultItem[]> = {};
   for (const item of results) {

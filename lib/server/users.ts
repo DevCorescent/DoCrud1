@@ -97,6 +97,32 @@ export async function saveStoredUsers(users: StoredUser[]) {
 }
 
 /** Per-row fetch by id — avoids loading the full table. */
+/**
+ * Canonical display names for many users in ONE pass.
+ *
+ * `StoredUser.name` is the single source of truth for a person's display name.
+ * Several surfaces (recents/stories, notifications, published feed) snapshot the
+ * name at write time, so those copies go stale the moment someone renames
+ * themselves. Those readers call this to resolve the current name instead.
+ *
+ * Reads the already-cached user list — no per-user query, so this is O(1)
+ * round trips regardless of how many ids are passed (the same reason
+ * getProfileAvatars() exists for avatars).
+ */
+export async function getUserNames(ids: string[]): Promise<Map<string, string>> {
+  const wanted = new Set(ids.filter(Boolean).map(String));
+  if (!wanted.size) return new Map();
+  const users = await getStoredUsers();
+  const out = new Map<string, string>();
+  for (const u of users) {
+    const id = String(u?.id ?? '');
+    if (id && wanted.has(id) && typeof u.name === 'string' && u.name.trim()) {
+      out.set(id, u.name.trim());
+    }
+  }
+  return out;
+}
+
 export async function getStoredUserById(id: string): Promise<StoredUser | null> {
   if (getDbPool()) {
     const row = await selectUserRowById(id);

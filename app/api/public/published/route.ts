@@ -5,6 +5,7 @@ import { getMongoDb } from '@/lib/server/database';
 import { getAuthSession } from '@/lib/server/auth';
 import { readJsonFile, businessPagesPath } from '@/lib/server/storage';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
+import { getUserNames } from '@/lib/server/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,10 +160,27 @@ export async function GET(request: NextRequest) {
       avatarMap = await getProfileAvatars(missingIds).catch(() => new Map());
     }
 
+    /* `uploadedByName` is snapshotted when the item is published, so it shows a
+       stale name after the publisher renames their account. Resolve the current
+       canonical StoredUser.name for every publisher we can identify.
+
+       ONE bulk lookup over the already-cached user list — no per-item query —
+       and it runs even when ?noAvatar=1 skips the avatar batch, because the
+       byline is shown either way. Only the public display name is read; no
+       other user data enters the response. */
+    const publisherIds = Array.from(new Set(
+      slice.map(t => t.uploadedByUserId).filter((id): id is string => Boolean(id))
+    ));
+    const nameMap = await getUserNames(publisherIds).catch(() => new Map<string, string>());
+
     const items = slice.map(t => {
       const isFeaturedActive = t.featured && t.featuredUntil && new Date(t.featuredUntil) > now;
       const cat = t.directoryCategory?.toLowerCase() || 'document';
-      const authorName = t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
+      // Canonical name first; legacy records with no resolvable user id keep
+      // their original snapshot behaviour untouched.
+      const authorName =
+        (t.uploadedByUserId ? nameMap.get(t.uploadedByUserId) : undefined)
+        || t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
       return {
         id: t.id,
         shareId: t.shareId,

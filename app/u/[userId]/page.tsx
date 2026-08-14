@@ -1351,13 +1351,16 @@ interface EditModalProps {
   profile: UserProfileData;
   userName: string;
   onClose: () => void;
-  onSaved: (updated: UserProfileData) => void;
+  onSaved: (updated: UserProfileData, updatedName?: string) => void;
   /** Optional section to scroll to on open (data-edit-section attribute). */
   focusSection?: string | null;
 }
 
 function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }: EditModalProps) {
   const [form, setForm] = useState<UserProfileData>({ ...profile });
+  /* Display name lives on the user record, not UserProfileData, so it is held
+     alongside the profile form and sent through the same save request. */
+  const [name, setName] = useState(userName);
   const [skillInput, setSkillInput] = useState('');
   const [interestInput, setInterestInput] = useState('');
   /* Scroll the requested section into view once the modal has painted. Purely
@@ -1691,11 +1694,17 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
   }
 
   async function handleSave() {
+    // Client-side guard only — the same rules are enforced server-side.
+    const cleanName = name.replace(/\s+/g, ' ').trim();
+    if (!cleanName) { setError('Name cannot be empty.'); return; }
+    if (cleanName.length > 80) { setError('Name must be 80 characters or fewer.'); return; }
+
     setSaving(true);
     setError('');
     try {
-      const payload: UserProfileData = {
+      const payload: UserProfileData & { name: string } = {
         ...form,
+        name: cleanName,
         experience: expEntries.map(({ _key: _k, ...rest }) => rest),
         education: eduEntries.map(({ _key: _k, ...rest }) => rest),
       };
@@ -1704,9 +1713,9 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const json = await res.json();
+      const json = await res.json() as { profile: UserProfileData; user?: { name?: string }; error?: string };
       if (!res.ok) throw new Error(json.error || 'Save failed');
-      onSaved(json.profile as UserProfileData);
+      onSaved(json.profile, json.user?.name ?? cleanName);
       onClose();
     } catch (err) {
       console.error('[ProfileSave] error:', err);
@@ -2086,9 +2095,12 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
               <div>
                 <label className="block text-xs text-white/40 mb-1">Name</label>
                 <input
-                  value={userName}
-                  disabled
-                  className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white/40 px-3 text-sm cursor-not-allowed"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={80}
+                  placeholder="Your full name"
+                  autoComplete="name"
+                  className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
                 />
               </div>
               <div>
@@ -7013,8 +7025,16 @@ export default function UserProfilePage() {
           userName={user.name}
           focusSection={editFocusSection}
           onClose={() => { setEditOpen(false); setEditFocusSection(null); }}
-          onSaved={(updated) => {
-            setData((prev) => prev ? { ...prev, profile: updated } : prev);
+          onSaved={(updated, updatedName) => {
+            setData((prev) => prev
+              ? {
+                  ...prev,
+                  profile: updated,
+                  // Header, QR, initials and everything else reading data.user
+                  // pick the new name up from this single state write.
+                  user: updatedName ? { ...prev.user, name: updatedName } : prev.user,
+                }
+              : prev);
           }}
         />
       )}

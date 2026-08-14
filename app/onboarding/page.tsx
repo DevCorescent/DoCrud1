@@ -1779,7 +1779,7 @@ function OnboardingPageInner() {
 
       await Promise.all([
         ...followed.map(id => fetch('/api/profile/follow', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ targetUserId:id, action:'follow' }) })),
-        fetch('/api/onboarding/complete', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ profile:{ headline, bio, location, website, avatarUrl: finalAvatarUrl || undefined, bannerUrl: finalBannerUrl || undefined, openToWork, skills, interests, experience, education, onboardingDone:true, profileSetupDone:true } }) }),
+        fetch('/api/onboarding/complete', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ profile:{ headline, bio, location, website, avatarUrl: finalAvatarUrl || undefined, bannerUrl: finalBannerUrl || undefined, openToWork, skills, interests, experience, education, profileSetupDone:true } }) }),
       ]);
       setScreen(DONE_SCR);
     } catch { setScreen(DONE_SCR); }

@@ -27,7 +27,10 @@ export interface UserProfileData {
   pronouns?: string;
   updatedAt?: string;
   profileSetupDone?: boolean;
+  /** True once the welcome → interests → first-post onboarding is finished or skipped. */
   onboardingDone?: boolean;
+  onboardingCompletedAt?: string;
+  onboardingSkippedAt?: string;
   emailVerified?: boolean;
   emailVerifiedAt?: string;
   interests?: string[];

@@ -4,6 +4,7 @@ import NextDynamic from 'next/dynamic';
 import { buildPageMetadata } from '@/lib/seo';
 import { getThemeSettings } from '@/lib/server/settings';
 import { getAuthSession } from '@/lib/server/auth';
+import { getProfileFields } from '@/lib/server/user-profiles';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,22 @@ export default async function Home() {
 
   if (!session && !isGuest) {
     redirect('/onboarding');
+  }
+
+  // First-run gate: an individual whose email is verified but who has never been
+  // through onboarding gets the welcome → interests → first-post flow once.
+  // Guests, business accounts and anyone already onboarded fall straight through.
+  const needsOnboarding = Boolean(
+    session?.user?.id
+    && session.user.accountType === 'individual'
+    && session.user.emailVerified === true
+    && (await getProfileFields(session.user.id, ['onboardingDone'])
+      .then((profile) => profile.onboardingDone !== true)
+      .catch(() => false)),
+  );
+
+  if (needsOnboarding) {
+    redirect('/onboarding/start');
   }
 
   return (

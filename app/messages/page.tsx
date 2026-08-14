@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   ArrowLeft,
+  Ban,
   Bookmark,
   BookmarkCheck,
   Briefcase,
@@ -17,6 +18,7 @@ import {
   ChevronRight,
   ChevronUp,
   Clock,
+  Copy,
   CornerUpLeft,
   ExternalLink,
   File,
@@ -190,7 +192,21 @@ interface Message {
   sentAt: string;
   seenBy: string[];
   replyTo?: ReplyTo;
+  edited?: boolean;
+  editedAt?: string;
+  deletedForEveryone?: boolean;
+  deletedAt?: string;
+  reactions?: Record<string, string>;
+  pinnedAt?: string;
+  pinnedBy?: string;
 }
+
+/* Edit / delete-for-everyone window. Mirrors MESSAGE_MUTATION_WINDOW_MS in
+   lib/server/messages.ts — the server is the authority, this only decides
+   what the menu offers. */
+const MUTATION_WINDOW_MS = 60_000;
+const REACTION_EMOJIS = ['❤️', '👍', '😂', '😮', '😢', '🙏'];
+
 interface TypingUser {
   id: string;
   name: string;
@@ -298,6 +314,7 @@ function TypingIndicator({ users }: { users: TypingUser[] }) {
 /* ─── Message Bubble ─────────────────────────────────────── */
 function MessageBubble({
   msg, isMine, isLast, isIndexed, onDelete, onToggleIndex, onReply, onScrollToReply, msgRef, currentUserId, otherUserName,
+  onEdit, onDeleteForEveryone, onDeleteForMe, onReact, onPin, onCopy, onInfo,
 }: {
   msg: Message; isMine: boolean;
   isLast: boolean; isIndexed: boolean;
@@ -305,10 +322,19 @@ function MessageBubble({
   onReply: (msg: Message) => void; onScrollToReply: (id: string) => void;
   msgRef: (el: HTMLDivElement | null) => void;
   currentUserId: string; otherUserName: string;
+  onEdit: (msg: Message) => void;
+  onDeleteForEveryone: (id: string) => void;
+  onDeleteForMe: (id: string) => void;
+  onReact: (id: string, emoji: string) => void;
+  onPin: (id: string, pinned: boolean) => void;
+  onCopy: (msg: Message) => void;
+  onInfo: (msg: Message) => void;
 }) {
   const [lightbox, setLightbox] = useState(false);
   const [menu, setMenu] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const menuRef = useRef<HTMLDivElement>(null);
   const lpRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -320,6 +346,107 @@ function MessageBubble({
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, [menu]);
+
+  // While a menu is open, re-check the 60-second window each second so Edit /
+  // Delete-for-everyone disappear the moment they expire. The server enforces
+  // the same window regardless of what the menu shows.
+  useEffect(() => {
+    if (!menu) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [menu]);
+  useEffect(() => { if (!menu) setConfirmDelete(false); }, [menu]);
+
+  const isPending = msg.id.startsWith('temp_');
+  const isTombstone = Boolean(msg.deletedForEveryone);
+  const withinWindow = !isPending && now - new Date(msg.sentAt).getTime() <= MUTATION_WINDOW_MS;
+  const canEdit = isMine && !isTombstone && !isPending && msg.type === 'text' && withinWindow;
+  const canDeleteForEveryone = isMine && !isTombstone && !isPending && withinWindow;
+  const isPinned = Boolean(msg.pinnedAt);
+  const myReaction = msg.reactions?.[currentUserId];
+
+  const closeAnd = (fn: () => void) => () => { setMenu(false); fn(); };
+
+  /* One action list, rendered by both the desktop menu and the mobile sheet.
+     Anything the current user is not authorised to do is simply absent. */
+  const actions: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean; accent?: string }[] = isTombstone
+    ? [
+        { icon: <Info style={{ width: 13, height: 13 }} />, label: 'Info', onClick: closeAnd(() => onInfo(msg)) },
+        { icon: <Trash2 style={{ width: 13, height: 13 }} />, label: 'Delete for me', onClick: closeAnd(() => onDeleteForMe(msg.id)), danger: true },
+      ]
+    : [
+        { icon: <CornerUpLeft style={{ width: 13, height: 13 }} />, label: 'Reply', onClick: closeAnd(() => onReply(msg)) },
+        ...(msg.type === 'text' ? [{ icon: <Copy style={{ width: 13, height: 13 }} />, label: 'Copy', onClick: closeAnd(() => onCopy(msg)) }] : []),
+        ...(canEdit ? [{ icon: <PenLine style={{ width: 13, height: 13 }} />, label: 'Edit', onClick: closeAnd(() => onEdit(msg)) }] : []),
+        {
+          icon: isIndexed ? <BookmarkCheck style={{ width: 13, height: 13 }} /> : <Bookmark style={{ width: 13, height: 13 }} />,
+          label: isIndexed ? 'Remove bookmark' : 'Bookmark',
+          onClick: closeAnd(() => onToggleIndex(msg.id)),
+          accent: isIndexed ? '#fbbf24' : undefined,
+        },
+        {
+          icon: isPinned ? <PinOff style={{ width: 13, height: 13 }} /> : <Pin style={{ width: 13, height: 13 }} />,
+          label: isPinned ? 'Unpin' : 'Pin',
+          onClick: closeAnd(() => onPin(msg.id, !isPinned)),
+          accent: isPinned ? '#fbbf24' : undefined,
+        },
+        ...(isMine ? [{ icon: <Info style={{ width: 13, height: 13 }} />, label: 'Info', onClick: closeAnd(() => onInfo(msg)) }] : []),
+        ...(isPending ? [] : [{ icon: <Trash2 style={{ width: 13, height: 13 }} />, label: 'Delete', onClick: () => setConfirmDelete(true), danger: true }]),
+      ];
+
+  /* Delete sub-step: "for me" always, "for everyone" only inside the window. */
+  const deleteActions: { icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean; accent?: string }[] = [
+    { icon: <Trash2 style={{ width: 13, height: 13 }} />, label: 'Delete for me', onClick: closeAnd(() => onDeleteForMe(msg.id)), danger: true },
+    ...(canDeleteForEveryone
+      ? [{ icon: <Trash2 style={{ width: 13, height: 13 }} />, label: 'Delete for everyone', onClick: closeAnd(() => onDeleteForEveryone(msg.id)), danger: true }]
+      : []),
+  ];
+
+  const reactionRow = !isTombstone ? (
+    <div className="flex items-center gap-1 px-2.5 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      {REACTION_EMOJIS.map(e => (
+        <button
+          key={e}
+          onClick={() => { setMenu(false); onReact(msg.id, e); }}
+          className="flex items-center justify-center rounded-full transition-transform active:scale-90 hover:scale-110"
+          style={{ width: 28, height: 28, fontSize: 15, background: myReaction === e ? 'rgba(59,130,246,0.20)' : 'transparent' }}
+          aria-label={`React ${e}`}
+        >
+          {e}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  /* Reactions summary shown under the bubble. */
+  const reactionEntries = Object.entries(msg.reactions ?? {});
+  const reactionCounts = reactionEntries.reduce<Record<string, number>>((acc, [, emoji]) => {
+    acc[emoji] = (acc[emoji] ?? 0) + 1; return acc;
+  }, {});
+  const reactionsBar = reactionEntries.length > 0 ? (
+    <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} w-full`} style={{ marginTop: -2, marginBottom: 4 }}>
+      <div className="flex items-center gap-1 rounded-full px-1.5 py-0.5" style={{ background: 'rgba(28,30,46,0.92)', border: '1px solid rgba(255,255,255,0.10)' }}>
+        {Object.entries(reactionCounts).map(([emoji, count]) => (
+          <button
+            key={emoji}
+            onClick={() => onReact(msg.id, emoji)}
+            className="flex items-center gap-0.5 transition-transform active:scale-90"
+            style={{ fontSize: 11, color: myReaction === emoji ? '#93c5fd' : 'rgba(255,255,255,0.55)' }}
+            title={myReaction === emoji ? 'Remove your reaction' : 'React'}
+          >
+            <span style={{ fontSize: 12 }}>{emoji}</span>
+            {count > 1 && <span style={{ fontSize: 9.5, fontWeight: 700 }}>{count}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
+  /* Timestamp row shared by the text/file bubbles — adds the edited marker. */
+  const editedMark = msg.edited && !isTombstone ? (
+    <span style={{ fontSize: 9.5, color: isMine ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.26)' }}>edited ·</span>
+  ) : null;
 
   const sentR = isLast ? 'rounded-[17px] rounded-br-[4px]' : 'rounded-[17px]';
   const recvR = isLast ? 'rounded-[17px] rounded-bl-[4px]' : 'rounded-[17px]';
@@ -386,19 +513,19 @@ function MessageBubble({
                 className={`absolute bottom-8 ${isMine ? 'right-0' : 'left-0'} rounded-[16px] overflow-hidden animate-in fade-in zoom-in-95 duration-150`}
                 style={{ width: 180, background: 'rgba(14,15,24,0.96)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 24px 64px rgba(0,0,0,0.85)', zIndex: 50 }}
               >
-                <div className="px-3.5 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="px-3.5 py-2 flex items-center justify-between gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.28)', fontWeight: 600, letterSpacing: '0.03em' }}>{fmtTime(msg.sentAt)}</p>
+                  {confirmDelete && (
+                    <button onClick={() => setConfirmDelete(false)} style={{ fontSize: 10, color: 'rgba(255,255,255,0.40)' }}>Back</button>
+                  )}
                 </div>
-                {[
-                  { icon: <CornerUpLeft style={{ width: 13, height: 13 }} />, label: 'Reply', onClick: () => { setMenu(false); onReply(msg); }, color: 'rgba(255,255,255,0.68)' },
-                  { icon: isIndexed ? <BookmarkCheck style={{ width: 13, height: 13 }} /> : <Bookmark style={{ width: 13, height: 13 }} />, label: isIndexed ? 'Remove bookmark' : 'Bookmark', onClick: () => { setMenu(false); onToggleIndex(msg.id); }, color: isIndexed ? '#fbbf24' : 'rgba(255,255,255,0.68)' },
-                  ...(isMine ? [{ icon: <Trash2 style={{ width: 13, height: 13 }} />, label: 'Delete', onClick: () => { setMenu(false); onDelete(msg.id); }, color: '#f87171' }] : []),
-                ].map((item, i) => (
+                {!confirmDelete && reactionRow}
+                {(confirmDelete ? deleteActions : actions).map((item, i) => (
                   <button
                     key={i}
                     onClick={item.onClick}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2.5 transition-colors"
-                    style={{ color: item.color, fontSize: 13, fontWeight: 500 }}
+                    style={{ color: item.danger ? '#f87171' : item.accent ?? 'rgba(255,255,255,0.68)', fontSize: 13, fontWeight: 500 }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
                     onMouseLeave={e => (e.currentTarget.style.background = '')}
                   >
@@ -417,39 +544,82 @@ function MessageBubble({
                 <div className="flex justify-center pt-3 pb-1"><div style={{ width: 36, height: 4, borderRadius: 99, background: 'rgba(255,255,255,0.15)' }} /></div>
                 <div className="px-4 pt-1 pb-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   <p className="truncate" style={{ fontSize: 11, color: 'rgba(255,255,255,0.28)', fontWeight: 500 }}>
-                    {msg.type === 'image' ? '📷 Image' : msg.type === 'file' ? `📎 ${msg.attachmentName}` : msg.content.slice(0, 60) + (msg.content.length > 60 ? '…' : '')}
+                    {isTombstone ? 'This message was deleted'
+                      : msg.type === 'image' ? '📷 Image'
+                      : msg.type === 'file' ? `📎 ${msg.attachmentName}`
+                      : msg.content.slice(0, 60) + (msg.content.length > 60 ? '…' : '')}
                   </p>
                 </div>
-                {[
-                  { icon: <CornerUpLeft style={{ width: 16, height: 16 }} />, label: 'Reply', onClick: () => { setMenu(false); onReply(msg); } },
-                  { icon: isIndexed ? <BookmarkCheck style={{ width: 16, height: 16 }} /> : <Bookmark style={{ width: 16, height: 16 }} />, label: isIndexed ? 'Remove Bookmark' : 'Bookmark', onClick: () => { setMenu(false); onToggleIndex(msg.id); } },
-                  ...(isMine ? [{ icon: <Trash2 style={{ width: 16, height: 16 }} />, label: 'Delete Message', onClick: () => { setMenu(false); onDelete(msg.id); }, danger: true }] : []),
-                ].map((item, i) => (
+                {/* Reaction strip — thumb-reachable at the top of the sheet */}
+                {!confirmDelete && !isTombstone && (
+                  <div className="flex items-center justify-around px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    {REACTION_EMOJIS.map(e => (
+                      <button
+                        key={e}
+                        onClick={() => { setMenu(false); onReact(msg.id, e); }}
+                        className="flex items-center justify-center rounded-full transition-transform active:scale-90"
+                        style={{ width: 40, height: 40, fontSize: 22, background: myReaction === e ? 'rgba(59,130,246,0.20)' : 'transparent' }}
+                        aria-label={`React ${e}`}
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {(confirmDelete ? deleteActions : actions).map((item, i) => (
                   <button
                     key={i}
                     onClick={item.onClick}
                     className="w-full flex items-center gap-3.5 px-5 active:bg-white/5"
-                    style={{ height: 52, color: (item as { danger?: boolean }).danger ? '#f87171' : 'rgba(255,255,255,0.80)', fontSize: 15, fontWeight: 500, borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                    style={{ height: 52, color: item.danger ? '#f87171' : 'rgba(255,255,255,0.80)', fontSize: 15, fontWeight: 500, borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                   >
-                    <span style={{ color: (item as { danger?: boolean }).danger ? '#f87171' : 'rgba(255,255,255,0.40)' }}>{item.icon}</span>
+                    <span style={{ color: item.danger ? '#f87171' : 'rgba(255,255,255,0.40)' }}>{item.icon}</span>
                     {item.label}
                   </button>
                 ))}
+                {confirmDelete && (
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="w-full flex items-center justify-center active:bg-white/5"
+                    style={{ height: 52, color: 'rgba(255,255,255,0.55)', fontSize: 15, fontWeight: 500 }}
+                  >
+                    Cancel
+                  </button>
+                )}
                 <div style={{ height: 'max(16px, env(safe-area-inset-bottom))' }} />
               </div>
             </div>,
             document.body
           )}
 
-          {/* Bookmark pip */}
-          {isIndexed && (
-            <div className="flex-shrink-0 self-end" style={{ marginBottom: 5 }}>
-              <BookmarkCheck style={{ width: 9, height: 9, color: '#fbbf24' }} />
+          {/* Bookmark / pinned pips */}
+          {(isIndexed || isPinned) && (
+            <div className="flex-shrink-0 self-end flex items-center gap-0.5" style={{ marginBottom: 5 }}>
+              {isIndexed && <BookmarkCheck style={{ width: 9, height: 9, color: '#fbbf24' }} />}
+              {isPinned && <Pin style={{ width: 9, height: 9, color: '#fbbf24' }} />}
             </div>
           )}
 
-          {/* Bubble */}
-          {msg.type === 'image' && msg.attachmentUrl ? (
+          {/* Bubble + reactions */}
+          <div className="flex flex-col min-w-0" style={{ maxWidth: '100%' }}>
+          {isTombstone ? (
+            <div
+              className={`${br} overflow-hidden`}
+              style={{
+                padding: '9px 13px', maxWidth: '100%',
+                background: 'rgba(28,30,46,0.55)',
+                border: '1px dashed rgba(255,255,255,0.14)',
+              }}
+            >
+              <div className="flex items-center gap-1.5">
+                <Ban style={{ width: 12, height: 12, color: 'rgba(255,255,255,0.28)', flexShrink: 0 }} />
+                <p style={{ fontSize: 13.5, fontStyle: 'italic', color: 'rgba(255,255,255,0.38)' }}>This message was deleted</p>
+              </div>
+              <div className="flex items-center justify-end" style={{ marginTop: 3 }}>
+                <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.24)' }}>{fmtTime(msg.sentAt)}</span>
+              </div>
+            </div>
+          ) : msg.type === 'image' && msg.attachmentUrl ? (
             <div className="msg-img-bubble flex flex-col overflow-hidden">
               {replyPreview && <div style={{ padding: '6px 6px 0 6px' }}>{replyPreview}</div>}
               <div className={`relative cursor-pointer overflow-hidden ${br}`} onClick={() => setLightbox(true)} style={isMine ? { boxShadow: '0 4px 20px rgba(59,130,246,0.28)' } : {}}>
@@ -504,11 +674,14 @@ function MessageBubble({
                 {msg.content}
               </p>
               <div className="flex items-center justify-end gap-[3px]" style={{ marginTop: 4 }}>
+                {editedMark}
                 <span style={{ fontSize: 9.5, color: isMine ? 'rgba(255,255,255,0.48)' : 'rgba(255,255,255,0.28)' }}>{fmtTime(msg.sentAt)}</span>
                 <StatusIcon msg={msg} isMine={isMine} />
               </div>
             </div>
           )}
+          {reactionsBar}
+          </div>
         </div>
       </div>
     </>
@@ -1547,6 +1720,13 @@ function MessagesPageInner() {
   const [activeTab, setActiveTab] = useState<'messages' | 'requests' | 'services'>('messages');
   const [serviceConvs, setServiceConvs] = useState<Conversation[]>([]);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  /* WhatsApp-style message actions */
+  const [editingMsg, setEditingMsg] = useState<Message | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [infoMsg, setInfoMsg] = useState<Message | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [newBelowCount, setNewBelowCount] = useState(0);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
 
   /* Keep the app box glued to the *visual* viewport so the composer stays
@@ -1607,11 +1787,37 @@ function MessagesPageInner() {
     if (bPinned !== aPinned) return bPinned - aPinned;
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
   });
+  // Most recently pinned message in the open conversation, if any.
+  const pinnedMessage = messages
+    .filter(m => m.pinnedAt)
+    .sort((a, b) => new Date(b.pinnedAt!).getTime() - new Date(a.pinnedAt!).getTime())[0] ?? null;
   const filteredConvs = sortedConvs.filter(c => c.otherUser.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredServiceConvs = serviceConvs.filter(c => c.otherUser.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const scrollToBottom = useCallback((smooth = true) => {
+  /* Scroll position tracking — a message arriving while the user is reading
+     history must not yank them to the bottom. `force` is used by the actions
+     the user themself took (sending, opening a conversation). */
+  const atBottomRef = useRef(true);
+  const dragDepthRef = useRef(0);
+
+  const scrollToBottom = useCallback((smooth = true, force = false) => {
+    // A non-smooth jump means "open/reset this conversation" — always honour it.
+    if (!force && smooth && !atBottomRef.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
+    atBottomRef.current = true;
+    setNewBelowCount(0);
+  }, []);
+
+  const handleMessagesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    atBottomRef.current = atBottom;
+    if (atBottom) setNewBelowCount(0);
+  }, []);
+
+  const showToast = useCallback((text: string) => {
+    setToast(text);
+    setTimeout(() => setToast(t => (t === text ? null : t)), 1800);
   }, []);
 
   const loadConversations = useCallback(async () => {
@@ -1662,6 +1868,20 @@ function MessagesPageInner() {
   }, [currentUserId]);
 
   useEffect(() => { activeConvIdRef.current = activeConvId; }, [activeConvId]);
+
+  /* "↓ new message" counter. Derived from the message state the poll already
+     maintains — no extra fetching and no change to the polling loop itself. */
+  const lastSeenMsgIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (!last) { lastSeenMsgIdRef.current = null; return; }
+    const prevId = lastSeenMsgIdRef.current;
+    if (prevId === last.id) return;
+    lastSeenMsgIdRef.current = last.id;
+    if (prevId === null) return;                       // first paint of a conversation
+    if (last.senderId === currentUserId) return;       // our own send scrolls anyway
+    if (!atBottomRef.current) setNewBelowCount(c => c + 1);
+  }, [messages, currentUserId]);
 
   /* ── Visibility tracking ── */
   useEffect(() => {
@@ -1836,7 +2056,7 @@ function MessagesPageInner() {
     const tempId = `temp_${Date.now()}`;
     const opt: Message = { id: tempId, conversationId: activeConvId, senderId: currentUserId, content, type: 'text', sentAt: new Date().toISOString(), seenBy: [currentUserId], replyTo };
     setMessages(prev => [...prev, opt]);
-    setTimeout(() => scrollToBottom(true), 30);
+    setTimeout(() => scrollToBottom(true, true), 30);
 
     try {
       const body: Record<string, unknown> = { content, type: 'text' };
@@ -1859,7 +2079,7 @@ function MessagesPageInner() {
     const isImg = file.type.startsWith('image/');
     const opt: Message = { id: tempId, conversationId: activeConvId, senderId: currentUserId, content: isImg ? '' : file.name, type: isImg ? 'image' : 'file', attachmentUrl: previewUrl, attachmentName: file.name, attachmentSize: file.size, sentAt: new Date().toISOString(), seenBy: [currentUserId] };
     setMessages(prev => [...prev, opt]);
-    setTimeout(() => scrollToBottom(true), 30);
+    setTimeout(() => scrollToBottom(true, true), 30);
     try {
       const fd = new FormData(); fd.append('file', file);
       const ur = await fetch('/api/messages/upload', { method: 'POST', body: fd });
@@ -1913,6 +2133,114 @@ function MessagesPageInner() {
     try {
       await fetch(`/api/messages/${activeConvId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messageId: msgId }) });
     } catch { /* silent */ }
+  }
+
+  /* ── Message actions ──────────────────────────────────────────────
+     Each one updates local state optimistically and then calls the shared
+     PATCH endpoint. The server re-checks ownership and the 60-second window,
+     so a rejection here simply rolls the optimistic update back. Nothing in
+     this block touches the polling loop — updates flow through the same
+     `messages` state the poll already writes to. */
+  async function patchMessageAction(body: Record<string, unknown>): Promise<{ ok: boolean; message?: Message; error?: string }> {
+    if (!activeConvId) return { ok: false };
+    try {
+      const r = await fetch(`/api/messages/${activeConvId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const d = await r.json().catch(() => ({})) as { message?: Message; error?: string };
+      return { ok: r.ok, message: d.message, error: d.error };
+    } catch { return { ok: false }; }
+  }
+
+  function startEditMessage(msg: Message) {
+    setEditingMsg(msg);
+    setReplyingTo(null);
+    setInput(msg.content);
+    setTimeout(() => textareaRef.current?.focus(), 40);
+  }
+
+  function cancelEditMessage() {
+    setEditingMsg(null);
+    setInput('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  }
+
+  async function saveEditMessage() {
+    if (!editingMsg || savingEdit) return;
+    const content = input.trim();
+    if (!content || content === editingMsg.content) { cancelEditMessage(); return; }
+    setSavingEdit(true);
+    const res = await patchMessageAction({ action: 'edit', messageId: editingMsg.id, content });
+    setSavingEdit(false);
+    if (res.ok && res.message) {
+      const updated = res.message;
+      setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, ...updated } : m));
+      cancelEditMessage();
+    } else {
+      showToast(res.error ?? 'Could not edit message');
+      cancelEditMessage();
+    }
+  }
+
+  async function handleDeleteForEveryone(msgId: string) {
+    const snapshot = messages.find(m => m.id === msgId);
+    setMessages(prev => prev.map(m => m.id === msgId
+      ? { ...m, deletedForEveryone: true, content: '', attachmentUrl: undefined, reactions: {}, pinnedAt: undefined }
+      : m));
+    const res = await patchMessageAction({ action: 'delete-for-everyone', messageId: msgId });
+    if (!res.ok) {
+      if (snapshot) setMessages(prev => prev.map(m => m.id === msgId ? snapshot : m));
+      showToast(res.error ?? 'Could not delete message');
+    }
+  }
+
+  async function handleDeleteForMe(msgId: string) {
+    const snapshot = messages.find(m => m.id === msgId);
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    setIndexedIds(prev => prev.filter(id => id !== msgId));
+    const res = await patchMessageAction({ action: 'delete-for-me', messageId: msgId });
+    if (!res.ok && snapshot) {
+      setMessages(prev => [...prev, snapshot].sort((a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()));
+      showToast(res.error ?? 'Could not delete message');
+    }
+  }
+
+  async function handleReact(msgId: string, emoji: string) {
+    if (msgId.startsWith('temp_')) return;
+    const current = messages.find(m => m.id === msgId)?.reactions?.[currentUserId];
+    const next = current === emoji ? null : emoji; // tapping the same emoji removes it
+    setMessages(prev => prev.map(m => {
+      if (m.id !== msgId) return m;
+      const reactions = { ...(m.reactions ?? {}) };
+      if (next) reactions[currentUserId] = next; else delete reactions[currentUserId];
+      return { ...m, reactions };
+    }));
+    const res = await patchMessageAction({ action: 'react', messageId: msgId, emoji: next });
+    if (res.ok && res.message) {
+      const updated = res.message;
+      setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, reactions: updated.reactions ?? {} } : m));
+    }
+  }
+
+  async function handlePin(msgId: string, pinned: boolean) {
+    if (msgId.startsWith('temp_')) return;
+    const res = await patchMessageAction({ action: 'pin', messageId: msgId, pinned });
+    if (res.ok && res.message) {
+      const updated = res.message;
+      setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, pinnedAt: updated.pinnedAt, pinnedBy: updated.pinnedBy } : m));
+      showToast(pinned ? 'Pinned' : 'Unpinned');
+    } else {
+      showToast(res.error ?? 'Could not pin message');
+    }
+  }
+
+  async function handleCopyMessage(msg: Message) {
+    const text = msg.type === 'text' ? msg.content : (msg.attachmentName ?? msg.content);
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Copied');
+    } catch { showToast('Could not copy'); }
   }
 
   async function handleToggleIndex(msgId: string) {
@@ -2019,7 +2347,11 @@ function MessagesPageInner() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === 'Escape' && editingMsg) { e.preventDefault(); cancelEditMessage(); return; }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (editingMsg) void saveEditMessage(); else handleSend();
+    }
   }
   function onTextareaInput() {
     const ta = textareaRef.current;
@@ -2061,6 +2393,69 @@ function MessagesPageInner() {
   return (
     <>
       {showInfinityModal && <InfinityUpgradeModal feature="chat" onClose={() => setShowInfinityModal(false)} returnTo="/messages" />}
+
+      {/* Message info — only fields the backend actually records are shown. */}
+      {infoMsg && (
+        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setInfoMsg(null)}>
+          <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.62)', backdropFilter: 'blur(6px)' }} />
+          <div
+            className="relative w-full sm:max-w-[340px] overflow-hidden rounded-t-[22px] sm:rounded-[18px] animate-in fade-in slide-in-from-bottom-2 duration-200"
+            style={{ background: 'rgba(14,15,24,0.98)', border: '1px solid rgba(255,255,255,0.10)', boxShadow: '0 24px 64px rgba(0,0,0,0.75)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+              <div className="flex items-center gap-2">
+                <Info style={{ width: 13, height: 13, color: 'rgba(255,255,255,0.45)' }} />
+                <p style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.80)' }}>Message info</p>
+              </div>
+              <button onClick={() => setInfoMsg(null)} className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                <X style={{ width: 11, height: 11, color: 'rgba(255,255,255,0.45)' }} />
+              </button>
+            </div>
+            <div className="px-4 py-3">
+              <p className="mb-3" style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', lineHeight: '1.5', wordBreak: 'break-word' }}>
+                {infoMsg.deletedForEveryone ? 'This message was deleted'
+                  : infoMsg.type === 'text' ? infoMsg.content
+                  : infoMsg.attachmentName ?? infoMsg.type}
+              </p>
+              {[
+                { k: 'Sent', v: new Date(infoMsg.sentAt).toLocaleString() },
+                ...(infoMsg.edited && infoMsg.editedAt ? [{ k: 'Edited', v: new Date(infoMsg.editedAt).toLocaleString() }] : []),
+                ...(infoMsg.deletedForEveryone && infoMsg.deletedAt ? [{ k: 'Deleted', v: new Date(infoMsg.deletedAt).toLocaleString() }] : []),
+                { k: 'Status', v: infoMsg.seenBy.length > 1 ? 'Read' : 'Sent' },
+                { k: 'Type', v: infoMsg.type === 'text' ? 'Text' : infoMsg.type === 'image' ? 'Image' : 'File' },
+                ...(infoMsg.reactions && Object.keys(infoMsg.reactions).length
+                  ? [{ k: 'Reactions', v: Object.values(infoMsg.reactions).join(' ') }] : []),
+                ...(infoMsg.pinnedAt ? [{ k: 'Pinned', v: new Date(infoMsg.pinnedAt).toLocaleString() }] : []),
+              ].map(row => (
+                <div key={row.k} className="flex items-start justify-between gap-3 py-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.32)' }}>{row.k}</span>
+                  <span className="text-right" style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.68)' }}>{row.v}</span>
+                </div>
+              ))}
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.22)', marginTop: 10, lineHeight: '1.5' }}>
+                Read receipts are tracked as a status only — this chat does not record delivery or read timestamps.
+              </p>
+            </div>
+            <div style={{ height: 'max(8px, env(safe-area-inset-bottom))' }} />
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className="fixed left-1/2 z-[80] animate-in fade-in slide-in-from-bottom-2 duration-200"
+          style={{ bottom: 'max(84px, calc(env(safe-area-inset-bottom) + 84px))', transform: 'translateX(-50%)', pointerEvents: 'none' }}
+        >
+          <div
+            className="rounded-full px-4 py-2"
+            style={{ background: 'rgba(20,22,32,0.96)', border: '1px solid rgba(255,255,255,0.12)', boxShadow: '0 10px 30px rgba(0,0,0,0.55)', fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.86)' }}
+          >
+            {toast}
+          </div>
+        </div>
+      )}
       <style>{`
         /* ══════════════════════════════════════════════════════════════
            Messages — responsive system.
@@ -2419,7 +2814,7 @@ function MessagesPageInner() {
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col flex-1 min-h-0">
+              <div className="relative flex flex-col flex-1 min-h-0">
                 {/* Desktop chat sub-header */}
                 <div className="hidden sm:flex shrink-0 items-center px-4 gap-3 z-10" style={{ height: 54, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                   {otherUser && (
@@ -2479,8 +2874,59 @@ function MessagesPageInner() {
                   </div>
                 )}
 
-                {/* Messages scroll area */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden cs px-3 sm:px-4 py-3" data-ns style={{ overflowX: 'hidden' }}>
+                {/* Pinned message bar — most recently pinned, tap to jump to it */}
+                {pinnedMessage && (
+                  <div
+                    className="shrink-0 flex items-center gap-2 px-3 sm:px-4"
+                    style={{ height: 38, background: 'rgba(245,158,11,0.06)', borderBottom: '1px solid rgba(245,158,11,0.16)' }}
+                  >
+                    <Pin style={{ width: 12, height: 12, color: '#fbbf24', flexShrink: 0 }} />
+                    <button onClick={() => scrollToMsg(pinnedMessage.id)} className="flex-1 min-w-0 text-left">
+                      <p className="truncate" style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)' }}>
+                        <span style={{ color: 'rgba(251,191,36,0.75)', fontWeight: 700 }}>Pinned · </span>
+                        {pinnedMessage.deletedForEveryone ? 'This message was deleted'
+                          : pinnedMessage.type === 'image' ? '📷 Photo'
+                          : pinnedMessage.type === 'file' ? `📎 ${pinnedMessage.attachmentName ?? 'File'}`
+                          : pinnedMessage.content}
+                      </p>
+                    </button>
+                    <button
+                      onClick={() => void handlePin(pinnedMessage.id, false)}
+                      className="flex-shrink-0 h-6 w-6 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}
+                      aria-label="Unpin message"
+                    >
+                      <PinOff style={{ width: 11, height: 11, color: 'rgba(255,255,255,0.45)' }} />
+                    </button>
+                  </div>
+                )}
+
+                {/* Messages scroll area — also the drag & drop target. Dropping
+                    reuses handleFileUpload, i.e. the existing upload pipeline. */}
+                <div
+                  className="relative flex-1 overflow-y-auto overflow-x-hidden cs px-3 sm:px-4 py-3"
+                  data-ns
+                  style={{ overflowX: 'hidden' }}
+                  onScroll={handleMessagesScroll}
+                  onDragEnter={e => {
+                    if (!canSend || !e.dataTransfer?.types?.includes('Files')) return;
+                    e.preventDefault(); dragDepthRef.current += 1; setDragActive(true);
+                  }}
+                  onDragOver={e => { if (canSend && e.dataTransfer?.types?.includes('Files')) e.preventDefault(); }}
+                  onDragLeave={() => {
+                    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+                    if (dragDepthRef.current === 0) setDragActive(false);
+                  }}
+                  onDrop={e => {
+                    if (!canSend) return;
+                    const files = Array.from(e.dataTransfer?.files ?? []);
+                    if (!files.length) return;
+                    e.preventDefault();
+                    dragDepthRef.current = 0;
+                    setDragActive(false);
+                    for (const f of files) void handleFileUpload(f);
+                  }}
+                >
                   {loadingMsgs && (
                     <div className="flex items-center justify-center py-16">
                       <div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.12)', borderTopColor: 'rgba(59,130,246,0.60)' }} className="animate-spin" />
@@ -2519,6 +2965,13 @@ function MessagesPageInner() {
                               onDelete={handleDelete} onToggleIndex={handleToggleIndex}
                               onReply={setReplyingTo}
                               onScrollToReply={scrollToMsg}
+                              onEdit={startEditMessage}
+                              onDeleteForEveryone={handleDeleteForEveryone}
+                              onDeleteForMe={handleDeleteForMe}
+                              onReact={handleReact}
+                              onPin={handlePin}
+                              onCopy={handleCopyMessage}
+                              onInfo={setInfoMsg}
                               msgRef={el => { if (el) msgNodesRef.current.set(m.id, el); else msgNodesRef.current.delete(m.id); }}
                               currentUserId={currentUserId}
                               otherUserName={otherUser?.name ?? ''}
@@ -2532,6 +2985,38 @@ function MessagesPageInner() {
                   <TypingIndicator users={typingUsers} />
                   <div ref={messagesEndRef} />
                 </div>
+
+                {/* Drop overlay — decorative, never intercepts pointer events */}
+                {dragActive && (
+                  <div
+                    className="absolute inset-0 z-20 flex items-center justify-center animate-in fade-in duration-150"
+                    style={{ pointerEvents: 'none', background: 'rgba(8,9,14,0.62)', backdropFilter: 'blur(3px)' }}
+                  >
+                    <div
+                      className="flex flex-col items-center gap-2 rounded-[18px] px-7 py-6"
+                      style={{ border: '1.5px dashed rgba(96,165,250,0.55)', background: 'rgba(20,22,32,0.75)' }}
+                    >
+                      <Paperclip style={{ width: 20, height: 20, color: '#60a5fa' }} />
+                      <p style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.82)' }}>Drop files to send</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* "New message" pill — only while the user is reading history */}
+                {newBelowCount > 0 && (
+                  <button
+                    onClick={() => scrollToBottom(true, true)}
+                    className="absolute left-1/2 z-20 flex items-center gap-1.5 rounded-full animate-in fade-in slide-in-from-bottom-2 duration-200 active:scale-95"
+                    style={{
+                      bottom: 12, transform: 'translateX(-50%)', padding: '6px 14px',
+                      background: 'rgba(37,99,235,0.92)', border: '1px solid rgba(255,255,255,0.14)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.45)', fontSize: 12, fontWeight: 600, color: '#fff',
+                    }}
+                  >
+                    <ChevronDown style={{ width: 13, height: 13 }} />
+                    {newBelowCount === 1 ? '1 new message' : `${newBelowCount} new messages`}
+                  </button>
+                )}
 
                 {/* Input bar */}
                 {canSend ? (
@@ -2547,8 +3032,34 @@ function MessagesPageInner() {
                       boxSizing: 'border-box',
                     }}
                   >
+                    {/* Editing bar — replaces the reply preview while editing */}
+                    {editingMsg && (
+                      <div className="flex items-center gap-2 rounded-[12px] mb-2 px-3 py-2 animate-in fade-in slide-in-from-bottom-1 duration-150" style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.18)' }}>
+                        <PenLine style={{ width: 11, height: 11, color: '#fbbf24', flexShrink: 0 }} />
+                        <div className="flex-1 min-w-0 overflow-hidden">
+                          <p style={{ fontSize: 10, fontWeight: 700, color: '#fbbf24', marginBottom: 1 }}>Editing message</p>
+                          <p className="truncate" style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.42)' }}>{editingMsg.content}</p>
+                        </div>
+                        <button
+                          onClick={cancelEditMessage}
+                          className="flex-shrink-0 rounded-[8px] px-2.5 py-1 transition-colors"
+                          style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.50)', background: 'rgba(255,255,255,0.06)' }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => void saveEditMessage()}
+                          disabled={savingEdit || !input.trim()}
+                          className="flex-shrink-0 rounded-[8px] px-2.5 py-1 transition-colors disabled:opacity-40"
+                          style={{ fontSize: 11, fontWeight: 700, color: '#0b0b0d', background: '#fbbf24' }}
+                        >
+                          {savingEdit ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    )}
+
                     {/* Reply preview */}
-                    {replyingTo && (
+                    {!editingMsg && replyingTo && (
                       <div className="flex items-center gap-2 rounded-[12px] mb-2 px-3 py-2 animate-in fade-in slide-in-from-bottom-1 duration-150" style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.16)' }}>
                         <CornerUpLeft style={{ width: 11, height: 11, color: '#60a5fa', flexShrink: 0 }} />
                         <div className="flex-1 min-w-0 overflow-hidden">
@@ -2765,7 +3276,7 @@ function MessagesPageInner() {
                           onChange={e => { handleInputChange(e.target.value); onTextareaInput(); }}
                           onKeyDown={onKeyDown}
                           onFocus={() => setTimeout(() => scrollToBottom(true), 350)}
-                          placeholder="Message…"
+                          placeholder={editingMsg ? 'Edit message…' : 'Message…'}
                           className="msg-ta w-full min-w-0 placeholder:text-white/20 outline-none resize-none"
                           style={{ background: 'transparent', fontSize: 16, color: '#fff', lineHeight: '1.5', minHeight: 22, display: 'block', boxSizing: 'border-box' }}
                           disabled={sending}
@@ -2774,8 +3285,8 @@ function MessagesPageInner() {
 
                       {/* Send button */}
                       <button
-                        onClick={handleSend}
-                        disabled={!input.trim() || sending}
+                        onClick={() => { if (editingMsg) void saveEditMessage(); else handleSend(); }}
+                        disabled={!input.trim() || sending || savingEdit}
                         className="flex-shrink-0 rounded-full flex items-center justify-center self-end transition-all active:scale-90"
                         style={{
                           width: 38, height: 38,

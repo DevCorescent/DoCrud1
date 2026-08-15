@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { sanitizeCtaLabel, sanitizeCtaUrl, CTA_LABEL_MAX } from '@/lib/cta';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -135,6 +136,8 @@ const CAT_COLORS: Record<string, { bg: string; icon: string; ring: string; glow:
 /* ─── field states ──────────────────────────────────────────── */
 const blank = {
   title: '', tags: '', notes: '', visibility: 'public' as Visibility,
+  // call-to-action button (optional, one per post)
+  ctaLabel: '', ctaUrl: '',
   // news
   publisher: '', location: '', sourceUrl: '', newsDate: '',
   // article
@@ -311,6 +314,15 @@ export default function PublishAnythingDialog({
   const avatarRef = useRef<HTMLInputElement>(null);
 
   const set = (patch: Partial<FieldState>) => setFields(f => ({ ...f, ...patch }));
+
+  /* ── Call-to-action ───────────────────────────────────────────
+     One optional CTA per post. `ctaDraft` is the validated value that goes
+     into the publish payload; the server re-validates it either way. */
+  const [ctaOpen, setCtaOpen] = useState(false);
+  const ctaLabelClean = sanitizeCtaLabel(fields.ctaLabel);
+  const ctaUrlClean = sanitizeCtaUrl(fields.ctaUrl);
+  const ctaDraft = ctaLabelClean && ctaUrlClean ? { label: ctaLabelClean, url: ctaUrlClean } : null;
+  const ctaUrlInvalid = fields.ctaUrl.trim().length > 0 && !ctaUrlClean;
 
   // reset on open
   useEffect(() => {
@@ -717,6 +729,8 @@ export default function PublishAnythingDialog({
           authMode: fields.visibility === 'public' ? 'public' : 'password',
           videoUrl: category === 'video' && fields.videoUrl.trim() ? fields.videoUrl.trim() : undefined,
           thumbnailUrl: resolvedThumbnailUrl,
+          // Structured CTA — the server re-validates and drops it if unsafe.
+          cta: ctaDraft ?? undefined,
           // Business page attribution — if publishing from a company page
           uploadedByName: businessPageName || undefined,
           avatarUrl: businessLogoUrl || undefined,
@@ -1043,6 +1057,69 @@ export default function PublishAnythingDialog({
             </div>
           ) : (
             <>
+              {/* ── Call to action (optional, one per post) ── */}
+              <div className="self-start w-full">
+                {!ctaOpen && !ctaDraft && (
+                  <button
+                    type="button"
+                    onClick={() => setCtaOpen(true)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.03] px-3 py-1.5 text-[11.5px] font-semibold text-white/55 transition hover:border-white/[0.18] hover:bg-white/[0.06] hover:text-white/85"
+                  >
+                    <Plus className="h-3 w-3" /> Add CTA
+                  </button>
+                )}
+
+                {(ctaOpen || ctaDraft) && (
+                  <div className="w-full rounded-xl border border-white/[0.09] bg-white/[0.025] p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">Call to action</span>
+                      <button
+                        type="button"
+                        onClick={() => { set({ ctaLabel: '', ctaUrl: '' }); setCtaOpen(false); }}
+                        aria-label="Remove call to action"
+                        className="rounded-lg px-2 py-0.5 text-[11px] text-white/40 transition hover:bg-white/[0.06] hover:text-white/75"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[11px] text-white/40">Button text</label>
+                        <input
+                          className={inputCls}
+                          value={fields.ctaLabel}
+                          maxLength={CTA_LABEL_MAX}
+                          onChange={e => set({ ctaLabel: e.target.value })}
+                          placeholder="Visit Website"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] text-white/40">Link</label>
+                        <input
+                          className={inputCls}
+                          value={fields.ctaUrl}
+                          onChange={e => set({ ctaUrl: e.target.value })}
+                          placeholder="https://example.com"
+                          inputMode="url"
+                        />
+                      </div>
+                    </div>
+                    {ctaUrlInvalid && (
+                      <p className="mt-1.5 text-[11px] text-rose-300/80">Enter a valid http:// or https:// link.</p>
+                    )}
+                    {/* Preview — exactly how it renders on the published post */}
+                    {ctaDraft && (
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-[0.14em] text-white/25">Preview</span>
+                        <span className="inline-flex items-center gap-1.5 rounded-[11px] border border-white/[0.14] bg-white/[0.08] px-3.5 py-2 text-[12.5px] font-semibold text-white/85">
+                          {ctaDraft.label} <span aria-hidden>&rarr;</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Visibility toggle */}
               <div className="flex items-center gap-1.5 self-start rounded-xl border border-white/[0.07] bg-white/[0.025] p-[3px]">
                 <button

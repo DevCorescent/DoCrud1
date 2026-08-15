@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { isInternalCtaUrl } from '@/lib/cta';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -55,6 +56,7 @@ export type FeedItem = {
   trendedByViewer?: boolean;
   commentsCount?: number;
   thumbnailUrl?: string;
+  cta?: { label: string; url: string };
   applicationUrl?: string;
   uploadedByUserId?: string;
   uploadedByName?: string;
@@ -663,6 +665,23 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
           )}
           {item.body?.trim() && <BodyOrChips body={item.body} byline={item.byline} category={item.category} />}
         </Link>
+
+        {/* Call to action — a real link, outside the card's own <Link> so the
+            click goes to the destination rather than the post. */}
+        {item.cta?.url && item.cta.label && (
+          <div className="mt-3">
+            <a
+              href={item.cta.url}
+              {...(isInternalCtaUrl(item.cta.url) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+              aria-label={item.cta.label}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex max-w-full items-center gap-1.5 rounded-[11px] border border-white/[0.14] bg-white/[0.08] px-3.5 py-2 text-[12.5px] font-semibold text-white/85 transition duration-150 hover:border-white/[0.22] hover:bg-white/[0.13] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            >
+              <span className="min-w-0 break-words text-left">{item.cta.label}</span>
+              <span aria-hidden className="shrink-0">&rarr;</span>
+            </a>
+          </div>
+        )}
 
         {/* chips */}
         {item.chips && item.chips.length > 0 && (

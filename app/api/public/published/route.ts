@@ -189,6 +189,7 @@ export async function GET(request: NextRequest) {
         title: t.title || t.fileName,
         byline: authorName,
         uploadedByName: authorName,
+        cta: t.cta,
         body: t.notes || '',
         chips: cleanChips(t.directoryTags),
         postedAt: t.createdAt,

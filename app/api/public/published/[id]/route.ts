@@ -68,6 +68,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       title: t.title || t.fileName,
       byline: authorName,
       uploadedByName: authorName,
+      cta: t.cta,
       body: t.notes || '',
       chips: cleanChips(t.directoryTags),
       postedAt: t.createdAt,

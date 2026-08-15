@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { isInternalCtaUrl } from '@/lib/cta';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -102,6 +103,7 @@ type PublishedItem = {
   mimeType?: string;
   videoUrl?: string;
   thumbnailUrl?: string;
+  cta?: { label: string; url: string };
   likesCount?: number;
   likedByViewer?: boolean;
   trendCount?: number;
@@ -2007,6 +2009,21 @@ export default function PublishedItemPage({ id }: { id: string }) {
             <div className="mt-7">
               <BodyRenderer body={item.body} category={item.category} />
             </div>
+
+            {/* Publisher-defined call to action */}
+            {item.cta?.url && item.cta.label && (
+              <div className="mt-6">
+                <a
+                  href={item.cta.url}
+                  {...(isInternalCtaUrl(item.cta.url) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+                  aria-label={item.cta.label}
+                  className="inline-flex max-w-full items-center gap-2 rounded-[12px] border border-white/[0.14] bg-white/[0.08] px-4 py-2.5 text-[13.5px] font-semibold text-white/90 transition duration-150 hover:border-white/[0.22] hover:bg-white/[0.13] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                >
+                  <span className="min-w-0 break-words">{item.cta.label}</span>
+                  <span aria-hidden className="shrink-0">&rarr;</span>
+                </a>
+              </div>
+            )}
 
             {/* ── Category CTAs ── */}
             {item.category === 'document' && (() => {

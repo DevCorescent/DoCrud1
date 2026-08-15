@@ -2118,6 +2118,9 @@ export interface SecureFileTransfer {
   featuredOrderId?: string;
   /* directory publishing extras */
   thumbnailUrl?: string;
+  /** Optional call-to-action button. Structured, never embedded in the body,
+      so click/CTR analytics can read it later without parsing text. */
+  cta?: { label: string; url: string };
   applicationUrl?: string;
   registrations?: Array<{ id: string; name: string; email: string; note?: string; registeredAt: string; type: 'event' | 'hackathon' | 'other' }>;
   jobApplications?: Array<{ id: string; name: string; email: string; note?: string; appliedAt: string }>;

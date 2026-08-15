@@ -8,6 +8,7 @@ import { isR2Configured, compressAndUploadThumbnail, uploadToR2, compressImageFo
 import path from 'path';
 import fs from 'fs';
 import type { SecureFileTransfer } from '@/types/document';
+import { sanitizeCta } from '@/lib/cta';
 
 export const dynamic = 'force-dynamic';
 
@@ -229,6 +230,10 @@ export async function POST(request: NextRequest) {
       businessPageSlug,
       videoUrl: payload.videoUrl?.trim() || undefined,
       thumbnailUrl: resolvedThumb,
+      // Server is the authority on CTA safety: unsafe schemes
+      // (javascript:/data:/vbscript:…) and malformed URLs are dropped here
+      // regardless of what the client sent.
+      cta: sanitizeCta((payload as { cta?: unknown }).cta) ?? undefined,
     });
 
     created.thumbnailUrl = resolvedThumb || created.thumbnailUrl;

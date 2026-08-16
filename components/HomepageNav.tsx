@@ -98,7 +98,7 @@ interface WorkspaceNotification {
 }
 
 const TONE_RING: Record<NonNullable<WorkspaceNotification['tone']>, string> = {
-  default: 'ring-white/20',
+  default: 'ring-[var(--nt-line)]',
   amber:   'ring-amber-400/30',
   sky:     'ring-sky-400/30',
   emerald: 'ring-emerald-400/30',
@@ -106,7 +106,7 @@ const TONE_RING: Record<NonNullable<WorkspaceNotification['tone']>, string> = {
 };
 
 const ICON_BG: Record<NonNullable<WorkspaceNotification['tone']>, string> = {
-  default: 'bg-white/[0.07]',
+  default: 'bg-[var(--nt-surface-2)]',
   amber:   'bg-amber-500/[0.12]',
   sky:     'bg-sky-500/[0.12]',
   emerald: 'bg-emerald-500/[0.12]',
@@ -114,7 +114,7 @@ const ICON_BG: Record<NonNullable<WorkspaceNotification['tone']>, string> = {
 };
 
 const ICON_COLOR: Record<NonNullable<WorkspaceNotification['tone']>, string> = {
-  default: 'text-white/40',
+  default: 'text-[color:var(--nt-t3)]',
   amber:   'text-amber-400',
   sky:     'text-sky-400',
   emerald: 'text-emerald-400',
@@ -197,7 +197,7 @@ function NotificationActorAvatar({ src, name }: { src?: string; name?: string })
     );
   }
   return (
-    <span className="text-[13px] font-bold text-white/70 select-none bg-white/[0.07] w-full h-full flex items-center justify-center">
+    <span className="text-[13px] font-bold text-[color:var(--nt-t2)] select-none bg-[var(--nt-surface-2)] w-full h-full flex items-center justify-center">
       {(name || '?').charAt(0).toUpperCase()}
     </span>
   );
@@ -745,7 +745,7 @@ useEffect(() => {
                 <button
                   type="button"
                   aria-label="Close notifications"
-                  className="notif-backdrop fixed inset-0 bg-black/75 backdrop-blur-[6px]"
+                  className="notif-backdrop fixed inset-0 backdrop-blur-[6px]"
                   style={{ zIndex: 2147483646 }}
                   onClick={() => setNotifOpen(false)}
                 />
@@ -755,20 +755,19 @@ useEffect(() => {
                   ref={notifPanelRef}
                   className="notif-panel fixed flex flex-col
                     bottom-0 left-0 right-0 rounded-t-[26px]
-                    border-t border-l border-r border-white/[0.12]
-                    shadow-[0_-4px_40px_rgba(0,0,0,1)]
-                    sm:bottom-auto sm:left-auto sm:top-[57px] sm:right-4 sm:w-[390px] sm:rounded-[20px] sm:border sm:shadow-[0_8px_48px_rgba(0,0,0,0.92)]"
-                  style={{ background: '#0c0c0f', maxHeight: '78svh', zIndex: 2147483647 }}
+                    border-t border-l border-r border-[var(--nt-line)]
+                    sm:bottom-auto sm:left-auto sm:top-[57px] sm:right-4 sm:w-[390px] sm:rounded-[20px] sm:border"
+                  style={{ maxHeight: '78svh', zIndex: 2147483647 }}
                 >
                   {/* Drag handle — mobile only */}
                   <div className="shrink-0 flex justify-center pt-3 pb-1 sm:hidden">
-                    <div className="h-[5px] w-12 rounded-full bg-white/[0.15]" />
+                    <div className="h-[5px] w-12 rounded-full bg-[var(--nt-line)]" />
                   </div>
 
                   {/* Header */}
-                  <div className="shrink-0 flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
+                  <div className="shrink-0 flex items-center justify-between border-b border-[var(--nt-line)] px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <p className="text-[14px] font-bold text-white tracking-[-0.015em]">Notifications</p>
+                      <p className="text-[14px] font-bold text-[color:var(--nt-t1)] tracking-[-0.015em]">Notifications</p>
                       {unreadCount > 0 && (
                         <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-rose-500/15 px-1.5 text-[9px] font-black text-rose-400 border border-rose-500/20 tabular-nums">
                           {unreadCount}
@@ -780,7 +779,7 @@ useEffect(() => {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); void markAllRead(); }}
-                          className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11px] font-medium text-white/30 transition hover:bg-white/[0.07] hover:text-white/65 active:scale-95"
+                          className="flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11px] font-medium text-[color:var(--nt-t3)] transition hover:bg-[var(--nt-surface-2)] hover:text-[color:var(--nt-t2)] active:scale-95"
                         >
                           <Check className="h-3 w-3" />
                           Mark all read
@@ -789,7 +788,7 @@ useEffect(() => {
                       <button
                         type="button"
                         onClick={() => setNotifOpen(false)}
-                        className="flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/35 transition hover:bg-white/[0.10] hover:text-white"
+                        className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--nt-line)] bg-[var(--nt-surface-2)] text-[color:var(--nt-t3)] transition hover:bg-[var(--nt-surface-2)] hover:text-[color:var(--nt-t1)]"
                         aria-label="Close"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -798,18 +797,18 @@ useEffect(() => {
                   </div>
 
                   {/* Scrollable body */}
-                  <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+                  <div className="notif-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
                     {notifications.length === 0 ? (
                       <div className="flex flex-col items-center justify-center px-6 py-12 gap-4">
-                        <div className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-white/[0.07] bg-white/[0.025]">
-                          <Bell className="h-7 w-7 text-white/12" />
-                          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#1a1a1e] border border-white/[0.07]">
-                            <Check className="h-3 w-3 text-white/25" />
+                        <div className="relative flex h-16 w-16 items-center justify-center rounded-[20px] border border-[var(--nt-line)] bg-[var(--nt-surface-2)]">
+                          <Bell className="h-7 w-7 text-[color:var(--nt-t4)]" />
+                          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#1a1a1e] border border-[var(--nt-line)]">
+                            <Check className="h-3 w-3 text-[color:var(--nt-t4)]" />
                           </span>
                         </div>
                         <div className="text-center">
-                          <p className="text-[14px] font-semibold text-white/35 tracking-[-0.01em]">You&apos;re all caught up</p>
-                          <p className="mt-1 text-[12px] leading-relaxed text-white/20">
+                          <p className="text-[14px] font-semibold text-[color:var(--nt-t3)] tracking-[-0.01em]">You&apos;re all caught up</p>
+                          <p className="mt-1 text-[12px] leading-relaxed text-[color:var(--nt-t4)]">
                             New activity from your network<br />will appear here.
                           </p>
                         </div>
@@ -819,8 +818,8 @@ useEffect(() => {
                         {notifications.filter((n) => n.type && SOCIAL_TYPES.has(n.type)).length > 0 && (
                           <>
                             <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2">
-                              <span className="text-[9px] font-black uppercase tracking-[0.28em] text-white/20">Social</span>
-                              <div className="flex-1 h-px bg-white/[0.05]" />
+                              <span className="text-[9px] font-black uppercase tracking-[0.28em] text-[color:var(--nt-t4)]">Social</span>
+                              <div className="flex-1 h-px bg-[var(--nt-surface-2)]" />
                             </div>
                             {notifications.filter((n) => n.type && SOCIAL_TYPES.has(n.type)).map((notif) => {
                               const tone = notif.tone || 'default';
@@ -828,7 +827,7 @@ useEffect(() => {
                               const isSocial = notif.type && SOCIAL_TYPES.has(notif.type);
                               return (
                                 <div key={notif.id}
-                                  className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
+                                  className={`group relative flex cursor-pointer items-start gap-3 border-b border-[var(--nt-line)] px-4 py-3.5 transition-colors hover:bg-[var(--nt-hover)] active:bg-[var(--nt-surface-2)] ${notif.read ? '' : 'bg-[var(--nt-unread)]'}`}
                                   onClick={() => openNotification(notif)}>
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (
@@ -840,10 +839,10 @@ useEffect(() => {
                                   )}
                                   <div className="flex-1 min-w-0 pt-0.5">
                                     <div className="flex items-start justify-between gap-2">
-                                      <p className={`text-[12.5px] font-semibold leading-snug ${notif.read ? 'text-white/45' : 'text-white/88'}`}>{notif.title}</p>
-                                      <span className="shrink-0 text-[10px] text-white/22 mt-0.5 tabular-nums">{timeAgo(notif.createdAt)}</span>
+                                      <p className={`text-[12.5px] font-semibold leading-snug ${notif.read ? 'text-[color:var(--nt-t2)]' : 'text-[color:var(--nt-t1)]'}`}>{notif.title}</p>
+                                      <span className="shrink-0 text-[10px] text-[color:var(--nt-t4)] mt-0.5 tabular-nums">{timeAgo(notif.createdAt)}</span>
                                     </div>
-                                    <p className={`mt-0.5 text-[11.5px] leading-relaxed line-clamp-2 ${notif.read ? 'text-white/22' : 'text-white/48'}`}>{notif.body}</p>
+                                    <p className={`mt-0.5 text-[11.5px] leading-relaxed line-clamp-2 ${notif.read ? 'text-[color:var(--nt-t4)]' : 'text-[color:var(--nt-t2)]'}`}>{notif.body}</p>
                                     <span className={`mt-1.5 inline-flex items-center gap-1 text-[10.5px] font-semibold ${ICON_COLOR[tone]}`}>{notif.ctaLabel || 'Open'} →</span>
                                   </div>
                                 </div>
@@ -854,8 +853,8 @@ useEffect(() => {
                         {notifications.filter((n) => !n.type || !SOCIAL_TYPES.has(n.type)).length > 0 && (
                           <>
                             <div className="flex items-center gap-2.5 px-4 pt-3.5 pb-2">
-                              <span className="text-[9px] font-black uppercase tracking-[0.28em] text-white/20">Workspace</span>
-                              <div className="flex-1 h-px bg-white/[0.05]" />
+                              <span className="text-[9px] font-black uppercase tracking-[0.28em] text-[color:var(--nt-t4)]">Workspace</span>
+                              <div className="flex-1 h-px bg-[var(--nt-surface-2)]" />
                             </div>
                             {notifications.filter((n) => !n.type || !SOCIAL_TYPES.has(n.type)).map((notif) => {
                               const tone = notif.tone || 'default';
@@ -863,7 +862,7 @@ useEffect(() => {
                               const isSocial = notif.type && SOCIAL_TYPES.has(notif.type);
                               return (
                                 <div key={notif.id}
-                                  className={`group relative flex cursor-pointer items-start gap-3 border-b border-white/[0.04] px-4 py-3.5 transition-colors hover:bg-white/[0.03] active:bg-white/[0.05] ${notif.read ? '' : 'bg-white/[0.018]'}`}
+                                  className={`group relative flex cursor-pointer items-start gap-3 border-b border-[var(--nt-line)] px-4 py-3.5 transition-colors hover:bg-[var(--nt-hover)] active:bg-[var(--nt-surface-2)] ${notif.read ? '' : 'bg-[var(--nt-unread)]'}`}
                                   onClick={() => openNotification(notif)}>
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (
@@ -875,10 +874,10 @@ useEffect(() => {
                                   )}
                                   <div className="flex-1 min-w-0 pt-0.5">
                                     <div className="flex items-start justify-between gap-2">
-                                      <p className={`text-[12.5px] font-semibold leading-snug ${notif.read ? 'text-white/45' : 'text-white/88'}`}>{notif.title}</p>
-                                      <span className="shrink-0 text-[10px] text-white/22 mt-0.5 tabular-nums">{timeAgo(notif.createdAt)}</span>
+                                      <p className={`text-[12.5px] font-semibold leading-snug ${notif.read ? 'text-[color:var(--nt-t2)]' : 'text-[color:var(--nt-t1)]'}`}>{notif.title}</p>
+                                      <span className="shrink-0 text-[10px] text-[color:var(--nt-t4)] mt-0.5 tabular-nums">{timeAgo(notif.createdAt)}</span>
                                     </div>
-                                    <p className={`mt-0.5 text-[11.5px] leading-relaxed line-clamp-2 ${notif.read ? 'text-white/22' : 'text-white/48'}`}>{notif.body}</p>
+                                    <p className={`mt-0.5 text-[11.5px] leading-relaxed line-clamp-2 ${notif.read ? 'text-[color:var(--nt-t4)]' : 'text-[color:var(--nt-t2)]'}`}>{notif.body}</p>
                                     <span className={`mt-1.5 inline-flex items-center gap-1 text-[10.5px] font-semibold ${ICON_COLOR[tone]}`}>{notif.ctaLabel || 'Open'} →</span>
                                   </div>
                                 </div>

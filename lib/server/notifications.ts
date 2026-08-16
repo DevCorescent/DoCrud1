@@ -362,7 +362,11 @@ async function buildSocialNotifications(user: User, state: NotificationState): P
     const e = canSeeIdentity
       // Canonical name replaces the snapshot; redaction below is unchanged.
       ? { ...rawEvent, actorName: nameRows.get(rawEvent.actorId) || rawEvent.actorName }
-      : { ...rawEvent, actorName: 'Someone', actorId: '', actorHeadline: undefined, href: undefined };
+      // actorAvatar is cleared too: identity redaction covers the PHOTO as well
+      // as the name. Without this, the `|| e.actorAvatar` fallback below would
+      // hand back the raw event's snapshot and leak the actor's picture next to
+      // the word "Someone".
+      : { ...rawEvent, actorName: 'Someone', actorId: '', actorHeadline: undefined, href: undefined, actorAvatar: undefined };
     const notificationId = `social-${rawEvent.id}`;
     const toneMap: Record<string, WorkspaceNotification['tone']> = {
       follow: 'sky',

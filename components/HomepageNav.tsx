@@ -173,6 +173,36 @@ const TOOLS_ITEMS = [
   { id: 'directory', label: 'File Directory', desc: 'Browse your workspace',  Icon: Layers,        color: '#fbbf24', bg: 'rgba(251,191,36,0.11)',  bd: 'rgba(251,191,36,0.20)'  },
 ] as const;
 
+/**
+ * Actor avatar for a social notification.
+ *
+ * Falls back to the actor's initial when there is no photo OR the photo fails
+ * to load, so a dead URL never renders a broken image. The error flag resets
+ * whenever `src` changes — the panel reuses these rows as the list refreshes,
+ * so without the reset one failed image would leave later actors stuck on the
+ * initial (the same bug that was fixed in the story viewer).
+ */
+function NotificationActorAvatar({ src, name }: { src?: string; name?: string }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [src]);
+  if (src && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name || ''}
+        onError={() => setFailed(true)}
+        className="h-full w-full object-cover"
+      />
+    );
+  }
+  return (
+    <span className="text-[13px] font-bold text-white/70 select-none bg-white/[0.07] w-full h-full flex items-center justify-center">
+      {(name || '?').charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
 export default function HomepageNav({
   softwareName,
   accentLabel,
@@ -803,10 +833,7 @@ useEffect(() => {
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (
                                     <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 overflow-hidden ${TONE_RING[tone]}`}>
-                                      {notif.actorAvatar
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        ? <img src={notif.actorAvatar} alt={notif.actorName || ''} className="h-full w-full object-cover" />
-                                        : <span className="text-[13px] font-bold text-white/70 select-none bg-white/[0.07] w-full h-full flex items-center justify-center">{(notif.actorName || '?').charAt(0).toUpperCase()}</span>}
+                                      <NotificationActorAvatar src={notif.actorAvatar} name={notif.actorName} />
                                     </div>
                                   ) : (
                                     <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] ${ICON_BG[tone]}`}><IconComp className={`h-4 w-4 ${ICON_COLOR[tone]}`} /></div>
@@ -841,10 +868,7 @@ useEffect(() => {
                                   {!notif.read && <span className="absolute left-1.5 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_5px_rgba(239,68,68,0.8)]" />}
                                   {isSocial && notif.actorId ? (
                                     <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 overflow-hidden ${TONE_RING[tone]}`}>
-                                      {notif.actorAvatar
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        ? <img src={notif.actorAvatar} alt={notif.actorName || ''} className="h-full w-full object-cover" />
-                                        : <span className="text-[13px] font-bold text-white/70 select-none bg-white/[0.07] w-full h-full flex items-center justify-center">{(notif.actorName || '?').charAt(0).toUpperCase()}</span>}
+                                      <NotificationActorAvatar src={notif.actorAvatar} name={notif.actorName} />
                                     </div>
                                   ) : (
                                     <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] ${ICON_BG[tone]}`}><IconComp className={`h-4 w-4 ${ICON_COLOR[tone]}`} /></div>

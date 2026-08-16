@@ -34,6 +34,8 @@ import {
   Briefcase,
   Star,
 } from 'lucide-react';
+import { REACTION_META, type ReactionType, type ReactionSummary } from '@/lib/reactions';
+import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 
 /* ─── types ─────────────────────────────────────────────────────── */
 export type FeedItem = {
@@ -52,6 +54,7 @@ export type FeedItem = {
   isReal?: boolean;
   likesCount?: number;
   likedByViewer?: boolean;
+  reactions?: ReactionSummary & { previewAvatars?: string[] };
   trendCount?: number;
   trendedByViewer?: boolean;
   commentsCount?: number;
@@ -569,6 +572,12 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
   const [modal, setModal]          = useState<ModalVariant | null>(null);
   const [liked, setLiked]          = useState(item.likedByViewer ?? false);
   const [likeCount, setLikeCount]  = useState(item.likesCount ?? 0);
+  /* One shared controller — same hook every other post surface uses. */
+  const rx = usePostReactions(
+    item.id,
+    { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: item.reactions },
+    { live: Boolean(item.isReal), onError: (m) => toast(m, 'error') },
+  );
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(item.commentsCount ?? 0);
   const likeInFlight               = useRef(false);
@@ -594,7 +603,11 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
     <>
       {modal && <ActionModal variant={modal} itemTitle={item.title} itemId={item.id} onClose={() => setModal(null)} />}
 
-      <article className="group py-5 border-b border-white/[0.05] last:border-0">
+      <article
+        className="group py-5 border-b border-white/[0.05] last:border-0"
+        onDoubleClick={rx.onBodyDoubleTap}
+        onTouchEnd={rx.onBodyDoubleTap}
+      >
         {/* header */}
         <div className="flex items-center gap-3 mb-3.5">
           <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${AVATAR_CLS}`}>
@@ -666,6 +679,7 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
           {item.body?.trim() && <BodyOrChips body={item.body} byline={item.byline} category={item.category} />}
         </Link>
 
+
         {/* Call to action — a real link, outside the card's own <Link> so the
             click goes to the destination rather than the post. */}
         {item.cta?.url && item.cta.label && (
@@ -707,33 +721,13 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
           </div>
         )}
 
+        {/* Reaction summary — compact: top three glyphs plus the total. */}
+        <PostReactionSummaryBar c={rx} postId={item.id} fmtCount={fmtCount} />
+
         {/* engagement row */}
         <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.preventDefault()}>
-          {/* like */}
-          <button type="button"
-            onClick={async e => {
-              e.stopPropagation();
-              if (likeInFlight.current) return;
-              const newLiked = !liked;
-              setLiked(newLiked);
-              setLikeCount(c => newLiked ? c + 1 : Math.max(0, c - 1));
-              if (newLiked) toast('Liked!', 'success', '❤️');
-              trackCTA('like_post', cat);
-              if (item.isReal) {
-                likeInFlight.current = true;
-                try {
-                  const res = await fetch(`/api/published/${item.id}/like`, { method: 'POST' });
-                  if (res.ok) {
-                    const d = await res.json() as { liked: boolean; likesCount: number };
-                    setLiked(d.liked); setLikeCount(d.likesCount);
-                  } else { setLiked(liked); setLikeCount(c => newLiked ? Math.max(0, c - 1) : c + 1); }
-                } catch { setLiked(liked); } finally { likeInFlight.current = false; }
-              }
-            }}
-            className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${liked ? 'text-rose-400' : 'text-white/35 hover:text-white/70'}`}>
-            <Heart className={`h-4 w-4 transition-transform ${liked ? 'fill-current scale-110' : ''}`} />
-            <span>{likeCount > 0 ? fmtCount(likeCount) : (liked ? 'Liked' : 'Like')}</span>
-          </button>
+          {/* like / reactions — shared component */}
+          <PostReactionButton c={rx} />
 
           {/* comments */}
           <button type="button"

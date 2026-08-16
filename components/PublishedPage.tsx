@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
@@ -1302,6 +1303,11 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
   const [saved, toggleSaved] = useBookmark(item.id, item.category);
   const [modal, setModal]    = useState<ModalVariant | null>(null);
   const [liked, setLiked]    = useState(item.likedByViewer ?? false);
+  const rx1 = usePostReactions(
+    item.id,
+    { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: (item as { reactions?: import('@/components/social/PostReactionButton').PostReactionSummary }).reactions },
+    { live: Boolean(item.isReal) },
+  );
   const [likeCount, setLikeCount] = useState(item.likesCount ?? 0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(item.commentsCount ?? 0);
@@ -1408,32 +1414,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         {/* ── engagement row ── */}
         <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.preventDefault()}>
           {/* like */}
-          <button
-            type="button"
-            onClick={async e => {
-              e.stopPropagation();
-              if (likeInFlight.current) return;
-              const newLiked = !liked;
-              setLiked(newLiked);
-              setLikeCount(c => newLiked ? c + 1 : Math.max(0, c - 1));
-              if (newLiked) toast('Liked!', 'success', '❤️');
-              trackCTA('like_post', cat);
-              if (item.isReal) {
-                likeInFlight.current = true;
-                try {
-                  const res = await fetch(`/api/published/${item.id}/like`, { method: 'POST' });
-                  if (res.ok) {
-                    const d = await res.json() as { liked: boolean; likesCount: number };
-                    setLiked(d.liked); setLikeCount(d.likesCount);
-                  } else { setLiked(liked); setLikeCount(c => newLiked ? Math.max(0, c - 1) : c + 1); }
-                } catch { setLiked(liked); } finally { likeInFlight.current = false; }
-              }
-            }}
-            className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${liked ? 'text-rose-400' : 'text-white/35 hover:text-white/70'}`}
-          >
-            <Heart className={`h-4 w-4 transition-transform ${liked ? 'fill-current scale-110' : ''}`} />
-            <span>{likeCount > 0 ? (likeCount >= 1000 ? `${(likeCount/1000).toFixed(1)}k` : String(likeCount)) : (liked ? 'Liked' : 'Like')}</span>
-          </button>
+          <PostReactionButton c={rx1} />
 
           {/* comments */}
           <button
@@ -2620,6 +2601,11 @@ const buildCommentTree = useCallback(
 /* ─── post card — instagram-style ───────────────────────────────── */
 function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: string }) {
   const [liked, setLiked] = useState(item.likedByViewer ?? false);
+  const rx2 = usePostReactions(
+    item.id,
+    { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: (item as { reactions?: import('@/components/social/PostReactionButton').PostReactionSummary }).reactions },
+    { live: Boolean(item.isReal) },
+  );
   const [bookmarked, toggleBookmarked] = useBookmark(item.id, item.category);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(item.commentsCount ?? 0);
@@ -2634,25 +2620,6 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
   useEffect(() => { setLikeCount(item.likesCount ?? localLikes); }, [item.likesCount]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (item.commentsCount !== undefined) setCommentCount(item.commentsCount); }, [item.commentsCount]);
 
-  const handleLike = useCallback(async (e: React.MouseEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    if (likeInFlight.current) return;
-    const newLiked = !liked;
-    setLiked(newLiked);
-    setLikeCount(c => newLiked ? c + 1 : Math.max(0, c - 1));
-    trackCTA('like_post', item.category);
-    if (newLiked) toast('Liked!', 'success', '❤️');
-    if (item.isReal) {
-      likeInFlight.current = true;
-      try {
-        const res = await fetch(`/api/published/${item.id}/like`, { method: 'POST' });
-        if (res.ok) {
-          const d = await res.json() as { liked: boolean; likesCount: number };
-          setLiked(d.liked); setLikeCount(d.likesCount);
-        } else { setLiked(liked); setLikeCount(c => newLiked ? Math.max(0, c - 1) : c + 1); }
-      } catch { setLiked(liked); } finally { likeInFlight.current = false; }
-    }
-  }, [liked, item.id, item.isReal, item.category]);
 
   const displayName = item.uploadedByName || item.byline.split(' · ')[0];
   const initials    = displayName.split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()??'').join('');
@@ -2725,10 +2692,7 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
 
       {/* engagement */}
       <div className="flex items-center gap-4 mt-3.5 pt-3.5 border-t border-white/[0.05]">
-        <button type="button" onClick={handleLike} className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${liked?'text-rose-400':'text-white/35 hover:text-white/70'}`}>
-          <Heart className={`h-4 w-4 ${liked?'fill-current scale-110 transition-transform':''}`} />
-          {likeCount > 0 ? (likeCount >= 1000 ? `${(likeCount/1000).toFixed(1)}k` : String(likeCount)) : '0'}
-        </button>
+        <PostReactionButton c={rx2} />
         <button
           type="button"
           onClick={e => { e.preventDefault(); e.stopPropagation(); setCommentsOpen(v => !v); }}

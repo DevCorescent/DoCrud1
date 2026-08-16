@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { isInternalCtaUrl } from '@/lib/cta';
+import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -103,6 +104,7 @@ type PublishedItem = {
   mimeType?: string;
   videoUrl?: string;
   thumbnailUrl?: string;
+  reactions?: import('@/components/social/PostReactionButton').PostReactionSummary;
   cta?: { label: string; url: string };
   likesCount?: number;
   likedByViewer?: boolean;
@@ -1279,8 +1281,10 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const [item,          setItem]          = useState<PublishedItem | null>(null);
   const [related,       setRelated]       = useState<PublishedItem[]>([]);
   const [loading,       setLoading]       = useState(true);
-  const [likeCount,     setLikeCount]     = useState(0);
-  const [liked,         setLiked]         = useState(false);
+  /* Server/localStorage SEED only. Everything that renders a count reads the
+     shared controller below, so there is exactly one live source of truth. */
+  const [likeSeed,      setLikeSeed]      = useState(0);
+  const [likedSeed,     setLikedSeed]     = useState(false);
   const [trendCount,    setTrendCount]    = useState(0);
   const [trended,       setTrended]       = useState(false);
   const [viewCount,     setViewCount]     = useState(0);
@@ -1322,8 +1326,8 @@ export default function PublishedItemPage({ id }: { id: string }) {
           };
           setItem(real);
           setIsRealItem(true);
-          setLikeCount(real.likesCount ?? 0);
-          setLiked(real.likedByViewer ?? false);
+          setLikeSeed(real.likesCount ?? 0);
+          setLikedSeed(real.likedByViewer ?? false);
           setTrendCount(real.trendCount ?? 0);
           setTrended(real.trendedByViewer ?? false);
           setViewCount(real.viewCount ?? 0);
@@ -1344,8 +1348,8 @@ export default function PublishedItemPage({ id }: { id: string }) {
       const found = ALL_MOCK.find(m => m.id === id) ?? ALL_MOCK[0];
       setItem(found);
       setIsRealItem(false);
-      setLikeCount(getLikes(found.id));
-      setLiked(getDidLike(found.id));
+      setLikeSeed(getLikes(found.id));
+      setLikedSeed(getDidLike(found.id));
       setComments(getLocalComments(found.id));
       setRelated(ALL_MOCK.filter(m => m.id !== found.id && m.category === found.category).slice(0, 4));
       setLoading(false);
@@ -1364,8 +1368,8 @@ export default function PublishedItemPage({ id }: { id: string }) {
         ]);
         if (lRes.ok) {
           const d = await lRes.json() as { likesCount?: number; likedByViewer?: boolean; trendCount?: number; trendedByViewer?: boolean; viewCount?: number };
-          setLikeCount(n => d.likesCount ?? n);
-          if (d.likedByViewer !== undefined) setLiked(d.likedByViewer);
+          setLikeSeed(n => d.likesCount ?? n);
+          if (d.likedByViewer !== undefined) setLikedSeed(d.likedByViewer);
           setTrendCount(n => d.trendCount ?? n);
           if (d.trendedByViewer !== undefined) setTrended(d.trendedByViewer);
           if (d.viewCount !== undefined) setViewCount(d.viewCount);
@@ -1388,19 +1392,33 @@ export default function PublishedItemPage({ id }: { id: string }) {
     return () => document.removeEventListener('mousedown', h);
   }, [showSharePanel]);
 
-  /* ── like ── */
+  /* Shared reaction controller — same hook the feed uses, so a reaction made
+     here and one made in the feed are the same state on the server. */
+  const rx = usePostReactions(
+    item?.id ?? '',
+    { likesCount: likeSeed, likedByViewer: likedSeed, reactions: item?.reactions },
+    { live: Boolean(isRealItem) },
+  );
+
+  /* Single live source for every count/state on this page — header button,
+     byline row, sidebar Engagement badge and the analytics panels all read
+     these, so they can never disagree. No extra state, no extra request. */
+  const likeCount = rx.likeCount;
+  const liked = rx.reaction !== null;
+
+  /* ── like (legacy path, retained for the non-real/demo items) ── */
   const toggleLike = async () => {
     if (!item || likeInFlight.current) return;
     const next = !liked;
     const nc = next ? likeCount + 1 : likeCount - 1;
-    setLiked(next); setLikeCount(nc);
+    setLikedSeed(next); setLikeSeed(nc);
     if (isRealItem) {
       likeInFlight.current = true;
       try {
         const res = await fetch(`/api/published/${item.id}/like`, { method: 'POST' });
         if (res.ok) {
           const d = await res.json() as { liked: boolean; likesCount: number };
-          setLiked(d.liked); setLikeCount(d.likesCount);
+          setLikedSeed(d.liked); setLikeSeed(d.likesCount);
         }
       } catch {} finally { likeInFlight.current = false; }
     } else {
@@ -1751,16 +1769,10 @@ export default function PublishedItemPage({ id }: { id: string }) {
                 <span className="hidden sm:inline">Delete</span>
               </button>
             )}
-            <button
-              type="button"
-              onClick={toggleLike}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition ${
-                liked ? 'border-rose-500/30 bg-rose-500/10 text-rose-400' : 'border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.09] hover:text-white'
-              }`}
-            >
-              <ThumbsUp className={`h-3.5 w-3.5 transition-transform ${liked ? 'scale-110' : ''}`} />
-              <span className="tabular-nums">{likeCount}</span>
-            </button>
+            <div className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3">
+              <PostReactionButton c={rx} compact />
+            </div>
+
 
             <button
               type="button"
@@ -1920,16 +1932,9 @@ export default function PublishedItemPage({ id }: { id: string }) {
               <p className="text-sm text-white/45">{item.byline}</p>
               {/* inline engagement row */}
               <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={toggleLike}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-semibold transition ${
-                    liked ? 'bg-rose-500/10 text-rose-400' : 'text-white/40 hover:bg-white/[0.06] hover:text-white/80'
-                  }`}
-                >
-                  <ThumbsUp className={`h-4 w-4 ${liked ? 'fill-rose-400/20' : ''} transition-transform ${liked ? 'scale-110' : ''}`} />
-                  <span className="tabular-nums">{likeCount}</span>
-                </button>
+                <div className="inline-flex items-center rounded-xl px-3 py-2">
+                  <PostReactionButton c={rx} />
+                </div>
                 <button
                   type="button"
                   onClick={() => void toggleTrend()}
@@ -2336,16 +2341,9 @@ export default function PublishedItemPage({ id }: { id: string }) {
 
                 <SidebarTab id="engagement" label="Engagement" badge={likeCount + trendCount + totalComments || undefined}>
                   <div className="space-y-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={toggleLike}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                        liked ? 'bg-rose-500/10 text-rose-400' : 'border border-white/[0.07] bg-white/[0.03] text-white/50 hover:bg-white/[0.07] hover:text-white'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2"><ThumbsUp className="h-4 w-4" />{liked ? 'Liked' : 'Like'}</span>
-                      <span className="tabular-nums text-xs">{likeCount}</span>
-                    </button>
+                    <div className="flex w-full items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2.5">
+                      <PostReactionButton c={rx} />
+                    </div>
                     <button
                       type="button"
                       onClick={() => void toggleTrend()}

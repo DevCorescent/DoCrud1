@@ -6,6 +6,7 @@ import { getAuthSession } from '@/lib/server/auth';
 import { readJsonFile, businessPagesPath } from '@/lib/server/storage';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
 import { getUserNames } from '@/lib/server/users';
+import { summarizeReactions } from '@/lib/reactions';
 
 export const dynamic = 'force-dynamic';
 
@@ -157,7 +158,10 @@ export async function GET(request: NextRequest) {
       const missingIds = Array.from(new Set(
         slice.filter(t => !t.avatarUrl && t.uploadedByUserId).map(t => t.uploadedByUserId as string)
       ));
-      avatarMap = await getProfileAvatars(missingIds).catch(() => new Map());
+      /* Reactor preview avatars ride along in the SAME batched query as the
+         author avatars — at most 3 ids per post, and no extra round trip. */
+      const reactorIds = slice.flatMap(t => (t.likedBy ?? []).slice(-3));
+      avatarMap = await getProfileAvatars(Array.from(new Set([...missingIds, ...reactorIds]))).catch(() => new Map());
     }
 
     /* `uploadedByName` is snapshotted when the item is published, so it shows a
@@ -197,6 +201,19 @@ export async function GET(request: NextRequest) {
         featuredPlan: isFeaturedActive ? t.featuredPlan : undefined,
         isReal: true,
         likesCount: t.likesCount ?? 0,
+        /* Reaction summary rides along with the post — the feed never issues a
+           per-post reactions request. Computed from data already on the row. */
+        reactions: (() => {
+          const sum = summarizeReactions(t.likedBy, t.reactions, viewerIdentifier);
+          return {
+            ...sum,
+            // Resolved from the batch above; ids that have no photo are dropped
+            // so the client renders initials instead of empty circles.
+            previewAvatars: sum.previewIds
+              .map(pid => avatarMap.get(pid) || null)
+              .filter((u): u is string => Boolean(u)),
+          };
+        })(),
         commentsCount: t.commentsCount ?? 0,
         viewCount: t.viewCount ?? t.openCount ?? 0,
         likedByViewer: viewerIdentifier ? (t.likedBy ?? []).includes(viewerIdentifier) : false,

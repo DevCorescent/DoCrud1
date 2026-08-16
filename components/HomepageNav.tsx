@@ -333,7 +333,12 @@ useEffect(() => {
     return () => clearInterval(id);
   }, []);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  /* The server counts unread across the WHOLE set; the response is capped to a
+     page, so deriving the badge from the returned array alone would undercount
+     once a user has more than one page of notifications. */
+  const [serverUnread, setServerUnread] = useState<number | null>(null);
+  const localUnread = notifications.filter((n) => !n.read).length;
+  const unreadCount = serverUnread ?? localUnread;
   useEffect(() => {
   const currentIds = new Set(
     notifications.map((notification) => notification.id)
@@ -365,13 +370,25 @@ useEffect(() => {
   previousNotificationIdsRef.current = currentIds;
 }, [notifications]);
 
+  /* Stale-response protection: only the newest in-flight request may write to
+     state. Each call aborts the previous one and stamps a sequence number, so a
+     slow earlier response can never overwrite a newer one. */
+  const notifAbortRef = useRef<AbortController | null>(null);
+  const notifSeqRef = useRef(0);
+
   const fetchNotifications = useCallback(async () => {
+    notifAbortRef.current?.abort();
+    const controller = new AbortController();
+    notifAbortRef.current = controller;
+    const seq = ++notifSeqRef.current;
     try {
-      const res = await fetch('/api/notifications');
+      const res = await fetch('/api/notifications', { signal: controller.signal });
       if (!res.ok) return;
-      const data = await res.json() as { notifications?: WorkspaceNotification[] };
+      const data = await res.json() as { notifications?: WorkspaceNotification[]; unreadCount?: number };
+      if (seq !== notifSeqRef.current) return;          // a newer request won
       if (Array.isArray(data.notifications)) setNotifications(data.notifications);
-    } catch { /* silent */ }
+      if (typeof data.unreadCount === 'number') setServerUnread(data.unreadCount);
+    } catch { /* aborted or offline — keep what is on screen */ }
   }, []);
 
   useEffect(() => {
@@ -396,61 +413,57 @@ useEffect(() => {
     } catch { /* silent */ }
   }, []);
 
-  // SSE connection for real-time notifications + 60s fallback poll
+  /* Notification + unread polling.
+     
+     There is no SSE connection here any more. app/api/notifications/stream
+     exposes an EventSource endpoint, but nothing in the codebase ever calls its
+     notifyUser()/__sseNotifyUser push hook, so the stream only ever delivered
+     the payload once on connect and then keepalive comments — while holding a
+     long-lived connection open per tab (a billed, long-running invocation on
+     serverless). The client therefore polls, which is what actually drove
+     updates before. The server route is left in place: reintroduce the
+     connection here once a shared cross-instance event bus exists to push from.
+
+     One timer drives both fetches, and it does not run while the tab is
+     hidden — a background tab costs nothing until the user returns. */
   useEffect(() => {
     if (!isAuthenticated || guestMode) return;
 
-    let es: EventSource | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    const POLL_MS = 60_000;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
-    function connect() {
-      es = new EventSource('/api/notifications/stream');
+    const refresh = () => { void fetchNotifications(); void fetchMsgUnread(); };
 
-      es.onmessage = (e) => {
-        if (e.data === 'ping') {
-          fetchNotifications();
-          return;
-        }
-        try {
-          const data = JSON.parse(e.data) as { notifications?: WorkspaceNotification[] };
-          if (Array.isArray(data.notifications)) setNotifications(data.notifications);
-        } catch { /* ignore parse errors */ }
-      };
+    const start = () => {
+      if (timer) return;
+      timer = setInterval(refresh, POLL_MS);
+    };
+    const stop = () => {
+      if (!timer) return;
+      clearInterval(timer);
+      timer = null;
+    };
 
-      es.onerror = () => {
-        es?.close();
-        es = null;
-        // Reconnect after 5s
-        reconnectTimer = setTimeout(connect, 5_000);
-      };
-    }
-
-    // Delay initial fetches by 1.5s so they don't compete with page paint
+    // Delay the first pass so it does not compete with page paint.
     const initTimer = setTimeout(() => {
-      connect();
-      fetchNotifications();
-      fetchMsgUnread();
+      refresh();
+      if (document.visibilityState === 'visible') start();
     }, 1500);
 
-    // Fallback poll every 60s — SSE covers real-time, this is a safety net
-    const pollId = setInterval(fetchNotifications, 60_000);
-    const msgId = setInterval(fetchMsgUnread, 30_000);
-
-    function onVisible() {
+    function onVisibility() {
       if (document.visibilityState === 'visible') {
-        fetchNotifications();
-        fetchMsgUnread();
+        refresh();      // exactly one catch-up refresh
+        start();
+      } else {
+        stop();         // no polling in the background
       }
     }
-    document.addEventListener('visibilitychange', onVisible);
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       clearTimeout(initTimer);
-      es?.close();
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      clearInterval(pollId);
-      clearInterval(msgId);
-      document.removeEventListener('visibilitychange', onVisible);
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [isAuthenticated, guestMode, fetchNotifications, fetchMsgUnread]);
 

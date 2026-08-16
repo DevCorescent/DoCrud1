@@ -112,7 +112,20 @@ async function buildBillingNotifications(
   const threshold = buildBillingThreshold(usage.thresholdPercentUsed ?? 0, usage.remainingGenerations);
   if (threshold.state === 'healthy') return [];
 
-  const notificationId = `billing-${threshold.state}-${usage.cycleEndAt || 'current'}`;
+  /* Stable per ALERT INSTANCE.
+     The old key was `billing-<state>-<cycleEndAt || 'current'>`, which had two
+     failure modes: the id changed when a cycle rolled over (so a dismissed
+     alert came back unread), and the literal 'current' fallback collided
+     across cycles (so a genuinely new alert could arrive already-read).
+
+     The cycle is now identified by its START, which does not move for the life
+     of the cycle, and a cycle with no dates falls back to the user id rather
+     than a shared constant — so two users, and two different cycles, can never
+     share a key. Legacy ids are still honoured for read-state (see
+     isBillingRead) so nothing the user already dismissed reappears. */
+  const cycleKey = usage.cycleStartAt || usage.cycleEndAt || `nocycle-${user.id}`;
+  const notificationId = `billing-${threshold.state}-${cycleKey}`;
+  const legacyNotificationId = `billing-${threshold.state}-${usage.cycleEndAt || 'current'}`;
   return [{
     id: notificationId,
     type: 'billing',
@@ -120,7 +133,9 @@ async function buildBillingNotifications(
     body: threshold.recommendation,
     href: '/workspace?tab=billing',
     createdAt: new Date().toISOString(),
-    read: isRead(state, user.id, notificationId),
+    // Honour the pre-fix id too, so an alert dismissed before this change
+    // stays dismissed.
+    read: isRead(state, user.id, notificationId) || isRead(state, user.id, legacyNotificationId),
     tone: threshold.state === 'limit_reached' ? 'rose' : threshold.state === 'critical' ? 'amber' : 'default',
     metadata: {
       status: threshold.state,
@@ -269,11 +284,31 @@ export async function getNotificationState(userId?: string): Promise<Notificatio
       return { readMap: { [userId]: docs.map((d) => d.notificationId) } };
     }
   }
-  return readJsonFile<NotificationState>(notificationStatePath, emptyState);
+  const state = await readJsonFile<NotificationState>(notificationStatePath, emptyState);
+  /* Scope the JSON blob to the caller. Without this the whole cross-user map is
+     handed back, and a later whole-file write could persist another user's
+     entries from a stale snapshot. Callers only ever need their own reads. */
+  if (userId) return { readMap: { [userId]: state.readMap?.[userId] ?? [] } };
+  return state;
 }
 
 export async function saveNotificationState(state: NotificationState) {
   await writeJsonFile(notificationStatePath, state);
+}
+
+/* ── JSON write serialisation ──────────────────────────────────────────────
+   The JSON path is read-modify-write over one file, so two concurrent
+   mark-read calls could each write a snapshot taken before the other's change
+   and silently drop it. Every mutation is chained onto a single in-process
+   promise, so writes run one at a time and each one re-reads the current file
+   first. (The Mongo path needs none of this — it uses per-id upserts.) */
+let jsonWriteQueue: Promise<unknown> = Promise.resolve();
+
+function withJsonStateLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = jsonWriteQueue.then(fn, fn);
+  // Keep the chain alive even if one mutation rejects.
+  jsonWriteQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 function resolveSocialHref(e: { type: string; href?: string; actorId?: string; resourceId?: string }): string {
@@ -376,7 +411,10 @@ async function buildSocialNotifications(user: User, state: NotificationState): P
   });
 }
 
-export async function getWorkspaceNotifications(user: User) {
+/** Newest-first cap on what a single refresh returns. */
+export const NOTIFICATION_PAGE_LIMIT = 50;
+
+export async function getWorkspaceNotifications(user: User, limit: number = NOTIFICATION_PAGE_LIMIT) {
   // Started before the (serial) read-state fetch so the history round trip
   // overlaps it instead of queueing behind it, and shared with the billing
   // builder — getUserUsageSummary() used to issue a SECOND identical
@@ -401,10 +439,66 @@ export async function getWorkspaceNotifications(user: User) {
     ...boardRoomNotifications,
   ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 
+  /* `unreadCount` is counted over the WHOLE set before truncation, so the bell
+     badge stays correct even when more notifications exist than are returned.
+     `total`/`hasMore` are additive — existing clients that read only
+     `notifications` and `unreadCount` are unaffected. */
+  const unreadCount = all.filter((entry) => !entry.read).length;
+  const capped = Number.isFinite(limit) && limit > 0 ? all.slice(0, limit) : all;
+
   return {
-    notifications: all,
-    unreadCount: all.filter((entry) => !entry.read).length,
+    notifications: capped,
+    unreadCount,
+    total: all.length,
+    hasMore: capped.length < all.length,
   };
+}
+
+/**
+ * Conservative read-state pruning.
+ *
+ * Read records accumulate one entry per (user, notification) forever, including
+ * for notifications that no longer exist. This drops only entries whose
+ * notification is NOT in the caller's current live set — so anything still on
+ * screen keeps its read flag and nothing becomes unread again.
+ *
+ * Deliberately conservative:
+ *  • runs only when the list has grown past PRUNE_THRESHOLD, not on every read;
+ *  • needs a non-empty live set, so a transient failure that yields zero
+ *    notifications can never wipe the user's history;
+ *  • best-effort — a failure here must never break loading notifications.
+ */
+const PRUNE_THRESHOLD = 500;
+
+export async function pruneNotificationReadState(userId: string, liveIds: string[]): Promise<number> {
+  if (!userId || liveIds.length === 0) return 0;
+  const live = new Set(liveIds);
+
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const col = db.collection<{ _id: string; userId: string; notificationId: string }>('notification_reads');
+      const docs = await col.find({ userId }).toArray();
+      if (docs.length <= PRUNE_THRESHOLD) return 0;
+      const dead = docs.filter((d) => !live.has(d.notificationId)).map((d) => d._id);
+      if (!dead.length) return 0;
+      await col.deleteMany({ _id: { $in: dead } });
+      return dead.length;
+    }
+  }
+
+  return withJsonStateLock(async () => {
+    const current = await readJsonFile<NotificationState>(notificationStatePath, emptyState);
+    const ids = current.readMap?.[userId] ?? [];
+    if (ids.length <= PRUNE_THRESHOLD) return 0;
+    const kept = ids.filter((id) => live.has(id));
+    if (kept.length === ids.length) return 0;
+    await saveNotificationState({
+      ...current,
+      readMap: { ...current.readMap, [userId]: kept },
+    });
+    return ids.length - kept.length;
+  });
 }
 
 export async function markWorkspaceNotificationsRead(userId: string, notificationIds: string[]) {
@@ -424,13 +518,17 @@ export async function markWorkspaceNotificationsRead(userId: string, notificatio
       return { readMap: { [userId]: notificationIds } };
     }
   }
-  const state = await getNotificationState();
-  const existing = new Set(state.readMap[userId] || []);
-  notificationIds.forEach((id) => existing.add(id));
-  const nextState: NotificationState = {
-    ...state,
-    readMap: { ...state.readMap, [userId]: Array.from(existing) },
-  };
-  await saveNotificationState(nextState);
-  return nextState;
+  /* Serialised, and re-reads the FULL file inside the lock so other users'
+     entries are preserved while only this user's list is modified. */
+  return withJsonStateLock(async () => {
+    const current = await readJsonFile<NotificationState>(notificationStatePath, emptyState);
+    const existing = new Set(current.readMap?.[userId] || []);
+    notificationIds.forEach((id) => existing.add(id));
+    const nextState: NotificationState = {
+      ...current,
+      readMap: { ...current.readMap, [userId]: Array.from(existing) },
+    };
+    await saveNotificationState(nextState);
+    return nextState;
+  });
 }

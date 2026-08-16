@@ -1898,3 +1898,50 @@ html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
     --gs-row-hover: rgba(255,255,255,0.05);
     --gs-input-bg: rgba(255,255,255,0.05);
 }
+
+/* ── Notifications panel tokens ──────────────────────────────────────────────
+   The panel was authored dark-only (a literal #0c0c0f surface plus white-alpha
+   utilities), so it stayed dark when the app switched to light. Each colour now
+   resolves through a semantic token. The .dark values reproduce exactly what
+   shipped, so dark mode is unchanged; :root gives light mode a real design —
+   white surface, slate text, soft grey borders — not an inverted dark theme. */
+:root {
+  --nt-surface: #ffffff;
+  --nt-surface-2: rgba(15,23,42,0.035);   /* header / raised rows */
+  --nt-line: rgba(15,23,42,0.09);
+  --nt-hover: rgba(15,23,42,0.045);
+  --nt-unread: rgba(37,99,235,0.055);     /* tinted, not just "less faint" */
+  --nt-t1: rgba(15,23,42,0.92);           /* titles */
+  --nt-t2: rgba(15,23,42,0.66);           /* body */
+  --nt-t3: rgba(15,23,42,0.50);           /* labels / controls */
+  --nt-t4: rgba(15,23,42,0.38);           /* timestamps / faint meta */
+  --nt-shadow: 0 8px 40px rgba(15,23,42,0.16);
+  --nt-shadow-mobile: 0 -4px 32px rgba(15,23,42,0.18);
+  --nt-scrim: rgba(15,23,42,0.35);
+  --nt-scrollbar: rgba(15,23,42,0.20);
+}
+.dark {
+  --nt-surface: #0c0c0f;
+  --nt-surface-2: rgba(255,255,255,0.05);
+  --nt-line: rgba(255,255,255,0.07);
+  --nt-hover: rgba(255,255,255,0.03);
+  --nt-unread: rgba(255,255,255,0.018);
+  --nt-t1: rgba(255,255,255,0.88);
+  --nt-t2: rgba(255,255,255,0.48);
+  --nt-t3: rgba(255,255,255,0.35);
+  --nt-t4: rgba(255,255,255,0.22);
+  --nt-shadow: 0 8px 48px rgba(0,0,0,0.92);
+  --nt-shadow-mobile: 0 -4px 40px rgba(0,0,0,1);
+  --nt-scrim: rgba(0,0,0,0.75);
+  --nt-scrollbar: rgba(255,255,255,0.14);
+}
+
+.notif-panel { background: var(--nt-surface); box-shadow: var(--nt-shadow-mobile); }
+@media (min-width: 640px) { .notif-panel { box-shadow: var(--nt-shadow); } }
+.notif-backdrop { background: var(--nt-scrim); }
+
+/* Scrollbar follows the theme instead of staying dark on a white panel. */
+.notif-scroll { scrollbar-color: var(--nt-scrollbar) transparent; }
+.notif-scroll::-webkit-scrollbar { width: 6px; }
+.notif-scroll::-webkit-scrollbar-thumb { background: var(--nt-scrollbar); border-radius: 99px; }
+.notif-scroll::-webkit-scrollbar-track { background: transparent; }

@@ -2,6 +2,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePostReactions, PostReactionButton } from '@/components/social/PostReactionButton';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -1984,6 +1985,11 @@ function HpMetaChips({ body, byline, category }: { body: string; byline: string;
 const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: HpFeedItem }) {
   const router = useRouter();
   const [liked,      setLiked]      = React.useState(item.likedByViewer ?? false);
+  const rxHome = usePostReactions(
+    item.id,
+    { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: (item as { reactions?: import('@/components/social/PostReactionButton').PostReactionSummary }).reactions },
+    { live: Boolean(item.isReal) },
+  );
   const [likeCount,  setLikeCount]  = React.useState(item.likesCount ?? 0);
   const [trended,    setTrended]    = React.useState(() => {
     const stored = hpReadTrends()[item.id];
@@ -2099,30 +2105,7 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
 
       {/* engagement row */}
       <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={async e => {
-            e.stopPropagation();
-            if (likeInFlight.current) return;
-            const newLiked = !liked;
-            setLiked(newLiked);
-            setLikeCount(c => newLiked ? c + 1 : Math.max(0, c - 1));
-            if (item.isReal) {
-              likeInFlight.current = true;
-              try {
-                const res = await fetch(`/api/published/${item.id}/like`, { method: 'POST' });
-                if (res.ok) {
-                  const d = await res.json() as { liked: boolean; likesCount: number };
-                  setLiked(d.liked); setLikeCount(d.likesCount);
-                } else { setLiked(liked); setLikeCount(c => newLiked ? Math.max(0, c - 1) : c + 1); }
-              } catch { setLiked(liked); } finally { likeInFlight.current = false; }
-            }
-          }}
-          className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${liked ? 'text-rose-400' : 'text-white/35 hover:text-white/70'}`}
-        >
-          <Heart className={`h-4 w-4 transition-transform ${liked ? 'fill-current scale-110' : ''}`} />
-          <span>{likeCount > 0 ? (likeCount >= 1000 ? `${(likeCount/1000).toFixed(1)}k` : String(likeCount)) : (liked ? 'Liked' : 'Like')}</span>
-        </button>
+        <PostReactionButton c={rxHome} />
         <Link
           href={postHref}
           className="flex items-center gap-1.5 text-[12px] font-semibold text-white/35 hover:text-white/70 transition"

@@ -343,17 +343,56 @@ export function isPreviewableFile(mimeType: string) {
 
 /* ── Engagement + featuring helpers ── */
 
-export async function toggleLike(transferId: string, identifier: string): Promise<{ liked: boolean; likesCount: number }> {
+/**
+ * Set, change, or clear a viewer's reaction on a post.
+ *
+ * `toggleLike` is preserved below as a thin wrapper, so every existing caller
+ * behaves exactly as before. This is the same single read-modify-write the
+ * like path always used — reactions ride along on the same document write, so
+ * there is no second store to keep in sync and no extra round trip.
+ *
+ * Semantics:
+ *   type given, viewer had none      → add reaction
+ *   type given, viewer had a different type → REPLACE (never two records)
+ *   type given, viewer had that type → clear (tapping the same one removes it)
+ *   type null                        → clear
+ */
+export async function setPostReaction(
+  transferId: string,
+  identifier: string,
+  type: string | null,
+): Promise<{ liked: boolean; likesCount: number; reactionType: string | null; reactions: Record<string, string> }> {
   const usingDb = Boolean(getDbPool());
   const transfers = usingDb ? [] : await getFileTransfers();
   const current = usingDb
     ? await selectFileTransferRowById(transferId)
     : transfers.find((t) => t.id === transferId || t.shareId === transferId) || null;
   if (!current) throw new Error('Post not found.');
+
   const likedBy: string[] = current.likedBy ?? [];
-  const alreadyLiked = likedBy.includes(identifier);
-  const nextLikedBy = alreadyLiked ? likedBy.filter((x) => x !== identifier) : [...likedBy, identifier];
-  const next = { ...current, likedBy: nextLikedBy, likesCount: nextLikedBy.length, updatedAt: new Date().toISOString() };
+  const reactions: Record<string, string> = { ...(current.reactions ?? {}) };
+  const previous = likedBy.includes(identifier) ? (reactions[identifier] ?? 'like') : null;
+
+  // Same type again — or an explicit null — clears it.
+  const clearing = type === null || (previous !== null && previous === type);
+  const nextType = clearing ? null : (type ?? 'like');
+
+  let nextLikedBy: string[];
+  if (nextType === null) {
+    nextLikedBy = likedBy.filter((x) => x !== identifier);
+    delete reactions[identifier];
+  } else {
+    nextLikedBy = likedBy.includes(identifier) ? likedBy : [...likedBy, identifier];
+    reactions[identifier] = nextType;      // one key per user — replaces in place
+  }
+
+  const next = {
+    ...current,
+    likedBy: nextLikedBy,
+    likesCount: nextLikedBy.length,
+    reactions,
+    updatedAt: new Date().toISOString(),
+  };
   if (usingDb) {
     await upsertFileTransferRow(next);
   } else {
@@ -361,7 +400,20 @@ export async function toggleLike(transferId: string, identifier: string): Promis
     transfers[idx] = next;
     await writeJsonFile(fileTransfersPath, transfers);
   }
-  return { liked: !alreadyLiked, likesCount: nextLikedBy.length };
+  return { liked: nextType !== null, likesCount: nextLikedBy.length, reactionType: nextType, reactions };
+}
+
+/** Legacy toggle — unchanged behaviour for every existing caller. */
+export async function toggleLike(transferId: string, identifier: string): Promise<{ liked: boolean; likesCount: number }> {
+  const usingDb = Boolean(getDbPool());
+  const transfers = usingDb ? [] : await getFileTransfers();
+  const current = usingDb
+    ? await selectFileTransferRowById(transferId)
+    : transfers.find((t) => t.id === transferId || t.shareId === transferId) || null;
+  if (!current) throw new Error('Post not found.');
+  const alreadyLiked = (current.likedBy ?? []).includes(identifier);
+  const { liked, likesCount } = await setPostReaction(transferId, identifier, alreadyLiked ? null : 'like');
+  return { liked, likesCount };
 }
 
 export async function toggleTrend(transferId: string, identifier: string): Promise<{ trended: boolean; trendCount: number }> {

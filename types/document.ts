@@ -2101,6 +2101,9 @@ export interface SecureFileTransfer {
   /* engagement */
   likesCount?: number;
   likedBy?: string[];
+  /** identifier → reaction type. The key enforces one reaction per user per
+      post; `likedBy` remains authoritative for "has reacted". */
+  reactions?: Record<string, string>;
   trendCount?: number;
   trendedBy?: string[];
   interestedCount?: number;

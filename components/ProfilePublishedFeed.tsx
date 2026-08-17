@@ -40,6 +40,8 @@ import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/
 import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
 import { buildCategoryMetaChips, FeedMetaChipRow, getFeedDescription, hasFeedDescription } from '@/components/feed/FeedCardMeta';
 import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
+import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
+import type { PostSocialProof } from '@/lib/social-proof';
 
 /* ─── types ─────────────────────────────────────────────────────── */
 export type FeedItem = {
@@ -59,6 +61,8 @@ export type FeedItem = {
   likesCount?: number;
   likedByViewer?: boolean;
   reactions?: ReactionSummary & { previewAvatars?: string[] };
+  /** People from the viewer's follow graph who engaged — arrives with the feed. */
+  socialProof?: PostSocialProof | null;
   trendCount?: number;
   trendedByViewer?: boolean;
   commentsCount?: number;
@@ -701,6 +705,13 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
               </div>
             )}
             <PostReactionSummaryBar c={rx} postId={item.id} fmtCount={fmtCount} />
+            {/* Social proof (from origin/main) — reuses the existing who-reacted
+                modal and this card's existing comment panel. */}
+            <PostSocialProofRow
+              postId={item.id}
+              socialProof={item.socialProof}
+              onOpenComments={() => setCommentsOpen(true)}
+            />
           </>
         }
         actions={

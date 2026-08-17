@@ -266,9 +266,16 @@ export function PostReactionSummaryBar({ c, postId, fmtCount }: {
 
 /* ─── Who reacted ────────────────────────────────────────────────────────────
    Bounded listing from the single existing endpoint. */
-interface Reactor { id: string; name: string; avatarUrl: string | null; type: ReactionType }
+export interface Reactor { id: string; name: string; avatarUrl: string | null; type: ReactionType }
 
-export function WhoReactedModal({ postId, onClose }: { postId: string; onClose: () => void }) {
+/**
+ * Reactor listing for one post.
+ *
+ * Shared by the who-reacted modal and the social-proof dropdown so there is a
+ * single fetch path against the single existing endpoint — no second reaction
+ * API, no duplicated pagination logic.
+ */
+export function useReactors(postId: string, open: boolean) {
   const [filter, setFilter] = useState<'all' | ReactionType>('all');
   const [rows, setRows] = useState<Reactor[]>([]);
   const [counts, setCounts] = useState<Partial<Record<ReactionType, number>>>({});
@@ -276,6 +283,7 @@ export function WhoReactedModal({ postId, onClose }: { postId: string; onClose: 
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [viewerId, setViewerId] = useState<string | null>(null);
 
   const load = useCallback(async (type: 'all' | ReactionType, offset: number) => {
     setLoading(true);
@@ -283,16 +291,53 @@ export function WhoReactedModal({ postId, onClose }: { postId: string; onClose: 
       const res = await fetch(`/api/published/${postId}/reactions?type=${type}&offset=${offset}&limit=30`);
       if (!res.ok) throw new Error('failed');
       const d = await res.json() as {
-        reactors: Reactor[]; total: number; hasMore: boolean;
+        reactors: Reactor[]; total: number; hasMore: boolean; viewerId?: string | null;
         summary: { counts: Partial<Record<ReactionType, number>> };
       };
       setRows(prev => (offset === 0 ? d.reactors : [...prev, ...d.reactors]));
       setCounts(d.summary?.counts ?? {});
+      setViewerId(d.viewerId ?? null);
       setTotal(d.total); setHasMore(d.hasMore); setError(false);
     } catch { setError(true); } finally { setLoading(false); }
   }, [postId]);
 
-  useEffect(() => { void load(filter, 0); }, [filter, load]);
+  // Only fetches while the surface is actually open — a closed dropdown costs
+  // nothing, so a feed of 20 posts issues no reaction requests at all.
+  useEffect(() => { if (open) void load(filter, 0); }, [open, filter, load]);
+
+  return { filter, setFilter, rows, counts, total, hasMore, loading, error, load, viewerId };
+}
+
+/** One person in a reactor list. `youId` marks the viewer's own row. */
+export function ReactorRow({ r, youId }: { r: Reactor; youId?: string | null }) {
+  const isYou = Boolean(youId && r.id === youId);
+  return (
+    <a
+      href={`/u/${r.id}`}
+      className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 transition hover:bg-white/[0.04]"
+      style={{ color: 'var(--rx-text)' }}
+    >
+      {r.avatarUrl
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={r.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+        : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold"
+            style={{ background: 'var(--rx-chip-hover)', color: 'var(--rx-text-muted)' }}>
+            {(r.name || '?').charAt(0).toUpperCase()}
+          </span>}
+      <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+        {r.name}
+        {isYou && <span className="ml-1.5 text-[11px]" style={{ color: 'var(--rx-text-muted)' }}>· You</span>}
+      </span>
+      <span className="shrink-0 text-[15px]" title={REACTION_META[r.type].label} aria-label={REACTION_META[r.type].label}>
+        {REACTION_META[r.type].emoji}
+      </span>
+    </a>
+  );
+}
+
+export function WhoReactedModal({ postId, onClose }: { postId: string; onClose: () => void }) {
+  const { filter, setFilter, rows, counts, total, hasMore, loading, error, load, viewerId } = useReactors(postId, true);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
@@ -333,20 +378,7 @@ export function WhoReactedModal({ postId, onClose }: { postId: string; onClose: 
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
           {error && <p className="px-3 py-6 text-center text-[12px]" style={{ color: 'var(--rx-text-muted)' }}>Could not load reactions.</p>}
-          {!error && rows.map(r => (
-            <a key={r.id} href={`/u/${r.id}`} className="flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 transition"
-              style={{ color: 'var(--rx-text)' }}>
-              {r.avatarUrl
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={r.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
-                : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold"
-                    style={{ background: 'var(--rx-chip-hover)', color: 'var(--rx-text-muted)' }}>
-                    {(r.name || '?').charAt(0).toUpperCase()}
-                  </span>}
-              <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{r.name}</span>
-              <span className="shrink-0 text-[15px]" aria-label={REACTION_META[r.type].label}>{REACTION_META[r.type].emoji}</span>
-            </a>
-          ))}
+          {!error && rows.map(r => <ReactorRow key={r.id} r={r} youId={viewerId} />)}
           {!error && !loading && rows.length === 0 && (
             <p className="px-3 py-6 text-center text-[12px]" style={{ color: 'var(--rx-text-muted)' }}>No reactions yet.</p>
           )}

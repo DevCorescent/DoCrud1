@@ -7,6 +7,7 @@ import { readJsonFile, businessPagesPath } from '@/lib/server/storage';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
 import { getUserNames } from '@/lib/server/users';
 import { summarizeReactions } from '@/lib/reactions';
+import { createSocialProofBuilder } from '@/lib/server/social-proof';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,6 +150,15 @@ export async function GET(request: NextRequest) {
     const hasMore = offset + limit < total;
     const slice   = filtered.slice(offset, offset + limit);
 
+    /* Social proof — "people you follow reacted to this".
+       ONE builder for the whole page: two follow-graph queries up front, then a
+       pure set intersection per post over `likedBy` / `reactions` / `comments`
+       that are already on the row. Null for logged-out viewers and for anyone
+       with an empty graph, which skips the work outright. Every post here has
+       already passed the public-visibility filter above. */
+    const proofBuilder = await createSocialProofBuilder(viewerIdentifier).catch(() => null);
+    const proofDrafts = proofBuilder ? slice.map(t => proofBuilder.draft(t)) : [];
+
     /* avatar enrichment — skip when caller passes ?noAvatar=1 (e.g. home feed)
        ONE batched, field-projected query. Previously this was a per-author
        getProfileData() call, i.e. N round trips each pulling a whole profile
@@ -161,7 +171,12 @@ export async function GET(request: NextRequest) {
       /* Reactor preview avatars ride along in the SAME batched query as the
          author avatars — at most 3 ids per post, and no extra round trip. */
       const reactorIds = slice.flatMap(t => (t.likedBy ?? []).slice(-3));
-      avatarMap = await getProfileAvatars(Array.from(new Set([...missingIds, ...reactorIds]))).catch(() => new Map());
+      /* Social-proof faces ride along too — at most 3 reactors + 3 commenters
+         per post, deduped across the page, still ONE round trip. */
+      const proofIds = proofBuilder ? proofBuilder.previewIds(proofDrafts) : [];
+      avatarMap = await getProfileAvatars(
+        Array.from(new Set([...missingIds, ...reactorIds, ...proofIds])),
+      ).catch(() => new Map());
     }
 
     /* `uploadedByName` is snapshotted when the item is published, so it shows a
@@ -177,7 +192,7 @@ export async function GET(request: NextRequest) {
     ));
     const nameMap = await getUserNames(publisherIds).catch(() => new Map<string, string>());
 
-    const items = slice.map(t => {
+    const items = slice.map((t, i) => {
       const isFeaturedActive = t.featured && t.featuredUntil && new Date(t.featuredUntil) > now;
       const cat = t.directoryCategory?.toLowerCase() || 'document';
       // Canonical name first; legacy records with no resolvable user id keep
@@ -214,6 +229,9 @@ export async function GET(request: NextRequest) {
               .filter((u): u is string => Boolean(u)),
           };
         })(),
+        /* Omitted (undefined) rather than sent empty when nobody the viewer
+           knows engaged, so the client renders no row at all. */
+        socialProof: proofBuilder ? proofBuilder.hydrate(proofDrafts[i], avatarMap) ?? undefined : undefined,
         commentsCount: t.commentsCount ?? 0,
         viewCount: t.viewCount ?? t.openCount ?? 0,
         likedByViewer: viewerIdentifier ? (t.likedBy ?? []).includes(viewerIdentifier) : false,

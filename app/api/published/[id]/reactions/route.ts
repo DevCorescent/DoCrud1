@@ -63,6 +63,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json({
       summary,
+      /* Lets the client mark the viewer's own row without guessing. Already
+         derived above from the session — never taken from the client. */
+      viewerId: viewer,
       total: ordered.length,
       hasMore: offset + page.length < ordered.length,
       reactors: page.map((identifier) => ({

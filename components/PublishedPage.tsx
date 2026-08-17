@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
+import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
@@ -1425,6 +1426,15 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
            the body slot shows the description/summary instead. */
         renderMainBody={<BodyDisplay body={item.body} searchQuery={searchQuery} proseOnly={useCategoryMeta} />}
         renderMetadata={useCategoryMeta ? <FeedMetaChipRow chips={catMeta} /> : null}
+        /* Social proof (from origin/main) — existing who-reacted modal and this
+           card's existing comment panel. */
+        beforeActions={
+          <PostSocialProofRow
+            postId={item.id}
+            socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
+            onOpenComments={() => setCommentsOpen(true)}
+          />
+        }
         actions={
           <>
             <PostReactionButton c={rx1} />
@@ -2702,6 +2712,13 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
           </p>
         )}
       </Link>
+
+      {/* Social proof — existing who-reacted modal, existing comment panel. */}
+      <PostSocialProofRow
+        postId={item.id}
+        socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
+        onOpenComments={() => setCommentsOpen(true)}
+      />
 
       {/* engagement */}
       <div className="flex items-center gap-4 mt-3.5 pt-3.5 border-t border-white/[0.05]">

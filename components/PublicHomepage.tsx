@@ -3,6 +3,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton } from '@/components/social/PostReactionButton';
+import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -2084,6 +2085,16 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
             {hpGetBodySnippet(item.body)}
           </p>
         ) : null
+      }
+      /* Social proof (from origin/main). The home card has no inline comment
+         panel, so the comment half routes to the post's comments section —
+         the same target the comment count beside it uses. */
+      beforeActions={
+        <PostSocialProofRow
+          postId={item.id}
+          socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
+          onOpenComments={() => router.push(`${postHref}#comments`)}
+        />
       }
       actions={
         <>

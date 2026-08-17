@@ -53,6 +53,7 @@ export interface SocialProofDraft {
   reactionCount: number;
   commentCount: number;
   topReaction: ReactionType | null;
+  distinctReactionTypes: number;
   followingReactionCount: number;
   followerReactionCount: number;
   mutualReactionCount: number;
@@ -209,6 +210,8 @@ export async function createSocialProofBuilder(
         reactionCount: reactors.length,
         commentCount: commenters.length,
         topReaction,
+        // Free: `counts` is already built above to pick topReaction.
+        distinctReactionTypes: counts.size,
         mutualReactionCount: rt.mutual,
         followingReactionCount: rt.following,
         followerReactionCount: rt.follower,

@@ -51,6 +51,9 @@ export interface PostSocialProof {
   commentCount: number;
   /** Dominant reaction among those people — picks the glyph for the row. */
   topReaction: ReactionType | null;
+  /** How many DIFFERENT reaction types those people used. >1 means the row
+      must say "reacted", never "liked" — see describeSocialProof. */
+  distinctReactionTypes: number;
   followingReactionCount: number;
   followerReactionCount: number;
   mutualReactionCount: number;
@@ -74,25 +77,22 @@ function connectionPhrase(followsAny: boolean): string {
 }
 
 /**
- * "Priya", "Priya and Abhay", "Priya and 3 people you follow",
- * "Priya, Abhay and 2 others you follow", or a bare "3 people you follow" when
- * no name could be resolved.
+ * One name, then a count.
+ *
+ * "Priya", "Priya and 1 other you follow", or a bare "3 people you follow"
+ * when no name could be resolved. Naming a second person made the line long
+ * without telling the reader much — the dropdown now answers "who else".
  */
 function joinActors(actors: SocialProofActor[], total: number, followsAny: boolean): string {
   const connection = connectionPhrase(followsAny);
-  const names = actors.slice(0, total === 1 ? 1 : 2).map((a) => a.name).filter(Boolean);
-  const rest = total - names.length;
+  const lead = actors[0]?.name;
 
-  if (names.length === 0) {
+  if (!lead) {
     return `${total} ${total === 1 ? 'person' : 'people'} ${connection}`;
   }
-  if (rest <= 0) {
-    return names.length === 1 ? names[0] : `${names[0]} and ${names[1]}`;
-  }
-  if (names.length === 1) {
-    return `${names[0]} and ${rest} ${rest === 1 ? 'person' : 'people'} ${connection}`;
-  }
-  return `${names[0]}, ${names[1]} and ${rest} ${rest === 1 ? 'other' : 'others'} ${connection}`;
+  const rest = total - 1;
+  if (rest <= 0) return lead;
+  return `${lead} and ${rest} ${rest === 1 ? 'other' : 'others'} ${connection}`;
 }
 
 export interface SocialProofSegment {
@@ -128,13 +128,17 @@ export function describeSocialProof(proof: PostSocialProof | null | undefined): 
   let reaction: SocialProofSegment | null = null;
   if (reactionCount > 0) {
     const type = proof.topReaction ?? 'like';
-    // "liked this" only reads right for a heart; everything else is "reacted".
-    const verb = type === 'like' ? 'liked this' : 'reacted';
+    /* Saying everyone "liked this" when one of them chose Celebrate is simply
+       untrue, so a mixed set falls back to the neutral verb. */
+    const mixed = (proof.distinctReactionTypes ?? 1) > 1;
+    const verb = mixed ? 'reacted to this' : type === 'like' ? 'liked this' : 'reacted to this';
     const who = joinActors(proof.reactors, reactionCount, followsReactors);
     reaction = {
       emoji: REACTION_META[type].emoji,
       text: `${who} ${verb}`,
-      aria: `${who} ${type === 'like' ? 'liked this post' : `reacted ${REACTION_META[type].label} to this post`}`,
+      aria: `${who} ${mixed || type !== 'like'
+        ? 'reacted to this post'
+        : 'liked this post'}`,
     };
   }
 

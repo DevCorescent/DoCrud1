@@ -12,9 +12,92 @@
  * comments section. Nothing here can change a count.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { describeSocialProof, type PostSocialProof, type SocialProofActor } from '@/lib/social-proof';
-import { WhoReactedModal } from '@/components/social/PostReactionButton';
+import { WhoReactedModal, ReactorRow, useReactors } from '@/components/social/PostReactionButton';
+
+/**
+ * "Who reacted" without leaving the row.
+ *
+ * A popover on pointer screens, a bottom sheet on phones where a 200px-wide
+ * popover would be unusable. Data comes from useReactors — the same single
+ * endpoint the who-reacted modal uses — and only once the panel is opened.
+ */
+function ReactorsDropdown({ postId, count, onClose }: {
+  postId: string; count: number; onClose: () => void;
+}) {
+  const { rows, total, hasMore, loading, error, load, viewerId } = useReactors(postId, true);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  // Outside click and Escape both dismiss. Both panels are in the DOM (one is
+  // hidden by CSS), so a click counts as "inside" if it lands in either.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (sheetRef.current?.contains(t) || popRef.current?.contains(t)) return;
+      onClose();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [onClose]);
+
+  const list = (
+    <>
+      <div className="flex items-center justify-between px-3.5 pt-3 pb-2">
+        <p className="text-[12px] font-bold" style={{ color: 'var(--rx-text)' }}>People who reacted</p>
+        {/* The row's chip counts people you follow; this panel lists everyone,
+            so the number is labelled to make the difference deliberate. */}
+        <span className="text-[11px] tabular-nums" style={{ color: 'var(--rx-text-muted)' }}>All {total || count}</span>
+      </div>
+      <div className="max-h-[260px] overflow-y-auto px-1.5 pb-1.5 scrollbar-minimal">
+        {error && <p className="px-3 py-5 text-center text-[12px]" style={{ color: 'var(--rx-text-muted)' }}>Could not load reactions.</p>}
+        {!error && rows.map(r => <ReactorRow key={r.id} r={r} youId={viewerId} />)}
+        {!error && loading && rows.length === 0 && (
+          <p className="px-3 py-5 text-center text-[12px]" style={{ color: 'var(--rx-text-muted)' }}>Loading…</p>
+        )}
+        {!error && !loading && rows.length === 0 && (
+          <p className="px-3 py-5 text-center text-[12px]" style={{ color: 'var(--rx-text-muted)' }}>No reactions yet.</p>
+        )}
+        {hasMore && (
+          <button type="button" onClick={() => void load('all', rows.length)} disabled={loading}
+            className="mx-auto my-1.5 block rounded-full px-3 py-1.5 text-[11.5px] font-semibold"
+            style={{ background: 'var(--rx-chip-hover)', color: 'var(--rx-text)' }}>
+            {loading ? 'Loading…' : 'Show more'}
+          </button>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      {/* Phones: bottom sheet. */}
+      <div className="fixed inset-0 z-[9998] flex items-end sm:hidden" role="dialog" aria-modal="true" aria-label="People who reacted">
+        <div className="absolute inset-0" style={{ background: 'var(--rx-scrim)' }} />
+        <div ref={sheetRef} className="relative w-full rounded-t-[18px] pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+          style={{ background: 'var(--rx-panel)', borderTop: '1px solid var(--rx-border)', boxShadow: 'var(--rx-shadow)' }}>
+          {list}
+        </div>
+      </div>
+
+      {/* Pointer screens: a compact popover anchored to the row. */}
+      <div
+        ref={popRef}
+        role="dialog"
+        aria-label="People who reacted"
+        className="absolute left-0 top-full z-30 mt-1.5 hidden w-[260px] overflow-hidden rounded-[14px] sm:block
+          animate-in fade-in slide-in-from-top-1 [animation-duration:150ms] motion-reduce:animate-none"
+        style={{ background: 'var(--rx-panel)', border: '1px solid var(--rx-border)', boxShadow: 'var(--rx-shadow)' }}
+      >
+        {list}
+      </div>
+    </>
+  );
+}
 
 /** One face in the stack: photo when we have one, initial when we do not, and
     initial again if the photo fails to load. */
@@ -55,7 +138,9 @@ export interface PostSocialProofRowProps {
 
 export function PostSocialProofRow({ postId, socialProof, onOpenComments, className }: PostSocialProofRowProps) {
   const [whoOpen, setWhoOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
   const copy = describeSocialProof(socialProof);
+  const reactionCount = socialProof?.reactionCount ?? 0;
 
   const openWho = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation();
@@ -89,6 +174,27 @@ export function PostSocialProofRow({ postId, socialProof, onOpenComments, classN
             <span aria-hidden className="shrink-0">{copy.reaction.emoji}</span>
             <span className="truncate">{copy.reaction.text}</span>
           </button>
+        )}
+
+        {/* Count + disclosure. Compact by design; the sentence stays the
+            headline and this answers "who else, and with what". */}
+        {copy.reaction && reactionCount > 0 && (
+          <span className="relative inline-flex">
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setListOpen(o => !o); }}
+              aria-haspopup="dialog"
+              aria-expanded={listOpen}
+              aria-label={`See everyone who reacted — ${reactionCount} ${reactionCount === 1 ? 'person' : 'people'}`}
+              className="social-proof-link inline-flex min-h-[40px] items-center gap-0.5 rounded-[6px] px-1 text-[11.5px] font-semibold tabular-nums sm:min-h-0"
+            >
+              {reactionCount}
+              <ChevronDown className={`h-3 w-3 transition-transform duration-150 motion-reduce:transition-none ${listOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {listOpen && (
+              <ReactorsDropdown postId={postId} count={reactionCount} onClose={() => setListOpen(false)} />
+            )}
+          </span>
         )}
 
         {copy.reaction && copy.comment && (

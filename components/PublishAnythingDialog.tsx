@@ -1,11 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { sanitizeCtaLabel, sanitizeCtaUrl, CTA_LABEL_MAX } from '@/lib/cta';
+import { sanitizeCtaLabel, sanitizeCtaUrl, CTA_LABEL_MAX, type PostCta } from '@/lib/cta';
 import Link from 'next/link';
 import {
   ArrowLeft,
+  Eye,
+  Heart,
+  Share2,
   ArrowRight,
   Award,
   ChevronDown,
@@ -15,6 +19,7 @@ import {
   Briefcase,
   Building2,
   CalendarDays,
+  Check,
   CheckCircle2,
   ClipboardList,
   Clock,
@@ -31,6 +36,7 @@ import {
   MessageSquare,
   Newspaper,
   Package,
+  PenLine,
   Phone,
   Plus,
   Search,
@@ -119,18 +125,20 @@ const CATEGORIES = [
 
 type CategoryId = typeof CATEGORIES[number]['id'];
 
-const CAT_COLORS: Record<string, { bg: string; icon: string; ring: string; glow: string; grad: string; iconBg: string }> = {
-  rose:    { bg: 'bg-rose-500/[0.10]',    icon: 'text-rose-300',    ring: 'ring-rose-500/[0.15]',    glow: 'hover:shadow-[0_8px_32px_rgba(244,63,94,0.20)]',    grad: 'from-rose-500/[0.14] via-rose-500/[0.04]',    iconBg: 'bg-rose-500/20 ring-1 ring-rose-500/25'    },
-  violet:  { bg: 'bg-violet-500/[0.10]',  icon: 'text-violet-300',  ring: 'ring-violet-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(139,92,246,0.20)]',  grad: 'from-violet-500/[0.14] via-violet-500/[0.04]',  iconBg: 'bg-violet-500/20 ring-1 ring-violet-500/25'  },
-  amber:   { bg: 'bg-amber-500/[0.10]',   icon: 'text-amber-300',   ring: 'ring-amber-500/[0.15]',   glow: 'hover:shadow-[0_8px_32px_rgba(245,158,11,0.20)]',   grad: 'from-amber-500/[0.14] via-amber-500/[0.04]',   iconBg: 'bg-amber-500/20 ring-1 ring-amber-500/25'   },
-  emerald: { bg: 'bg-emerald-500/[0.10]', icon: 'text-emerald-300', ring: 'ring-emerald-500/[0.15]', glow: 'hover:shadow-[0_8px_32px_rgba(16,185,129,0.20)]', grad: 'from-emerald-500/[0.14] via-emerald-500/[0.04]', iconBg: 'bg-emerald-500/20 ring-1 ring-emerald-500/25' },
-  sky:     { bg: 'bg-sky-500/[0.10]',     icon: 'text-sky-300',     ring: 'ring-sky-500/[0.15]',     glow: 'hover:shadow-[0_8px_32px_rgba(14,165,233,0.20)]',     grad: 'from-sky-500/[0.14] via-sky-500/[0.04]',     iconBg: 'bg-sky-500/20 ring-1 ring-sky-500/25'     },
-  indigo:  { bg: 'bg-indigo-500/[0.10]',  icon: 'text-indigo-300',  ring: 'ring-indigo-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(99,102,241,0.20)]',  grad: 'from-indigo-500/[0.14] via-indigo-500/[0.04]',  iconBg: 'bg-indigo-500/20 ring-1 ring-indigo-500/25'  },
-  neutral: { bg: 'bg-white/[0.06]',       icon: 'text-white/70',    ring: 'ring-white/[0.10]',       glow: 'hover:shadow-[0_8px_32px_rgba(255,255,255,0.08)]', grad: 'from-white/[0.06] via-white/[0.02]',            iconBg: 'bg-white/10 ring-1 ring-white/15'           },
-  orange:  { bg: 'bg-orange-500/[0.10]',  icon: 'text-orange-300',  ring: 'ring-orange-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(249,115,22,0.20)]',  grad: 'from-orange-500/[0.14] via-orange-500/[0.04]',  iconBg: 'bg-orange-500/20 ring-1 ring-orange-500/25'  },
-  green:   { bg: 'bg-green-500/[0.10]',   icon: 'text-green-300',   ring: 'ring-green-500/[0.15]',   glow: 'hover:shadow-[0_8px_32px_rgba(34,197,94,0.20)]',   grad: 'from-green-500/[0.14] via-green-500/[0.04]',   iconBg: 'bg-green-500/20 ring-1 ring-green-500/25'   },
-  yellow:  { bg: 'bg-yellow-500/[0.10]',  icon: 'text-yellow-300',  ring: 'ring-yellow-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(234,179,8,0.20)]',  grad: 'from-yellow-500/[0.14] via-yellow-500/[0.04]',  iconBg: 'bg-yellow-500/20 ring-1 ring-yellow-500/25'  },
-  red:     { bg: 'bg-red-500/[0.10]',     icon: 'text-red-300',     ring: 'ring-red-500/[0.15]',     glow: 'hover:shadow-[0_8px_32px_rgba(239,68,68,0.20)]',     grad: 'from-red-500/[0.14] via-red-500/[0.04]',     iconBg: 'bg-red-500/20 ring-1 ring-red-500/25'     },
+/* `accent` is the same rgb already encoded in `glow`, as a space-separated triple
+   so it can be handed to CSS as --cat-accent for the selected ring. */
+const CAT_COLORS: Record<string, { bg: string; icon: string; ring: string; glow: string; grad: string; iconBg: string; accent: string }> = {
+  rose:    { bg: 'bg-rose-500/[0.10]',    icon: 'text-rose-300',    ring: 'ring-rose-500/[0.15]',    glow: 'hover:shadow-[0_8px_32px_rgba(244,63,94,0.20)]',    grad: 'from-rose-500/[0.14] via-rose-500/[0.04]',    iconBg: 'bg-rose-500/20 ring-1 ring-rose-500/25', accent: '244 63 94'    },
+  violet:  { bg: 'bg-violet-500/[0.10]',  icon: 'text-violet-300',  ring: 'ring-violet-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(139,92,246,0.20)]',  grad: 'from-violet-500/[0.14] via-violet-500/[0.04]',  iconBg: 'bg-violet-500/20 ring-1 ring-violet-500/25', accent: '139 92 246'  },
+  amber:   { bg: 'bg-amber-500/[0.10]',   icon: 'text-amber-300',   ring: 'ring-amber-500/[0.15]',   glow: 'hover:shadow-[0_8px_32px_rgba(245,158,11,0.20)]',   grad: 'from-amber-500/[0.14] via-amber-500/[0.04]',   iconBg: 'bg-amber-500/20 ring-1 ring-amber-500/25', accent: '245 158 11'   },
+  emerald: { bg: 'bg-emerald-500/[0.10]', icon: 'text-emerald-300', ring: 'ring-emerald-500/[0.15]', glow: 'hover:shadow-[0_8px_32px_rgba(16,185,129,0.20)]', grad: 'from-emerald-500/[0.14] via-emerald-500/[0.04]', iconBg: 'bg-emerald-500/20 ring-1 ring-emerald-500/25', accent: '16 185 129' },
+  sky:     { bg: 'bg-sky-500/[0.10]',     icon: 'text-sky-300',     ring: 'ring-sky-500/[0.15]',     glow: 'hover:shadow-[0_8px_32px_rgba(14,165,233,0.20)]',     grad: 'from-sky-500/[0.14] via-sky-500/[0.04]',     iconBg: 'bg-sky-500/20 ring-1 ring-sky-500/25', accent: '14 165 233'     },
+  indigo:  { bg: 'bg-indigo-500/[0.10]',  icon: 'text-indigo-300',  ring: 'ring-indigo-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(99,102,241,0.20)]',  grad: 'from-indigo-500/[0.14] via-indigo-500/[0.04]',  iconBg: 'bg-indigo-500/20 ring-1 ring-indigo-500/25', accent: '99 102 241'  },
+  neutral: { bg: 'bg-white/[0.06]',       icon: 'text-white/70',    ring: 'ring-white/[0.10]',       glow: 'hover:shadow-[0_8px_32px_rgba(255,255,255,0.08)]', grad: 'from-white/[0.06] via-white/[0.02]',            iconBg: 'bg-white/10 ring-1 ring-white/15', accent: '255 255 255'           },
+  orange:  { bg: 'bg-orange-500/[0.10]',  icon: 'text-orange-300',  ring: 'ring-orange-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(249,115,22,0.20)]',  grad: 'from-orange-500/[0.14] via-orange-500/[0.04]',  iconBg: 'bg-orange-500/20 ring-1 ring-orange-500/25', accent: '249 115 22'  },
+  green:   { bg: 'bg-green-500/[0.10]',   icon: 'text-green-300',   ring: 'ring-green-500/[0.15]',   glow: 'hover:shadow-[0_8px_32px_rgba(34,197,94,0.20)]',   grad: 'from-green-500/[0.14] via-green-500/[0.04]',   iconBg: 'bg-green-500/20 ring-1 ring-green-500/25', accent: '34 197 94'   },
+  yellow:  { bg: 'bg-yellow-500/[0.10]',  icon: 'text-yellow-300',  ring: 'ring-yellow-500/[0.15]',  glow: 'hover:shadow-[0_8px_32px_rgba(234,179,8,0.20)]',  grad: 'from-yellow-500/[0.14] via-yellow-500/[0.04]',  iconBg: 'bg-yellow-500/20 ring-1 ring-yellow-500/25', accent: '234 179 8'  },
+  red:     { bg: 'bg-red-500/[0.10]',     icon: 'text-red-300',     ring: 'ring-red-500/[0.15]',     glow: 'hover:shadow-[0_8px_32px_rgba(239,68,68,0.20)]',     grad: 'from-red-500/[0.14] via-red-500/[0.04]',     iconBg: 'bg-red-500/20 ring-1 ring-red-500/25', accent: '239 68 68'     },
 };
 
 /* ─── field states ──────────────────────────────────────────── */
@@ -199,8 +207,29 @@ const RESUME_CATEGORIES = [
   'Finance', 'HR', 'Legal', 'Data Science', 'DevOps', 'Content', 'Research', 'Other',
 ];
 
-/* ─── step state ─────────────────────────────────────────────── */
-type Step = 'pick' | 'form';
+/* One composer screen. The former intent/category/details/preview steps are
+   now controls and panels inside it; the category grid is an overlay, not a
+   stop on a journey. */
+type Step = 'compose';
+
+/**
+ * A titled group of fields.
+ *
+ * Deliberately one thin container per group rather than a glass card per
+ * field — the panel gives hierarchy, the fields inside keep the product's
+ * existing input styling untouched.
+ */
+function FormSection({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-white/[0.06] bg-white/[0.015] p-4">
+      <div className="mb-3">
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/35">{label}</h3>
+        {hint && <p className="mt-1 text-[11px] leading-snug text-white/30">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 /* ─── shared input styles ────────────────────────────────────── */
 function Field({ label, children, span, hint, required }: { label: string; children: React.ReactNode; span?: boolean; hint?: string; required?: boolean }) {
@@ -256,6 +285,10 @@ const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024; // 2 MB
 const THUMB_RECOMMENDED_W = 1200;
 const THUMB_RECOMMENDED_H = 630;
 
+/** A pre-request check that failed — the user must be returned to the fields,
+    unlike a network/server failure where staying put is correct. */
+class PublishValidationError extends Error {}
+
 /* ─── main component ─────────────────────────────────────────── */
 export default function PublishAnythingDialog({
   open,
@@ -282,13 +315,22 @@ export default function PublishAnythingDialog({
   onPublished?: (data: { id: string; title: string; content: string; category: string }) => void;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('pick');
+  const [step, setStep] = useState<Step>('compose');
+  /** Category grid, opened from the composer's Category control. */
+  const [pickerOpen, setPickerOpen] = useState(false);
+  /** Mobile-only preview toggle; desktop shows the preview permanently. */
+  const [showPreview, setShowPreview] = useState(false);
+  const { data: session } = useSession();
   const [category, setCategory] = useState<CategoryId | null>(null);
   const [fields, setFields] = useState<FieldState>({ ...blank });
   const [resume, setResume] = useState({ ...blankResume });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [successHref, setSuccessHref] = useState<string | null>(null);
+  /* Set alongside successHref so the post-publish screen can offer View Post
+     and Share. Public posts live at /published/<shareId|id>. */
+  const [publishedTitle, setPublishedTitle] = useState('');
+  const [shareCopied, setShareCopied] = useState(false);
   const [animKey, setAnimKey] = useState(0);
   const [catSearch, setCatSearch] = useState('');
 
@@ -340,30 +382,78 @@ export default function PublishAnythingDialog({
       setThumbnailUrlInput('');
       setThumbnailMode('upload');
       setCatSearch('');
-      if (initialCategory) {
-        setCategory(initialCategory);
-        setStep('form');
-        setAnimKey(k => k + 1);
-      } else {
-        setStep('pick');
-        setCategory(null);
-      }
+      setConfirmClose(false);
+      setPublishedTitle('');
+      setShareCopied(false);
+      setPickerOpen(false);
+      setShowPreview(false);
+      setStep('compose');
+      /* Opens as a Post composer — the fastest path, and the one most people
+         want. A deep link (business page "post a job") still pins its own
+         category. */
+      setCategory(initialCategory ?? 'post');
+      setAnimKey(k => k + 1);
     }
   }, [open, initialCategory]);
 
   const pickCategory = (id: CategoryId) => {
     setCategory(id);
-    setStep('form');
+    setPickerOpen(false);
     setError('');
     setSuccessHref(null);
     setAnimKey(k => k + 1);
   };
 
-  const goBack = () => {
-    setStep('pick');
-    setError('');
-    setSuccessHref(null);
+  /** Closing the category overlay is the only "back" the composer has. */
+  const goBack = () => { setPickerOpen(false); setError(''); };
+
+  /* ── Closing safely ───────────────────────────────────────────────────────
+     Cancel, the X, the backdrop and Escape all used to drop everything the
+     user had typed without asking. The guard below only interrupts when there
+     is something to lose — an untouched wizard still closes on the first
+     click. It reads the existing state; it does not track a second copy. */
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  const hasUnsavedInput = (): boolean => {
+    if (successHref) return false;                        // already published
+    if (thumbnailFile || thumbnailUrlInput.trim()) return true;
+    if (postImages.length > 0 || productImages.length > 0) return true;
+    if (category === 'resume') return JSON.stringify(resume) !== JSON.stringify(blankResume);
+    if (JSON.stringify(fields) !== JSON.stringify(blank)) return true;
+    if (pollOptions.some(o => o.trim())) return true;
+    if (surveyQuestions.some(q => q.text.trim())) return true;
+    if (tutorialSteps.some(t => t.title.trim() || t.desc.trim() || t.imageUrl.trim())) return true;
+    return false;
   };
+
+  /** Every user-initiated close goes through here. */
+  const requestClose = () => {
+    if (hasUnsavedInput()) { setConfirmClose(true); return; }
+    onOpenChange(false);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (confirmClose) { setConfirmClose(false); return; }
+      requestClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  });
+
+
+  /* Identity for the composer row and the preview. Session data the app has
+     already fetched, or the business page being posted as — never a lookup. */
+  const authorName = businessPageName || session?.user?.name || 'You';
+  const authorAvatar = businessLogoUrl || session?.user?.image || null;
+  /* An email is not a headline, and putting one on a post preview exposes it
+     for no benefit. Fall back to the organisation, or show nothing. */
+  const authorContext = businessPageName
+    ? 'Business page'
+    : ((session?.user as { organizationName?: string } | undefined)?.organizationName ?? null);
+
 
   /* ── build text body from form ── */
   const buildTextBody = (): string => {
@@ -529,15 +619,40 @@ export default function PublishAnythingDialog({
   };
 
   /* ── publish ── */
+  /* Duplicate-submission lock.
+     `busy` alone cannot stop this: setBusy(true) is async, so several clicks
+     landing in the same tick all read busy === false and all fire a request —
+     measured as 2 publications from 6 rapid clicks. A ref flips synchronously
+     on the first call, so the rest return immediately. */
+  const publishing = useRef(false);
+
   const publish = async () => {
+    if (publishing.current) return;
+    publishing.current = true;
+    try {
+      await runPublish();
+    } finally {
+      publishing.current = false;
+    }
+  };
+
+  const runPublish = async () => {
     if (!category) return;
     setError(''); setSuccessHref(null);
 
+    /* A failed check must land the user next to the field it is about. When
+       the attempt came from Preview that means stepping back to the form —
+       otherwise the message points at inputs that are not on screen. */
+    const invalid = (message: string) => {
+      setError(message);
+      setPickerOpen(false);   // never leave the message hidden behind the grid
+    };
+
     if (category === 'resume') {
-      if (!isAuthenticated) { setError('Login required to publish a resume.'); return; }
-      if (!resume.displayName.trim()) { setError('Display name is required.'); return; }
-      if (!resume.category.trim()) { setError('Please select a category.'); return; }
-      if (!resume.resumeFile && !resume.pastedText.trim()) { setError('Upload a resume file or paste resume text.'); return; }
+      if (!isAuthenticated) { invalid('Login required to publish a resume.'); return; }
+      if (!resume.displayName.trim()) { invalid('Display name is required.'); return; }
+      if (!resume.category.trim()) { invalid('Please select a category.'); return; }
+      if (!resume.resumeFile && !resume.pastedText.trim()) { invalid('Upload a resume file or paste resume text.'); return; }
       setBusy(true);
       try {
         // 1. Create talent profile
@@ -606,15 +721,41 @@ export default function PublishAnythingDialog({
       }
     }
 
-    if (category === 'gig' && !fields.title.trim()) { setError('Gig title is required.'); return; }
-    if (category === 'gig' && !fields.gigSummary.trim()) { setError('Gig summary is required.'); return; }
-    if (category === 'poll' && !fields.pollQuestion.trim()) { setError('Poll question is required.'); return; }
-    if (category === 'poll' && pollOptions.filter(Boolean).length < 2) { setError('At least 2 poll options are required.'); return; }
-    if (category === 'survey' && !surveyQuestions.some(q => q.text.trim())) { setError('At least 1 survey question is required.'); return; }
-    if (category === 'chart' && !fields.chartLabels.trim()) { setError('Chart labels are required.'); return; }
-    if (category === 'chart' && !fields.chartValues.trim()) { setError('Chart values are required.'); return; }
-    if (category === 'post' && !fields.postCaption.trim() && postImages.length === 0) { setError('Add a caption or at least one image.'); return; }
-    if (category === 'tutorial' && !tutorialSteps.some(s => s.title.trim())) { setError('Add at least one step.'); return; }
+    if (category === 'gig' && !fields.title.trim()) { invalid('Gig title is required.'); return; }
+    if (category === 'gig' && !fields.gigSummary.trim()) { invalid('Gig summary is required.'); return; }
+    if (category === 'poll' && !fields.pollQuestion.trim()) { invalid('Poll question is required.'); return; }
+    if (category === 'poll' && pollOptions.filter(Boolean).length < 2) { invalid('At least 2 poll options are required.'); return; }
+    if (category === 'survey' && !surveyQuestions.some(q => q.text.trim())) { invalid('At least 1 survey question is required.'); return; }
+    if (category === 'chart' && !fields.chartLabels.trim()) { invalid('Chart labels are required.'); return; }
+    if (category === 'chart' && !fields.chartValues.trim()) { invalid('Chart values are required.'); return; }
+    if (category === 'post' && !fields.postCaption.trim() && postImages.length === 0) { invalid('Add a caption or at least one image.'); return; }
+    if (category === 'tutorial' && !tutorialSteps.some(s => s.title.trim())) { invalid('Add at least one step.'); return; }
+
+    /* Fields the forms already mark with * but nothing enforced — the UI
+       promised a rule the validator did not apply, so a user could publish a
+       Job with no title. Wording follows the existing "X is required." style. */
+    if (category === 'news'         && !fields.notes.trim())       { invalid('Summary is required.'); return; }
+    if (category === 'article'      && !fields.content.trim())     { invalid('Article body is required.'); return; }
+    if (category === 'portfolio'    && !fields.notes.trim())       { invalid('Project description is required.'); return; }
+    if (category === 'announcement' && !fields.notes.trim())       { invalid('Announcement message is required.'); return; }
+    if (category === 'job'          && !fields.title.trim())       { invalid('Job title is required.'); return; }
+    if (category === 'job'          && !fields.description.trim()) { invalid('Job description is required.'); return; }
+    if (category === 'product'      && !fields.title.trim())       { invalid('Product name is required.'); return; }
+    if (category === 'event'        && !fields.title.trim())       { invalid('Event name is required.'); return; }
+    if (category === 'event'        && !fields.notes.trim())       { invalid('Event description is required.'); return; }
+    if (category === 'hackathon'    && !fields.title.trim())       { invalid('Hackathon name is required.'); return; }
+    if (category === 'milestone'    && !fields.notes.trim())       { invalid('Milestone story is required.'); return; }
+    /* buildTextBody() emits a literal "Thread: " prefix, so an entirely empty
+       thread still produced non-empty body text and slipped past the generic
+       empty-content guard below. */
+    if (category === 'thread' && !fields.title.trim() && !fields.threadPoints.trim()) {
+      invalid('Add a thread title or your first entry.'); return;
+    }
+    if (category === 'video') {
+      if (!fields.videoUrl.trim()) { invalid('Video URL is required.'); return; }
+      // Same vetting the CTA uses — no second URL rule invented for this field.
+      if (!sanitizeCtaUrl(fields.videoUrl)) { invalid('Enter a valid http:// or https:// video URL.'); return; }
+    }
 
     const isDoc = category === 'document';
     const hasFile = Boolean(isDoc && fields.file);
@@ -661,13 +802,13 @@ export default function PublishAnythingDialog({
         const isImage = file.type.startsWith('image/');
         if (fields.visibility === 'public') {
           const limit = isImage ? MAX_PUBLIC_IMAGE_BYTES : MAX_PUBLIC_FILE_BYTES;
-          if (file.size > limit) throw new Error(`File too large for public publishing (max ${formatBytes(limit)}).`);
+          if (file.size > limit) throw new PublishValidationError(`File too large for public publishing (max ${formatBytes(limit)}).`);
         }
         dataUrl = await fileToDataUrl(file);
         fileName = file.name; mimeType = file.type || 'application/octet-stream'; sizeInBytes = file.size;
       } else {
         const text = buildTextBody();
-        if (!text.trim() && !fields.title.trim()) { throw new Error('Add content to publish.'); }
+        if (!text.trim() && !fields.title.trim()) { throw new PublishValidationError('Add content to publish.'); }
         const titleBase = (fields.title.trim() || category).replace(/[^\w\s-]+/g, '').trim().replace(/\s+/g, '_') || 'post';
         const fmt = isDoc ? fields.textFormat : 'txt';
         const isNewCat = ['post', 'poll', 'survey', 'chart', 'thread', 'video', 'milestone', 'tutorial'].includes(category);
@@ -693,7 +834,7 @@ export default function PublishAnythingDialog({
       let resolvedThumbnailUrl: string | undefined;
 
       if (thumbnailMode === 'upload' && thumbnailFile) {
-        if (thumbnailFile.size > MAX_THUMBNAIL_BYTES) throw new Error(`Thumbnail too large (max ${formatBytes(MAX_THUMBNAIL_BYTES)}).`);
+        if (thumbnailFile.size > MAX_THUMBNAIL_BYTES) throw new PublishValidationError(`Thumbnail too large (max ${formatBytes(MAX_THUMBNAIL_BYTES)}).`);
         resolvedThumbnailUrl = await fileToDataUrl(thumbnailFile);
       } else if (thumbnailMode === 'url' && thumbnailUrlInput.trim()) {
         resolvedThumbnailUrl = thumbnailUrlInput.trim();
@@ -763,14 +904,22 @@ export default function PublishAnythingDialog({
           category,
         });
       }
-      // Close dialog and refresh current page data without navigating away
+      /* Show the success screen instead of closing. The surrounding page is
+         still refreshed so the new post appears behind the dialog. */
+      setPublishedTitle(resolvedTitle || '');
       if (publishedId && fields.visibility === 'public') {
-        onOpenChange(false);
+        const shareId = (transfer as { shareId?: string })?.shareId || publishedId;
+        setSuccessHref(`/published/${shareId}`);
         router.refresh();
       } else {
         setSuccessHref(publishedId ? `/transfer/${publishedId}` : '/file-directory');
       }
-    } catch (e) { setError(e instanceof Error ? e.message : 'Publish failed.'); }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Publish failed.';
+      // Validation → back to the fields. Server/network failure → stay put so
+      // the user can simply retry from where they are.
+      if (e instanceof PublishValidationError) invalid(message); else setError(message);
+    }
     finally { setBusy(false); }
   };
 
@@ -817,374 +966,425 @@ export default function PublishAnythingDialog({
 
     <div
       className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 md:p-6 pb-[84px] sm:pb-0 px-0 sm:px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onOpenChange(false); }}
+      onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-lg animate-in fade-in duration-200" aria-hidden="true" />
 
       {/* Dialog */}
-      <div className="relative flex w-full max-w-[880px] flex-col overflow-hidden
-        h-auto max-h-[calc(96dvh-84px)] rounded-t-[28px]
-        sm:h-auto sm:max-h-[88dvh] sm:rounded-[28px]
+      {/* The composer fills the height the app actually leaves free on a phone —
+          the global bottom nav is z-9995 and outranks this dialog — and becomes
+          a wide panel with room for the live preview from lg up. */}
+      <div className="relative flex w-full flex-col overflow-hidden
+        h-[calc(100dvh-84px)] max-h-[calc(100dvh-84px)] rounded-none pt-[env(safe-area-inset-top)]
+        sm:h-auto sm:max-h-[88dvh] sm:rounded-[28px] sm:pt-0
+        max-w-[680px] lg:max-w-[1020px]
         border border-white/[0.08] bg-[#0a0a0e]
         shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_-1px_0_0_rgba(255,255,255,0.06),0_32px_80px_rgba(0,0,0,0.98)]
-        animate-in fade-in slide-in-from-bottom-8 [animation-duration:300ms] [animation-timing-function:cubic-bezier(0.25,0.75,0,1)]
-        sm:slide-in-from-bottom-4 sm:zoom-in-[99%] sm:[animation-duration:180ms]">
+        animate-in fade-in slide-in-from-bottom-4 [animation-duration:200ms] [animation-timing-function:cubic-bezier(0.25,0.75,0,1)]
+        motion-reduce:animate-none
+        sm:zoom-in-[99%] sm:[animation-duration:180ms]">
 
-        {/* Mobile drag handle */}
-        <div className="flex sm:hidden shrink-0 justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-white/[0.12]" />
-        </div>
-
-        {/* ── Header ── */}
-        <div className="flex shrink-0 items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.06]">
-          {step === 'pick' ? (
-            <div className="flex items-center gap-3">
-              <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] ring-1 ring-white/[0.09]">
-                <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white/60" />
-              </div>
-              <div>
-                <h2 className="text-[14px] sm:text-[15px] font-bold text-white leading-tight tracking-[-0.01em]">Publish anything</h2>
-                <p className="mt-0.5 text-[10.5px] sm:text-[11px] text-white/35 leading-tight">{CATEGORIES.length} formats · choose one to get started</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={goBack}
-                className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white/50 transition hover:bg-white/[0.09] hover:text-white active:scale-95"
-                aria-label="Back to categories"
-              >
-                <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </button>
-              {activeCat && (
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${CAT_COLORS[activeCat.color]?.bg ?? 'bg-white/[0.06]'} ${CAT_COLORS[activeCat.color]?.ring ?? 'ring-white/[0.10]'}`}>
-                    <activeCat.icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${CAT_COLORS[activeCat.color]?.icon ?? 'text-white/70'}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-[14px] sm:text-[15px] font-bold text-white leading-tight tracking-[-0.01em] truncate">{activeCat.label}</h2>
-                    <p className="mt-0.5 text-[10.5px] text-white/35 leading-tight truncate">{activeCat.desc}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/40 transition hover:bg-white/[0.09] hover:text-white active:scale-95"
+        {confirmClose && (
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center p-5"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Discard this publication?"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* ── Body ── */}
-        {step === 'pick' ? (
-          <div className="flex flex-col flex-1 overflow-hidden">
-            {/* Search bar — hidden on all sizes */}
-            <div className="hidden shrink-0 px-5 sm:px-6 pt-4 pb-3.5">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
-                <input
-                  type="text"
-                  value={catSearch}
-                  onChange={e => setCatSearch(e.target.value)}
-                  placeholder="Search — article, job post, product, gig…"
-                  className="h-11 w-full rounded-2xl border border-white/[0.08] bg-white/[0.035] pl-11 pr-10 text-[13.5px] text-white placeholder:text-white/18 outline-none transition-all focus:border-white/[0.18] focus:bg-white/[0.055] focus:shadow-[0_0_0_3px_rgba(255,255,255,0.04)]"
-                  autoComplete="off"
-                />
-                {catSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setCatSearch('')}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-white/40 hover:bg-white/20 hover:text-white/70 transition"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
+            <div className="absolute inset-0 bg-black/70" onClick={() => setConfirmClose(false)} />
+            <div className="relative w-full max-w-[340px] rounded-2xl border border-white/[0.10] bg-[#111116] p-5
+              shadow-[0_24px_60px_rgba(0,0,0,0.6)]
+              animate-in fade-in zoom-in-[98%] [animation-duration:170ms] motion-reduce:animate-none">
+              <p className="text-[14px] font-bold text-white">Discard this publication?</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-white/45">Your changes will not be saved.</p>
+              <div className="mt-4 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  autoFocus
+                  onClick={() => setConfirmClose(false)}
+                  className="h-9 shrink-0 whitespace-nowrap rounded-xl border border-white/[0.10] bg-transparent px-4 text-[13px] font-medium text-white/60 transition hover:bg-white/[0.06] hover:text-white"
+                >
+                  Keep editing
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setConfirmClose(false); onOpenChange(false); }}
+                  className="h-9 shrink-0 whitespace-nowrap rounded-xl border border-red-500/30 bg-red-500/[0.14] px-4 text-[13px] font-bold text-red-300 transition hover:bg-red-500/25 hover:text-red-200"
+                >
+                  Discard
+                </button>
               </div>
             </div>
-
-            {/* Category grid */}
-            <div className="flex-1 overflow-y-auto px-3 pb-3 pt-2 sm:px-4 sm:pb-4 sm:pt-2 scrollbar-minimal">
-              {filteredCats.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.08]">
-                    <Search className="h-5 w-5 text-white/20" />
-                  </div>
-                  <div>
-                    <p className="text-[13px] font-semibold text-white/40">No formats found</p>
-                    <p className="mt-1 text-[11.5px] text-white/22">Try a different keyword</p>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 sm:gap-2">
-                  {filteredCats.map(({ id, label, icon: Icon, desc, color }) => {
-                    const c = CAT_COLORS[color] ?? CAT_COLORS['neutral'];
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => pickCategory(id)}
-                        className={`group relative flex flex-col gap-2 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0e0e12] p-2.5 sm:p-3 text-left transition-all duration-200 hover:border-white/[0.14] hover:scale-[1.02] active:scale-[0.98] ${c.glow}`}
-                      >
-                        {/* gradient wash */}
-                        <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.grad} to-transparent opacity-100 transition-opacity duration-300 group-hover:opacity-100`} />
-                        {/* icon */}
-                        <div className={`relative flex h-7 w-7 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105 ${c.iconBg}`}>
-                          <Icon className={`h-3.5 w-3.5 ${c.icon}`} />
-                        </div>
-                        {/* text */}
-                        <div className="relative min-w-0">
-                          <p className="text-[11px] sm:text-[12px] font-bold text-white/85 leading-tight group-hover:text-white transition-colors">{label}</p>
-                        </div>
-                        {/* arrow */}
-                        <ArrowRight className={`absolute right-2.5 top-2.5 h-3 w-3 ${c.icon} opacity-0 group-hover:opacity-50 transition-opacity`} />
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Form area */
-          <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 scrollbar-minimal overscroll-contain">
-            <div key={animKey} className="animate-in fade-in slide-in-from-bottom-2 duration-200 space-y-5">
-
-              {/* ── Cover Image — always FIRST, visible immediately in every form ── */}
-              {category && (
-                <ThumbnailSection
-                  category={category}
-                  thumbnailFile={thumbnailFile}
-                  thumbnailUrlInput={thumbnailUrlInput}
-                  thumbnailMode={thumbnailMode}
-                  onFileChange={setThumbnailFile}
-                  onUrlChange={setThumbnailUrlInput}
-                  onModeChange={setThumbnailMode}
-                  thumbnailRef={thumbnailRef}
-                  postImages={category === 'post' ? postImages : undefined}
-                  postImagesRef={category === 'post' ? postImagesRef : undefined}
-                  setPostImages={category === 'post' ? setPostImages : undefined}
-                />
-              )}
-
-              {/* ── Category-specific fields ── */}
-              {category === 'post'         && <PostForm fields={fields} set={set} postImages={postImages} setPostImages={setPostImages} postImagesRef={postImagesRef} />}
-              {category === 'poll'         && <PollForm fields={fields} set={set} pollOptions={pollOptions} setPollOptions={setPollOptions} />}
-              {category === 'survey'       && <SurveyForm fields={fields} set={set} surveyQuestions={surveyQuestions} setSurveyQuestions={setSurveyQuestions} />}
-              {category === 'chart'        && <ChartForm fields={fields} set={set} />}
-              {category === 'news'         && <NewsForm fields={fields} set={set} />}
-              {category === 'article'      && <ArticleForm fields={fields} set={set} />}
-              {category === 'document'     && <DocumentForm fields={fields} set={set} fileRef={fileRef} />}
-              {category === 'portfolio'    && <PortfolioForm fields={fields} set={set} />}
-              {category === 'announcement' && <AnnouncementForm fields={fields} set={set} />}
-              {category === 'job'          && <JobForm fields={fields} set={set} />}
-              {category === 'resume'       && <ResumeForm resume={resume} setResume={setResume} isAuthenticated={isAuthenticated} resumeRef={resumeRef} avatarRef={avatarRef} />}
-              {category === 'product'      && <ProductForm fields={fields} set={set} productImages={productImages} setProductImages={setProductImages} productImagesRef={productImagesRef} />}
-              {category === 'event'        && <EventForm fields={fields} set={set} />}
-              {category === 'hackathon'    && <HackathonForm fields={fields} set={set} />}
-              {category === 'gig'          && <GigForm fields={fields} set={set} />}
-              {category === 'thread'       && <ThreadForm fields={fields} set={set} />}
-              {category === 'video'        && <VideoForm fields={fields} set={set} />}
-              {category === 'milestone'    && <MilestoneForm fields={fields} set={set} />}
-              {category === 'tutorial'     && <TutorialForm fields={fields} set={set} steps={tutorialSteps} setSteps={setTutorialSteps} />}
-            </div>
-
-            {/* Common: tags + notes */}
-            {category && !['resume', 'gig', 'post', 'poll', 'survey', 'chart', 'thread', 'video', 'milestone', 'tutorial'].includes(category) && (
-              <div className="mt-2 grid gap-3 sm:grid-cols-2 rounded-2xl border border-white/[0.06] bg-white/[0.015] p-4">
-                <Field label="Tags" hint="Comma-separated keywords for discovery" span>
-                  <div className="relative">
-                    <Tag className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/22" />
-                    <input className={`${inputCls} pl-9`} value={fields.tags} onChange={e => set({ tags: e.target.value })} placeholder="e.g. nda, contract, template" />
-                  </div>
-                </Field>
-                <Field label="Short description" hint="Shown in search and discovery listings" span>
-                  <input className={inputCls} value={fields.notes} onChange={e => set({ notes: e.target.value })} placeholder="One-line summary of this content…" />
-                </Field>
-              </div>
-            )}
-
-            {/* Tags for new categories */}
-            {category && ['post', 'poll', 'survey', 'chart', 'thread', 'video', 'milestone', 'tutorial'].includes(category) && (
-              <div className="mt-2 rounded-2xl border border-white/[0.06] bg-white/[0.015] p-4">
-                <Field label="Tags" hint="Comma-separated keywords — helps people find your content">
-                  <div className="relative">
-                    <Tag className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/22" />
-                    <input className={`${inputCls} pl-9`} value={fields.tags} onChange={e => set({ tags: e.target.value })} placeholder="e.g. community, feedback, product" />
-                  </div>
-                </Field>
-              </div>
-            )}
-
-            {error && (
-              <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-500/[0.18] bg-red-500/[0.07] px-3.5 py-3 text-[13px] text-red-400">
-                <X className="h-3.5 w-3.5 mt-px shrink-0 opacity-70" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {successHref && (
-              <div className="mt-4 flex items-center gap-3 rounded-xl border border-emerald-500/[0.18] bg-emerald-500/[0.07] px-3.5 py-3 text-[13px] text-emerald-400">
-                <CheckCircle2 className="h-4 w-4 shrink-0" />
-                <span className="font-medium">Published!{' '}
-                  <Link href={successHref} className="font-bold underline underline-offset-2 hover:text-emerald-300 transition">
-                    View it <ArrowRight className="inline h-3.5 w-3.5" />
-                  </Link>
-                </span>
-              </div>
-            )}
-
-            <div className="h-6" />
           </div>
         )}
 
-        {/* ── Footer ── */}
-        <div className="flex shrink-0 flex-col gap-2.5 border-t border-white/[0.06] bg-[#0a0a0e] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4">
-          {step === 'pick' ? (
-            <div className="flex w-full items-center justify-between">
-              <p className="text-[11.5px] text-white/22">Select a format above to begin publishing</p>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                className="h-8 rounded-xl border border-white/[0.07] bg-transparent px-4 text-[12.5px] font-medium text-white/45 transition hover:bg-white/[0.05] hover:text-white"
-              >
-                Cancel
-              </button>
+
+        {/* ── Header ── */}
+        <div className="flex shrink-0 items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.06]">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] ring-1 ring-white/[0.09]">
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white/60" />
             </div>
-          ) : (
-            <>
-              {/* ── Call to action (optional, one per post) ── */}
-              <div className="self-start w-full">
-                {!ctaOpen && !ctaDraft && (
-                  <button
-                    type="button"
-                    onClick={() => setCtaOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.03] px-3 py-1.5 text-[11.5px] font-semibold text-white/55 transition hover:border-white/[0.18] hover:bg-white/[0.06] hover:text-white/85"
-                  >
-                    <Plus className="h-3 w-3" /> Add CTA
-                  </button>
+            <div className="min-w-0">
+              <h2 className="text-[14px] sm:text-[15px] font-bold text-white leading-tight tracking-[-0.01em]">Create publication</h2>
+              <p className="mt-0.5 truncate text-[10.5px] sm:text-[11px] text-white/35 leading-tight">
+                {businessPageName ? `Posting as ${businessPageName}` : 'Share an update with the community'}
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Mobile preview toggle — desktop keeps the preview on screen. */}
+            <button
+              type="button"
+              onClick={() => setShowPreview(v => !v)}
+              aria-pressed={showPreview}
+              className={`lg:hidden inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.08] px-3 text-[12px] font-semibold transition ${showPreview ? 'bg-white/[0.12] text-white' : 'bg-white/[0.03] text-white/50 hover:text-white'}`}
+            >
+              <Eye className="h-3.5 w-3.5" /> Preview
+            </button>
+            <button
+              type="button"
+              onClick={requestClose}
+              aria-label="Close"
+              className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/40 transition hover:bg-white/[0.09] hover:text-white active:scale-95"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Composer ──────────────────────────────────────────────────────
+            One screen. Editing on the left, a live card preview on the right
+            where there is room for it. Everything the old steps collected is
+            still here, just reachable without a journey. */}
+        {!successHref && (
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            {/* Editor */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 scrollbar-minimal overscroll-contain">
+              <div key={animKey} className="mx-auto w-full max-w-[620px] animate-in fade-in [animation-duration:180ms] motion-reduce:animate-none">
+
+                {/* Who is posting — real session/page identity, never invented. */}
+                <div className="flex items-center gap-2.5">
+                  {authorAvatar ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={authorAvatar} alt="" className="h-9 w-9 rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold text-white/70">
+                      {authorName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-[13px] font-semibold text-white/85">{authorName}</p>
+                    <p className="text-[10.5px] text-white/35">{vis === 'private' ? 'Only you' : 'Anyone on Docrud'}</p>
+                  </div>
+                </div>
+
+                {/* Post is the default: one box, start typing. Other categories
+                    bring their own fields instead. */}
+                {category === 'post' ? (
+                  <textarea
+                    autoFocus
+                    rows={5}
+                    value={fields.postCaption}
+                    onChange={e => set({ postCaption: e.target.value })}
+                    placeholder="What's on your mind?"
+                    className="mt-3.5 w-full resize-none bg-transparent text-[15px] leading-relaxed text-white placeholder:text-white/25 outline-none"
+                  />
+                ) : (
+                  <div className="mt-4">
+                    <FormSection label={`${activeCat?.label ?? 'Category'} details`}>
+                      <div className="space-y-4">
+                        {category === 'poll'         && <PollForm fields={fields} set={set} pollOptions={pollOptions} setPollOptions={setPollOptions} />}
+                        {category === 'survey'       && <SurveyForm fields={fields} set={set} surveyQuestions={surveyQuestions} setSurveyQuestions={setSurveyQuestions} />}
+                        {category === 'chart'        && <ChartForm fields={fields} set={set} />}
+                        {category === 'news'         && <NewsForm fields={fields} set={set} />}
+                        {category === 'article'      && <ArticleForm fields={fields} set={set} />}
+                        {category === 'document'     && <DocumentForm fields={fields} set={set} fileRef={fileRef} />}
+                        {category === 'portfolio'    && <PortfolioForm fields={fields} set={set} />}
+                        {category === 'announcement' && <AnnouncementForm fields={fields} set={set} />}
+                        {category === 'job'          && <JobForm fields={fields} set={set} />}
+                        {category === 'resume'       && <ResumeForm resume={resume} setResume={setResume} isAuthenticated={isAuthenticated} resumeRef={resumeRef} avatarRef={avatarRef} />}
+                        {category === 'product'      && <ProductForm fields={fields} set={set} productImages={productImages} setProductImages={setProductImages} productImagesRef={productImagesRef} />}
+                        {category === 'event'        && <EventForm fields={fields} set={set} />}
+                        {category === 'hackathon'    && <HackathonForm fields={fields} set={set} />}
+                        {category === 'gig'          && <GigForm fields={fields} set={set} />}
+                        {category === 'thread'       && <ThreadForm fields={fields} set={set} />}
+                        {category === 'video'        && <VideoForm fields={fields} set={set} />}
+                        {category === 'milestone'    && <MilestoneForm fields={fields} set={set} />}
+                        {category === 'tutorial'     && <TutorialForm fields={fields} set={set} steps={tutorialSteps} setSteps={setTutorialSteps} />}
+                      </div>
+                    </FormSection>
+                  </div>
                 )}
 
-                {(ctaOpen || ctaDraft) && (
-                  <div className="w-full rounded-xl border border-white/[0.09] bg-white/[0.025] p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">Call to action</span>
-                      <button
-                        type="button"
-                        onClick={() => { set({ ctaLabel: '', ctaUrl: '' }); setCtaOpen(false); }}
-                        aria-label="Remove call to action"
-                        className="rounded-lg px-2 py-0.5 text-[11px] text-white/40 transition hover:bg-white/[0.06] hover:text-white/75"
-                      >
-                        Remove
-                      </button>
-                    </div>
+                {/* Media — the Task 4 component, in place, not on another screen. */}
+                {category && (
+                  <div className="mt-4">
+                    <ThumbnailSection
+                      category={category}
+                      thumbnailFile={thumbnailFile}
+                      thumbnailUrlInput={thumbnailUrlInput}
+                      thumbnailMode={thumbnailMode}
+                      onFileChange={setThumbnailFile}
+                      onUrlChange={setThumbnailUrlInput}
+                      onModeChange={setThumbnailMode}
+                      thumbnailRef={thumbnailRef}
+                      postImages={category === 'post' ? postImages : undefined}
+                      postImagesRef={category === 'post' ? postImagesRef : undefined}
+                      setPostImages={category === 'post' ? setPostImages : undefined}
+                    />
+                  </div>
+                )}
+
+                {/* Controls: category, visibility, CTA — compact, collapsed. */}
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen(true)}
+                    className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 text-[12px] font-semibold text-white/70 transition hover:bg-white/[0.09] hover:text-white"
+                  >
+                    {activeCat && <activeCat.icon className="h-3.5 w-3.5" />}
+                    {activeCat?.label ?? 'Category'}
+                    <ChevronDown className="h-3 w-3 opacity-60" />
+                  </button>
+
+                  <div className="inline-flex items-center gap-px rounded-xl border border-white/[0.09] bg-white/[0.03] p-[3px]">
+                    <button type="button" onClick={() => setVis('public')}
+                      className={`inline-flex h-[26px] items-center gap-1.5 rounded-[9px] px-2.5 text-[11.5px] font-semibold transition ${vis === 'public' ? 'bg-white/[0.12] text-white' : 'text-white/40 hover:text-white/70'}`}>
+                      <Globe className="h-3 w-3" /> Public
+                    </button>
+                    <button type="button" onClick={() => setVis('private')}
+                      className={`inline-flex h-[26px] items-center gap-1.5 rounded-[9px] px-2.5 text-[11.5px] font-semibold transition ${vis === 'private' ? 'bg-white/[0.12] text-white' : 'text-white/40 hover:text-white/70'}`}>
+                      <Lock className="h-3 w-3" /> Private
+                    </button>
+                  </div>
+
+                  {!ctaOpen && !ctaDraft && (
+                    <button
+                      type="button"
+                      onClick={() => setCtaOpen(true)}
+                      className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 text-[12px] font-semibold text-white/60 transition hover:bg-white/[0.09] hover:text-white"
+                    >
+                      <Plus className="h-3 w-3" /> Add CTA
+                    </button>
+                  )}
+                  {!ctaOpen && ctaDraft && (
+                    <span className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/[0.14] bg-white/[0.08] px-3 text-[12px] font-semibold text-white/85">
+                      {ctaDraft.label} <span aria-hidden>&rarr;</span>
+                      <button type="button" onClick={() => setCtaOpen(true)} aria-label="Edit call to action" className="ml-1 text-white/45 hover:text-white">Edit</button>
+                      <button type="button" onClick={() => set({ ctaLabel: '', ctaUrl: '' })} aria-label="Remove call to action" className="text-white/45 hover:text-white"><X className="h-3 w-3" /></button>
+                    </span>
+                  )}
+                </div>
+
+                {/* CTA editor — same fields, same sanitisation as before. */}
+                {ctaOpen && (
+                  <div className="mt-3 rounded-xl border border-white/[0.09] bg-white/[0.025] p-3">
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-[11px] text-white/40">Button text</label>
-                        <input
-                          className={inputCls}
-                          value={fields.ctaLabel}
-                          maxLength={CTA_LABEL_MAX}
-                          onChange={e => set({ ctaLabel: e.target.value })}
-                          placeholder="Visit Website"
-                        />
+                        <input className={inputCls} value={fields.ctaLabel} maxLength={CTA_LABEL_MAX}
+                          onChange={e => set({ ctaLabel: e.target.value })} placeholder="Learn more" />
                       </div>
                       <div>
                         <label className="mb-1 block text-[11px] text-white/40">Link</label>
-                        <input
-                          className={inputCls}
-                          value={fields.ctaUrl}
-                          onChange={e => set({ ctaUrl: e.target.value })}
-                          placeholder="https://example.com"
-                          inputMode="url"
-                        />
+                        <input className={inputCls} value={fields.ctaUrl} inputMode="url"
+                          onChange={e => set({ ctaUrl: e.target.value })} placeholder="https://example.com" />
                       </div>
                     </div>
-                    {ctaUrlInvalid && (
-                      <p className="mt-1.5 text-[11px] text-rose-300/80">Enter a valid http:// or https:// link.</p>
-                    )}
-                    {/* Preview — exactly how it renders on the published post */}
-                    {ctaDraft && (
-                      <div className="mt-2.5 flex items-center gap-2">
-                        <span className="text-[10px] uppercase tracking-[0.14em] text-white/25">Preview</span>
-                        <span className="inline-flex items-center gap-1.5 rounded-[11px] border border-white/[0.14] bg-white/[0.08] px-3.5 py-2 text-[12.5px] font-semibold text-white/85">
-                          {ctaDraft.label} <span aria-hidden>&rarr;</span>
-                        </span>
-                      </div>
-                    )}
+                    {ctaUrlInvalid && <p className="mt-1.5 text-[11px] text-rose-300/80">Enter a valid http:// or https:// link.</p>}
+                    <div className="mt-2.5 flex items-center justify-end gap-2">
+                      <button type="button" onClick={() => { set({ ctaLabel: '', ctaUrl: '' }); setCtaOpen(false); }}
+                        className="h-8 rounded-lg px-3 text-[12px] font-medium text-white/45 transition hover:text-white">Cancel</button>
+                      <button type="button" onClick={() => setCtaOpen(false)} disabled={!ctaDraft}
+                        className="h-8 rounded-lg border border-white/[0.12] bg-white/[0.08] px-3 text-[12px] font-semibold text-white/85 transition hover:bg-white/[0.14] disabled:opacity-40">Done</button>
+                    </div>
                   </div>
                 )}
-              </div>
 
-              {/* Visibility toggle */}
-              <div className="flex items-center gap-1.5 self-start rounded-xl border border-white/[0.07] bg-white/[0.025] p-[3px]">
-                <button
-                  type="button"
-                  onClick={() => setVis('public')}
-                  className={[
-                    'inline-flex h-7 sm:h-7.5 items-center gap-1.5 rounded-[10px] px-3 text-[11.5px] font-semibold transition-all',
-                    vis === 'public'
-                      ? 'bg-white/[0.12] text-white shadow-[0_1px_3px_rgba(0,0,0,0.4)]'
-                      : 'text-white/35 hover:text-white/60',
-                  ].join(' ')}
-                >
-                  <Globe className="h-3 w-3" /> Public
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVis('private')}
-                  className={[
-                    'inline-flex h-7 sm:h-7.5 items-center gap-1.5 rounded-[10px] px-3 text-[11.5px] font-semibold transition-all',
-                    vis === 'private'
-                      ? 'bg-white/[0.12] text-white shadow-[0_1px_3px_rgba(0,0,0,0.4)]'
-                      : 'text-white/35 hover:text-white/60',
-                  ].join(' ')}
-                >
-                  <Lock className="h-3 w-3" /> Private
-                </button>
-              </div>
+                {error && (
+                  <div
+                    role="alert"
+                    ref={el => { el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }}
+                    className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-500/[0.18] bg-red-500/[0.07] px-3.5 py-2.5 text-[12.5px] text-red-400"
+                  >
+                    <X className="h-3.5 w-3.5 mt-px shrink-0 opacity-70" />
+                    <span>{error}</span>
+                  </div>
+                )}
 
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  className="h-9 sm:h-9.5 rounded-xl border border-white/[0.07] bg-transparent px-4 sm:px-5 text-[13px] font-medium text-white/45 transition hover:bg-white/[0.05] hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void publish()}
-                  disabled={busy}
-                  className={[
-                    'inline-flex h-9 sm:h-9.5 min-w-[130px] items-center justify-center gap-2 rounded-xl px-5 sm:px-6 text-[13px] font-bold transition-all active:scale-[0.97] disabled:opacity-40',
-                    vis === 'private'
-                      ? 'border border-white/[0.14] bg-white/[0.08] text-white hover:bg-white/[0.14] shadow-[0_2px_12px_rgba(0,0,0,0.3)]'
-                      : 'bg-white text-[#09090c] hover:bg-white/90 shadow-[0_4px_20px_rgba(255,255,255,0.12),0_2px_8px_rgba(0,0,0,0.3)]',
-                  ].join(' ')}
-                >
-                  {busy ? (
-                    <>
-                      <div className={`h-3.5 w-3.5 animate-spin rounded-full border-2 ${vis === 'private' ? 'border-white/30 border-t-white' : 'border-[#09090c]/30 border-t-[#09090c]'}`} />
-                      Publishing…
-                    </>
-                  ) : (
-                    <>
-                      {vis === 'private'
-                        ? <><Lock className="h-3.5 w-3.5" /> Save privately</>
-                        : <><Globe className="h-3.5 w-3.5" /> Publish publicly</>
-                      }
-                    </>
-                  )}
-                </button>
+                {/* Mobile preview lives under the editor, not on another page. */}
+                {showPreview && (
+                  <div className="mt-5 lg:hidden">
+                    <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">Preview</p>
+                    <PublishPreviewCard
+                      category={category} activeCat={activeCat} fields={fields} resume={resume}
+                      thumbnailFile={thumbnailFile} thumbnailUrlInput={thumbnailUrlInput} thumbnailMode={thumbnailMode}
+                      postImages={postImages} productImages={productImages} pollOptions={pollOptions} tutorialSteps={tutorialSteps}
+                      authorName={authorName} authorAvatar={authorAvatar} authorContext={authorContext} cta={ctaDraft}
+                    />
+                  </div>
+                )}
+
+                <div className="h-4" />
               </div>
-            </>
-          )}
-        </div>
+            </div>
+
+            {/* Live preview — permanent where there is width for it. */}
+            <aside className="hidden lg:flex w-[340px] shrink-0 flex-col overflow-y-auto border-l border-white/[0.06] bg-white/[0.012] px-5 py-5 scrollbar-minimal">
+              <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">Preview</p>
+              <PublishPreviewCard
+                category={category} activeCat={activeCat} fields={fields} resume={resume}
+                thumbnailFile={thumbnailFile} thumbnailUrlInput={thumbnailUrlInput} thumbnailMode={thumbnailMode}
+                postImages={postImages} productImages={productImages} pollOptions={pollOptions} tutorialSteps={tutorialSteps}
+                authorName={authorName} authorAvatar={authorAvatar} authorContext={authorContext} cta={ctaDraft}
+              />
+              <p className="mt-3 text-[10.5px] leading-relaxed text-white/25">Updates as you type.</p>
+            </aside>
+
+            {/* Category grid — an overlay over the composer, not a step. */}
+            {pickerOpen && (
+              <div className="absolute inset-0 z-20 flex flex-col bg-[#0a0a0e] animate-in fade-in [animation-duration:170ms] motion-reduce:animate-none">
+                <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-5 py-3.5 sm:px-6">
+                  <div>
+                    <h3 className="text-[14px] font-bold text-white">Choose a category</h3>
+                    <p className="mt-0.5 text-[10.5px] text-white/35">Select the category that best describes your publication.</p>
+                  </div>
+                  <button type="button" onClick={goBack} aria-label="Close category picker"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/45 transition hover:bg-white/[0.09] hover:text-white">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 scrollbar-minimal">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5 lg:grid-cols-4">
+                    {CATEGORIES.map(({ id, label, icon: Icon, desc, color }) => {
+                      const c = CAT_COLORS[color] ?? CAT_COLORS['neutral'];
+                      const selected = category === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => pickCategory(id)}
+                          aria-pressed={selected}
+                          aria-label={`${label}. ${desc}.`}
+                          style={{ ['--cat-accent' as string]: c.accent }}
+                          className={[
+                            'publish-category-card group relative flex flex-col gap-2 overflow-hidden rounded-2xl p-3 text-left backdrop-blur-xl backdrop-saturate-150',
+                            selected ? 'bg-white/[0.075]' : 'bg-white/[0.03] hover:bg-white/[0.055]',
+                          ].join(' ')}
+                        >
+                          <div aria-hidden className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${c.grad} to-transparent transition-opacity duration-200 motion-reduce:transition-none ${selected ? 'opacity-100' : 'opacity-60 group-hover:opacity-90'}`} />
+                          <div className="relative flex items-start justify-between gap-2">
+                            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${c.iconBg}`}>
+                              <Icon className={`h-4 w-4 ${c.icon}`} />
+                            </span>
+                            {selected
+                              ? <CheckCircle2 className="h-4 w-4 shrink-0 text-white" />
+                              : <ArrowRight className={`h-3.5 w-3.5 shrink-0 ${c.icon} opacity-25 transition-opacity duration-200 group-hover:opacity-70 motion-reduce:transition-none`} />}
+                          </div>
+                          <div className="relative min-w-0">
+                            <p className={`text-[12px] font-bold leading-tight tracking-[-0.01em] ${selected ? 'text-white' : 'text-white/85'}`}>{label}</p>
+                            <p className="mt-1 text-[10.5px] leading-snug text-white/40 line-clamp-2">{desc}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Published successfully ── */}
+        {successHref && (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-10 text-center">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/[0.12] ring-1 ring-emerald-500/25">
+              <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+            </span>
+            <p className="mt-4 text-[16px] font-bold text-white">Published successfully</p>
+            {publishedTitle && (
+              <p className="mt-1 max-w-[380px] truncate text-[12.5px] text-white/40">{publishedTitle}</p>
+            )}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
+              <Link
+                href={successHref}
+                className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-xl bg-white px-4 text-[13px] font-bold text-[#09090c] transition hover:bg-white/90"
+              >
+                View post <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+              <button
+                type="button"
+                onClick={async () => {
+                  const url = `${window.location.origin}${successHref}`;
+                  try { await navigator.clipboard.writeText(url); } catch { /* clipboard unavailable */ }
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 1800);
+                }}
+                className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.10] bg-white/[0.04] px-4 text-[13px] font-semibold text-white/70 transition hover:bg-white/[0.09] hover:text-white"
+              >
+                {shareCopied ? <><Check className="h-3.5 w-3.5 text-emerald-400" /> Link copied</> : <><Link2 className="h-3.5 w-3.5" /> Share</>}
+              </button>
+              <button
+                type="button"
+                /* Straight back to step 1 with a clean slate — the reset the
+                   open-effect already performs, without closing the dialog. */
+                onClick={() => {
+                  setSuccessHref(null); setPublishedTitle(''); setError('');
+                  setFields({ ...blank }); setResume({ ...blankResume });
+                  setPollOptions(['', '', '']); setSurveyQuestions([{ text: '', type: 'text' }]);
+                  setTutorialSteps([{ title: '', desc: '', imageUrl: '' }]);
+                  setPostImages([]); setProductImages([]);
+                  setThumbnailFile(null); setThumbnailUrlInput(''); setThumbnailMode('upload');
+                  setCategory(initialCategory ?? 'post');
+                  setPickerOpen(false); setShowPreview(false); setCtaOpen(false); setAnimKey(k => k + 1);
+                }}
+                className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.10] bg-white/[0.04] px-4 text-[13px] font-semibold text-white/70 transition hover:bg-white/[0.09] hover:text-white"
+              >
+                <Plus className="h-3.5 w-3.5" /> Create another
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Footer ── one primary action, nothing competing with it. */}
+        {!successHref && !pickerOpen && (
+          <div
+            className="flex shrink-0 items-center justify-end gap-2.5 border-t border-white/[0.06] bg-[#0a0a0e] px-5 py-3.5 sm:px-6 sm:py-4"
+            style={{ paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom))' }}
+          >
+            <button
+              type="button"
+              onClick={requestClose}
+              className="h-9 shrink-0 whitespace-nowrap rounded-xl border border-white/[0.07] bg-transparent px-4 sm:px-5 text-[13px] font-medium text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void publish()}
+              disabled={busy}
+              className={[
+                'inline-flex h-9 min-w-[120px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-5 sm:px-6 text-[13px] font-bold transition-all duration-[170ms] active:scale-[0.97] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100',
+                vis === 'private'
+                  ? 'border border-white/[0.14] bg-white/[0.08] text-white hover:bg-white/[0.14]'
+                  : 'bg-white text-[#09090c] hover:bg-white/90 shadow-[0_4px_20px_rgba(255,255,255,0.12),0_2px_8px_rgba(0,0,0,0.3)]',
+              ].join(' ')}
+            >
+              {busy ? (
+                <>
+                  <div className={`h-3.5 w-3.5 animate-spin rounded-full border-2 ${vis === 'private' ? 'border-white/30 border-t-white' : 'border-[#09090c]/30 border-t-[#09090c]'}`} />
+                  Publishing…
+                </>
+              ) : vis === 'private' ? (
+                <><Lock className="h-3.5 w-3.5" /> Save privately</>
+              ) : (
+                <>Publish</>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* hidden file inputs */}
@@ -1318,10 +1518,8 @@ function PollForm({
     <div className="space-y-4">
       <SectionHeader icon={ListChecks} label="Poll" />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Poll title (optional)" span>
-          <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Give your poll a name…" />
-        </Field>
-        <Field label="Question *" span>
+        {/* The question is the poll — it leads, and the optional name follows. */}
+        <Field label="Question" required span>
           <textarea
             className={textareaCls}
             rows={3}
@@ -1329,6 +1527,9 @@ function PollForm({
             onChange={e => set({ pollQuestion: e.target.value })}
             placeholder="Ask your audience something…"
           />
+        </Field>
+        <Field label="Poll title (optional)" span>
+          <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Give your poll a name…" />
         </Field>
 
         <div className="sm:col-span-2 space-y-2">
@@ -1345,6 +1546,7 @@ function PollForm({
                 <button
                   type="button"
                   onClick={() => setPollOptions(prev => prev.filter((_, j) => j !== i))}
+                  aria-label={`Remove option ${i + 1}`}
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-white/40 transition hover:bg-white/[0.08] hover:text-white/70"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -1482,10 +1684,10 @@ function ChartForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fi
             <option value="pie" className="bg-[#0D0D0F]">Pie chart</option>
           </select>
         </Field>
-        <Field label="Labels (comma-separated)" span>
+        <Field label="Labels (comma-separated)" required span>
           <input className={inputCls} value={f.chartLabels} onChange={e => set({ chartLabels: e.target.value })} placeholder="Jan, Feb, Mar, Apr…" />
         </Field>
-        <Field label="Values (comma-separated)" span>
+        <Field label="Values (comma-separated)" required span>
           <input className={inputCls} value={f.chartValues} onChange={e => set({ chartValues: e.target.value })} placeholder="120, 240, 80, 310…" />
         </Field>
       </div>
@@ -1646,18 +1848,25 @@ function DocumentForm({ fields: f, set, fileRef }: { fields: FieldState; set: (p
                 <p className="truncate text-sm font-medium text-white">{f.file.name}</p>
                 <p className="mt-0.5 text-[11px] text-white/40">{f.file.type || 'file'} · {formatBytes(f.file.size)}</p>
               </div>
-              <button type="button" onClick={() => { set({ file: null }); if (fileRef.current) fileRef.current.value = ''; }} className="ml-3 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-white/60 hover:text-white">Remove</button>
+              <button
+                type="button"
+                onClick={() => { set({ file: null }); if (fileRef.current) fileRef.current.value = ''; }}
+                aria-label={`Remove ${f.file.name}`}
+                className="ml-3 shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-xs text-white/60 transition hover:bg-white/[0.09] hover:text-white"
+              >
+                Remove
+              </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.15] bg-white/[0.02] py-8 text-center transition hover:border-white/25 hover:bg-white/[0.04]"
-            >
-              <Upload className="h-6 w-6 text-white/30" />
-              <span className="text-sm font-medium text-white/50">Click to upload a file</span>
-              <span className="text-[11px] text-white/25">PDF, DOCX, Images and more · 15 MB max</span>
-            </button>
+            /* Same picker and same `file` field — the shared empty state just
+               adds drag & drop and matches every other uploader in the wizard.
+               No accept filter: this input takes any file type, as before. */
+            <MediaDropZone
+              title="Attach a file"
+              hint="Drag & drop a file here or choose from your device · PDF, DOCX, Images and more · 15 MB max"
+              onChoose={() => fileRef.current?.click()}
+              onFiles={files => set({ file: files[0] })}
+            />
           )}
         </div>
 
@@ -1816,10 +2025,10 @@ function ResumeForm({ resume: r, setResume, isAuthenticated, resumeRef, avatarRe
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Display name *">
+        <Field label="Display name" required>
           <input className={inputCls} value={r.displayName} onChange={e => set({ displayName: e.target.value })} placeholder="Kushagra Sharma" />
         </Field>
-        <Field label="Category *">
+        <Field label="Category" required>
           <select className={selectCls} value={r.category} onChange={e => set({ category: e.target.value })}>
             {RESUME_CATEGORIES.map(cat => (
               <option key={cat} value={cat} className="bg-[#0D0D0F]">{cat}</option>
@@ -1891,49 +2100,45 @@ function ProductForm({
     <div className="space-y-4">
       <SectionHeader icon={Package} label="Product listing (e-commerce)" />
 
-      {/* Product images */}
+      {/* Name first — "what is this?" before its pictures. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Product name" required span>
+          <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Wireless Noise-Cancelling Headphones" />
+        </Field>
+      </div>
+
+      {/* Product images — same state, same setter, same 6-photo cap and MAIN
+          badge as before; only the presentation is now the shared one, which
+          also brings drag & drop and a remove control that works on touch. */}
       <div>
         <label className="mb-1.5 block text-[12px] font-medium text-white/55">
           Product Images{productImages.length > 0 ? ` (${productImages.length}/6)` : ' — up to 6'}
         </label>
         {productImages.length < 6 && (
-          <button
-            type="button"
-            onClick={() => productImagesRef.current?.click()}
-            className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.15] bg-white/[0.02] py-6 text-center transition hover:border-white/25 hover:bg-white/[0.04]"
-          >
-            <Upload className="h-5 w-5 text-white/30" />
-            <span className="text-sm font-medium text-white/50">Click to add product images</span>
-            <span className="text-[11px] text-white/25">PNG, JPG, WebP · up to 6 photos</span>
-          </button>
+          <MediaDropZone
+            title={productImages.length === 0 ? 'Add product images' : `Add more (${productImages.length}/6)`}
+            hint="Drag & drop images here or choose from your device · PNG, JPG, WebP · up to 6 photos"
+            onChoose={() => productImagesRef.current?.click()}
+            accept={file => file.type.startsWith('image/')}
+            onFiles={files => setProductImages(prev => [...prev, ...files].slice(0, 6))}
+          />
         )}
         {productImages.length > 0 && (
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {productImages.map((img, i) => {
-              const url = URL.createObjectURL(img);
-              return (
-                <div key={i} className="relative group aspect-square rounded-xl overflow-hidden border border-white/[0.10]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setProductImages(prev => prev.filter((_, j) => j !== i))}
-                    className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white/80 opacity-0 group-hover:opacity-100 transition hover:bg-red-500/80"
-                  >
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                  {i === 0 && <div className="absolute bottom-1 left-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white/70">MAIN</div>}
-                </div>
-              );
-            })}
+          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {productImages.map((img, i) => (
+              <MediaTile
+                key={`${img.name}-${img.size}-${i}`}
+                file={img}
+                badge={i === 0 ? 'MAIN' : undefined}
+                oversizeLimit={MAX_PUBLIC_IMAGE_BYTES}
+                onRemove={() => setProductImages(prev => prev.filter((_, j) => j !== i))}
+              />
+            ))}
           </div>
         )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Product name *" span>
-          <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Wireless Noise-Cancelling Headphones" />
-        </Field>
         <Field label="Description" span>
           <textarea className={textareaCls} rows={4} value={f.content} onChange={e => set({ content: e.target.value })} placeholder="What does this product do? What problem does it solve? Who is it for?" />
         </Field>
@@ -2029,7 +2234,7 @@ function HackathonForm({ fields: f, set }: { fields: FieldState; set: (p: Partia
     <div className="space-y-4">
       <SectionHeader icon={Terminal} label="Hackathon / coding sprint" />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Hackathon name *" span>
+        <Field label="Hackathon name" required span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="HackIndia 2026, Build for Bharat…" />
         </Field>
         <Field label="Problem statement / brief" span>
@@ -2088,10 +2293,10 @@ function GigForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fiel
     <div className="space-y-4">
       <SectionHeader icon={Zap} label="Gig / freelance brief" />
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="What do you need done? *" span>
+        <Field label="What do you need done?" required span>
           <textarea className={textareaCls} rows={5} value={f.gigSummary} onChange={e => set({ gigSummary: e.target.value })} placeholder="Describe the work, context, and what success looks like…" />
         </Field>
-        <Field label="Gig title (auto-generated if empty)" span>
+        <Field label="Gig title" required span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Build a React dashboard, Logo design for startup…" />
         </Field>
         {/* Apply URL — prominent placement */}
@@ -2206,7 +2411,7 @@ function VideoForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fi
         <Field label="Video title" span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Full-stack tutorial, Conference talk, Product demo…" />
         </Field>
-        <Field label="Video URL *" span>
+        <Field label="Video URL" required span>
           <div className="relative">
             <Video className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/25" />
             <input
@@ -2405,22 +2610,10 @@ function ThumbnailSection({
   setPostImages?: React.Dispatch<React.SetStateAction<File[]>>;
 }) {
   const [urlError, setUrlError] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const isPost = category === 'post';
 
-  // For non-post: resolve preview from file or url
-  const uploadPreview = !isPost && thumbnailFile ? URL.createObjectURL(thumbnailFile) : null;
-  const hasPreview = isPost
-    ? (postImages?.length ?? 0) > 0
-    : !!(uploadPreview || (thumbnailMode === 'url' && thumbnailUrlInput.trim() && !urlError));
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (isPost) return; // post has its own uploader
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) onFileChange(file);
-  };
+  // Created once per file and revoked on change — see useObjectUrl.
+  const uploadPreview = useObjectUrl(!isPost ? thumbnailFile : null);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0d0d11]">
@@ -2477,50 +2670,30 @@ function ThumbnailSection({
       {/* ── body ── */}
       <div className="p-3 sm:p-4">
 
-        {/* POST: grid image picker */}
+        {/* POST: multi-image picker. Same 6-image cap and same state setter. */}
         {isPost && postImages !== undefined && postImagesRef !== undefined && setPostImages !== undefined && (
           <div className="space-y-3">
             {(postImages?.length ?? 0) < 6 && (
-              <button
-                type="button"
-                onClick={() => postImagesRef.current?.click()}
-                className="group flex w-full items-center justify-center gap-3 rounded-xl border border-dashed border-white/[0.13] bg-white/[0.015] py-5 transition hover:border-white/25 hover:bg-white/[0.03]"
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.10] bg-white/[0.05] transition group-hover:bg-white/[0.09]">
-                  <Upload className="h-4 w-4 text-white/35 transition group-hover:text-white/60" />
-                </div>
-                <div className="text-left">
-                  <p className="text-[13px] font-semibold text-white/50">
-                    {(postImages?.length ?? 0) === 0 ? 'Add photos' : `Add more (${postImages?.length ?? 0}/6)`}
-                  </p>
-                  <p className="text-[11px] text-white/25">PNG, JPG, GIF · up to 6 images · 5 MB each</p>
-                </div>
-              </button>
+              <MediaDropZone
+                title={(postImages?.length ?? 0) === 0 ? 'Add photos' : `Add more (${postImages?.length ?? 0}/6)`}
+                hint="Drag & drop images here or choose from your device · PNG, JPG, GIF · up to 6 · 5 MB each"
+                onChoose={() => postImagesRef.current?.click()}
+                accept={f => f.type.startsWith('image/')}
+                /* Same cap the hidden input enforces. */
+                onFiles={files => setPostImages(prev => [...prev, ...files].slice(0, 6))}
+              />
             )}
             {(postImages?.length ?? 0) > 0 && (
-              <div className="grid grid-cols-3 gap-2">
-                {postImages?.map((img, i) => {
-                  const url = URL.createObjectURL(img);
-                  return (
-                    <div key={i} className="group relative aspect-square overflow-hidden rounded-xl border border-white/[0.09]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={url} alt="" className="h-full w-full object-cover" />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 transition group-hover:opacity-100" />
-                      <button
-                        type="button"
-                        onClick={() => setPostImages(prev => prev.filter((_, j) => j !== i))}
-                        className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/80 text-white/80 opacity-0 transition group-hover:opacity-100 hover:bg-red-500/80"
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                      {i === 0 && (
-                        <div className="absolute bottom-1.5 left-1.5">
-                          <span className="rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white/70">COVER</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {postImages?.map((img, i) => (
+                  <MediaTile
+                    key={`${img.name}-${img.size}-${i}`}
+                    file={img}
+                    badge={i === 0 ? 'COVER' : undefined}
+                    oversizeLimit={MAX_PUBLIC_IMAGE_BYTES}
+                    onRemove={() => setPostImages(prev => prev.filter((_, j) => j !== i))}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -2533,69 +2706,43 @@ function ThumbnailSection({
               /* ── preview ── */
               <div className="group relative overflow-hidden rounded-xl border border-white/[0.10]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={uploadPreview} alt="Cover preview" className="h-44 w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />
-                {/* gradient overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                {/* file name */}
-                <div className="absolute bottom-3 left-3 right-12">
-                  <p className="truncate text-[11px] font-semibold text-white/70">{thumbnailFile?.name}</p>
-                  <p className="text-[10px] text-white/40">{thumbnailFile ? formatBytes(thumbnailFile.size) : ''}</p>
+                <img src={uploadPreview} alt="Cover preview" className="h-44 w-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                <div className="absolute bottom-3 left-3 right-24">
+                  <p className="truncate text-[11px] font-semibold text-white/80">{thumbnailFile?.name}</p>
+                  <p className="text-[10px] text-white/50">{thumbnailFile ? formatBytes(thumbnailFile.size) : ''}</p>
                 </div>
-                {/* remove */}
+                {/* Controls stay visible on touch, where there is no hover. */}
                 <button
                   type="button"
                   onClick={() => onFileChange(null)}
-                  className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/70 text-white/70 opacity-0 transition group-hover:opacity-100 hover:bg-red-500/80 hover:text-white"
+                  aria-label="Remove cover image"
+                  className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/75 text-white/80 transition duration-150 hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 motion-reduce:transition-none"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
-                {/* change label */}
                 <button
                   type="button"
                   onClick={() => thumbnailRef.current?.click()}
-                  className="absolute bottom-3 right-3 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white/60 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 hover:text-white"
+                  className="absolute bottom-3 right-3 rounded-lg border border-white/20 bg-black/70 px-2.5 py-1 text-[11px] font-semibold text-white/75 transition duration-150 hover:bg-white/15 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 motion-reduce:transition-none"
                 >
                   Change
                 </button>
+                {thumbnailFile && thumbnailFile.size > MAX_THUMBNAIL_BYTES && (
+                  <p className="absolute left-3 top-3 rounded-md bg-red-500/85 px-2 py-1 text-[10px] font-semibold text-white">
+                    Over {formatBytes(MAX_THUMBNAIL_BYTES)}
+                  </p>
+                )}
               </div>
             ) : (
               /* ── drop zone ── */
-              <div
-                onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                className={`relative overflow-hidden rounded-xl border border-dashed transition-all ${
-                  isDragging
-                    ? 'border-white/40 bg-white/[0.06]'
-                    : 'border-white/[0.13] bg-white/[0.015] hover:border-white/25 hover:bg-white/[0.03]'
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => thumbnailRef.current?.click()}
-                  className="flex w-full items-center gap-3 px-4 py-4 text-left"
-                >
-                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all ${
-                    isDragging ? 'border-white/25 bg-white/10' : 'border-white/[0.10] bg-white/[0.05]'
-                  }`}>
-                    <Upload className={`h-4 w-4 transition ${isDragging ? 'text-white/70' : 'text-white/30'}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-white/50">
-                      {isDragging ? 'Drop to set cover image' : 'Upload cover image'}
-                    </p>
-                    <p className="text-[11px] text-white/25 mt-0.5">
-                      Recommended {THUMB_RECOMMENDED_W}×{THUMB_RECOMMENDED_H}px · PNG, JPG, WebP · max 2 MB
-                    </p>
-                    <p className="text-[10.5px] text-white/18 mt-1 leading-relaxed">
-                      Only shown in the homepage feed if a cover image is uploaded
-                    </p>
-                  </div>
-                </button>
-                {isDragging && (
-                  <div className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-inset ring-white/20" />
-                )}
-              </div>
+              <MediaDropZone
+                title="Add cover image"
+                hint={`Drag & drop an image here or choose from your device · PNG, JPG, WebP · max ${formatBytes(MAX_THUMBNAIL_BYTES)} · recommended ${THUMB_RECOMMENDED_W}×${THUMB_RECOMMENDED_H}px`}
+                onChoose={() => thumbnailRef.current?.click()}
+                accept={f => f.type.startsWith('image/')}
+                onFiles={files => onFileChange(files[0])}
+              />
             )}
           </>
         )}
@@ -2659,6 +2806,311 @@ function ThumbnailSection({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A preview URL for a File that is created once and revoked on unmount.
+ *
+ * The previous inline `URL.createObjectURL(file)` ran on every render, minting
+ * a fresh blob URL each time and never revoking any of them — the browser held
+ * every one for the life of the page.
+ */
+function useObjectUrl(file: File | null | undefined): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!file) { setUrl(null); return; }
+    const next = URL.createObjectURL(file);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [file]);
+  return url;
+}
+
+/**
+ * One selected file. Images show their thumbnail; anything else falls back to
+ * an icon with the name and size, so a non-image never renders as a broken
+ * picture.
+ */
+function MediaTile({ file, badge, onRemove, oversizeLimit }: {
+  file: File;
+  badge?: string;
+  onRemove: () => void;
+  /** Existing publish-time limit for this slot, used for an early heads-up. */
+  oversizeLimit?: number;
+}) {
+  const url = useObjectUrl(file);
+  const isImage = file.type.startsWith('image/');
+  const oversize = oversizeLimit !== undefined && file.size > oversizeLimit;
+
+  return (
+    <div className="group relative">
+      <div
+        className={`relative aspect-square overflow-hidden rounded-xl border transition-colors duration-150 motion-reduce:transition-none ${
+          oversize ? 'border-red-500/40' : 'border-white/[0.09]'
+        }`}
+      >
+        {isImage && url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt={file.name} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 bg-white/[0.03] px-2 text-center">
+            <FileText className="h-5 w-5 text-white/30" />
+            <p className="w-full truncate text-[10px] font-medium text-white/45">{file.name}</p>
+            <p className="text-[9.5px] text-white/25">{formatBytes(file.size)}</p>
+          </div>
+        )}
+
+        {badge && (
+          <span className="absolute bottom-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-bold text-white/70">
+            {badge}
+          </span>
+        )}
+
+        {/* Always tappable on touch; fades in on pointer devices. */}
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${file.name}`}
+          className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-black/75 text-white/80 transition duration-150 hover:bg-red-500/80 hover:text-white sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 motion-reduce:transition-none"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Surfaces the EXISTING publish-time size rule next to the file that
+          breaks it. Nothing is blocked here — publish() stays the enforcer. */}
+      {oversize && (
+        <p className="mt-1 text-[10px] leading-snug text-red-400/90">
+          Over {formatBytes(oversizeLimit!)} — remove or replace to publish.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The empty state. Deliberately one quiet dashed panel: an icon, a line of
+ * instruction, the accepted formats, and a button.
+ */
+function MediaDropZone({ title, hint, onChoose, onFiles, accept }: {
+  title: string;
+  hint: string;
+  onChoose: () => void;
+  onFiles: (files: File[]) => void;
+  accept?: (f: File) => boolean;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const depth = useRef(0);   // dragenter/leave fire per child; count them
+
+  return (
+    <div
+      onDragEnter={e => { e.preventDefault(); depth.current += 1; setDragging(true); }}
+      onDragOver={e => e.preventDefault()}
+      onDragLeave={e => { e.preventDefault(); depth.current -= 1; if (depth.current <= 0) { depth.current = 0; setDragging(false); } }}
+      onDrop={e => {
+        e.preventDefault();
+        depth.current = 0;
+        setDragging(false);
+        const files = Array.from(e.dataTransfer.files ?? []).filter(f => !accept || accept(f));
+        if (files.length) onFiles(files);
+      }}
+      /* Styling comes from .publish-dropzone — see the note in globals.css. */
+      data-dragging={dragging}
+      className="publish-dropzone rounded-xl"
+    >
+      <div className="flex flex-col items-center gap-2.5 px-4 py-4 text-center sm:flex-row sm:gap-3.5 sm:py-5 sm:text-left">
+        <span
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors duration-150 motion-reduce:transition-none ${
+            dragging ? 'border-white/25 bg-white/10' : 'border-white/[0.10] bg-white/[0.05]'
+          }`}
+        >
+          <Upload className={`h-4 w-4 transition-colors duration-150 motion-reduce:transition-none ${dragging ? 'text-white/70' : 'text-white/35'}`} />
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-white/60">{dragging ? 'Drop to add' : title}</p>
+          <p className="mt-0.5 text-[11px] leading-snug text-white/28">{hint}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onChoose}
+          className="shrink-0 whitespace-nowrap rounded-xl border border-white/[0.12] bg-white/[0.06] px-3.5 py-2 text-[12px] font-semibold text-white/70 transition duration-150 hover:bg-white/[0.11] hover:text-white motion-reduce:transition-none"
+        >
+          Choose files
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Feed-card preview.
+ *
+ * Mirrors the hierarchy the real cards use — category badge, title, body,
+ * category-specific metadata, actions — from the values currently in the form.
+ * It reads state; it never writes, so opening Preview can never alter a draft.
+ */
+function PublishPreviewCard({
+  category, activeCat, fields: f, resume: r,
+  thumbnailFile, thumbnailUrlInput, thumbnailMode,
+  postImages, productImages, pollOptions, tutorialSteps,
+  authorName, authorAvatar, authorContext, cta,
+}: {
+  category: CategoryId | null;
+  activeCat: (typeof CATEGORIES)[number] | null | undefined;
+  fields: FieldState;
+  resume: typeof blankResume;
+  thumbnailFile: File | null;
+  thumbnailUrlInput: string;
+  thumbnailMode: 'upload' | 'url';
+  postImages: File[];
+  productImages: File[];
+  pollOptions: string[];
+  tutorialSteps: { title: string; desc: string; imageUrl: string }[];
+  /** Identity comes from the session/business page the composer already has —
+      no lookup, no client-supplied id. */
+  authorName: string;
+  authorAvatar?: string | null;
+  authorContext?: string | null;
+  cta: PostCta | null;
+}) {
+  // Cover: uploaded file, pasted URL, or the first gallery image.
+  const gallery = category === 'product' ? productImages : postImages;
+  const coverFile = thumbnailFile ?? (gallery.length > 0 ? gallery[0] : null);
+  const coverObjectUrl = useObjectUrl(coverFile);
+  const cover = thumbnailMode === 'url' && thumbnailUrlInput.trim()
+    ? thumbnailUrlInput.trim()
+    : coverObjectUrl;
+
+  const c = CAT_COLORS[activeCat?.color ?? 'neutral'] ?? CAT_COLORS['neutral'];
+  const Icon = activeCat?.icon ?? FileText;
+
+  const title =
+    category === 'resume' ? r.displayName
+    : category === 'poll' ? (f.pollQuestion || f.title)
+    : category === 'post' ? (f.postCaption || f.title)
+    : f.title;
+
+  const body =
+    category === 'article' ? f.content
+    : category === 'post' ? ''
+    : category === 'gig' ? f.gigSummary
+    : (f.notes || f.description || f.content || f.excerpt);
+
+  /* Metadata mirrors what each card type shows in the feed. Only entries the
+     user actually filled in are rendered. */
+  const meta: string[] = (() => {
+    switch (category) {
+      case 'job':       return [f.jobLocation, f.jobType, f.salary];
+      case 'event':     return [f.eventDate, f.eventTime, f.eventVenue || f.eventMode];
+      case 'product':   return [f.price, f.notes];
+      case 'tutorial':  return [`${tutorialSteps.filter(t => t.title.trim()).length} steps`];
+      case 'gig':       return [f.gigBudget, f.gigTimeline, f.gigLocation];
+      case 'video':     return [f.videoDuration, f.videoSource];
+      case 'poll':      return [`${pollOptions.filter(Boolean).length} options`, f.pollDuration && `${f.pollDuration} days`];
+      case 'news':      return [f.publisher, f.newsDate];
+      case 'document':  return [f.file ? (f.file.type.split('/').pop() || 'file').toUpperCase() : f.textFormat?.toUpperCase()];
+      case 'hackathon': return [f.hackMode, f.hackPrize, f.hackStartDate];
+      case 'milestone': return [f.milestoneMetric, f.milestoneContext];
+      default:          return [];
+    }
+  })().filter((x): x is string => Boolean(x && String(x).trim()));
+
+  const tags = f.tags.split(',').map(t => t.trim()).filter(Boolean).slice(0, 3);
+
+  return (
+    <article
+      className="overflow-hidden rounded-2xl border border-white/[0.09] bg-white/[0.025]"
+      style={{ ['--cat-accent' as string]: c.accent }}
+      aria-label="Preview of your publication"
+    >
+      {cover && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cover} alt="" className="h-40 w-full object-cover" />
+      )}
+      <div className="p-4">
+        {/* Author row — the same hierarchy the real feed cards use. */}
+        <div className="flex items-start gap-2.5">
+          {authorAvatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={authorAvatar} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+          ) : (
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold text-white/70">
+              {(authorName || 'You').charAt(0).toUpperCase()}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] font-semibold leading-tight text-white/90">{authorName || 'You'}</p>
+            {authorContext && <p className="mt-0.5 truncate text-[10.5px] leading-tight text-white/35">{authorContext}</p>}
+            <p className="mt-0.5 flex items-center gap-1.5 text-[10.5px] leading-tight text-white/30">
+              <span className={`inline-flex items-center gap-1 ${c.icon}`}>
+                <Icon className="h-3 w-3" />
+                {activeCat?.label ?? 'Publication'}
+              </span>
+              <span aria-hidden className="opacity-50">·</span>
+              {f.visibility === 'private' ? 'Private' : 'Public'}
+              <span aria-hidden className="opacity-50">·</span>
+              just now
+            </p>
+          </div>
+        </div>
+
+        <h4 className="mt-3 text-[15px] font-bold leading-snug tracking-[-0.01em] text-white">
+          {title?.trim() || <span className="text-white/30">Untitled</span>}
+        </h4>
+
+        {body?.trim() && (
+          <p className="mt-1.5 line-clamp-3 text-[12.5px] leading-relaxed text-white/50">{body}</p>
+        )}
+
+        {category === 'poll' && pollOptions.filter(Boolean).length > 0 && (
+          <ul className="mt-3 space-y-1.5">
+            {pollOptions.filter(Boolean).map((o, i) => (
+              <li key={i} className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[12px] text-white/65">{o}</li>
+            ))}
+          </ul>
+        )}
+
+        {meta.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/40">
+            {meta.map((m, i) => (
+              <span key={i} className="flex items-center gap-2">
+                {i > 0 && <span aria-hidden className="opacity-40">·</span>}{m}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {tags.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {tags.map(t => (
+              <span key={t} className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10.5px] text-white/45">#{t}</span>
+            ))}
+          </div>
+        )}
+
+        {gallery.length > 1 && (
+          <p className="mt-3 text-[10.5px] text-white/30">+{gallery.length - 1} more image{gallery.length > 2 ? 's' : ''}</p>
+        )}
+
+        {/* CTA — label only. The raw URL is never surfaced once a label exists. */}
+        {cta && (
+          <span className="mt-3 inline-flex items-center gap-1.5 rounded-[11px] border border-white/[0.14] bg-white/[0.08] px-3.5 py-2 text-[12.5px] font-semibold text-white/85">
+            {cta.label} <span aria-hidden>&rarr;</span>
+          </span>
+        )}
+
+        {/* Actions, as they appear on a real card. No counts are shown —
+            a brand-new post has no engagement, and inventing some would lie. */}
+        <div aria-hidden className="mt-3.5 flex items-center gap-5 border-t border-white/[0.06] pt-2.5 text-[11.5px] font-semibold text-white/30">
+          <span className="inline-flex items-center gap-1.5"><Heart className="h-3.5 w-3.5" /> Like</span>
+          <span className="inline-flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Comment</span>
+          <span className="inline-flex items-center gap-1.5"><Share2 className="h-3.5 w-3.5" /> Share</span>
+        </div>
+      </div>
+    </article>
   );
 }
 

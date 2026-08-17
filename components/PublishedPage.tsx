@@ -1560,7 +1560,11 @@ function GigCard({ item }: { item: PublishedItem }) {
   const [err, setErr] = useState('');
 
   const g = item.gigData;
-  if (!g) return null;
+  /* Gigs published through the wizard carry no gigData (that comes from the gigs
+     service). Without this fallback such a gig renders nothing at all, breaking
+     "content appears in the feed using its category-specific card". The shared
+     card already shows the gig's price/delivery/location metadata. */
+  if (!g) return <PublishedCard item={item} searchQuery="" />;
 
   const engLabel = (e: string) => ({ one_time: 'One-time', ongoing: 'Ongoing', retainer: 'Retainer' }[e] ?? e);
 

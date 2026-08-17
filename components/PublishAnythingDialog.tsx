@@ -225,6 +225,7 @@ function sectionForStep(category: string | null, step: StepId): FormSection {
 }
 
 type StepExtras = {
+  contentMode: ContentMode;
   postImages: File[];
   pollOptions: string[];
   surveyQuestions: { text: string; type: string }[];
@@ -277,9 +278,14 @@ function missingForStep(
 
   /* step === 'details' */
   switch (category) {
-    case 'post':
-      if (!has(f.postCaption) && extras.postImages.length === 0) miss.push('a caption or at least one photo');
+    case 'post': {
+      /* the PDF's Photo / Caption / Both choice decides what is required */
+      const wantsPhoto = extras.contentMode !== 'caption';
+      const wantsCaption = extras.contentMode !== 'photo';
+      if (wantsCaption && !has(f.postCaption)) miss.push('a caption');
+      if (wantsPhoto && extras.postImages.length === 0) miss.push('at least one photo');
       break;
+    }
     case 'poll':
       if (!has(f.pollQuestion)) miss.push('Question');
       if (extras.pollOptions.filter(o => o.trim()).length < 2) miss.push('at least two options');
@@ -944,7 +950,7 @@ export default function PublishAnythingDialog({
   const isReview    = step === 'form' && activeStep === 'review';
   const formSection = sectionForStep(category, activeStep);
   const stepMissing = step === 'form'
-    ? missingForStep(category, activeStep, fields, { postImages, pollOptions, surveyQuestions, tutorialSteps, resume })
+    ? missingForStep(category, activeStep, fields, { contentMode, postImages, pollOptions, surveyQuestions, tutorialSteps, resume })
     : [];
   /* total = content mode + format picker + the category's own steps */
   const totalSteps   = flowSteps.length + 2;
@@ -1692,7 +1698,7 @@ function PostForm({
               })}
             </div>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

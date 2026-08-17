@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserNames } from '@/lib/server/users';
 import { getFileTransferById, updateFileTransfer } from '@/lib/server/file-transfers';
 import { getAuthSession } from '@/lib/server/auth';
+import { getProfileAvatars } from '@/lib/server/user-profiles';
+import { createSocialProofBuilder } from '@/lib/server/social-proof';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,6 +62,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       ? (await getUserNames([t.uploadedByUserId]).catch(() => new Map<string, string>())).get(t.uploadedByUserId)
       : undefined;
     const authorName = canonicalName || t.uploadedByName || t.uploadedBy?.split('@')[0] || 'Docrud User';
+
+    /* Social proof for this one post. Reached only after the public-visibility
+       gate above, so a private/revoked/removed post never reports who engaged.
+       Cost: two follow-graph queries plus one bounded avatar batch (≤6 ids),
+       and nothing at all for logged-out viewers or an empty graph. */
+    const proofBuilder = await createSocialProofBuilder(viewerIdentifier).catch(() => null);
+    const proofDraft = proofBuilder ? proofBuilder.draft(t) : null;
+    const proofAvatars = proofBuilder && proofDraft
+      ? await getProfileAvatars(proofBuilder.previewIds([proofDraft])).catch(() => new Map<string, string | null>())
+      : new Map<string, string | null>();
+
     return NextResponse.json({
       id: t.id,
       shareId: t.shareId,
@@ -81,6 +94,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       trendedByViewer: viewerIdentifier ? (t.trendedBy ?? []).includes(viewerIdentifier) : false,
       interestedCount: t.interestedCount ?? 0,
       interestedByViewer: viewerIdentifier ? (t.interestedBy ?? []).includes(viewerIdentifier) : false,
+      socialProof: proofBuilder ? proofBuilder.hydrate(proofDraft, proofAvatars) ?? undefined : undefined,
       commentsCount: t.commentsCount ?? 0,
       comments: (t.comments ?? []).map((c) => ({
         id: c.id,

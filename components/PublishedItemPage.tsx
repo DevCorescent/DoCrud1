@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { isInternalCtaUrl } from '@/lib/cta';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
+import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -105,6 +106,8 @@ type PublishedItem = {
   videoUrl?: string;
   thumbnailUrl?: string;
   reactions?: import('@/components/social/PostReactionButton').PostReactionSummary;
+  /** People from the viewer's follow graph who engaged — arrives with the item. */
+  socialProof?: import('@/lib/social-proof').PostSocialProof | null;
   cta?: { label: string; url: string };
   likesCount?: number;
   likedByViewer?: boolean;
@@ -1839,6 +1842,15 @@ export default function PublishedItemPage({ id }: { id: string }) {
             {item.category === 'video'     && <VideoDetailContent     {...sharedCatProps} />}
             {item.category === 'milestone' && <MilestoneDetailContent {...sharedCatProps} />}
             {item.category === 'tutorial'  && <TutorialDetailContent  {...sharedCatProps} />}
+
+            {/* Social proof — the new-category layouts render their own body, so
+                the row is attached here rather than to the classic byline row. */}
+            <PostSocialProofRow
+              postId={item.id}
+              socialProof={item.socialProof}
+              onOpenComments={() => commentRef.current?.focus()}
+              className="px-4 sm:px-0"
+            />
           </div>
         </div>
       )}
@@ -1986,6 +1998,15 @@ export default function PublishedItemPage({ id }: { id: string }) {
                 </button>
               </div>
             </div>
+
+            {/* Social proof — who from the viewer's graph engaged. Same modal
+                and same comment box as the controls above it. */}
+            <PostSocialProofRow
+              postId={item.id}
+              socialProof={item.socialProof}
+              onOpenComments={() => commentRef.current?.focus()}
+              className="mt-3"
+            />
 
             {/* mobile: stats (hidden on lg+, shown in sidebar there) */}
             {item.stats && item.stats.length > 0 && (

@@ -36,6 +36,8 @@ import {
 } from 'lucide-react';
 import { REACTION_META, type ReactionType, type ReactionSummary } from '@/lib/reactions';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
+import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
+import type { PostSocialProof } from '@/lib/social-proof';
 
 /* ─── types ─────────────────────────────────────────────────────── */
 export type FeedItem = {
@@ -55,6 +57,8 @@ export type FeedItem = {
   likesCount?: number;
   likedByViewer?: boolean;
   reactions?: ReactionSummary & { previewAvatars?: string[] };
+  /** People from the viewer's follow graph who engaged — arrives with the feed. */
+  socialProof?: PostSocialProof | null;
   trendCount?: number;
   trendedByViewer?: boolean;
   commentsCount?: number;
@@ -723,6 +727,14 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
 
         {/* Reaction summary — compact: top three glyphs plus the total. */}
         <PostReactionSummaryBar c={rx} postId={item.id} fmtCount={fmtCount} />
+
+        {/* Social proof — reuses the existing who-reacted modal and the existing
+            comments section; renders nothing when the viewer's graph is absent. */}
+        <PostSocialProofRow
+          postId={item.id}
+          socialProof={item.socialProof}
+          onOpenComments={() => setCommentsOpen(true)}
+        />
 
         {/* engagement row */}
         <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.preventDefault()}>

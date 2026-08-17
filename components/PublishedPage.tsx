@@ -7,6 +7,8 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { PresenceDot } from '@/components/PresenceBadge';
+import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { shouldShowFeedTitle } from '@/components/feed/feedCardTheme';
 const PublishAnythingDialog = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import {
   ArrowLeft,
@@ -1298,244 +1300,178 @@ function UpraiseMiniButton({ itemId, uploadedByUserId, category }: { itemId: str
   );
 }
 
-/* ─── instagram-style feed post card ────────────────────────────── */
+/* ─── feed post card (Task 9 shared shell) ───────────────────────── */
 function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery: string }) {
   const [saved, toggleSaved] = useBookmark(item.id, item.category);
   const [modal, setModal]    = useState<ModalVariant | null>(null);
-  const [liked, setLiked]    = useState(item.likedByViewer ?? false);
   const rx1 = usePostReactions(
     item.id,
     { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: (item as { reactions?: import('@/components/social/PostReactionButton').PostReactionSummary }).reactions },
     { live: Boolean(item.isReal) },
   );
-  const [likeCount, setLikeCount] = useState(item.likesCount ?? 0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(item.commentsCount ?? 0);
-  const likeInFlight = useRef(false);
+  const cat = item.category;
+  /* Preserve pre-Task-9 URL construction on /published cards. */
+  const detailHref = `/published/${item.id}`;
 
-  useEffect(() => { setLiked(item.likedByViewer ?? false); }, [item.likedByViewer]);
-  useEffect(() => { setLikeCount(item.likesCount ?? 0); }, [item.likesCount]);
   useEffect(() => { if (item.commentsCount !== undefined) setCommentCount(item.commentsCount); }, [item.commentsCount]);
 
-  const TabIcon = TABS.find(t => t.id === item.category)?.icon ?? Newspaper;
-  const cat     = item.category;
-
-  const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
-  const initials    = displayName.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
-  // Route to company page if published by a business, else to user profile
-  const profileHref = item.businessPageSlug
-    ? `/businesses/${item.businessPageSlug}`
-    : item.uploadedByUserId ? `/u/${item.uploadedByUserId}` : null;
-
-  /* button classes — clean, borderless style */
   const primCls  = 'inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-4 text-[12px] font-bold text-[#0D0D0F] transition hover:bg-white/90 active:scale-[0.98]';
   const ghostCls = 'inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.10] px-3.5 text-[12px] font-semibold text-white/55 transition hover:border-white/[0.20] hover:text-white/90';
   const iconCls  = 'flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition hover:bg-white/[0.06] hover:text-white/70';
 
-  /* shared avatar inner content — image when available, else initials */
-  const avatarInner = item.avatarUrl
-    ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" />
-    : (initials.slice(0, 2) || <TabIcon className="h-3.5 w-3.5 opacity-60" />);
+  const showTitle = shouldShowFeedTitle(cat, item.title);
 
   return (
     <>
       {modal && <ActionModal variant={modal} itemTitle={item.title} itemId={item.id} uploadedByUserId={item.uploadedByUserId} onClose={() => setModal(null)} />}
 
-      <article className="group py-5 px-4 sm:px-0">
-        {/* ── header ── */}
-        <div className="flex items-center gap-3 mb-3.5">
-          {profileHref ? (
-            <Link href={profileHref} onClick={e => e.stopPropagation()} className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold ${AVATAR_CLS} hover:opacity-80 transition`}>
-              {avatarInner}
-            </Link>
-          ) : (
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold ${AVATAR_CLS}`}>
-              {avatarInner}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              {profileHref ? (
-                <Link href={profileHref} onClick={e => e.stopPropagation()} className="text-[13.5px] font-semibold text-white leading-tight truncate hover:text-white/80 transition">
-                  {displayName}
-                </Link>
-              ) : (
-                <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
-              )}
-              {/* Presence — green only while the author is genuinely online now. */}
-            <PresenceDot userId={item.uploadedByUserId} size="sm" />
-            </div>
-            <p className="text-[11px] text-white/35 mt-0.5 truncate">
-              {item.badge} · {timeAgo(item.postedAt)}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={e => { e.stopPropagation(); toggleSaved(); }}
-              className={`transition ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
-            >
-              {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-            </button>
-          </div>
-        </div>
-
-        {/* ── thumbnail — full bleed ── */}
-        {item.thumbnailUrl && (
-          <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
-          </Link>
-        )}
-
-        {/* ── content — photo posts: body only, never title ── */}
-        <Link href={`/published/${item.id}`} className="block">
-          {item.category !== 'post' && !isJunkTitle(item) && (
-            <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-              {searchQuery ? highlight(item.title, searchQuery) : item.title}
-            </h3>
-          )}
-          <BodyDisplay body={item.body} searchQuery={searchQuery} />
-        </Link>
-
-
-        {/* ── stats ── */}
-        {item.stats && (
-          <div className="flex items-center gap-5 mt-3">
-            {item.stats.slice(0, 3).map(s => (
-              <div key={s.l} className="flex items-baseline gap-1.5">
-                <span className="text-[13.5px] font-bold text-white/75 tabular-nums">{s.v}</span>
-                <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">{s.l}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* ── engagement row ── */}
-        <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.preventDefault()}>
-          {/* like */}
-          <PostReactionButton c={rx1} />
-
-          {/* comments */}
+      <PublishedFeedCard
+        item={item}
+        timeLabel={timeAgo(item.postedAt)}
+        subtitle={`${item.badge} · ${timeAgo(item.postedAt)}`}
+        detailHref={detailHref}
+        showPresence
+        headerRight={
           <button
             type="button"
-            onClick={e => { e.stopPropagation(); setCommentsOpen(v => !v); }}
-            className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${commentsOpen ? 'text-white/70' : 'text-white/30 hover:text-white/60'}`}
+            onClick={e => { e.stopPropagation(); toggleSaved(); }}
+            className={`transition ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
           >
-            <MessageSquare className="h-4 w-4" />
-            <span>{commentCount > 0 ? (commentCount >= 1000 ? `${(commentCount/1000).toFixed(1)}k` : String(commentCount)) : '0'}</span>
+            {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
           </button>
-
-          {/* trend */}
-          <TrendButton item={item} />
-
-          {/* category-specific CTA */}
-          <div className="flex items-center gap-2 ml-auto">
-            {(cat === 'news' || cat === 'article') && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('read_article', cat); }}>
-                Read <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'document' && (
-              <>
-                <button type="button" onClick={e => { e.stopPropagation(); trackCTA('download_doc', cat); window.open(`/published/${item.id}`, '_blank'); }} className={ghostCls}>
-                  <Download className="h-3.5 w-3.5" /> Download
-                </button>
-                <button type="button" onClick={e => { e.stopPropagation(); window.open(`/published/${item.id}`, '_blank'); }} className={iconCls}>
-                  <ExternalLink className="h-4 w-4" />
-                </button>
-              </>
-            )}
-            {cat === 'portfolio' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('view_portfolio', cat); }}>
-                View Work <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'announcement' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                Read <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'job' && (
-              <button type="button" onClick={e => {
-                e.stopPropagation(); trackCTA('apply_job', cat);
-                if (item.applicationUrl) {
-                  try {
-                    const raw = localStorage.getItem('pub_job_applications') || '[]';
-                    const apps = JSON.parse(raw) as Array<{itemId: string; title: string; appliedAt: number; url: string}>;
-                    apps.unshift({ itemId: item.id, title: item.title, appliedAt: Date.now(), url: item.applicationUrl });
-                    localStorage.setItem('pub_job_applications', JSON.stringify(apps.slice(0, 200)));
-                  } catch {}
-                  window.open(item.applicationUrl, '_blank', 'noopener,noreferrer');
-                  toast('Redirecting…', 'success', '💼');
-                } else setModal('apply');
-              }} className={primCls}>
-                Apply Now <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {cat === 'resume' && (
-              <>
-                <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>View Profile <ArrowRight className="h-3.5 w-3.5" /></Link>
-                <UpraiseMiniButton itemId={item.id} uploadedByUserId={item.uploadedByUserId} category={cat} />
-              </>
-            )}
-            {cat === 'product' && (() => {
-              const shopUrl  = item.body?.match(/^Shop URL:\s*(.+)$/im)?.[1]?.trim() || '';
-              const whatsapp = item.body?.match(/^WhatsApp:\s*(.+)$/im)?.[1]?.trim() || '';
-              return shopUrl ? (
-                <button type="button" onClick={e => { e.stopPropagation(); trackCTA('shop_product', cat); window.open(shopUrl, '_blank', 'noopener,noreferrer'); }} className={primCls}>
-                  Shop Now <ExternalLink className="h-3.5 w-3.5" />
-                </button>
-              ) : whatsapp ? (
-                <button type="button" onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${whatsapp.replace(/\D/g,'')}`, '_blank'); }} className={ghostCls}>
-                  <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
-                </button>
-              ) : (
-                <Link href={`/published/${item.id}`} className={primCls} onClick={e => e.stopPropagation()}>View Product <ArrowRight className="h-3.5 w-3.5" /></Link>
-              );
-            })()}
-            {cat === 'event' && (() => {
-              const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
-              return (
-                <button type="button" onClick={e => {
-                  e.stopPropagation(); trackCTA('register_event', cat);
-                  try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
-                  if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🎟️'); } else setModal('register');
-                }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
-              );
-            })()}
-            {cat === 'hackathon' && (() => {
-              const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
-              return (
-                <button type="button" onClick={e => {
-                  e.stopPropagation(); trackCTA('register_hackathon', cat);
-                  try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
-                  if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🏆'); } else setModal('register');
-                }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
-              );
-            })()}
-            {cat !== 'news' && cat !== 'article' && cat !== 'document' && cat !== 'portfolio' &&
-             cat !== 'announcement' && cat !== 'job' && cat !== 'resume' && cat !== 'product' &&
-             cat !== 'event' && cat !== 'hackathon' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                Open <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            <button type="button" onClick={e => { e.stopPropagation(); void shareItem(item.id, item.title); trackCTA('share_item', cat); }} className={iconCls}>
-              <Share2 className="h-4 w-4" />
+        }
+        renderTitle={
+          showTitle ? (
+            <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 transition-colors group-hover:text-white/85">
+              {searchQuery ? highlight(item.title, searchQuery) : item.title}
+            </h3>
+          ) : null
+        }
+        /* Preserve BodyDisplay (structured chips OR highlighted prose). */
+        renderMainBody={<BodyDisplay body={item.body} searchQuery={searchQuery} />}
+        /* BodyDisplay already owns structured metadata chips. */
+        renderMetadata={null}
+        actions={
+          <>
+            <PostReactionButton c={rx1} />
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setCommentsOpen(v => !v); }}
+              className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${commentsOpen ? 'text-white/70' : 'text-white/30 hover:text-white/60'}`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>{commentCount > 0 ? (commentCount >= 1000 ? `${(commentCount/1000).toFixed(1)}k` : String(commentCount)) : '0'}</span>
             </button>
-          </div>
-        </div>
-
-      {/* inline comment panel */}
-        {commentsOpen && item.isReal && (
-          <CardCommentPanel
-            item={item}
-            onClose={() => setCommentsOpen(false)}
-            onCommentCountChange={setCommentCount}
-          />
-        )}
-      </article>
+            <TrendButton item={item} />
+            <div className="flex items-center gap-2 ml-auto">
+              {(cat === 'news' || cat === 'article') && (
+                <Link href={detailHref} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('read_article', cat); }}>
+                  Read <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'document' && (
+                <>
+                  <button type="button" onClick={e => { e.stopPropagation(); trackCTA('download_doc', cat); window.open(detailHref, '_blank'); }} className={ghostCls}>
+                    <Download className="h-3.5 w-3.5" /> Download
+                  </button>
+                  <button type="button" onClick={e => { e.stopPropagation(); window.open(detailHref, '_blank'); }} className={iconCls}>
+                    <ExternalLink className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+              {cat === 'portfolio' && (
+                <Link href={detailHref} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('view_portfolio', cat); }}>
+                  View Work <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'announcement' && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  Read <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'job' && (
+                <button type="button" onClick={e => {
+                  e.stopPropagation(); trackCTA('apply_job', cat);
+                  if (item.applicationUrl) {
+                    try {
+                      const raw = localStorage.getItem('pub_job_applications') || '[]';
+                      const apps = JSON.parse(raw) as Array<{itemId: string; title: string; appliedAt: number; url: string}>;
+                      apps.unshift({ itemId: item.id, title: item.title, appliedAt: Date.now(), url: item.applicationUrl });
+                      localStorage.setItem('pub_job_applications', JSON.stringify(apps.slice(0, 200)));
+                    } catch {}
+                    window.open(item.applicationUrl, '_blank', 'noopener,noreferrer');
+                    toast('Redirecting…', 'success', '💼');
+                  } else setModal('apply');
+                }} className={primCls}>
+                  Apply Now <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {cat === 'resume' && (
+                <>
+                  <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>View Profile <ArrowRight className="h-3.5 w-3.5" /></Link>
+                  <UpraiseMiniButton itemId={item.id} uploadedByUserId={item.uploadedByUserId} category={cat} />
+                </>
+              )}
+              {cat === 'product' && (() => {
+                const shopUrl  = item.body?.match(/^Shop URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                const whatsapp = item.body?.match(/^WhatsApp:\s*(.+)$/im)?.[1]?.trim() || '';
+                return shopUrl ? (
+                  <button type="button" onClick={e => { e.stopPropagation(); trackCTA('shop_product', cat); window.open(shopUrl, '_blank', 'noopener,noreferrer'); }} className={primCls}>
+                    Shop Now <ExternalLink className="h-3.5 w-3.5" />
+                  </button>
+                ) : whatsapp ? (
+                  <button type="button" onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${whatsapp.replace(/\D/g,'')}`, '_blank'); }} className={ghostCls}>
+                    <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+                  </button>
+                ) : (
+                  <Link href={detailHref} className={primCls} onClick={e => e.stopPropagation()}>View Product <ArrowRight className="h-3.5 w-3.5" /></Link>
+                );
+              })()}
+              {cat === 'event' && (() => {
+                const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                return (
+                  <button type="button" onClick={e => {
+                    e.stopPropagation(); trackCTA('register_event', cat);
+                    try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
+                    if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🎟️'); } else setModal('register');
+                  }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
+                );
+              })()}
+              {cat === 'hackathon' && (() => {
+                const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                return (
+                  <button type="button" onClick={e => {
+                    e.stopPropagation(); trackCTA('register_hackathon', cat);
+                    try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
+                    if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🏆'); } else setModal('register');
+                  }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
+                );
+              })()}
+              {cat !== 'news' && cat !== 'article' && cat !== 'document' && cat !== 'portfolio' &&
+               cat !== 'announcement' && cat !== 'job' && cat !== 'resume' && cat !== 'product' &&
+               cat !== 'event' && cat !== 'hackathon' && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  Open <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              <button type="button" onClick={e => { e.stopPropagation(); void shareItem(item.id, item.title); trackCTA('share_item', cat); }} className={iconCls}>
+                <Share2 className="h-4 w-4" />
+              </button>
+            </div>
+          </>
+        }
+        footer={
+          commentsOpen && item.isReal ? (
+            <CardCommentPanel
+              item={item}
+              onClose={() => setCommentsOpen(false)}
+              onCommentCountChange={setCommentCount}
+            />
+          ) : null
+        }
+      />
     </>
   );
 }

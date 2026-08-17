@@ -1,0 +1,261 @@
+'use client';
+
+import React from 'react';
+import Link from 'next/link';
+import { Newspaper } from 'lucide-react';
+import { PresenceDot } from '@/components/PresenceBadge';
+import {
+  FEED_AVATAR_CLS,
+  FEED_TAG_CLS,
+  feedCategoryLabel,
+  shouldShowFeedTitle,
+} from '@/components/feed/feedCardTheme';
+import { FeedCardMetaChips, getFeedBodySnippet } from '@/components/feed/FeedCardMeta';
+
+export type FeedCardShellItem = {
+  id: string;
+  shareId?: string;
+  category: string;
+  badge: string;
+  title: string;
+  byline: string;
+  body: string;
+  chips?: string[];
+  stats?: { v: string; l: string }[];
+  postedAt: string;
+  thumbnailUrl?: string;
+  avatarUrl?: string;
+  uploadedByUserId?: string;
+  uploadedByName?: string;
+  businessPageSlug?: string;
+};
+
+export type PublishedFeedCardProps = {
+  item: FeedCardShellItem;
+  /** Fallback when `subtitle` is not provided. */
+  timeLabel: string;
+  /** Host-owned detail URL — do not invent shareId/id policy here. */
+  detailHref: string;
+  /** Full subtitle line under author (preserves authorMeta/badge · time). */
+  subtitle?: React.ReactNode;
+  headerRight?: React.ReactNode;
+  headerExtras?: React.ReactNode;
+  /** Override main body (e.g. BodyDisplay / BodyOrChips). Pass null to hide. */
+  renderMainBody?: React.ReactNode | null;
+  /** Override title node (e.g. search highlight). */
+  renderTitle?: React.ReactNode | null;
+  /**
+   * Metadata section. Pass `null` when main body already includes structured
+   * chips (BodyDisplay / BodyOrChips). Omit to use default FeedCardMetaChips.
+   */
+  renderMetadata?: React.ReactNode | null;
+  beforeActions?: React.ReactNode;
+  actions: React.ReactNode;
+  footer?: React.ReactNode;
+  articleClassName?: string;
+  articleProps?: React.HTMLAttributes<HTMLElement>;
+  linkContent?: boolean;
+  /** When false, author name/avatar are not links (profile feed). Default true. */
+  linkAuthor?: boolean;
+  showPresence?: boolean;
+  showBodySnippet?: boolean;
+  bodyLineClamp?: 2 | 3;
+};
+
+/**
+ * Shared feed-card shell (Task 9).
+ * Hierarchy: Category → Title → Main Content → Metadata → Actions
+ * Hosts keep existing interaction handlers and content renderers via slots.
+ */
+export function PublishedFeedCard({
+  item,
+  timeLabel,
+  detailHref,
+  subtitle,
+  headerRight,
+  headerExtras,
+  renderMainBody,
+  renderTitle,
+  renderMetadata,
+  beforeActions,
+  actions,
+  footer,
+  articleClassName = 'group py-5 px-4 sm:px-0',
+  articleProps,
+  linkContent = true,
+  linkAuthor = true,
+  showPresence = true,
+  showBodySnippet = true,
+  bodyLineClamp = 2,
+}: PublishedFeedCardProps) {
+  const cat = item.category || 'post';
+  const tagCls = FEED_TAG_CLS[cat] ?? 'bg-white/[0.07] text-white/45 border-white/[0.08]';
+  const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
+  const initials = displayName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
+  const profileHref = item.businessPageSlug
+    ? `/businesses/${item.businessPageSlug}`
+    : item.uploadedByUserId
+      ? `/u/${item.uploadedByUserId}`
+      : null;
+  const canLinkAuthor = linkAuthor && Boolean(profileHref);
+  const showTitle = shouldShowFeedTitle(cat, item.title);
+  const snippet = showBodySnippet ? getFeedBodySnippet(item.body) : '';
+  const categoryLabel = feedCategoryLabel(cat);
+  const bodyClampCls = bodyLineClamp === 3 ? 'line-clamp-3' : 'line-clamp-2';
+
+  const avatarInner = item.avatarUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={item.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" />
+  ) : (
+    initials.slice(0, 2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />
+  );
+
+  const titleEl =
+    renderTitle !== undefined
+      ? renderTitle
+      : showTitle ? (
+          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 transition-colors group-hover:text-white/85">
+            {item.title}
+          </h3>
+        ) : null;
+
+  const defaultBody =
+    snippet ? (
+      <p className={`text-[13px] leading-relaxed text-white/50 ${bodyClampCls} ${showTitle ? 'mt-1.5' : ''}`}>
+        {snippet}
+      </p>
+    ) : null;
+
+  const bodyEl = renderMainBody !== undefined ? renderMainBody : defaultBody;
+
+  const wrap = (node: React.ReactNode, key?: string) => {
+    if (!node) return null;
+    if (!linkContent) return <React.Fragment key={key}>{node}</React.Fragment>;
+    return (
+      <Link key={key} href={detailHref} className="block" onClick={(e) => e.stopPropagation()}>
+        {node}
+      </Link>
+    );
+  };
+
+  const subtitleNode = subtitle !== undefined ? subtitle : timeLabel;
+
+  return (
+    <article className={articleClassName} {...articleProps}>
+      {/* 1. CATEGORY */}
+      <div className="mb-3.5 flex items-start gap-3">
+        {canLinkAuthor ? (
+          <Link
+            href={profileHref!}
+            onClick={(e) => e.stopPropagation()}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold transition hover:opacity-80 ${FEED_AVATAR_CLS}`}
+          >
+            {avatarInner}
+          </Link>
+        ) : (
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold ${FEED_AVATAR_CLS}`}>
+            {avatarInner}
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${tagCls}`}>
+              {categoryLabel}
+            </span>
+            {item.badge && item.badge.toLowerCase() !== cat.toLowerCase() && (
+              <span className="truncate text-[11px] text-white/35">{item.badge}</span>
+            )}
+          </div>
+          <div className="mt-1 flex min-w-0 items-center gap-2">
+            {canLinkAuthor ? (
+              <Link
+                href={profileHref!}
+                onClick={(e) => e.stopPropagation()}
+                className="truncate text-[13.5px] font-semibold leading-tight text-white transition hover:text-white/80"
+              >
+                {displayName}
+              </Link>
+            ) : (
+              <span className="truncate text-[13.5px] font-semibold leading-tight text-white">{displayName}</span>
+            )}
+            {showPresence && <PresenceDot userId={item.uploadedByUserId} size="sm" />}
+            {headerExtras}
+          </div>
+          {subtitleNode != null && subtitleNode !== '' && (
+            <p className="mt-0.5 truncate text-[11px] text-white/35">{subtitleNode}</p>
+          )}
+        </div>
+        {headerRight && <div className="flex shrink-0 items-center gap-3">{headerRight}</div>}
+      </div>
+
+      {/* 2. TITLE */}
+      {titleEl && <div className="mb-0">{wrap(titleEl, 'title')}</div>}
+
+      {/* 3. MAIN CONTENT */}
+      {item.thumbnailUrl && (
+        <div className={`-mx-4 overflow-hidden sm:mx-0 sm:rounded-xl ${titleEl || bodyEl ? 'mb-3.5' : ''} ${titleEl ? 'mt-3.5' : ''}`}>
+          {wrap(
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.thumbnailUrl}
+              alt={showTitle ? item.title : ''}
+              className="h-auto w-full transition-transform duration-500 group-hover:scale-[1.01]"
+              loading="lazy"
+              decoding="async"
+            />,
+            'thumb',
+          )}
+        </div>
+      )}
+      {bodyEl && <div>{linkContent ? wrap(bodyEl, 'body') : bodyEl}</div>}
+
+      {/* 4. METADATA */}
+      {renderMetadata !== undefined ? (
+        renderMetadata
+      ) : (
+        <FeedCardMetaChips body={item.body} byline={item.byline} category={cat} />
+      )}
+
+      {item.chips && item.chips.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {item.chips.slice(0, 5).map((c) => (
+            <span key={c} className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[11px] text-white/40">
+              {c}
+            </span>
+          ))}
+          {item.chips.length > 5 && (
+            <span className="rounded-full bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-white/20">
+              +{item.chips.length - 5}
+            </span>
+          )}
+        </div>
+      )}
+
+      {item.stats && item.stats.length > 0 && (
+        <div className="mt-3 flex items-center gap-5">
+          {item.stats.slice(0, 3).map((s) => (
+            <div key={s.l} className="flex items-baseline gap-1.5">
+              <span className="text-[13.5px] font-bold tabular-nums text-white/75">{s.v}</span>
+              <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">{s.l}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {beforeActions}
+
+      {/* 5. ACTIONS */}
+      <div
+        className="mt-3.5 flex items-center gap-3 border-t border-white/[0.05] pt-3.5"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        {actions}
+      </div>
+
+      {footer}
+    </article>
+  );
+}

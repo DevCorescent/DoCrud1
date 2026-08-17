@@ -6,11 +6,16 @@ import { Newspaper } from 'lucide-react';
 import { PresenceDot } from '@/components/PresenceBadge';
 import {
   FEED_AVATAR_CLS,
-  FEED_TAG_CLS,
   feedCategoryLabel,
+  feedCategoryTreatment,
   shouldShowFeedTitle,
 } from '@/components/feed/feedCardTheme';
-import { FeedCardMetaChips, getFeedBodySnippet } from '@/components/feed/FeedCardMeta';
+import {
+  buildCategoryHighlight,
+  FeedCardCategoryLine,
+  FeedCardMetaChips,
+  getFeedBodySnippet,
+} from '@/components/feed/FeedCardMeta';
 
 export type FeedCardShellItem = {
   id: string;
@@ -89,7 +94,9 @@ export function PublishedFeedCard({
   bodyLineClamp = 2,
 }: PublishedFeedCardProps) {
   const cat = item.category || 'post';
-  const tagCls = FEED_TAG_CLS[cat] ?? 'bg-white/[0.07] text-white/45 border-white/[0.08]';
+  /* Task 11 — shared category identity (label + icon + pastel treatment). */
+  const category = feedCategoryTreatment(cat);
+  const CategoryIcon = category.icon;
   const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
   const initials = displayName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
   const profileHref = item.businessPageSlug
@@ -100,8 +107,15 @@ export function PublishedFeedCard({
   const canLinkAuthor = linkAuthor && Boolean(profileHref);
   const showTitle = shouldShowFeedTitle(cat, item.title);
   const snippet = showBodySnippet ? getFeedBodySnippet(item.body) : '';
+  /* Label still comes from the existing helper so an unknown category keeps
+     showing its own name rather than the neutral fallback label. */
   const categoryLabel = feedCategoryLabel(cat);
   const bodyClampCls = bodyLineClamp === 3 ? 'line-clamp-3' : 'line-clamp-2';
+  /* Task 12 — category line under the title. Skipped when it would only repeat
+     the author already shown in the header (company pages publish as the company). */
+  const highlight = buildCategoryHighlight({ category: cat, body: item.body });
+  const categoryLine =
+    highlight && highlight.toLowerCase() !== displayName.toLowerCase() ? highlight : '';
 
   const avatarInner = item.avatarUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
@@ -159,7 +173,8 @@ export function PublishedFeedCard({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize ${tagCls}`}>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${category.badgeCls}`}>
+              <CategoryIcon className="h-2.5 w-2.5 shrink-0" />
               {categoryLabel}
             </span>
             {item.badge && item.badge.toLowerCase() !== cat.toLowerCase() && (
@@ -188,8 +203,9 @@ export function PublishedFeedCard({
         {headerRight && <div className="flex shrink-0 items-center gap-3">{headerRight}</div>}
       </div>
 
-      {/* 2. TITLE */}
+      {/* 2. TITLE (+ Task 12 category line, e.g. a job's company) */}
       {titleEl && <div className="mb-0">{wrap(titleEl, 'title')}</div>}
+      <FeedCardCategoryLine text={categoryLine} />
 
       {/* 3. MAIN CONTENT */}
       {item.thumbnailUrl && (
@@ -199,7 +215,9 @@ export function PublishedFeedCard({
             <img
               src={item.thumbnailUrl}
               alt={showTitle ? item.title : ''}
-              className="h-auto w-full transition-transform duration-500 group-hover:scale-[1.01]"
+              /* Task 15 — cap media height on small screens so a very tall image
+                 cannot become an unreadable block. Desktop keeps natural height. */
+              className="h-auto max-h-[70vh] w-full object-cover transition-transform duration-500 group-hover:scale-[1.01] sm:max-h-none"
               loading="lazy"
               decoding="async"
             />,
@@ -246,7 +264,9 @@ export function PublishedFeedCard({
 
       {/* 5. ACTIONS */}
       <div
-        className="mt-3.5 flex items-center gap-3 border-t border-white/[0.05] pt-3.5"
+        /* Task 15 — wrap instead of crushing when a card carries many actions
+           on a narrow screen; single-line on wider cards as before. */
+        className="mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-white/[0.05] pt-3.5"
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

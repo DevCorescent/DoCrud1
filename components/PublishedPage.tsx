@@ -8,7 +8,15 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { PresenceDot } from '@/components/PresenceBadge';
 import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
-import { shouldShowFeedTitle } from '@/components/feed/feedCardTheme';
+import { feedCategoryTreatment, shouldShowFeedTitle } from '@/components/feed/feedCardTheme';
+import {
+  buildCategoryMetaChips,
+  FeedMetaChipRow,
+  getFeedDescription,
+  hasFeedDescription,
+  readFeedLabelledValue,
+} from '@/components/feed/FeedCardMeta';
+import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
 const PublishAnythingDialog = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import {
   ArrowLeft,
@@ -795,11 +803,13 @@ function getBodySnippet(raw: string, maxLen = 180): string {
   return prose.length > maxLen ? `${prose.slice(0, maxLen).trimEnd()}…` : prose;
 }
 
-/** Renders body as structured key-value chips OR plain prose */
-function BodyDisplay({ body, searchQuery = '' }: { body: string; searchQuery?: string }) {
+/** Renders body as structured key-value chips OR plain prose.
+ *  `proseOnly` — Task 10: the card renders category metadata separately, so the
+ *  body slot shows the description instead of a generic key-value dump. */
+function BodyDisplay({ body, searchQuery = '', proseOnly = false }: { body: string; searchQuery?: string; proseOnly?: boolean }) {
   if (!body) return null;
 
-  if (isStructuredBody(body)) {
+  if (!proseOnly && isStructuredBody(body)) {
     const pairs = parseBodyPairs(body);
     if (pairs.length >= 2) {
       /* Icon hints for common keys */
@@ -837,7 +847,8 @@ function BodyDisplay({ body, searchQuery = '' }: { body: string; searchQuery?: s
   }
 
   /* Plain prose */
-  const snippet = getBodySnippet(body);
+  const snippet = proseOnly ? getFeedDescription(body) : getBodySnippet(body);
+  if (!snippet) return null;
   return (
     <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-3">
       {searchQuery ? highlight(snippet, searchQuery) : snippet}
@@ -886,6 +897,42 @@ function highlight(text: string, q: string): React.ReactNode {
 
 /* ─── avatar — monochrome, no category colours ───────────────────── */
 const AVATAR_CLS = 'bg-white/[0.08] text-white/55 ring-1 ring-white/[0.07]';
+
+/* ─── Task 14 discovery readers ───────────────────────────────────────
+ * All of these read fields the item already carries — the labelled body
+ * lines the publish flow writes (and the cards display), existing gigData,
+ * existing tags and the existing author name. Nothing is invented.
+ */
+/** City / venue / work location, '' when the item carries none. */
+function itemLocation(item: PublishedItem): string {
+  if (item.gigData?.locationPreference) return item.gigData.locationPreference;
+  return readFeedLabelledValue(item.body ?? '', ['Job Location', 'Location', 'Venue', 'City']);
+}
+/** Employment / work type for jobs. */
+function itemEmploymentType(item: PublishedItem): string {
+  return readFeedLabelledValue(item.body ?? '', ['Employment Type', 'Job Type', 'Type', 'Work Mode', 'Mode']);
+}
+/** Tutorial difficulty — labelled body value, else the badge/tag convention. */
+function itemTutorialLevel(item: PublishedItem): string {
+  const labelled = readFeedLabelledValue(item.body ?? '', ['Difficulty', 'Level']);
+  if (labelled) return labelled;
+  return /beginner|intermediate|advanced/i.exec(`${item.badge} ${(item.chips ?? []).join(' ')}`)?.[0] ?? '';
+}
+/** Numeric price for products — labelled `Price:` first, then legacy byline. */
+function itemPriceValue(item: PublishedItem): number {
+  const raw = readFeedLabelledValue(item.body ?? '', ['Price', 'Pricing']) || item.byline;
+  const m = raw.match(/[₹$€£]\s*([\d,]+)/);
+  return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+}
+/** Event start date from the labelled `Date:` / `Event Dates:` value. */
+function itemEventDate(item: PublishedItem): Date | null {
+  const raw = readFeedLabelledValue(item.body ?? '', ['Event Dates?', 'Date']);
+  if (!raw) return null;
+  const iso = raw.match(/\d{4}-\d{2}-\d{2}/);
+  const d = new Date(iso ? iso[0] : raw.split(/\s*[–-]\s*/)[0]);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+const eqi = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /* ─── trend button ───────────────────────────────────────────────── */
 function TrendButton({ item }: { item: PublishedItem }) {
@@ -1323,6 +1370,20 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
 
   const showTitle = shouldShowFeedTitle(cat, item.title);
 
+  /* Task 10 — category-relevant metadata built from fields the item already has. */
+  const catMeta = buildCategoryMetaChips({
+    category: cat,
+    title: item.title,
+    body: item.body,
+    byline: item.byline,
+    chips: item.chips,
+    stats: item.stats,
+  });
+  /* Adopt the Task 10 hierarchy (description + metadata) only when the item has
+     both. Otherwise BodyDisplay keeps its existing rendering and no content is
+     lost or duplicated. */
+  const useCategoryMeta = catMeta.length > 0 && hasFeedDescription(item.body);
+
   return (
     <>
       {modal && <ActionModal variant={modal} itemTitle={item.title} itemId={item.id} uploadedByUserId={item.uploadedByUserId} onClose={() => setModal(null)} />}
@@ -1334,13 +1395,23 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         detailHref={detailHref}
         showPresence
         headerRight={
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); toggleSaved(); }}
-            className={`transition ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
-          >
-            {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); toggleSaved(); }}
+              className={`transition ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
+            >
+              {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+            </button>
+            {/* Task 10 header options — existing handlers only */}
+            <FeedCardMenu
+              items={[
+                { label: 'Share link', icon: <Share2 className="h-3.5 w-3.5" />, onSelect: () => { void shareItem(item.id, item.title); trackCTA('share_item', cat); } },
+                { label: 'Open in new tab', icon: <ExternalLink className="h-3.5 w-3.5" />, onSelect: () => window.open(detailHref, '_blank', 'noopener,noreferrer') },
+                { label: saved ? 'Remove bookmark' : 'Save', icon: saved ? <BookmarkCheck className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />, onSelect: toggleSaved },
+              ]}
+            />
+          </>
         }
         renderTitle={
           showTitle ? (
@@ -1349,10 +1420,11 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
             </h3>
           ) : null
         }
-        /* Preserve BodyDisplay (structured chips OR highlighted prose). */
-        renderMainBody={<BodyDisplay body={item.body} searchQuery={searchQuery} />}
-        /* BodyDisplay already owns structured metadata chips. */
-        renderMetadata={null}
+        /* Preserve BodyDisplay (structured chips OR highlighted prose). When
+           category metadata is available it moves to the metadata section, so
+           the body slot shows the description/summary instead. */
+        renderMainBody={<BodyDisplay body={item.body} searchQuery={searchQuery} proseOnly={useCategoryMeta} />}
+        renderMetadata={useCategoryMeta ? <FeedMetaChipRow chips={catMeta} /> : null}
         actions={
           <>
             <PostReactionButton c={rx1} />
@@ -2605,7 +2677,8 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
           <img
             src={thumbUrl}
             alt=""
-            className="w-full h-auto"
+            /* Task 15 — same small-screen media cap as the shared card shell. */
+            className="w-full h-auto max-h-[70vh] object-cover sm:max-h-none"
             loading="lazy"
             decoding="async"
           />
@@ -3440,6 +3513,12 @@ export default function PublishedPage() {
   /* product */
   const [productPrice, setProductPrice] = useState('');
 
+  /* Task 14 discovery filters — tags, location, creator, tutorial difficulty */
+  const [tagFilter, setTagFilter]           = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+  const [creatorFilter, setCreatorFilter]   = useState('');
+  const [tutorialLevel, setTutorialLevel]   = useState('');
+
   const clearAllFilters = () => {
     setDateRange('all'); setSortBy('recent'); setFeaturedOnly(false); setLiveOnly(false);
     setReadTime(''); setDocFileType('');
@@ -3447,6 +3526,7 @@ export default function PublishedPage() {
     setEventType(''); setEventMode(''); setUpcomingOnly(false);
     setHackPrize(''); setHackFormat('');
     setResumeAvail(''); setProductPrice('');
+    setTagFilter(''); setLocationFilter(''); setCreatorFilter(''); setTutorialLevel('');
     setGigCat(''); setGigEngagement(''); setGigLocation('');
     setGigBidMode(''); setGigSkill(''); setGigUrgent(false); setGigSort('recent');
     setVisibleCount(10);
@@ -3459,6 +3539,7 @@ export default function PublishedPage() {
     dateRange, featuredOnly, liveOnly, readTime, docFileType,
     jobWorkMode, jobType, salaryRange, eventType, eventMode, upcomingOnly,
     hackPrize, hackFormat, resumeAvail, productPrice,
+    tagFilter, locationFilter, creatorFilter, tutorialLevel,
     gigCat, gigEngagement, gigLocation, gigBidMode, gigSkill, gigUrgent,
   ]);
 
@@ -3489,9 +3570,36 @@ export default function PublishedPage() {
     readTime, docFileType, jobWorkMode, jobType, salaryRange,
     eventType, eventMode, upcomingOnly, hackPrize, hackFormat,
     resumeAvail, productPrice, sortBy !== 'recent',
+    tagFilter, locationFilter, creatorFilter, tutorialLevel,
   ].filter(Boolean).length;
 
   const totalFilterCount = activeGlobalFilterCount + activeGigFilterCount;
+
+  /* Task 14 — discovery options derived from the unfiltered pool, so choosing
+     one value never removes the others from the list. Mirrors the existing
+     gigCategoryOptions/gigSkillOptions pattern. */
+  const discoveryOptions = useMemo(() => {
+    const pool = [...realItems, ...gigItems, ...MOCK_ITEMS];
+    const tally = (m: Map<string, number>, v?: string) => {
+      const k = (v ?? '').trim();
+      if (k && k.length < 28) m.set(k, (m.get(k) ?? 0) + 1);
+    };
+    const tags = new Map<string, number>();
+    const locations = new Map<string, number>();
+    const creators = new Map<string, number>();
+    for (const it of pool) {
+      (it.chips ?? []).forEach(c => tally(tags, c));
+      (it.gigData?.skills ?? []).forEach(s => tally(tags, s));
+      tally(locations, itemLocation(it));
+      tally(creators, it.uploadedByName);
+    }
+    const top = (m: Map<string, number>, n: number) => {
+      const rows: { v: string; c: number }[] = [];
+      m.forEach((c, v) => rows.push({ v, c }));
+      return rows.sort((a, b) => b.c - a.c || a.v.localeCompare(b.v)).slice(0, n).map(r => r.v);
+    };
+    return { tags: top(tags, 12), locations: top(locations, 8), creators: top(creators, 8) };
+  }, [realItems, gigItems]);
 
   /* merge real + gigs + mock, real-first, deduped, all filters applied */
   const allItems = useMemo<PublishedItem[]>(() => {
@@ -3510,6 +3618,15 @@ export default function PublishedPage() {
     /* status flags */
     if (featuredOnly) items = items.filter(i => i.featured);
     if (liveOnly)     items = items.filter(i => i.isReal);
+
+    /* Task 14 — tag / location / creator discovery (existing item data) */
+    if (tagFilter) {
+      items = items.filter(i =>
+        (i.chips ?? []).some(c => eqi(c, tagFilter)) ||
+        (i.gigData?.skills ?? []).some(s => eqi(s, tagFilter)));
+    }
+    if (locationFilter) items = items.filter(i => eqi(itemLocation(i), locationFilter));
+    if (creatorFilter)  items = items.filter(i => eqi(i.uploadedByName ?? '', creatorFilter));
 
     /* category-specific */
     items = items.filter(item => {
@@ -3531,13 +3648,15 @@ export default function PublishedPage() {
         if (docFileType !== 'free' && !hay.includes(docFileType.toLowerCase())) return false;
       }
 
-      /* job → work mode */
+      /* job → work mode (labelled Type/Mode value first, then legacy badge/byline) */
       if (jobWorkMode && cat === 'job') {
-        if (!`${item.badge} ${item.byline}`.toLowerCase().includes(jobWorkMode.toLowerCase())) return false;
+        const hay = `${itemEmploymentType(item)} ${item.badge} ${item.byline}`.toLowerCase();
+        if (!hay.includes(jobWorkMode.toLowerCase())) return false;
       }
       /* job → employment type */
       if (jobType && cat === 'job') {
-        if (!`${item.badge} ${item.byline}`.toLowerCase().includes(jobType.toLowerCase())) return false;
+        const hay = `${itemEmploymentType(item)} ${item.badge} ${item.byline}`.toLowerCase();
+        if (!hay.includes(jobType.toLowerCase())) return false;
       }
       /* job → salary range */
       if (salaryRange && cat === 'job') {
@@ -3552,17 +3671,22 @@ export default function PublishedPage() {
       if (eventType && cat === 'event') {
         if (!item.badge.toLowerCase().includes(eventType.toLowerCase())) return false;
       }
-      /* event → mode */
+      /* event → mode (labelled Mode/Venue value first, then legacy byline/chips) */
       if (eventMode && cat === 'event') {
-        const hay = `${item.byline} ${(item.chips ?? []).join(' ')}`.toLowerCase();
+        const hay = `${readFeedLabelledValue(item.body ?? '', ['Mode'])} ${itemLocation(item)} ${item.byline} ${(item.chips ?? []).join(' ')}`.toLowerCase();
         const isOnline = hay.includes('online') || hay.includes('zoom') || hay.includes('virtual');
         if (eventMode === 'online'   && !isOnline) return false;
         if (eventMode === 'inperson' && isOnline)  return false;
       }
-      /* event → upcoming */
+      /* event → upcoming (labelled event date first, then legacy byline month) */
       if (upcomingOnly && cat === 'event') {
-        const m = item.byline.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/i);
-        if (m) { const evDate = new Date(`${m[0]}, 2026`); if (evDate < new Date()) return false; }
+        const labelled = itemEventDate(item);
+        if (labelled) {
+          if (labelled < new Date()) return false;
+        } else {
+          const m = item.byline.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/i);
+          if (m) { const evDate = new Date(`${m[0]}, 2026`); if (evDate < new Date()) return false; }
+        }
       }
 
       /* hackathon → prize */
@@ -3589,10 +3713,14 @@ export default function PublishedPage() {
         if (!item.badge.toLowerCase().includes(resumeAvail.toLowerCase())) return false;
       }
 
-      /* product → price */
+      /* tutorial → difficulty */
+      if (tutorialLevel && cat === 'tutorial') {
+        if (!eqi(itemTutorialLevel(item), tutorialLevel)) return false;
+      }
+
+      /* product → price (labelled Price: value first, then legacy byline) */
       if (productPrice && cat === 'product') {
-        const m = item.byline.match(/[₹]([\d,]+)/);
-        const price = m ? parseInt(m[1].replace(/,/g, '')) : 0;
+        const price = itemPriceValue(item);
         if (productPrice === 'free'    && price > 0)             return false;
         if (productPrice === 'budget'  && (price === 0 || price > 999))   return false;
         if (productPrice === 'mid'     && (price < 1000 || price > 4999)) return false;
@@ -3611,6 +3739,7 @@ export default function PublishedPage() {
     eventType, eventMode, upcomingOnly,
     hackPrize, hackFormat,
     resumeAvail, productPrice,
+    tagFilter, locationFilter, creatorFilter, tutorialLevel,
   ]);
 
   const itemsByCategory = useMemo(() => {
@@ -4015,8 +4144,10 @@ export default function PublishedPage() {
             </button>
           </div>
 
-          {/* mobile horizontal tab chips — commented out for now */}
-          {/* <div
+          {/* Task 13 — filters stay horizontally scrollable on small screens
+              instead of being compressed. Same TABS config, same activeTab
+              state and the Task 11 category treatment for the active chip. */}
+          <div
             style={{
               maxHeight: !isSearching && tabBarVisible ? '52px' : '0px',
               opacity:   !isSearching && tabBarVisible ? 1 : 0,
@@ -4034,26 +4165,25 @@ export default function PublishedPage() {
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition border ${
-                        tab.id === 'featured' && isActive
-                          ? 'border-amber-500/25 bg-amber-500/10 text-amber-400/85'
-                          : isActive
-                            ? 'border-white/[0.18] bg-white/[0.09] text-white/80'
-                            : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:text-white/65 hover:border-white/[0.12]'
+                      aria-pressed={isActive}
+                      onClick={() => { setActiveTab(tab.id as TabId); setSearch(''); }}
+                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
+                        isActive
+                          ? feedCategoryTreatment(tab.id).badgeCls
+                          : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
                       }`}
                     >
-                      <tab.icon className="h-3 w-3" />
+                      <tab.icon className="h-3 w-3 shrink-0" />
                       {tab.label}
                       {count > 0 && (
-                        <span className={`text-[9px] font-bold ${isActive ? 'text-slate-950/50' : 'text-white/20'}`}>{count}</span>
+                        <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
                       )}
                     </button>
                   );
                 })}
               </div>
             </div>
-          </div> */}
+          </div>
         </header>
 
         {/* ── Comprehensive filter panel (all tabs) ── */}
@@ -4217,6 +4347,52 @@ export default function PublishedPage() {
                     <button key={opt.v} type="button" onClick={() => setProductPrice(opt.v)}
                       className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${productPrice === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
                     >{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* ── TUTORIAL: difficulty (Task 14) ── */}
+              {(activeTab === 'tutorial' || activeTab === 'all') && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">Level</span>
+                  {([{v:'',l:'Any level'},{v:'beginner',l:'Beginner'},{v:'intermediate',l:'Intermediate'},{v:'advanced',l:'Advanced'}] as const).map(opt => (
+                    <button key={opt.v} type="button" onClick={() => setTutorialLevel(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${tutorialLevel === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Task 14: tags / location / creator (from existing item data) ── */}
+              {discoveryOptions.tags.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">Tags</span>
+                  {[{v:'',l:'Any tag'}, ...discoveryOptions.tags.map(t => ({ v: t, l: t }))].map(opt => (
+                    <button key={opt.v || 'any-tag'} type="button" onClick={() => setTagFilter(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${tagFilter === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {discoveryOptions.locations.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">Where</span>
+                  {[{v:'',l:'Anywhere'}, ...discoveryOptions.locations.map(l => ({ v: l, l }))].map(opt => (
+                    <button key={opt.v || 'anywhere'} type="button" onClick={() => setLocationFilter(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${locationFilter === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.v && <MapPin className="h-3 w-3" />}{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {discoveryOptions.creators.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">By</span>
+                  {[{v:'',l:'Anyone'}, ...discoveryOptions.creators.map(c => ({ v: c, l: c }))].map(opt => (
+                    <button key={opt.v || 'anyone'} type="button" onClick={() => setCreatorFilter(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${creatorFilter === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.v && <User className="h-3 w-3" />}{opt.l}</button>
                   ))}
                 </div>
               )}

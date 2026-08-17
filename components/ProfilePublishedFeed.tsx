@@ -19,6 +19,7 @@ import {
   Send,
   Share2,
   Terminal,
+  Trash2,
   TrendingUp,
   MapPin,
   Target,
@@ -37,6 +38,8 @@ import {
 import { REACTION_META, type ReactionType, type ReactionSummary } from '@/lib/reactions';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { buildCategoryMetaChips, FeedMetaChipRow, getFeedDescription, hasFeedDescription } from '@/components/feed/FeedCardMeta';
+import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
 
 /* ─── types ─────────────────────────────────────────────────────── */
 export type FeedItem = {
@@ -266,7 +269,14 @@ function buildChips(body: string, byline: string, category: string): MetaChip[] 
   return bylineChips(byline, category);
 }
 
-function BodyOrChips({ body, byline, category }: { body: string; byline: string; category: string }) {
+function BodyOrChips({ body, byline, category, proseOnly = false }: { body: string; byline: string; category: string; proseOnly?: boolean }) {
+  /* Task 10: when the card renders category metadata separately, the body slot
+     shows the description/summary instead of a generic key-value dump. */
+  if (proseOnly) {
+    const prose = getFeedDescription(body, 200);
+    if (!prose) return null;
+    return <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{prose}</p>;
+  }
   const chips = buildChips(body, byline, category).slice(0, 5);
   if (!chips.length) return (
     <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{getBodySnippet(body)}</p>
@@ -590,6 +600,20 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
   const iconCls  = 'flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition hover:bg-white/[0.06] hover:text-white/70';
   const fmtCount = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
 
+  /* Task 10 — category-relevant metadata built from fields the item already has. */
+  const catMeta = buildCategoryMetaChips({
+    category: cat,
+    title: item.title,
+    body: item.body,
+    byline: item.byline,
+    chips: item.chips,
+    stats: item.stats,
+  });
+  /* Adopt the Task 10 hierarchy (description + metadata) only when the item has
+     both. Otherwise BodyOrChips keeps its existing rendering and no content is
+     lost or duplicated. */
+  const useCategoryMeta = catMeta.length > 0 && hasFeedDescription(item.body);
+
   const moderationExtras = isOwn ? (
     <>
       {item.moderationStatus === 'suspended' && (
@@ -644,11 +668,22 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
               className={`transition ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}>
               {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
             </button>
+            {/* Task 10 header options — existing handlers only */}
+            <FeedCardMenu
+              items={[
+                { label: 'Share link', icon: <Share2 className="h-3.5 w-3.5" />, onSelect: () => { void shareItem(item.id, item.title); trackCTA('share_item', cat); } },
+                { label: 'Open in new tab', icon: <ExternalLink className="h-3.5 w-3.5" />, onSelect: () => window.open(detailHref, '_blank', 'noopener,noreferrer') },
+                { label: saved ? 'Remove bookmark' : 'Save', icon: saved ? <BookmarkCheck className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />, onSelect: toggleSaved },
+                ...(onDelete ? [{ label: 'Delete post', icon: <Trash2 className="h-3.5 w-3.5" />, onSelect: onDelete, danger: true }] : []),
+              ]}
+            />
           </>
         }
-        /* Preserve BodyOrChips (chips OR prose). */
-        renderMainBody={item.body?.trim() ? <BodyOrChips body={item.body} byline={item.byline} category={item.category} /> : null}
-        renderMetadata={null}
+        /* Preserve BodyOrChips (chips OR prose). When category metadata is
+           available it moves to the metadata section, so the body slot shows
+           the description/summary. */
+        renderMainBody={item.body?.trim() ? <BodyOrChips body={item.body} byline={item.byline} category={item.category} proseOnly={useCategoryMeta} /> : null}
+        renderMetadata={useCategoryMeta ? <FeedMetaChipRow chips={catMeta} /> : null}
         beforeActions={
           <>
             {item.cta?.url && item.cta.label && (

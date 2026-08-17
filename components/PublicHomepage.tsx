@@ -12,6 +12,9 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import { PresenceDot } from '@/components/PresenceBadge';
 import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { buildCategoryMetaChips, FeedMetaChipRow, omitChipsPresentIn } from '@/components/feed/FeedCardMeta';
+import { feedCategoryTreatment } from '@/components/feed/feedCardTheme';
+import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
 import {
   Activity,
   ArrowLeft,
@@ -2006,6 +2009,27 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
   const authorMeta = bylineParts.slice(1).join(' · ');
   const showTitle = item.category !== 'post' && !hpIsJunkTitle(item);
 
+  /* Task 10 — category-relevant metadata built from fields the item already has.
+     The homepage body snippet is left untouched, so any value it already shows
+     is dropped here rather than repeated. */
+  const catMeta = omitChipsPresentIn(
+    buildCategoryMetaChips({
+      category: item.category,
+      title: item.title,
+      body: item.body,
+      byline: item.byline,
+      chips: item.chips,
+      stats: item.stats,
+    }),
+    hpHasRealCaption(item.body) ? hpGetBodySnippet(item.body) : '',
+  );
+
+  const sharePost = async () => {
+    const url = `${window.location.origin}${postHref}`;
+    if (navigator.share) { try { await navigator.share({ title: item.title, url }); return; } catch {} }
+    await navigator.clipboard.writeText(url).catch(() => {});
+  };
+
   return (
     <PublishedFeedCard
       item={item}
@@ -2014,8 +2038,8 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
       detailHref={postHref}
       showPresence
       linkContent={false}
-      /* Homepage previously did not render HpMetaChips — keep that behavior. */
-      renderMetadata={null}
+      /* Task 10 — category-relevant metadata only; nothing when no field applies. */
+      renderMetadata={catMeta.length > 0 ? <FeedMetaChipRow chips={catMeta} /> : null}
       articleClassName="group py-5 px-4 sm:px-0 cursor-pointer"
       articleProps={{
         role: 'link',
@@ -2029,13 +2053,23 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
         },
       }}
       headerRight={
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); setSaved(v => !v); }}
-          className={`transition shrink-0 ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
-        >
-          <Bookmark className={`h-4 w-4 ${saved ? 'fill-current' : ''}`} />
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setSaved(v => !v); }}
+            className={`transition shrink-0 ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
+          >
+            <Bookmark className={`h-4 w-4 ${saved ? 'fill-current' : ''}`} />
+          </button>
+          {/* Task 10 header options — existing handlers only */}
+          <FeedCardMenu
+            items={[
+              { label: 'Share link', icon: <Share2 className="h-3.5 w-3.5" />, onSelect: () => { void sharePost(); } },
+              { label: 'Open in new tab', onSelect: () => window.open(postHref, '_blank', 'noopener,noreferrer') },
+              { label: saved ? 'Remove bookmark' : 'Save', icon: <Bookmark className="h-3.5 w-3.5" />, onSelect: () => setSaved(v => !v) },
+            ]}
+          />
+        </>
       }
       renderTitle={
         showTitle ? (
@@ -2099,12 +2133,7 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
           <button
             type="button"
             className="ml-auto flex items-center gap-1.5 text-[12px] font-semibold text-white/25 hover:text-white/55 transition"
-            onClick={async e => {
-              e.stopPropagation();
-              const url = `${window.location.origin}${postHref}`;
-              if (navigator.share) { try { await navigator.share({ title: item.title, url }); return; } catch {} }
-              await navigator.clipboard.writeText(url).catch(() => {});
-            }}
+            onClick={e => { e.stopPropagation(); void sharePost(); }}
           >
             <Share2 className="h-4 w-4" />
           </button>
@@ -2532,6 +2561,37 @@ function HomepageLiveFeed() {
               </div>
             )}
 
+          </div>
+
+          {/* Task 13 — the same HP_TABS category filters the lg+ sidebar shows,
+              exposed on small screens as a horizontally scrollable row. Reuses
+              activecat/setActivecat and the Task 11 category treatment. */}
+          <div className="lg:hidden shrink-0 overflow-x-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-max gap-2">
+              {HP_TABS.map(tab => {
+                const isActive = activecat === tab.id;
+                const count    = tab.id === 'all' ? allItems.length : (catCounts[tab.id] ?? 0);
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
+                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
+                      isActive
+                        ? feedCategoryTreatment(tab.id).badgeCls
+                        : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
+                    }`}
+                  >
+                    <tab.icon className="h-3 w-3 shrink-0" />
+                    {tab.label}
+                    {count > 0 && (
+                      <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* feed cards */}

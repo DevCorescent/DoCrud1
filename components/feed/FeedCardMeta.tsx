@@ -158,18 +158,8 @@ export function getFeedBodySnippet(raw: string, maxLen = 180): string {
   return text.length > maxLen ? `${text.slice(0, maxLen).trimEnd()}…` : text;
 }
 
-export function FeedCardMetaChips({
-  body,
-  byline,
-  category,
-  max = 5,
-}: {
-  body: string;
-  byline: string;
-  category: string;
-  max?: number;
-}) {
-  const chips = buildFeedMetaChips(body, byline, category).slice(0, max);
+/** Shared chip row — single source of truth for metadata chip styling. */
+export function FeedMetaChipRow({ chips }: { chips: FeedMetaChip[] }) {
   if (!chips.length) return null;
   return (
     <div className="mt-3 flex flex-wrap gap-1.5">
@@ -185,4 +175,214 @@ export function FeedCardMetaChips({
       ))}
     </div>
   );
+}
+
+export function FeedCardMetaChips({
+  body,
+  byline,
+  category,
+  max = 5,
+}: {
+  body: string;
+  byline: string;
+  category: string;
+  max?: number;
+}) {
+  return <FeedMetaChipRow chips={buildFeedMetaChips(body, byline, category).slice(0, max)} />;
+}
+
+/* ─── Task 10: category-specific metadata ────────────────────────────
+ * Reads ONLY fields the publishing flow already writes (PublishAnythingDialog
+ * `buildTextBody` labels), plus legacy byline/stats for pre-existing items.
+ * Nothing is synthesised — a category shows a chip only when its field exists.
+ */
+
+export type FeedCardMetaSource = {
+  category: string;
+  title?: string;
+  body?: string;
+  byline?: string;
+  chips?: string[];
+  stats?: { v: string; l: string }[];
+};
+
+const DOC_EXT_RE = /\.(pdf|docx?|xlsx?|pptx?|csv|txt|zip|rtf|odt)$/i;
+
+/** "Key: value" metadata line. */
+const KV_LINE_RE = /^[A-Za-z][A-Za-z0-9 /()]{0,28}:\s*\S/;
+/** "Requirements:" style section heading with no value on the line. */
+const SECTION_LINE_RE = /^[A-Za-z][A-Za-z0-9 /()]{0,28}:\s*$/;
+
+/**
+ * Description/summary for the card body once metadata is shown separately.
+ * Drops the labelled metadata lines outright instead of only their labels, so
+ * the body reads as prose. Returns '' when the item carries no description.
+ */
+export function getFeedDescription(raw: string, maxLen = 200): string {
+  if (!raw?.trim()) return '';
+  const prose = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .filter((l) => !KV_LINE_RE.test(l) && !SECTION_LINE_RE.test(l) && !/^https?:\/\//i.test(l))
+    .join(' ')
+    .replace(/https?:\/\/\S+/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  return prose.length > maxLen ? `${prose.slice(0, maxLen).trimEnd()}…` : prose;
+}
+
+/**
+ * True when the item carries a real description. Hosts use this so the Task 10
+ * layout is only adopted when there is prose to show — otherwise the card keeps
+ * its existing body rendering untouched and loses nothing.
+ */
+export function hasFeedDescription(body?: string): boolean {
+  return getFeedDescription(body || '').length > 0;
+}
+
+/**
+ * Drop metadata chips whose value the card already shows in its body text, so
+ * adding the metadata section never duplicates existing content.
+ */
+export function omitChipsPresentIn(chips: FeedMetaChip[], renderedText: string): FeedMetaChip[] {
+  const hay = (renderedText || '').toLowerCase().replace(/\s+/g, ' ');
+  if (!hay) return chips;
+  return chips.filter((c) => !hay.includes(c.value.toLowerCase().replace(/\s+/g, ' ')));
+}
+
+/** Start of the following `Some Key:` pair — case-sensitive, so ordinary
+ *  sentence words and times like "5:00 PM" are not mistaken for a new key. */
+const NEXT_KEY_RE = /\s+[A-Z][A-Za-z0-9 /()]{0,22}:\s/;
+
+/** Read a `Key: Value` line (or inline pair) written by the publish flow. */
+function labelledValue(body: string, keys: string[]): string {
+  for (const key of keys) {
+    const match = body.match(new RegExp(`(?:^|\\n|\\s)${key}\\s*:[^\\S\\n]*`, 'i'));
+    if (!match || match.index === undefined) continue;
+    let rest = body.slice(match.index + match[0].length).split('\n')[0];
+    const next = rest.match(NEXT_KEY_RE);
+    if (next && next.index !== undefined) rest = rest.slice(0, next.index);
+    const value = rest.trim().replace(/\s{2,}/g, ' ');
+    if (!value || value.length > 70) continue;
+    if (/^https?:\/\//i.test(value)) continue;
+    return value;
+  }
+  return '';
+}
+
+/**
+ * Task 14 — shared reader so discovery filters match on exactly the labelled
+ * fields the cards display, instead of re-implementing the parsing.
+ */
+export function readFeedLabelledValue(body: string, keys: string[]): string {
+  return labelledValue(body || '', keys);
+}
+
+/**
+ * Task 12 — the one category-defining fact the spec prints directly under the
+ * title (a job's company). Returns '' when the category has no such line or the
+ * field is absent, so the card renders exactly as before.
+ */
+export function buildCategoryHighlight(src: FeedCardMetaSource): string {
+  const body = src.body || '';
+  switch ((src.category || '').toLowerCase()) {
+    case 'job':
+      return labelledValue(body, ['Company', 'Organisation', 'Organization', 'Employer']);
+    default:
+      return '';
+  }
+}
+
+/** Renders the Task 12 category line. Nothing when there is no line to show. */
+export function FeedCardCategoryLine({ text }: { text: string }) {
+  if (!text) return null;
+  return <p className="mt-0.5 truncate text-[12.5px] font-medium text-white/60">{text}</p>;
+}
+
+/** Build metadata for exactly the categories the spec defines. `[]` = render nothing. */
+export function buildCategoryMetaChips(src: FeedCardMetaSource): FeedMetaChip[] {
+  const cat = (src.category || '').toLowerCase();
+  const body = src.body || '';
+  const parts = (src.byline || '').split(/\s*·\s*/).map((s) => s.trim()).filter(Boolean);
+  const stat = (label: RegExp) => src.stats?.find((s) => label.test(s.l))?.v ?? '';
+  const chips: FeedMetaChip[] = [];
+  const push = (icon: React.ReactNode, label: string, value: string) => {
+    if (value) chips.push({ icon, label, value });
+  };
+
+  switch (cat) {
+    case 'job': {
+      push(ic(MapPin), 'LOCATION', labelledValue(body, ['Job Location', 'Location']) || (parts[2] ?? ''));
+      push(ic(Briefcase), 'TYPE', labelledValue(body, ['Employment Type', 'Job Type', 'Type', 'Work Mode', 'Mode']));
+      push(ic(Star), 'EXPERIENCE', labelledValue(body, ['Experience Required', 'Experience']) || (parts.find((p) => /\byrs?\b|\byears?\b/i.test(p)) ?? ''));
+      break;
+    }
+    case 'event': {
+      push(ic(CalendarDays), 'DATE', labelledValue(body, ['Event Dates?', 'Date']));
+      push(ic(Clock), 'TIME', labelledValue(body, ['Time']));
+      push(ic(MapPin), 'LOCATION', labelledValue(body, ['Venue', 'Location']) || labelledValue(body, ['Mode']));
+      /* Task 12 — the spec's event card names the organiser next to the action. */
+      push(ic(User), 'ORGANISER', labelledValue(body, ['Organisers?', 'Organizers?', 'Host']));
+      break;
+    }
+    case 'hackathon': {
+      push(ic(CalendarDays), 'DATES', labelledValue(body, ['Event Dates?', 'Date']));
+      push(ic(Trophy), 'PRIZE', labelledValue(body, ['Prize Pool', 'Prize']));
+      push(ic(CalendarDays), 'DEADLINE', labelledValue(body, ['Registration Deadline', 'Deadline']));
+      break;
+    }
+    case 'product': {
+      push(ic(Tag), 'PRICE', labelledValue(body, ['Price', 'Pricing']) || (parts.find((p) => /[₹$€£]/.test(p)) ?? ''));
+      push(ic(Target), 'CATEGORY', labelledValue(body, ['Product Category', 'Category']));
+      break;
+    }
+    case 'gig': {
+      push(ic(Tag), 'PRICE', labelledValue(body, ['Budget', 'Price', 'Rate']));
+      push(ic(Clock), 'DELIVERY', labelledValue(body, ['Delivery Time', 'Timeline', 'Delivery']));
+      /* Task 12 — the spec's gig card shows where the work happens. */
+      push(ic(MapPin), 'LOCATION', labelledValue(body, ['Location', 'Work Location']));
+      break;
+    }
+    case 'tutorial': {
+      push(ic(Star), 'LEVEL', labelledValue(body, ['Difficulty', 'Level']) || (parts.find((p) => /beginner|intermediate|advanced/i.test(p)) ?? ''));
+      push(ic(Clock), 'TIME', labelledValue(body, ['Estimated Time', 'Duration', 'Time']) || (parts.find((p) => /min read/i.test(p)) ?? ''));
+      break;
+    }
+    case 'video': {
+      /* Same sources VideoCard already derives duration from. */
+      push(
+        ic(Clock),
+        'DURATION',
+        labelledValue(body, ['Duration'])
+          || stat(/duration/i)
+          || (src.chips?.find((c) => /^\d+\s*(h|hr|m|min)\b/i.test(c)) ?? '')
+          || (parts.find((p) => /^\d+\s*(h|hr|m|min)\b/i.test(p)) ?? ''),
+      );
+      break;
+    }
+    case 'poll': {
+      push(ic(Users), 'VOTES', stat(/votes/i) || labelledValue(body, ['Votes']));
+      const pollDuration = labelledValue(body, ['Duration']);
+      if (pollDuration) push(ic(Clock), 'DURATION', pollDuration);
+      else push(ic(Clock), 'DAYS LEFT', stat(/days left/i));
+      break;
+    }
+    case 'news': {
+      push(ic(Globe), 'SOURCE', labelledValue(body, ['Publisher', 'Source']));
+      push(ic(CalendarDays), 'DATE', labelledValue(body, ['News Date', 'Date']));
+      break;
+    }
+    case 'document': {
+      const fromBody = labelledValue(body, ['Document Type', 'Format', 'File Type']);
+      const fromName = src.title?.match(DOC_EXT_RE)?.[1] ?? '';
+      const fromByline = parts.find((p) => /^(pdf|docx?|xlsx?|pptx?|zip|csv|txt)$/i.test(p)) ?? '';
+      push(ic(FileText), 'TYPE', fromBody || (fromName || fromByline).toUpperCase());
+      break;
+    }
+    default:
+      break;
+  }
+
+  return chips.slice(0, 4);
 }

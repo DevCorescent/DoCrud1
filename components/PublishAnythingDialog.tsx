@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { sanitizeCtaLabel, sanitizeCtaUrl, CTA_LABEL_MAX } from '@/lib/cta';
+import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -194,13 +195,136 @@ const blankResume = {
   avatarFile: null as File | null, resumeFile: null as File | null,
 };
 
+/* ─── Task 16: guided publishing steps ───────────────────────────────
+ * Config-driven: a category only gets the steps it actually needs, so simple
+ * formats stay a two-tap flow while long forms are split into Basics/Details.
+ * Every field, validation rule and payload stays exactly as it was.
+ */
+type StepId = 'basics' | 'details' | 'review';
+type FormSection = 'basics' | 'details' | 'all';
+
+const STEP_LABEL: Record<StepId, string> = {
+  basics: 'Basics',
+  details: 'Details',
+  review: 'Preview & Publish',
+};
+
+/** Categories whose existing form is long enough to justify a Basics step. */
+const SPLIT_CATEGORIES = new Set(['job', 'product', 'event', 'hackathon', 'gig', 'tutorial']);
+
+/** Steps after the format picker. */
+function stepsForCategory(category: string | null): StepId[] {
+  if (category && SPLIT_CATEGORIES.has(category)) return ['basics', 'details', 'review'];
+  return ['details', 'review'];
+}
+
+/** Which slice of a split form belongs to the active step. */
+function sectionForStep(category: string | null, step: StepId): FormSection {
+  if (!category || !SPLIT_CATEGORIES.has(category)) return 'all';
+  return step === 'basics' ? 'basics' : 'details';
+}
+
+type StepExtras = {
+  postImages: File[];
+  pollOptions: string[];
+  surveyQuestions: { text: string; type: string }[];
+  tutorialSteps: { title: string; desc: string; imageUrl: string }[];
+  resume: typeof blankResume;
+};
+
+/**
+ * Required fields for the CURRENT step only — mirrors the asterisks the forms
+ * already show and the checks `publish()` already performs, surfaced earlier so
+ * the user is not told about a problem three steps later. Never weakened:
+ * `publish()` still runs the full validation.
+ */
+function missingForStep(
+  category: string | null,
+  step: StepId,
+  f: FieldState,
+  extras: StepExtras,
+): string[] {
+  if (!category || step === 'review') return [];
+  const has = (v: string) => Boolean(v && v.trim());
+  const miss: string[] = [];
+
+  if (step === 'basics') {
+    switch (category) {
+      case 'job':
+        if (!has(f.title)) miss.push('Job Title');
+        if (!has(f.description)) miss.push('Job Description');
+        break;
+      case 'product':
+        if (!has(f.title)) miss.push('Product name');
+        break;
+      case 'event':
+        if (!has(f.title)) miss.push('Event Name');
+        if (!has(f.notes)) miss.push('Description');
+        break;
+      case 'hackathon':
+        if (!has(f.title)) miss.push('Hackathon name');
+        break;
+      case 'gig':
+        if (!has(f.gigSummary)) miss.push('What do you need done?');
+        /* publish() already refuses a gig without a title. */
+        if (!has(f.title)) miss.push('Gig title');
+        break;
+      default:
+        break;
+    }
+    return miss;
+  }
+
+  /* step === 'details' */
+  switch (category) {
+    case 'post':
+      if (!has(f.postCaption) && extras.postImages.length === 0) miss.push('a caption or at least one photo');
+      break;
+    case 'poll':
+      if (!has(f.pollQuestion)) miss.push('Question');
+      if (extras.pollOptions.filter(o => o.trim()).length < 2) miss.push('at least two options');
+      break;
+    case 'survey':
+      if (!extras.surveyQuestions.some(q => q.text.trim())) miss.push('at least one question');
+      break;
+    case 'chart':
+      if (!has(f.chartLabels)) miss.push('Labels');
+      if (!has(f.chartValues)) miss.push('Values');
+      break;
+    case 'tutorial':
+      /* same rule publish() enforces */
+      if (!extras.tutorialSteps.some(s => s.title.trim())) miss.push('at least one step');
+      break;
+    case 'resume':
+      if (!has(extras.resume.displayName)) miss.push('Display name');
+      if (!has(extras.resume.category)) miss.push('Category');
+      if (!extras.resume.resumeFile && !has(extras.resume.pastedText)) miss.push('a resume file or pasted text');
+      break;
+    case 'news':
+    case 'article':
+    case 'announcement':
+    case 'document':
+    case 'portfolio':
+    case 'thread':
+    case 'video':
+    case 'milestone':
+      if (!has(f.title)) miss.push('Title');
+      break;
+    default:
+      break;
+  }
+  return miss;
+}
+
 const RESUME_CATEGORIES = [
   'Engineering', 'Design', 'Product', 'Marketing', 'Sales', 'Operations',
   'Finance', 'HR', 'Legal', 'Data Science', 'DevOps', 'Content', 'Research', 'Other',
 ];
 
 /* ─── step state ─────────────────────────────────────────────── */
-type Step = 'pick' | 'form';
+type Step = 'mode' | 'pick' | 'form';
+/* PDF step 2 — what the author is publishing: a photo, a caption, or both. */
+type ContentMode = 'photo' | 'caption' | 'both';
 
 /* ─── shared input styles ────────────────────────────────────── */
 function Field({ label, children, span, hint, required }: { label: string; children: React.ReactNode; span?: boolean; hint?: string; required?: boolean }) {
@@ -282,7 +406,13 @@ export default function PublishAnythingDialog({
   onPublished?: (data: { id: string; title: string; content: string; category: string }) => void;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('pick');
+  const [step, setStep] = useState<Step>('mode');
+  /* PDF step 2 — Photo / Caption / Both. Controls the Post format's content
+     fields; structured categories keep all their own required fields. */
+  const [contentMode, setContentMode] = useState<ContentMode>('both');
+  /* Task 16 — index into stepsForCategory(category); state lives here (not in the
+     forms), so moving between steps never resets a value. */
+  const [flowIdx, setFlowIdx] = useState(0);
   const [category, setCategory] = useState<CategoryId | null>(null);
   const [fields, setFields] = useState<FieldState>({ ...blank });
   const [resume, setResume] = useState({ ...blankResume });
@@ -340,6 +470,8 @@ export default function PublishAnythingDialog({
       setThumbnailUrlInput('');
       setThumbnailMode('upload');
       setCatSearch('');
+      setFlowIdx(0);
+      setContentMode('both');
       if (initialCategory) {
         setCategory(initialCategory);
         setStep('form');
@@ -351,18 +483,33 @@ export default function PublishAnythingDialog({
     }
   }, [open, initialCategory]);
 
+  const chooseMode = (mode: ContentMode) => {
+    setContentMode(mode);
+    setStep('pick');
+    setError('');
+  };
+
   const pickCategory = (id: CategoryId) => {
+    /* Re-entering the same category keeps everything typed so far; switching to a
+       different one starts its own flow from the first step. */
     setCategory(id);
     setStep('form');
+    setFlowIdx(0);
     setError('');
     setSuccessHref(null);
     setAnimKey(k => k + 1);
   };
 
+  /** Header back — walks one wizard step back, then out to the format picker. */
   const goBack = () => {
-    setStep('pick');
     setError('');
     setSuccessHref(null);
+    if (step === 'pick') { setStep('mode'); return; }
+    setFlowIdx(i => {
+      if (i > 0) return i - 1;
+      setStep('pick');
+      return 0;
+    });
   };
 
   /* ── build text body from form ── */
@@ -774,7 +921,48 @@ export default function PublishAnythingDialog({
     finally { setBusy(false); }
   };
 
+  /* ── Task 16: one object URL for the review cover, revoked on change/close ── */
+  const reviewCoverFile = thumbnailFile ?? postImages[0] ?? productImages[0] ?? null;
+  const [reviewCoverUrl, setReviewCoverUrl] = useState<string>('');
+  useEffect(() => {
+    if (thumbnailMode === 'url' && thumbnailUrlInput.trim()) {
+      setReviewCoverUrl(thumbnailUrlInput.trim());
+      return;
+    }
+    if (!reviewCoverFile) { setReviewCoverUrl(''); return; }
+    const url = URL.createObjectURL(reviewCoverFile);
+    setReviewCoverUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [reviewCoverFile, thumbnailMode, thumbnailUrlInput]);
+
   if (!open) return null;
+
+  /* ── Task 16: derived wizard state ── */
+  const flowSteps   = stepsForCategory(category);
+  const stepIdx     = Math.min(flowIdx, flowSteps.length - 1);
+  const activeStep  = flowSteps[stepIdx];
+  const isReview    = step === 'form' && activeStep === 'review';
+  const formSection = sectionForStep(category, activeStep);
+  const stepMissing = step === 'form'
+    ? missingForStep(category, activeStep, fields, { postImages, pollOptions, surveyQuestions, tutorialSteps, resume })
+    : [];
+  /* total = content mode + format picker + the category's own steps */
+  const totalSteps   = flowSteps.length + 2;
+  const currentStep  = step === 'mode' ? 1 : step === 'pick' ? 2 : stepIdx + 3;
+  const currentLabel = step === 'mode' ? 'Content' : step === 'pick' ? 'Format' : STEP_LABEL[activeStep];
+
+  const goNext = () => {
+    if (stepMissing.length > 0) {
+      setError(`Add ${stepMissing.join(', ')} to continue.`);
+      /* focus the first empty control in the current step */
+      const first = document.querySelector<HTMLElement>('[data-publish-step] input:not([type=file]), [data-publish-step] textarea, [data-publish-step] select');
+      first?.focus();
+      first?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    setError('');
+    setFlowIdx(i => Math.min(i + 1, flowSteps.length - 1));
+  };
 
   const activeCat = category ? CATEGORIES.find(c => c.id === category) : null;
   const vis = category === 'resume' ? resume.visibility : fields.visibility;
@@ -794,7 +982,7 @@ export default function PublishAnythingDialog({
     <>
     {/* Publishing loader overlay */}
     {busy && (
-      <div className="fixed inset-0 z-[500] flex flex-col items-center justify-center bg-black/85 backdrop-blur-xl">
+      <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/85 backdrop-blur-xl">
         <div className="flex flex-col items-center gap-7">
           <div className="relative h-[72px] w-[72px]">
             <div className="absolute inset-0 rounded-full border-[3px] border-white/[0.08]" />
@@ -816,7 +1004,10 @@ export default function PublishAnythingDialog({
     )}
 
     <div
-      className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4 md:p-6 pb-[84px] sm:pb-0 px-0 sm:px-4"
+      /* Task 15 — full-screen wizard on small screens; desktop stays a centred
+         modal. z sits above the mobile bottom nav (z-index 9995) so the footer
+         Publish/Cancel actions are never covered. */
+      className="fixed inset-0 z-[9998] flex items-stretch sm:items-center justify-center sm:p-4 md:p-6 px-0 sm:px-4"
       onClick={(e) => { if (e.target === e.currentTarget) onOpenChange(false); }}
     >
       {/* Backdrop */}
@@ -824,28 +1015,30 @@ export default function PublishAnythingDialog({
 
       {/* Dialog */}
       <div className="relative flex w-full max-w-[880px] flex-col overflow-hidden
-        h-auto max-h-[calc(96dvh-84px)] rounded-t-[28px]
+        h-full max-h-none rounded-none
         sm:h-auto sm:max-h-[88dvh] sm:rounded-[28px]
         border border-white/[0.08] bg-[#0a0a0e]
         shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_-1px_0_0_rgba(255,255,255,0.06),0_32px_80px_rgba(0,0,0,0.98)]
         animate-in fade-in slide-in-from-bottom-8 [animation-duration:300ms] [animation-timing-function:cubic-bezier(0.25,0.75,0,1)]
         sm:slide-in-from-bottom-4 sm:zoom-in-[99%] sm:[animation-duration:180ms]">
 
-        {/* Mobile drag handle */}
-        <div className="flex sm:hidden shrink-0 justify-center pt-3 pb-1">
-          <div className="h-1 w-10 rounded-full bg-white/[0.12]" />
-        </div>
+        {/* Safe-area spacer — full-screen wizard starts below the status bar */}
+        <div className="shrink-0 sm:hidden" style={{ height: 'env(safe-area-inset-top)' }} />
 
         {/* ── Header ── */}
         <div className="flex shrink-0 items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.06]">
-          {step === 'pick' ? (
+          {step === 'mode' || step === 'pick' ? (
             <div className="flex items-center gap-3">
               <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] ring-1 ring-white/[0.09]">
                 <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white/60" />
               </div>
               <div>
-                <h2 className="text-[14px] sm:text-[15px] font-bold text-white leading-tight tracking-[-0.01em]">Publish anything</h2>
-                <p className="mt-0.5 text-[10.5px] sm:text-[11px] text-white/35 leading-tight">{CATEGORIES.length} formats · choose one to get started</p>
+                <h2 className="text-[14px] sm:text-[15px] font-bold text-white leading-tight tracking-[-0.01em]">
+                  {step === 'mode' ? 'Choose photo, caption, or both' : 'Select what you want to publish'}
+                </h2>
+                <p className="mt-0.5 text-[10.5px] sm:text-[11px] text-white/35 leading-tight">
+                  {step === 'mode' ? 'Start with what you have — you can pick a format next' : `${CATEGORIES.length} formats · choose one to get started`}
+                </p>
               </div>
             </div>
           ) : (
@@ -880,8 +1073,68 @@ export default function PublishAnythingDialog({
           </button>
         </div>
 
+        {/* ── Progress (Task 15/16 — derived from the active step config) ── */}
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-white/[0.05] px-5 sm:px-6 py-2">
+          <div className="flex min-w-0 flex-1 gap-1.5">
+            {Array.from({ length: totalSteps }).map((_, i) => (
+              <span
+                key={i}
+                className={`h-[3px] flex-1 rounded-full transition-colors ${
+                  i + 1 < currentStep ? 'bg-white/45' : i + 1 === currentStep ? 'bg-white/80' : 'bg-white/[0.09]'
+                }`}
+              />
+            ))}
+          </div>
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30">
+            {/* the step count only exists once a format is chosen */}
+            {step === 'mode'
+              ? 'Step 1 · Content'
+              : step === 'pick'
+                ? 'Step 2 · Format'
+                : `Step ${currentStep} of ${totalSteps} · ${currentLabel}`}
+          </span>
+        </div>
+
         {/* ── Body ── */}
-        {step === 'pick' ? (
+        {step === 'mode' ? (
+          /* PDF step 2 — Photo / Caption / Both */
+          <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 scrollbar-minimal overscroll-contain">
+            <div className="grid gap-2.5 sm:grid-cols-3">
+              {([
+                { id: 'photo'   as ContentMode, label: 'Photo',   desc: 'Images only',        icon: ImageIcon },
+                { id: 'caption' as ContentMode, label: 'Caption', desc: 'Words only',         icon: MessageSquare },
+                { id: 'both'    as ContentMode, label: 'Both',    desc: 'Photo and caption',  icon: Layers },
+              ]).map(m => {
+                const Icon = m.icon;
+                const active = contentMode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => chooseMode(m.id)}
+                    className={`group flex items-center gap-3 rounded-2xl border p-4 text-left transition-all active:scale-[0.99] sm:flex-col sm:items-start sm:gap-3 ${
+                      active
+                        ? 'border-white/[0.18] bg-white/[0.07]'
+                        : 'border-white/[0.07] bg-[#0e0e12] hover:border-white/[0.14] hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] ring-1 ring-white/[0.09]">
+                      <Icon className="h-4 w-4 text-white/70" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[13.5px] font-bold text-white">{m.label}</p>
+                      <p className="mt-0.5 text-[11.5px] text-white/35">{m.desc}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-4 text-[11.5px] leading-relaxed text-white/25">
+              This choice sets up a quick photo post. Formats such as Job, Event or Product still collect their own
+              structured details on the next steps.
+            </p>
+          </div>
+        ) : step === 'pick' ? (
           <div className="flex flex-col flex-1 overflow-hidden">
             {/* Search bar — hidden on all sizes */}
             <div className="hidden shrink-0 px-5 sm:px-6 pt-4 pb-3.5">
@@ -952,10 +1205,24 @@ export default function PublishAnythingDialog({
         ) : (
           /* Form area */
           <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 scrollbar-minimal overscroll-contain">
-            <div key={animKey} className="animate-in fade-in slide-in-from-bottom-2 duration-200 space-y-5">
+            <div key={`${animKey}-${activeStep}`} data-publish-step={activeStep} className="animate-in fade-in slide-in-from-bottom-2 duration-200 space-y-5">
 
-              {/* ── Cover Image — always FIRST, visible immediately in every form ── */}
-              {category && (
+              {/* ── Task 16: Preview & Publish step ── */}
+              {isReview && category && (
+                <PublishReview
+                  category={category}
+                  fields={fields}
+                  resume={resume}
+                  coverPreview={reviewCoverUrl}
+                  bodyText={buildTextBody()}
+                  ctaDraft={ctaDraft}
+                  visibility={vis}
+                  onEdit={() => setFlowIdx(0)}
+                />
+              )}
+
+              {/* ── Cover Image — first field of the flow's opening step ── */}
+              {!isReview && category && (formSection === 'all' || formSection === 'basics') && (
                 <ThumbnailSection
                   category={category}
                   thumbnailFile={thumbnailFile}
@@ -965,14 +1232,15 @@ export default function PublishAnythingDialog({
                   onUrlChange={setThumbnailUrlInput}
                   onModeChange={setThumbnailMode}
                   thumbnailRef={thumbnailRef}
-                  postImages={category === 'post' ? postImages : undefined}
+                  postImages={category === 'post' && contentMode !== 'caption' ? postImages : undefined}
                   postImagesRef={category === 'post' ? postImagesRef : undefined}
                   setPostImages={category === 'post' ? setPostImages : undefined}
                 />
               )}
 
-              {/* ── Category-specific fields ── */}
-              {category === 'post'         && <PostForm fields={fields} set={set} postImages={postImages} setPostImages={setPostImages} postImagesRef={postImagesRef} />}
+              {/* ── Category-specific fields (split forms render one section) ── */}
+              {isReview ? null : <>
+              {category === 'post'         && <PostForm fields={fields} set={set} postImages={postImages} setPostImages={setPostImages} postImagesRef={postImagesRef} mode={contentMode} />}
               {category === 'poll'         && <PollForm fields={fields} set={set} pollOptions={pollOptions} setPollOptions={setPollOptions} />}
               {category === 'survey'       && <SurveyForm fields={fields} set={set} surveyQuestions={surveyQuestions} setSurveyQuestions={setSurveyQuestions} />}
               {category === 'chart'        && <ChartForm fields={fields} set={set} />}
@@ -981,20 +1249,21 @@ export default function PublishAnythingDialog({
               {category === 'document'     && <DocumentForm fields={fields} set={set} fileRef={fileRef} />}
               {category === 'portfolio'    && <PortfolioForm fields={fields} set={set} />}
               {category === 'announcement' && <AnnouncementForm fields={fields} set={set} />}
-              {category === 'job'          && <JobForm fields={fields} set={set} />}
+              {category === 'job'          && <JobForm fields={fields} set={set} section={formSection} />}
               {category === 'resume'       && <ResumeForm resume={resume} setResume={setResume} isAuthenticated={isAuthenticated} resumeRef={resumeRef} avatarRef={avatarRef} />}
-              {category === 'product'      && <ProductForm fields={fields} set={set} productImages={productImages} setProductImages={setProductImages} productImagesRef={productImagesRef} />}
-              {category === 'event'        && <EventForm fields={fields} set={set} />}
-              {category === 'hackathon'    && <HackathonForm fields={fields} set={set} />}
-              {category === 'gig'          && <GigForm fields={fields} set={set} />}
+              {category === 'product'      && <ProductForm fields={fields} set={set} productImages={productImages} setProductImages={setProductImages} productImagesRef={productImagesRef} section={formSection} />}
+              {category === 'event'        && <EventForm fields={fields} set={set} section={formSection} />}
+              {category === 'hackathon'    && <HackathonForm fields={fields} set={set} section={formSection} />}
+              {category === 'gig'          && <GigForm fields={fields} set={set} section={formSection} />}
               {category === 'thread'       && <ThreadForm fields={fields} set={set} />}
               {category === 'video'        && <VideoForm fields={fields} set={set} />}
               {category === 'milestone'    && <MilestoneForm fields={fields} set={set} />}
-              {category === 'tutorial'     && <TutorialForm fields={fields} set={set} steps={tutorialSteps} setSteps={setTutorialSteps} />}
+              {category === 'tutorial'     && <TutorialForm fields={fields} set={set} steps={tutorialSteps} setSteps={setTutorialSteps} section={formSection} />}
+              </>}
             </div>
 
             {/* Common: tags + notes */}
-            {category && !['resume', 'gig', 'post', 'poll', 'survey', 'chart', 'thread', 'video', 'milestone', 'tutorial'].includes(category) && (
+            {!isReview && formSection !== 'basics' && category && !['resume', 'gig', 'post', 'poll', 'survey', 'chart', 'thread', 'video', 'milestone', 'tutorial'].includes(category) && (
               <div className="mt-2 grid gap-3 sm:grid-cols-2 rounded-2xl border border-white/[0.06] bg-white/[0.015] p-4">
                 <Field label="Tags" hint="Comma-separated keywords for discovery" span>
                   <div className="relative">
@@ -1009,7 +1278,7 @@ export default function PublishAnythingDialog({
             )}
 
             {/* Tags for new categories */}
-            {category && ['post', 'poll', 'survey', 'chart', 'thread', 'video', 'milestone', 'tutorial'].includes(category) && (
+            {!isReview && formSection !== 'basics' && category && ['post', 'poll', 'survey', 'chart', 'thread', 'video', 'milestone', 'tutorial'].includes(category) && (
               <div className="mt-2 rounded-2xl border border-white/[0.06] bg-white/[0.015] p-4">
                 <Field label="Tags" hint="Comma-separated keywords — helps people find your content">
                   <div className="relative">
@@ -1042,8 +1311,11 @@ export default function PublishAnythingDialog({
           </div>
         )}
 
-        {/* ── Footer ── */}
-        <div className="flex shrink-0 flex-col gap-2.5 border-t border-white/[0.06] bg-[#0a0a0e] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4">
+        {/* ── Footer — stays pinned at the bottom of the full-screen wizard ── */}
+        <div
+          className="flex shrink-0 flex-col gap-2.5 border-t border-white/[0.06] bg-[#0a0a0e] px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-6 sm:py-4"
+          style={{ paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom))' }}
+        >
           {step === 'pick' ? (
             <div className="flex w-full items-center justify-between">
               <p className="text-[11.5px] text-white/22">Select a format above to begin publishing</p>
@@ -1149,13 +1421,28 @@ export default function PublishAnythingDialog({
               </div>
 
               <div className="flex items-center gap-2.5">
+                {/* Task 16 — Back walks the wizard; Continue until the review step */}
                 <button
                   type="button"
-                  onClick={() => onOpenChange(false)}
-                  className="h-9 sm:h-9.5 rounded-xl border border-white/[0.07] bg-transparent px-4 sm:px-5 text-[13px] font-medium text-white/45 transition hover:bg-white/[0.05] hover:text-white"
+                  onClick={goBack}
+                  className="h-9 sm:h-9.5 rounded-xl border border-white/[0.07] bg-transparent px-4 text-[13px] font-medium text-white/50 transition hover:bg-white/[0.05] hover:text-white"
                 >
-                  Cancel
+                  Back
                 </button>
+                {!isReview ? (
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    aria-disabled={stepMissing.length > 0}
+                    className={`inline-flex h-9 sm:h-9.5 min-w-[130px] items-center justify-center gap-2 rounded-xl px-5 sm:px-6 text-[13px] font-bold transition-all active:scale-[0.97] ${
+                      stepMissing.length > 0
+                        ? 'border border-white/[0.10] bg-white/[0.06] text-white/40'
+                        : 'bg-white text-[#09090c] hover:bg-white/90 shadow-[0_4px_20px_rgba(255,255,255,0.12)]'
+                    }`}
+                  >
+                    Continue <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
                 <button
                   type="button"
                   onClick={() => void publish()}
@@ -1181,6 +1468,7 @@ export default function PublishAnythingDialog({
                     </>
                   )}
                 </button>
+                )}
               </div>
             </>
           )}
@@ -1231,6 +1519,104 @@ export default function PublishAnythingDialog({
   );
 }
 
+/* ─── Task 16: Preview & Publish ───────────────────────────────────
+ * Reuses the shared feed card (Tasks 9–12), so what the author reviews is the
+ * same component the feed will render — including the Task 11 pastel category
+ * identity and the Task 10/12 metadata built from the very body text that will
+ * be sent to the API. No second card implementation.
+ */
+function PublishReview({
+  category, fields: f, resume: r, coverPreview, bodyText, ctaDraft, visibility, onEdit,
+}: {
+  category: CategoryId;
+  fields: FieldState;
+  resume: typeof blankResume;
+  coverPreview: string;
+  /** Exactly the text that will be sent as `notes` — same builder as the payload. */
+  bodyText: string;
+  ctaDraft: { label: string; url: string } | null;
+  visibility: Visibility;
+  onEdit: () => void;
+}) {
+  const cat = CATEGORIES.find(c => c.id === category);
+  const isResume = category === 'resume';
+  const title = isResume ? r.displayName : f.title;
+  const author = isResume ? (r.displayName || 'You') : 'You';
+  const body = isResume
+    ? [r.headline && `Headline: ${r.headline}`, r.location && `Location: ${r.location}`, r.category && `Category: ${r.category}`, '', r.summary || r.pastedText].filter(Boolean).join('\n')
+    : (bodyText || f.notes || f.postCaption);
+  const tags = (isResume ? r.tags : f.tags).split(',').map(t => t.trim()).filter(Boolean);
+
+  const item = {
+    id: 'preview',
+    category,
+    badge: tags[0] || cat?.label || 'Draft',
+    title: title || (cat?.label ?? 'Untitled'),
+    byline: author,
+    uploadedByName: author,
+    body,
+    chips: tags.slice(1),
+    postedAt: new Date().toISOString(),
+    thumbnailUrl: coverPreview || undefined,
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[13px] font-bold text-white">Review before publishing</p>
+          <p className="mt-0.5 text-[11.5px] text-white/35">This is how your {cat?.label ?? 'post'} will appear in the feed.</p>
+        </div>
+        <span
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+            visibility === 'private'
+              ? 'border-white/[0.14] bg-white/[0.06] text-white/70'
+              : 'border-emerald-500/25 bg-emerald-500/[0.10] text-emerald-300/85'
+          }`}
+        >
+          {visibility === 'private' ? <><Lock className="h-3 w-3" /> Private</> : <><Globe className="h-3 w-3" /> Public</>}
+        </span>
+      </div>
+
+      {/* the real feed card */}
+      <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0d0d10] px-4 py-1">
+        <PublishedFeedCard
+          item={item}
+          timeLabel="Just now"
+          subtitle="Just now · preview"
+          detailHref="#"
+          linkContent={false}
+          linkAuthor={false}
+          showPresence={false}
+          articleClassName="group py-4"
+          actions={
+            <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-white/30">
+              <span>Reactions, comments and sharing become available once published.</span>
+            </div>
+          }
+        />
+      </div>
+
+      {ctaDraft && (
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-3.5 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/30">Call to action</p>
+          <p className="mt-1.5 break-all text-[12.5px] text-white/70">
+            <span className="font-semibold text-white/85">{ctaDraft.label}</span> → {ctaDraft.url}
+          </p>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onEdit}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.03] px-3.5 py-2 text-[12px] font-semibold text-white/60 transition hover:border-white/[0.18] hover:text-white/90"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Edit details
+      </button>
+    </div>
+  );
+}
+
 /* ─────────────────── new category forms ─────────────────────── */
 
 function PostForm({
@@ -1239,18 +1625,27 @@ function PostForm({
   postImages,
   setPostImages,
   postImagesRef,
+  mode = 'both',
 }: {
   fields: FieldState;
   set: (p: Partial<FieldState>) => void;
   postImages: File[];
   setPostImages: React.Dispatch<React.SetStateAction<File[]>>;
   postImagesRef: React.RefObject<HTMLInputElement>;
+  /** PDF step 2 choice — photo only, caption only, or both. */
+  mode?: ContentMode;
 }) {
+  const wantsPhoto   = mode !== 'caption';
+  const wantsCaption = mode !== 'photo';
   return (
     <div className="space-y-4">
-      <SectionHeader icon={ImageIcon} label="Photo post" />
+      <SectionHeader
+        icon={ImageIcon}
+        label={mode === 'photo' ? 'Photo post' : mode === 'caption' ? 'Caption post' : 'Photo post'}
+        hint={mode === 'photo' ? 'Photos only' : mode === 'caption' ? 'Words only' : 'Photo and caption'}
+      />
       <div className="grid gap-3">
-        <Field label="Caption" span>
+        {wantsCaption && <Field label="Caption" span>
           <textarea
             className={textareaCls}
             rows={4}
@@ -1258,10 +1653,10 @@ function PostForm({
             onChange={e => set({ postCaption: e.target.value })}
             placeholder="What's on your mind?"
           />
-        </Field>
+        </Field>}
 
         {/* image upload zone */}
-        <div>
+        {wantsPhoto && <div>
           <label className="mb-1.5 block text-[12px] font-medium text-white/55">
             Images{postImages.length > 0 ? ` (${postImages.length}/6)` : ' (up to 6)'}
           </label>
@@ -1746,11 +2141,13 @@ function AnnouncementForm({ fields: f, set }: { fields: FieldState; set: (p: Par
   );
 }
 
-function JobForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<FieldState>) => void }) {
+function JobForm({ fields: f, set, section = 'all' }: { fields: FieldState; set: (p: Partial<FieldState>) => void; section?: FormSection }) {
+  const show = (s: FormSection) => section === 'all' || section === s;
   return (
     <div className="space-y-4">
-      <SectionHeader icon={Briefcase} label="Job Posting" hint="Reach thousands of professionals actively looking for opportunities" />
+      <SectionHeader icon={Briefcase} label="Job Posting" hint={show('basics') ? 'Start with the role and what it involves' : 'Where, how and how much'} />
       <div className="space-y-3">
+        {show('basics') && <>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Job Title" required>
             <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Senior Frontend Engineer" />
@@ -1765,6 +2162,8 @@ function JobForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fiel
         <Field label="Job Description" required>
           <textarea className={textareaCls} rows={5} value={f.description} onChange={e => set({ description: e.target.value })} placeholder="What will this person do? Describe the role, team, and impact…" />
         </Field>
+        </>}
+        {show('details') && <>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Work Type">
             <select className={selectCls} value={f.jobType} onChange={e => set({ jobType: e.target.value as any })}>
@@ -1794,6 +2193,7 @@ function JobForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fiel
             <textarea className={textareaCls} rows={3} value={f.requirements} onChange={e => set({ requirements: e.target.value })} placeholder="3+ yrs React, strong TypeScript, CS degree preferred…" />
           </Field>
         </OptionalSection>
+        </>}
       </div>
     </div>
   );
@@ -1880,19 +2280,23 @@ function ResumeForm({ resume: r, setResume, isAuthenticated, resumeRef, avatarRe
 function ProductForm({
   fields: f, set,
   productImages, setProductImages, productImagesRef,
+  section = 'all',
 }: {
   fields: FieldState;
   set: (p: Partial<FieldState>) => void;
   productImages: File[];
   setProductImages: React.Dispatch<React.SetStateAction<File[]>>;
   productImagesRef: React.RefObject<HTMLInputElement>;
+  section?: FormSection;
 }) {
+  const show = (s: FormSection) => section === 'all' || section === s;
+
   return (
     <div className="space-y-4">
       <SectionHeader icon={Package} label="Product listing (e-commerce)" />
 
       {/* Product images */}
-      <div>
+      {show('basics') && <div>
         <label className="mb-1.5 block text-[12px] font-medium text-white/55">
           Product Images{productImages.length > 0 ? ` (${productImages.length}/6)` : ' — up to 6'}
         </label>
@@ -1928,15 +2332,18 @@ function ProductForm({
             })}
           </div>
         )}
-      </div>
+      </div>}
 
       <div className="grid gap-3 sm:grid-cols-2">
+        {show('basics') && <>
         <Field label="Product name *" span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Wireless Noise-Cancelling Headphones" />
         </Field>
         <Field label="Description" span>
           <textarea className={textareaCls} rows={4} value={f.content} onChange={e => set({ content: e.target.value })} placeholder="What does this product do? What problem does it solve? Who is it for?" />
         </Field>
+        </>}
+        {show('details') && <>
         <Field label="Price">
           <input className={inputCls} value={f.price} onChange={e => set({ price: e.target.value })} placeholder="₹2,499 · Free shipping" />
         </Field>
@@ -1960,22 +2367,28 @@ function ProductForm({
         <Field label="Key features" span>
           <textarea className={textareaCls} rows={3} value={f.features} onChange={e => set({ features: e.target.value })} placeholder="• Fast delivery across India&#10;• 1-year warranty&#10;• Easy returns" />
         </Field>
+        </>}
       </div>
     </div>
   );
 }
 
-function EventForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<FieldState>) => void }) {
+function EventForm({ fields: f, set, section = 'all' }: { fields: FieldState; set: (p: Partial<FieldState>) => void; section?: FormSection }) {
+  const show = (s: FormSection) => section === 'all' || section === s;
+
   return (
     <div className="space-y-4">
       <SectionHeader icon={CalendarDays} label="Event / Conference / Meetup" hint="Get RSVPs from the community — conferences, workshops, webinars" />
       <div className="space-y-3">
+{show('basics') && <>
         <Field label="Event Name" required>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="React India 2026, Mumbai DevMeetup…" />
         </Field>
         <Field label="Description" required>
           <textarea className={textareaCls} rows={4} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="What's this event about? Who should attend? What will they gain?" />
         </Field>
+        </>}
+        {show('details') && <>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Mode">
             <select className={selectCls} value={f.eventMode} onChange={e => set({ eventMode: e.target.value as any })}>
@@ -2019,22 +2432,28 @@ function EventForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fi
             <input className={inputCls} value={f.eventCapacity} onChange={e => set({ eventCapacity: e.target.value })} placeholder="500 seats · Unlimited" />
           </Field>
         </OptionalSection>
+        </>}
       </div>
     </div>
   );
 }
 
-function HackathonForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<FieldState>) => void }) {
+function HackathonForm({ fields: f, set, section = 'all' }: { fields: FieldState; set: (p: Partial<FieldState>) => void; section?: FormSection }) {
+  const show = (s: FormSection) => section === 'all' || section === s;
+
   return (
     <div className="space-y-4">
       <SectionHeader icon={Terminal} label="Hackathon / coding sprint" />
       <div className="grid gap-3 sm:grid-cols-2">
+{show('basics') && <>
         <Field label="Hackathon name *" span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="HackIndia 2026, Build for Bharat…" />
         </Field>
         <Field label="Problem statement / brief" span>
           <textarea className={textareaCls} rows={4} value={f.hackProblem} onChange={e => set({ hackProblem: e.target.value })} placeholder="What problem are participants solving? Key constraints, data, APIs available…" />
         </Field>
+        </>}
+        {show('details') && <>
         <Field label="Prize pool">
           <div className="relative">
             <Trophy className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/25" />
@@ -2078,16 +2497,20 @@ function HackathonForm({ fields: f, set }: { fields: FieldState; set: (p: Partia
             <textarea className={textareaCls} rows={3} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="Who should participate? Judging criteria? Perks?" />
           </Field>
         </OptionalSection>
+        </>}
       </div>
     </div>
   );
 }
 
-function GigForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<FieldState>) => void }) {
+function GigForm({ fields: f, set, section = 'all' }: { fields: FieldState; set: (p: Partial<FieldState>) => void; section?: FormSection }) {
+  const show = (s: FormSection) => section === 'all' || section === s;
+
   return (
     <div className="space-y-4">
       <SectionHeader icon={Zap} label="Gig / freelance brief" />
       <div className="grid gap-3 sm:grid-cols-2">
+{show('basics') && <>
         <Field label="What do you need done? *" span>
           <textarea className={textareaCls} rows={5} value={f.gigSummary} onChange={e => set({ gigSummary: e.target.value })} placeholder="Describe the work, context, and what success looks like…" />
         </Field>
@@ -2095,6 +2518,8 @@ function GigForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fiel
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Build a React dashboard, Logo design for startup…" />
         </Field>
         {/* Apply URL — prominent placement */}
+        </>}
+        {show('details') && <>
         <Field label="Apply / Contact URL" span>
           <div className="relative">
             <ExternalLink className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/25" />
@@ -2158,6 +2583,7 @@ function GigForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fiel
             <input className={inputCls} value={f.tags} onChange={e => set({ tags: e.target.value })} placeholder="freelance, urgent, design…" />
           </Field>
         </OptionalSection>
+        </>}
       </div>
     </div>
   );
@@ -2281,12 +2707,16 @@ function TutorialForm({
   set,
   steps,
   setSteps,
+  section = 'all',
 }: {
   fields: FieldState;
   set: (p: Partial<FieldState>) => void;
   steps: { title: string; desc: string; imageUrl: string }[];
   setSteps: React.Dispatch<React.SetStateAction<{ title: string; desc: string; imageUrl: string }[]>>;
+  section?: FormSection;
 }) {
+  const show = (s: FormSection) => section === 'all' || section === s;
+
   const updateStep = (i: number, patch: Partial<{ title: string; desc: string; imageUrl: string }>) =>
     setSteps(prev => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
   const addStep = () => setSteps(prev => [...prev, { title: '', desc: '', imageUrl: '' }]);
@@ -2295,7 +2725,7 @@ function TutorialForm({
   return (
     <div className="space-y-4">
       <SectionHeader icon={BookMarked} label="Tutorial / guide" />
-      <div className="grid gap-3 sm:grid-cols-2">
+      {show('basics') && <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Tutorial title (auto-generated if empty)" span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Build a REST API with Go and Gin…" />
         </Field>
@@ -2309,10 +2739,10 @@ function TutorialForm({
         <Field label="Prerequisites" span>
           <input className={inputCls} value={f.tutorialPrereqs} onChange={e => set({ tutorialPrereqs: e.target.value })} placeholder="Basic JavaScript, Node.js installed…" />
         </Field>
-      </div>
+      </div>}
 
       {/* Step-by-step editor */}
-      <div className="space-y-3">
+      {show('details') && <div className="space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Steps ({steps.length})</p>
           <button
@@ -2373,7 +2803,7 @@ function TutorialForm({
         >
           <Plus className="h-3.5 w-3.5" /> Add another step
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

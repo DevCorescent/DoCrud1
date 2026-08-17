@@ -321,6 +321,12 @@ export default function PublishAnythingDialog({
   /** Mobile-only preview toggle; desktop shows the preview permanently. */
   const [showPreview, setShowPreview] = useState(false);
   const { data: session } = useSession();
+  /* The session JWT deliberately does not carry the avatar — the auth callback
+     avoids pulling profile blobs on every request. /api/me/badge is the app's
+     existing canonical resolver (same one HomepageNav uses): it derives the
+     user from the session server-side and returns UserProfileData.avatarUrl
+     with no-store, so a photo changed elsewhere shows up on the next open. */
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
   const [category, setCategory] = useState<CategoryId | null>(null);
   const [fields, setFields] = useState<FieldState>({ ...blank });
   const [resume, setResume] = useState({ ...blankResume });
@@ -356,6 +362,20 @@ export default function PublishAnythingDialog({
   const avatarRef = useRef<HTMLInputElement>(null);
 
   const set = (patch: Partial<FieldState>) => setFields(f => ({ ...f, ...patch }));
+
+  /* Once per open — not per render, and never polled. The previous value is
+     kept while it refreshes so the avatar does not flash back to an initial. */
+  useEffect(() => {
+    if (!open || !isAuthenticated) return;
+    let cancelled = false;
+    fetch('/api/me/badge')
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { avatarUrl?: string | null } | null) => {
+        if (!cancelled && d) setProfileAvatar(d.avatarUrl ?? null);
+      })
+      .catch(() => { /* keep the initial fallback */ });
+    return () => { cancelled = true; };
+  }, [open, isAuthenticated]);
 
   /* ── Call-to-action ───────────────────────────────────────────
      One optional CTA per post. `ctaDraft` is the validated value that goes
@@ -447,7 +467,7 @@ export default function PublishAnythingDialog({
   /* Identity for the composer row and the preview. Session data the app has
      already fetched, or the business page being posted as — never a lookup. */
   const authorName = businessPageName || session?.user?.name || 'You';
-  const authorAvatar = businessLogoUrl || session?.user?.image || null;
+  const authorAvatar = businessLogoUrl || profileAvatar || session?.user?.image || null;
   /* An email is not a headline, and putting one on a post preview exposes it
      for no benefit. Fall back to the organisation, or show nothing. */
   const authorContext = businessPageName
@@ -1066,14 +1086,7 @@ export default function PublishAnythingDialog({
 
                 {/* Who is posting — real session/page identity, never invented. */}
                 <div className="flex items-center gap-2.5">
-                  {authorAvatar ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={authorAvatar} alt="" className="h-9 w-9 rounded-full object-cover" />
-                  ) : (
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold text-white/70">
-                      {authorName.charAt(0).toUpperCase()}
-                    </span>
-                  )}
+                  <IdentityAvatar src={authorAvatar} name={authorName} />
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-semibold text-white/85">{authorName}</p>
                     <p className="text-[10.5px] text-white/35">{vis === 'private' ? 'Only you' : 'Anyone on Docrud'}</p>
@@ -2810,6 +2823,37 @@ function ThumbnailSection({
 }
 
 /**
+ * The signed-in user's (or business page's) avatar.
+ *
+ * Used by BOTH the composer identity row and the live preview so the two are
+ * guaranteed to match. Falls back to the initial when there is no photo, and
+ * again if the photo fails to load — never a broken image.
+ */
+function IdentityAvatar({ src, name, className = 'h-9 w-9' }: { src?: string | null; name: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  // Reset when the photo changes, or a recycled component keeps showing the
+  // initial for a src that would load fine.
+  useEffect(() => { setFailed(false); }, [src]);
+
+  if (src && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt=""
+        onError={() => setFailed(true)}
+        className={`${className} shrink-0 rounded-full object-cover`}
+      />
+    );
+  }
+  return (
+    <span className={`${className} flex shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold text-white/70`}>
+      {(name || 'You').charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+/**
  * A preview URL for a File that is created once and revoked on unmount.
  *
  * The previous inline `URL.createObjectURL(file)` ran on every render, minting
@@ -3033,14 +3077,7 @@ function PublishPreviewCard({
       <div className="p-4">
         {/* Author row — the same hierarchy the real feed cards use. */}
         <div className="flex items-start gap-2.5">
-          {authorAvatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={authorAvatar} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
-          ) : (
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold text-white/70">
-              {(authorName || 'You').charAt(0).toUpperCase()}
-            </span>
-          )}
+          <IdentityAvatar src={authorAvatar} name={authorName} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold leading-tight text-white/90">{authorName || 'You'}</p>
             {authorContext && <p className="mt-0.5 truncate text-[10.5px] leading-tight text-white/35">{authorContext}</p>}

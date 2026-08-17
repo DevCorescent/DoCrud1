@@ -1902,9 +1902,9 @@ html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
 /* ── Notifications panel tokens ──────────────────────────────────────────────
    The panel was authored dark-only (a literal #0c0c0f surface plus white-alpha
    utilities), so it stayed dark when the app switched to light. Each colour now
-   resolves through a semantic token. The .dark values reproduce exactly what
-   shipped, so dark mode is unchanged; :root gives light mode a real design —
-   white surface, slate text, soft grey borders — not an inverted dark theme. */
+   resolves through a semantic token. :root gives light mode a real design —
+   white surface, slate text, soft grey borders — not an inverted dark theme.
+   .dark text opacities are raised to match app --text-* floors for readability. */
 :root {
   --nt-surface: #ffffff;
   --nt-surface-2: rgba(15,23,42,0.035);   /* header / raised rows */
@@ -1926,10 +1926,12 @@ html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
   --nt-line: rgba(255,255,255,0.07);
   --nt-hover: rgba(255,255,255,0.03);
   --nt-unread: rgba(255,255,255,0.018);
-  --nt-t1: rgba(255,255,255,0.88);
-  --nt-t2: rgba(255,255,255,0.48);
-  --nt-t3: rgba(255,255,255,0.35);
-  --nt-t4: rgba(255,255,255,0.22);
+  /* Align with app dark typography floors (--text-primary/secondary/muted)
+     so titles/bodies/timestamps stay readable without over-brightening. */
+  --nt-t1: rgba(255,255,255,0.92);  /* primary titles */
+  --nt-t2: rgba(255,255,255,0.68);  /* body / read titles */
+  --nt-t3: rgba(255,255,255,0.52);  /* labels / controls */
+  --nt-t4: rgba(255,255,255,0.42);  /* timestamps / faint meta */
   --nt-shadow: 0 8px 48px rgba(0,0,0,0.92);
   --nt-shadow-mobile: 0 -4px 40px rgba(0,0,0,1);
   --nt-scrim: rgba(0,0,0,0.75);

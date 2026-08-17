@@ -1994,3 +1994,104 @@ html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
   --rx-text-muted: rgba(255,255,255,0.45);
   --rx-scrim: rgba(0,0,0,0.72);
 }
+
+/* ── Social proof ────────────────────────────────────────────────────────────
+   Reads as quiet metadata until pointed at, then resolves to full-strength
+   text.
+
+   These values are white-alpha and deliberately do NOT flip with the theme —
+   the same treatment the reaction controls beside them use.
+
+   Why: the post surfaces are dark-only markup, and light mode is implemented by
+   inverting the whole shell (`filter: invert(1) hue-rotate(180deg)` on
+   .min-h-screen.bg-[#0D0D0F] et al, further down this file). Under that filter
+   white text is painted black, which is what makes light mode legible. A colour
+   that flipped to dark slate on its own would then be inverted to near-white
+   and vanish against the light card — so theme-aware tokens are exactly wrong
+   here. Photos are exempted from the inversion by the `img` rules, so avatars
+   keep their true colours either way.
+
+   The modal this row opens is a real panel, not part of the inverted shell, and
+   correctly keeps the theme-aware --rx-* tokens. */
+:root {
+  /* 0.58, not 0.45: alpha is composited over the dark card BEFORE the light-mode
+     filter inverts it, so the two themes are not symmetric — measured 5.4:1 dark
+     but only 3.9:1 light at 0.50. This clears 4.5:1 in both. */
+  --sp-text: rgba(255,255,255,0.58);
+  --sp-text-strong: rgba(255,255,255,0.90);
+  --sp-hover-bg: rgba(255,255,255,0.08);
+  --sp-face-bg: rgba(255,255,255,0.08);
+  --sp-face-border: rgba(255,255,255,0.14);
+}
+.social-proof-link {
+  color: var(--sp-text);
+  transition: color 170ms ease, background 170ms ease;
+  cursor: pointer;
+  padding: 1px 3px;
+  margin: -1px -3px;
+}
+.social-proof-link:hover { color: var(--sp-text-strong); background: var(--sp-hover-bg); }
+.social-proof-link:focus-visible {
+  outline: 2px solid rgba(244,63,94,0.6);
+  outline-offset: 1px;
+  color: var(--sp-text-strong);
+}
+@media (prefers-reduced-motion: reduce) { .social-proof-link { transition: none; } }
+
+/* ── Publish wizard — category cards ─────────────────────────────────────────
+   Border and shadow cannot come
+   from `border-white*` / `shadow-*` utilities because the dark-mode block below
+   overrides both with !important, which would erase the selected state.
+
+   --cat-accent carries the category's own colour so the selected ring is tinted
+   without a per-category class; it defaults to plain white if unset. */
+.publish-category-card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04), 0 2px 10px rgba(0, 0, 0, 0.20);
+  transition: transform 180ms ease, background-color 180ms ease,
+              border-color 180ms ease, box-shadow 180ms ease;
+}
+.publish-category-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+.publish-category-card:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.55);
+  outline-offset: 2px;
+}
+.publish-category-card[aria-pressed='true'] {
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px rgba(var(--cat-accent, 255 255 255) / 0.34),
+    0 8px 26px rgba(var(--cat-accent, 255 255 255) / 0.16);
+}
+@media (prefers-reduced-motion: reduce) {
+  .publish-category-card { transition: none; }
+  .publish-category-card:hover { transform: none; }
+}
+
+/* ── Publish wizard — media drop zone ────────────────────────────────────────
+   Border and surface live here for the same reason as the cards above: the
+   dark-mode block below rewrites every `border-white*` utility to one fixed
+   colour with !important, which flattened the drag-over state so the border
+   never changed while dragging.
+
+   The fill is deliberately heavier than the FormSection behind it (0.035 vs
+   0.015) — matching them made the zone dissolve into the panel. */
+.publish-dropzone {
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.035);
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.publish-dropzone:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.055);
+}
+.publish-dropzone[data-dragging='true'] {
+  border-color: rgba(255, 255, 255, 0.48);
+  background: rgba(255, 255, 255, 0.085);
+}
+@media (prefers-reduced-motion: reduce) {
+  .publish-dropzone { transition: none; }
+}

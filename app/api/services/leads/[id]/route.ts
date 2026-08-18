@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getStoredUserById } from '@/lib/server/users';
 import { getProfileFields } from '@/lib/server/user-profiles';
+import { trackAnalyticsEvent } from '@/lib/server/services';
 import {
   allowedServiceLeadTransitions,
   getServiceLeadById,
@@ -99,6 +100,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       status: requestedStatus || undefined,
       noteBody: note,
     });
+
+    /* §35 provider responded — the first time the provider moves a lead off
+       'new' or leaves a note, i.e. an actual response to the customer. */
+    const responded = (requestedStatus && lead.status === 'new' && updated.status !== 'new') || Boolean(note?.trim());
+    if (responded) {
+      void trackAnalyticsEvent({
+        serviceId: updated.serviceId, serviceUserId: actor.id, type: 'provider_responded',
+        source: 'direct', actorId: actor.id,
+        metadata: { leadId: updated.id, leadType: updated.type, status: updated.status },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       lead: updated,

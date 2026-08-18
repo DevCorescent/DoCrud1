@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getStoredUserById } from '@/lib/server/users';
-import { getServiceById } from '@/lib/server/services';
+import { getServiceById, trackAnalyticsEvent } from '@/lib/server/services';
 import {
   isServiceSaved,
   listSavedServiceIds,
@@ -92,7 +92,17 @@ export async function POST(req: NextRequest) {
     if (!service) return NextResponse.json({ error: 'Service not found.' }, { status: 404 });
     if (!service.isActive) return NextResponse.json({ error: 'This service is not available.' }, { status: 409 });
 
+    const alreadySaved = await isServiceSaved(actor.id, service.id);
     const save = await saveService(actor.id, service.id);
+
+    /* §35 — a re-save of the same service is not a new save event. */
+    if (!alreadySaved) {
+      void trackAnalyticsEvent({
+        serviceId: service.id, serviceUserId: service.userId, type: 'service_saved',
+        source: 'direct', actorId: actor.id,
+      }).catch(() => {});
+    }
+
     return NextResponse.json({ saved: true, save: { id: save.id, serviceId: save.serviceId, createdAt: save.createdAt } }, { status: 201 });
   } catch (error) {
     console.error('[services/saves] POST error', error);

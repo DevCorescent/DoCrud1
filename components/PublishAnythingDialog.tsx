@@ -210,10 +210,10 @@ const RESUME_CATEGORIES = [
 /* One composer screen. The former intent/category/details/preview steps are
    now controls and panels inside it; the category grid is an overlay, not a
    stop on a journey. */
-/* The composer is one surface; the PDF's "Photo, caption, or both" choice is a
-   short gate in front of it. */
-type Step = 'mode' | 'compose';
-type ContentMode = 'photo' | 'caption' | 'both';
+/* The composer is the only screen: Create publication opens it directly.
+   Photo-only, caption-only and photo+caption are all still supported — the
+   composer simply accepts whichever the author provides. */
+type Step = 'compose';
 
 /**
  * A titled group of fields.
@@ -318,8 +318,7 @@ export default function PublishAnythingDialog({
   onPublished?: (data: { id: string; title: string; content: string; category: string }) => void;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('mode');
-  const [contentMode, setContentMode] = useState<ContentMode>('both');
+  const [step] = useState<Step>('compose');
   /** Category grid, opened from the composer's Category control. */
   const [pickerOpen, setPickerOpen] = useState(false);
   /** Mobile-only preview toggle; desktop shows the preview permanently. */
@@ -411,9 +410,6 @@ export default function PublishAnythingDialog({
       setShareCopied(false);
       setPickerOpen(false);
       setShowPreview(false);
-      setContentMode('both');
-      /* Deep links ("post a job") pin their own category and skip the gate. */
-      setStep(initialCategory ? 'compose' : 'mode');
       /* Opens as a Post composer — the fastest path, and the one most people
          want. A deep link (business page "post a job") still pins its own
          category. */
@@ -754,11 +750,9 @@ export default function PublishAnythingDialog({
     if (category === 'survey' && !surveyQuestions.some(q => q.text.trim())) { invalid('At least 1 survey question is required.'); return; }
     if (category === 'chart' && !fields.chartLabels.trim()) { invalid('Chart labels are required.'); return; }
     if (category === 'chart' && !fields.chartValues.trim()) { invalid('Chart values are required.'); return; }
-    if (category === 'post') {
-      /* the Photo / Caption / Both choice decides what is required */
-      if (contentMode === 'photo' && postImages.length === 0) { invalid('Add at least one image.'); return; }
-      if (contentMode === 'caption' && !fields.postCaption.trim()) { invalid('Add a caption.'); return; }
-      if (contentMode === 'both' && (!fields.postCaption.trim() || postImages.length === 0)) { invalid('Add a caption and at least one image.'); return; }
+    if (category === 'post' && !fields.postCaption.trim() && postImages.length === 0) {
+      /* Caption, photo, or both — any one of them is a publishable post. */
+      invalid('Add a caption or at least one image.'); return;
     }
     if (category === 'tutorial' && !tutorialSteps.some(s => s.title.trim())) { invalid('Add at least one step.'); return; }
 
@@ -1089,42 +1083,6 @@ export default function PublishAnythingDialog({
             One screen. Editing on the left, a live card preview on the right
             where there is room for it. Everything the old steps collected is
             still here, just reachable without a journey. */}
-        {!successHref && step === 'mode' && (
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5 sm:px-6 sm:py-6 scrollbar-minimal overscroll-contain">
-            <div className="mx-auto w-full max-w-[620px]">
-              <p className="text-[13.5px] font-semibold text-white/85">Choose photo, caption, or both</p>
-              <p className="mt-1 text-[11.5px] text-white/35">
-                Sets up your post. Formats such as Job, Event or Product still collect their own details next.
-              </p>
-              <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
-                {([
-                  { id: 'photo'   as ContentMode, label: 'Photo',   desc: 'Images only',       icon: ImageIcon },
-                  { id: 'caption' as ContentMode, label: 'Caption', desc: 'Words only',        icon: MessageSquare },
-                  { id: 'both'    as ContentMode, label: 'Both',    desc: 'Photo and caption', icon: Layers },
-                ]).map(m => {
-                  const Icon = m.icon;
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => { setContentMode(m.id); setStep('compose'); }}
-                      className="group flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-[#0e0e12] p-4 text-left transition-all hover:border-white/[0.14] hover:bg-white/[0.04] active:scale-[0.99] sm:flex-col sm:items-start"
-                    >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] ring-1 ring-white/[0.09]">
-                        <Icon className="h-4 w-4 text-white/70" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[13.5px] font-bold text-white">{m.label}</p>
-                        <p className="mt-0.5 text-[11.5px] text-white/35">{m.desc}</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
         {!successHref && step === 'compose' && (
           <div className="flex min-h-0 flex-1 overflow-hidden">
             {/* Editor */}
@@ -1143,7 +1101,7 @@ export default function PublishAnythingDialog({
                 {/* Post is the default: one box, start typing. Other categories
                     bring their own fields instead. */}
                 {category === 'post' ? (
-                  contentMode === 'photo' ? null : (
+                  (
                   <textarea
                     autoFocus
                     rows={5}
@@ -1192,7 +1150,7 @@ export default function PublishAnythingDialog({
                       onUrlChange={setThumbnailUrlInput}
                       onModeChange={setThumbnailMode}
                       thumbnailRef={thumbnailRef}
-                      postImages={category === 'post' && contentMode !== 'caption' ? postImages : undefined}
+                      postImages={category === 'post' ? postImages : undefined}
                       postImagesRef={category === 'post' ? postImagesRef : undefined}
                       setPostImages={category === 'post' ? setPostImages : undefined}
                     />

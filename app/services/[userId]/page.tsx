@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import { serviceDetailHref, SERVICE_CATEGORIES } from '@/lib/services-ui';
+import { subcategoriesFor } from '@/lib/services-taxonomy';
 import {
   ArrowLeft,
   Briefcase,
@@ -51,6 +53,7 @@ interface Service {
   tagline: string;
   description: string;
   category: string;
+  subcategory?: string;
   tags: string[];
   pricingModel: string;
   basePrice: number;
@@ -59,6 +62,12 @@ interface Service {
   deliveryTime?: number;
   deliveryUnit?: string;
   imageUrl?: string;
+  coverImageUrl?: string;
+  serviceImageUrl?: string;
+  useMainProfileImage?: boolean;
+  location?: string;
+  workMode?: string;
+  availability?: string;
   faqs?: Array<{ question: string; answer: string }>;
   isActive: boolean;
   featured: boolean;
@@ -138,23 +147,8 @@ interface ProviderProfile {
 }
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
-const SERVICE_CATEGORIES: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  design: { label: 'Design', color: 'text-pink-400', bg: 'bg-pink-500/10 border-pink-500/20', icon: '🎨' },
-  development: { label: 'Development', color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', icon: '💻' },
-  writing: { label: 'Writing', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: '✍️' },
-  marketing: { label: 'Marketing', color: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/20', icon: '📣' },
-  consulting: { label: 'Consulting', color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/20', icon: '🧠' },
-  photography: { label: 'Photography', color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/20', icon: '📸' },
-  video: { label: 'Video', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20', icon: '🎬' },
-  music: { label: 'Music', color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: '🎵' },
-  business: { label: 'Business', color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: '📊' },
-  legal: { label: 'Legal', color: 'text-slate-400', bg: 'bg-slate-500/10 border-slate-500/20', icon: '⚖️' },
-  finance: { label: 'Finance', color: 'text-teal-400', bg: 'bg-teal-500/10 border-teal-500/20', icon: '💰' },
-  coaching: { label: 'Coaching', color: 'text-sky-400', bg: 'bg-sky-500/10 border-sky-500/20', icon: '🏆' },
-  education: { label: 'Education', color: 'text-lime-400', bg: 'bg-lime-500/10 border-lime-500/20', icon: '🎓' },
-  health: { label: 'Health', color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20', icon: '❤️' },
-  other: { label: 'Other', color: 'text-white/50', bg: 'bg-white/[0.06] border-white/[0.10]', icon: '⭐' },
-};
+/* Category palette is shared with the service detail page. */
+
 
 const COVER_GRADIENTS = [
   'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
@@ -681,6 +675,9 @@ type ServiceDraft = {
   title: string; tagline: string; description: string; category: string;
   tags: string[]; pricingModel: string; basePrice: number; currency: string;
   deliveryTime: number; deliveryUnit: string; isActive: boolean; featured: boolean; imageUrl: string;
+  subcategory: string;
+  coverImageUrl: string; serviceImageUrl: string; useMainProfileImage: boolean;
+  location: string; workMode: string; availability: string;
 };
 function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
   service: Service | null; // null = new
@@ -694,6 +691,7 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
     tagline: service?.tagline ?? '',
     description: service?.description ?? '',
     category: service?.category ?? 'design',
+    subcategory: service?.subcategory ?? '',
     tags: service?.tags ?? [],
     pricingModel: service?.pricingModel ?? 'fixed',
     basePrice: service?.basePrice ?? 0,
@@ -703,6 +701,12 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
     isActive: service?.isActive ?? true,
     featured: service?.featured ?? false,
     imageUrl: service?.imageUrl ?? '',
+    coverImageUrl: service?.coverImageUrl ?? '',
+    serviceImageUrl: service?.serviceImageUrl ?? '',
+    useMainProfileImage: service?.useMainProfileImage ?? false,
+    location: service?.location ?? '',
+    workMode: service?.workMode ?? '',
+    availability: service?.availability ?? '',
   });
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
@@ -714,7 +718,20 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
     e.preventDefault();
     setSaving(true); setErr('');
     try {
-      const payload = { ...draft, tags: draft.tags, basePrice: Number(draft.basePrice) };
+      /* Blank optional fields are sent as undefined, so "not specified"
+         stays genuinely absent instead of becoming an empty-string value. */
+      const blankToUndefined = (v: string) => (v.trim() ? v.trim() : undefined);
+      const payload = {
+        ...draft,
+        tags: draft.tags,
+        basePrice: Number(draft.basePrice),
+        subcategory: blankToUndefined(draft.subcategory),
+        coverImageUrl: blankToUndefined(draft.coverImageUrl),
+        serviceImageUrl: blankToUndefined(draft.serviceImageUrl),
+        location: blankToUndefined(draft.location),
+        workMode: blankToUndefined(draft.workMode),
+        availability: blankToUndefined(draft.availability),
+      };
       const res = await fetch(isNew ? '/api/services' : `/api/services/${service!.id}`, {
         method: isNew ? 'POST' : 'PUT',
         headers: { 'content-type': 'application/json' },
@@ -790,9 +807,40 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="col-span-2">
               <label className={lbl}>Category</label>
-              <select value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} className={`${inp} bg-[#111113]`}>
-                {Object.entries({ design: '🎨 Design', development: '💻 Development', writing: '✍️ Writing', marketing: '📣 Marketing', consulting: '🧠 Consulting', photography: '📸 Photography', video: '🎬 Video', music: '🎵 Music', business: '📊 Business', legal: '⚖️ Legal', finance: '💰 Finance', coaching: '🏆 Coaching', education: '🎓 Education', health: '❤️ Health', other: '⭐ Other' }).map(([v, l]) => (
-                  <option key={v} value={v}>{l}</option>
+              {/* Drawn from the shared category map, so adding a category in
+                  one place adds it here too. */}
+              <select
+                value={draft.category}
+                onChange={e => setDraft(d => ({
+                  ...d,
+                  category: e.target.value,
+                  /* A subcategory only means something inside its own
+                     category, so changing category clears it rather than
+                     leaving an impossible pair behind. */
+                  subcategory: '',
+                }))}
+                className={`${inp} bg-[#111113]`}
+              >
+                {Object.entries(SERVICE_CATEGORIES).map(([v, meta]) => (
+                  <option key={v} value={v}>{meta.icon} {meta.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className={lbl}>
+                Subcategory <span className="text-white/20 normal-case font-normal">(optional)</span>
+              </label>
+              <select
+                value={draft.subcategory}
+                onChange={e => setDraft(d => ({ ...d, subcategory: e.target.value }))}
+                disabled={subcategoriesFor(draft.category).length === 0}
+                className={`${inp} bg-[#111113] disabled:opacity-40`}
+              >
+                <option value="">
+                  {subcategoriesFor(draft.category).length ? 'Not specified' : 'None for this category'}
+                </option>
+                {subcategoriesFor(draft.category).map(sub => (
+                  <option key={sub} value={sub}>{sub}</option>
                 ))}
               </select>
             </div>
@@ -841,8 +889,60 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
 
           {/* Image URL */}
           <div>
-            <label className={lbl}>Cover image URL <span className="text-white/20 normal-case font-normal">(optional)</span></label>
+            <label className={lbl}>Service image URL <span className="text-white/20 normal-case font-normal">(optional)</span></label>
             <input value={draft.imageUrl} onChange={e => setDraft(d => ({ ...d, imageUrl: e.target.value }))} placeholder="https://..." className={inp} />
+          </div>
+
+          {/* Service-specific identity — independent of the main profile. */}
+          <div>
+            <label className={lbl}>Service cover image URL <span className="text-white/20 normal-case font-normal">(optional)</span></label>
+            <input value={draft.coverImageUrl} onChange={e => setDraft(d => ({ ...d, coverImageUrl: e.target.value }))} placeholder="https://..." className={inp} />
+          </div>
+
+          <div>
+            <label className={lbl}>Service profile image</label>
+            <label className="mb-2 flex items-center gap-2 text-[12.5px] text-white/60">
+              <input
+                type="checkbox"
+                checked={draft.useMainProfileImage}
+                onChange={e => setDraft(d => ({ ...d, useMainProfileImage: e.target.checked }))}
+                className="h-3.5 w-3.5 accent-white"
+              />
+              Use my main profile image
+            </label>
+            {!draft.useMainProfileImage && (
+              <input
+                value={draft.serviceImageUrl}
+                onChange={e => setDraft(d => ({ ...d, serviceImageUrl: e.target.value }))}
+                placeholder="https://... (leave blank to show your initial)"
+                className={inp}
+              />
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className={lbl}>Location / service area</label>
+              <input value={draft.location} onChange={e => setDraft(d => ({ ...d, location: e.target.value }))} placeholder="e.g. Bengaluru, India" className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>Work mode</label>
+              <select value={draft.workMode} onChange={e => setDraft(d => ({ ...d, workMode: e.target.value }))} className={inp}>
+                <option value="">Not specified</option>
+                <option value="remote">Remote</option>
+                <option value="onsite">On-site</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </div>
+            <div>
+              <label className={lbl}>Availability</label>
+              <select value={draft.availability} onChange={e => setDraft(d => ({ ...d, availability: e.target.value }))} className={inp}>
+                <option value="">Not specified</option>
+                <option value="available">Available now</option>
+                <option value="limited">Limited availability</option>
+                <option value="unavailable">Not taking work</option>
+              </select>
+            </div>
           </div>
 
           {/* Tags */}
@@ -1119,6 +1219,7 @@ function ServiceListCard({ service, reviews, shared, editMode, settings, onView,
 /* ─── Main Page ─────────────────────────────────────────────────────── */
 export default function ServicesPage() {
   const params = useParams();
+  const router = useRouter();
   const userId = params?.userId as string | undefined;
 
   const [provider, setProvider] = useState<ProviderProfile | null>(null);
@@ -1138,6 +1239,7 @@ export default function ServicesPage() {
 
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [activeSubcategory, setActiveSubcategory] = useState<string>('all');
   const [activePricing, setActivePricing] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'default' | 'price_asc' | 'price_desc' | 'newest' | 'top_rated' | 'most_reviewed'>('default');
   const [ratingFilter, setRatingFilter] = useState<'all' | '3+' | '4+'>('all');
@@ -1238,6 +1340,7 @@ export default function ServicesPage() {
       );
     }
     if (activeCategory !== 'all') list = list.filter(s => s.category === activeCategory);
+    if (activeSubcategory !== 'all') list = list.filter(s => s.subcategory === activeSubcategory);
     if (activePricing !== 'all') list = list.filter(s => s.pricingModel === activePricing);
     if (ratingFilter === '4+') list = list.filter(s => s.rating >= 4);
     else if (ratingFilter === '3+') list = list.filter(s => s.rating >= 3);
@@ -1253,7 +1356,7 @@ export default function ServicesPage() {
     else list.sort((a, b) => { if (a.featured && !b.featured) return -1; if (!a.featured && b.featured) return 1; return b.bookingCount - a.bookingCount; });
 
     return list;
-  }, [services, search, activeCategory, activePricing, ratingFilter, deliveryFilter, sortBy, editMode]);
+  }, [services, search, activeCategory, activeSubcategory, activePricing, ratingFilter, deliveryFilter, sortBy, editMode]);
 
   function handleCopy() {
     navigator.clipboard.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {});
@@ -1297,8 +1400,16 @@ export default function ServicesPage() {
   }
 
   const presentCategories = Array.from(new Set(services.map(s => s.category)));
+  /* Subcategories present in the currently selected category only — a
+     subcategory is meaningless outside its own category. */
+  const presentSubcategories = Array.from(new Set(
+    services
+      .filter(s => activeCategory === 'all' || s.category === activeCategory)
+      .map(s => s.subcategory)
+      .filter((v): v is string => Boolean(v)),
+  ));
   const filtered = filteredServices();
-  const hasActiveFilters = search || activeCategory !== 'all' || activePricing !== 'all' || ratingFilter !== 'all' || deliveryFilter !== 'all';
+  const hasActiveFilters = search || activeCategory !== 'all' || activeSubcategory !== 'all' || activePricing !== 'all' || ratingFilter !== 'all' || deliveryFilter !== 'all';
 
   // Aggregate stats for the stats bar
   const ratedServices = services.filter(s => s.reviewCount > 0);
@@ -1542,6 +1653,27 @@ export default function ServicesPage() {
                   </div>
                 </div>
               )}
+              {/* Subcategory — follows the selected category. */}
+              {presentSubcategories.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-semibold text-white/35 uppercase tracking-wider mb-2">Subcategory</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button type="button" onClick={() => setActiveSubcategory('all')}
+                      className={`rounded-full px-3 py-1 text-[11px] font-semibold border transition-all ${activeSubcategory === 'all' ? 'border-violet-500/50 bg-violet-500/15 text-violet-300' : 'border-white/[0.08] bg-white/[0.03] text-white/40 hover:text-white/70'}`}>
+                      All
+                    </button>
+                    {presentSubcategories.map(sub => {
+                      const count = services.filter(s => s.subcategory === sub && (activeCategory === 'all' || s.category === activeCategory)).length;
+                      return (
+                        <button key={sub} type="button" onClick={() => setActiveSubcategory(sub === activeSubcategory ? 'all' : sub)}
+                          className={`rounded-full px-3 py-1 text-[11px] font-semibold border transition-all ${activeSubcategory === sub ? 'border-white/30 bg-white/[0.10] text-white' : 'border-white/[0.08] bg-white/[0.03] text-white/40 hover:text-white/70'}`}>
+                          {sub} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {/* Pricing */}
               <div>
                 <p className="text-[10px] font-semibold text-white/35 uppercase tracking-wider mb-2">Pricing type</p>
@@ -1629,7 +1761,7 @@ export default function ServicesPage() {
               {filtered.map(svc => (
                 <ServiceListCard key={svc.id} service={svc} reviews={reviewsByService[svc.id] ?? []}
                   shared={sharedServiceId === svc.id} editMode={editMode} settings={catSettings}
-                  onView={() => { if (!editMode) { setSelectedService(svc); track(svc.id, 'detail_open'); } }}
+                  onView={() => { if (!editMode) { track(svc.id, 'detail_open'); router.push(serviceDetailHref(svc.id)); } }}
                   onBook={() => { if (!editMode) { setBookingService(svc); track(svc.id, 'book_click'); } }}
                   onEnquire={() => { if (!editMode) setEnquiryService(svc); }}
                   onShare={() => shareService(svc.id)}
@@ -1650,7 +1782,7 @@ export default function ServicesPage() {
               {filtered.map(svc => (
                 <ServiceCard key={svc.id} service={svc} reviews={reviewsByService[svc.id] ?? []}
                   shared={sharedServiceId === svc.id} editMode={editMode} settings={catSettings}
-                  onView={() => { if (!editMode) { setSelectedService(svc); track(svc.id, 'detail_open'); } }}
+                  onView={() => { if (!editMode) { track(svc.id, 'detail_open'); router.push(serviceDetailHref(svc.id)); } }}
                   onBook={() => { if (!editMode) { setBookingService(svc); track(svc.id, 'book_click'); } }}
                   onEnquire={() => { if (!editMode) setEnquiryService(svc); }}
                   onShare={() => shareService(svc.id)}

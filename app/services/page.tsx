@@ -16,7 +16,7 @@ import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 import { SERVICE_CATEGORIES, serviceCategory } from '@/lib/services-ui';
 import { ServiceSummaryCard, type ServiceSummary } from '@/components/services/ServiceSummaryCard';
 
-type Facets = { categories: Record<string, number>; subcategories?: Record<string, number>; pricing: Record<string, number>; tags?: Record<string, number>; skills?: Record<string, number>; languages?: Record<string, number>; workMode?: Record<string, number>; availability?: Record<string, number> };
+type Facets = { categories: Record<string, number>; subcategories?: Record<string, number>; pricing: Record<string, number>; tags?: Record<string, number>; skills?: Record<string, number>; providerType?: Record<string, number>; languages?: Record<string, number>; workMode?: Record<string, number>; availability?: Record<string, number> };
 type ApiResponse = {
   services: ServiceSummary[];
   total: number;
@@ -77,6 +77,7 @@ export default function ServicesDiscoveryPage() {
   const [tags, setTags] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
   const [languages, setLanguages] = useState<string[]>([]);
+  const [providerType, setProviderType] = useState<string[]>([]);
   const [location, setLocation] = useState('');
   const [debouncedLocation, setDebouncedLocation] = useState('');
   const [workMode, setWorkMode] = useState<string[]>([]);
@@ -114,6 +115,7 @@ export default function ServicesDiscoveryPage() {
     if (tags.length) p.set('tags', tags.join(','));
     if (skills.length) p.set('skills', skills.join(','));
     if (languages.length) p.set('languages', languages.join(','));
+    if (providerType.length) p.set('providerType', providerType.join(','));
     if (debouncedLocation) p.set('location', debouncedLocation);
     if (workMode.length) p.set('workMode', workMode.join(','));
     if (availability.length) p.set('availability', availability.join(','));
@@ -121,7 +123,7 @@ export default function ServicesDiscoveryPage() {
     if (maxPrice.trim()) p.set('maxPrice', maxPrice.trim());
     p.set('sort', sort);
     return p;
-  }, [debounced, categories, subcategories, pricing, minRating, maxDelivery, tags, skills, languages, debouncedLocation, workMode, availability, minPrice, maxPrice, sort]);
+  }, [debounced, categories, subcategories, pricing, minRating, maxDelivery, tags, skills, languages, providerType, debouncedLocation, workMode, availability, minPrice, maxPrice, sort]);
 
   /* Monotonic id: a slow earlier response can never overwrite a newer one. */
   const reqId = useRef(0);
@@ -151,7 +153,7 @@ export default function ServicesDiscoveryPage() {
 
   const clearAll = () => {
     setQuery(''); setCategories([]); setSubcategories([]); setPricing([]);
-    setMinRating(0); setMaxDelivery(''); setTags([]); setSkills([]); setLanguages([]);
+    setMinRating(0); setMaxDelivery(''); setTags([]); setSkills([]); setLanguages([]); setProviderType([]);
     setLocation(''); setWorkMode([]); setAvailability([]);
     setMinPrice(''); setMaxPrice(''); setSort('recommended');
   };
@@ -169,6 +171,7 @@ export default function ServicesDiscoveryPage() {
     ...tags.map(t => ({ label: t, clear: () => toggle(tags, setTags, t) })),
     ...skills.map(v => ({ label: v, clear: () => toggle(skills, setSkills, v) })),
     ...languages.map(v => ({ label: v, clear: () => toggle(languages, setLanguages, v) })),
+    ...providerType.map(v => ({ label: v === 'business' ? 'Company / agency' : 'Individual', clear: () => toggle(providerType, setProviderType, v) })),
     ...(debouncedLocation ? [{ label: debouncedLocation, clear: () => setLocation('') }] : []),
     ...workMode.map(w => ({ label: WORK_MODES.find(x => x.id === w)?.label ?? w, clear: () => toggle(workMode, setWorkMode, w) })),
     ...availability.map(a => ({ label: AVAILABILITIES.find(x => x.id === a)?.label ?? a, clear: () => toggle(availability, setAvailability, a) })),
@@ -352,6 +355,23 @@ export default function ServicesDiscoveryPage() {
           ))}
         </div>
       </div>
+
+      {/* Provider type comes from the account record, not the service. */}
+      {Object.keys(data?.facets.providerType ?? {}).length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Provider type</p>
+          <div className="flex flex-wrap gap-1.5">
+            {([['individual','Individual'],['business','Company / agency']] as const)
+              .filter(([id]) => (data?.facets.providerType?.[id] ?? 0) > 0 || providerType.includes(id))
+              .map(([id,label]) => (
+              <button key={id} type="button" onClick={() => toggle(providerType, setProviderType, id)} aria-pressed={providerType.includes(id)}
+                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${providerType.includes(id) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'}`}>
+                {label} <span className="text-white/30">{data?.facets.providerType?.[id] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Skills — the specification lists these separately from tags. */}
       {Object.keys(data?.facets.skills ?? {}).length > 0 && (

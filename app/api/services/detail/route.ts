@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServiceById, getPublicUserServices } from '@/lib/server/services';
 import { getStoredUserById } from '@/lib/server/users';
 import { getProfileFields } from '@/lib/server/user-profiles';
+import { getBusinessPagesByOwner } from '@/lib/server/business-pages';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,10 +46,15 @@ export async function GET(req: NextRequest) {
 
     /* One profile read and one services read for the whole page — the other
        services are already filtered to active by getPublicUserServices. */
-    const [profile, providerServices] = await Promise.all([
+    const [profile, providerServices, ownedPages] = await Promise.all([
       getProfileFields(provider.id, PROVIDER_FIELDS).catch(() => null),
       getPublicUserServices(provider.id).catch(() => [] as Awaited<ReturnType<typeof getPublicUserServices>>),
+      /* The only legitimate verification signal in this codebase: a business
+         page the provider owns that has been verified. Individual providers
+         have no equivalent source, so they simply carry no indicator. */
+      getBusinessPagesByOwner(provider.id).catch(() => []),
     ]);
+    const activePage = ownedPages.find((pg) => pg.status === 'active') ?? null;
 
     const others = providerServices.filter((s) => s.id !== service.id);
     const rated = providerServices.filter((s) => s.reviewCount > 0);
@@ -109,6 +115,17 @@ export async function GET(req: NextRequest) {
           : null,
         reviewCount: providerServices.reduce((t, s) => t + (s.reviewCount ?? 0), 0),
         completedBookings: providerServices.reduce((t, s) => t + (s.bookingCount ?? 0), 0),
+        /* Business identity, when the provider actually has a business page. */
+        businessName: activePage?.name ?? null,
+        businessSlug: activePage?.slug ?? null,
+        /* True only when that page is genuinely verified — never inferred
+           from email verification or any other unrelated signal. */
+        verifiedBusiness: activePage?.verified === true,
+        /* Typical response time has no source in this codebase: it would have
+           to be derived from booking/enquiry response data, which belongs to
+           the conversion side. Sent as null so the page omits it entirely
+           rather than showing an invented figure. */
+        responseTime: null as string | null,
       },
       /* Enough for the compact cards at the foot of the page — no second call. */
       otherServices: others.map((s) => ({

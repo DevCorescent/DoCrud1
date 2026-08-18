@@ -40,6 +40,7 @@ import ServiceEnquiryModal from '@/components/services/ServiceEnquiryModal';
 import ServiceBookingWizard from '@/components/services/ServiceBookingWizard';
 import SaveServiceButton from '@/components/services/SaveServiceButton';
 import type { AnalyticsEventType } from '@/lib/server/services';
+import { trackServiceEvent, trackServiceImpression } from '@/lib/services-analytics';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 interface ServicePackage {
@@ -1424,6 +1425,9 @@ export default function ServicesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCategory, activePricing, ratingFilter, deliveryFilter, firstServiceId]);
 
+  /* §35 — the page-level events fire once per mount, not per effect run. */
+  const pageViewTracked = useRef(false);
+
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -1461,22 +1465,14 @@ export default function ServicesPage() {
             method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ serviceId: svc.id, type: 'view', visitorId: visitorId.current, source: 'catalogue' }),
           }).catch(() => {});
-          /* §35 — services page viewed, catalogue opened and one impression per
-             listing, all once per load of this catalogue. */
-          fetch('/api/services/analytics/track', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ serviceId: svc.id, type: 'service_impression', visitorId: visitorId.current, source: 'catalogue' }),
-          }).catch(() => {});
+          /* §35 — one impression per listing, deduped for this page load so a
+             re-render (or React's dev double-invoke) cannot inflate the count. */
+          trackServiceImpression(svc.id, { source: 'catalogue' });
         });
-        if (svcs[0]) {
-          fetch('/api/services/analytics/track', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ serviceId: svcs[0].id, type: 'services_page_viewed', visitorId: visitorId.current, source: 'catalogue' }),
-          }).catch(() => {});
-          fetch('/api/services/analytics/track', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ serviceId: svcs[0].id, type: 'catalogue_opened', visitorId: visitorId.current, source: 'catalogue', metadata: { services: svcs.length } }),
-          }).catch(() => {});
+        if (svcs[0] && !pageViewTracked.current) {
+          pageViewTracked.current = true;
+          trackServiceEvent(svcs[0].id, 'services_page_viewed', { source: 'catalogue' });
+          trackServiceEvent(svcs[0].id, 'catalogue_opened', { source: 'catalogue', metadata: { services: svcs.length } });
         }
       }
     }).catch(() => setNotFound(true))

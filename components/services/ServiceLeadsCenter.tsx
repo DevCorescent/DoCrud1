@@ -341,6 +341,12 @@ export default function ServiceLeadsCenter() {
         <p className="mt-1 text-[12.5px] text-white/40">
           Every enquiry and booking request for your services, in one pipeline.
         </p>
+        <Link
+          href="/services/dashboard"
+          className="mt-2.5 inline-flex items-center gap-1.5 rounded-[10px] border border-white/[0.09] bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-white/55 transition hover:text-white"
+        >
+          View service dashboard
+        </Link>
       </div>
 
       {/* §25 — what a customer may see once a request is accepted */}

@@ -81,6 +81,21 @@ export interface ServiceBooking {
   scheduledDate?: string;
   createdAt: string;
   updatedAt: string;
+  /* ── §20 Booking Form additions. All optional, so bookings written before
+     these existed stay valid and every existing reader is unaffected. ── */
+  /** What the customer needs. Mirrors clientMessage for legacy readers. */
+  requirement?: string;
+  /** Expected delivery / completion date (YYYY-MM-DD). `scheduledDate` stays the start date. */
+  expectedDeliveryDate?: string;
+  budgetMin?: number;
+  budgetMax?: number;
+  attachments?: Array<{ url: string; name: string; size?: number; mimeType?: string }>;
+  additionalNotes?: string;
+  /** Lead + conversation created alongside the request (§22). */
+  leadId?: string;
+  conversationId?: string;
+  /** Dedupe key: customer + service + package + normalized requirement. */
+  fingerprint?: string;
 }
 
 type ServicesStore = Record<string, Service[]>;
@@ -177,6 +192,48 @@ export async function createBooking(data: Omit<ServiceBooking, 'id' | 'createdAt
   }
 
   return booking;
+}
+
+export async function getBookingById(bookingId: string): Promise<ServiceBooking | null> {
+  const bookings = await getAllBookings();
+  return bookings.find((b) => b.id === bookingId) ?? null;
+}
+
+/**
+ * Most recent identical request from the same customer inside `windowMs`.
+ * Mirrors the enquiry duplicate guard so a double-tapped "Send Booking Request"
+ * cannot produce two bookings.
+ */
+export async function findRecentDuplicateBooking(
+  clientId: string,
+  fingerprint: string,
+  windowMs: number,
+): Promise<ServiceBooking | null> {
+  if (!clientId || !fingerprint) return null;
+  const cutoff = new Date(Date.now() - windowMs).toISOString();
+  const bookings = await getAllBookings();
+  return (
+    bookings.find((b) => b.clientId === clientId && b.fingerprint === fingerprint && b.createdAt >= cutoff)
+    ?? null
+  );
+}
+
+/** Attach the lead / conversation ids once those exist. */
+export async function linkBooking(
+  bookingId: string,
+  links: { leadId?: string; conversationId?: string },
+): Promise<ServiceBooking | null> {
+  const bookings = await getAllBookings();
+  const idx = bookings.findIndex((b) => b.id === bookingId);
+  if (idx === -1) return null;
+  bookings[idx] = {
+    ...bookings[idx],
+    ...(links.leadId ? { leadId: links.leadId } : {}),
+    ...(links.conversationId ? { conversationId: links.conversationId } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+  await writeJsonFile(serviceBookingsPath, bookings);
+  return bookings[idx];
 }
 
 export async function getBookingsForProvider(userId: string): Promise<ServiceBooking[]> {

@@ -102,6 +102,10 @@ export interface ServiceLead {
   contactEmail?: string;
   contactPhone?: string;
 
+  /* Booking specifics — unset on enquiry leads. */
+  packageName?: string;
+  price?: number;
+
   /* Where the discussion lives */
   conversationId?: string;
 
@@ -172,6 +176,11 @@ export interface CreateServiceLeadInput {
   contactEmail?: string;
   contactPhone?: string;
   conversationId?: string;
+  /** Package / pricing chosen, for booking leads. */
+  packageName?: string;
+  price?: number;
+  /** Defaults to 'new'. Booking leads open at 'booking_requested' (§23). */
+  status?: ServiceLeadStatus;
 }
 
 /**
@@ -204,7 +213,9 @@ export async function createServiceLead(input: CreateServiceLeadInput): Promise<
     ...(input.contactEmail ? { contactEmail: input.contactEmail } : {}),
     ...(input.contactPhone ? { contactPhone: input.contactPhone } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-    status: 'new',
+    ...(input.packageName ? { packageName: input.packageName } : {}),
+    ...(input.price != null ? { price: input.price } : {}),
+    status: input.status && SERVICE_LEAD_STATUSES.includes(input.status) ? input.status : 'new',
     notes: [],
     createdAt: now,
     updatedAt: now,

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import InfinityUpgradeModal from '@/components/InfinityUpgradeModal';
 import ServiceEnquiryModal from '@/components/services/ServiceEnquiryModal';
+import ServiceBookingWizard from '@/components/services/ServiceBookingWizard';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 interface ServicePackage {
@@ -212,176 +213,6 @@ function StarRow({ rating, interactive = false, onChange }: { rating: number; in
           <Star className={`h-4 w-4 ${n <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-white/15'}`} />
         </button>
       ))}
-    </div>
-  );
-}
-
-/* ─── Booking Modal ─────────────────────────────────────────────────── */
-interface BookingModalProps {
-  service: Service;
-  onClose: () => void;
-}
-
-function BookingModal({ service, onClose }: BookingModalProps) {
-  const [form, setForm] = useState({ clientName: '', clientEmail: '', clientPhone: '', clientMessage: '', packageName: service.packages?.[0]?.name ?? '', scheduledDate: '' });
-  const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
-
-  const selectedPkg = service.packages?.find(p => p.name === form.packageName);
-  const displayPrice = selectedPkg ? selectedPkg.price : service.basePrice;
-  const sym = service.currency === 'INR' ? '₹' : service.currency === 'EUR' ? '€' : service.currency === 'GBP' ? '£' : '$';
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError('');
-    try {
-      const res = await fetch('/api/services/bookings', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ serviceId: service.id, ...form }),
-      });
-      const d = await res.json() as { error?: string };
-      if (!res.ok) { setError(d.error ?? 'Failed to submit.'); return; }
-      // Track conversion
-      fetch('/api/services/analytics/track', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ serviceId: service.id, type: 'booking_submitted', source: 'catalogue' }),
-      }).catch(() => {});
-      setSuccess(true);
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg bg-[#0E0E10] border border-white/[0.09] rounded-[28px] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.95)]">
-        {/* Header */}
-        <div className="relative overflow-hidden px-6 py-5 border-b border-white/[0.07]" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.08) 100%)' }}>
-          <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(139,92,246,0.15) 0%, transparent 70%)' }} />
-          <div className="relative flex items-start justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-violet-400/70 mb-1">Book Service</p>
-              <h2 className="font-bold text-white text-[16px] leading-tight line-clamp-2">{service.title}</h2>
-              {service.pricingModel !== 'contact' && (
-                <p className="text-[13px] font-black text-white/70 mt-1">
-                  {sym}{displayPrice.toLocaleString()}
-                  {service.pricingModel === 'hourly' && <span className="text-[11px] font-normal text-white/35"> /hr</span>}
-                  {selectedPkg && <span className="text-[11px] font-normal text-white/35 ml-1">· {selectedPkg.name} package</span>}
-                </p>
-              )}
-            </div>
-            <button onClick={onClose} className="shrink-0 h-8 w-8 rounded-full border border-white/[0.10] bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.12] transition-colors">
-              <X className="h-4 w-4 text-white/60" />
-            </button>
-          </div>
-        </div>
-
-        <div className="px-6 py-5 max-h-[70vh] overflow-y-auto [scrollbar-width:none]">
-          {success ? (
-            <div className="py-12 text-center">
-              <div className="h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-5 shadow-[0_0_30px_rgba(16,185,129,0.4)]" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
-                <Check className="h-8 w-8 text-white" />
-              </div>
-              <p className="font-black text-white text-[18px] mb-2">Booking Sent!</p>
-              <p className="text-[13px] text-white/40 leading-relaxed">The provider will review your request and reach out within 24 hours.</p>
-              <button onClick={onClose} className="mt-6 rounded-[14px] border border-white/[0.10] bg-white/[0.06] px-6 py-2.5 text-[13px] font-semibold text-white/70 hover:text-white hover:bg-white/[0.10] transition-all">
-                Close
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Package selector */}
-              {service.packages && service.packages.length > 0 && (
-                <div>
-                  <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-2.5">Choose Package</label>
-                  <div className="space-y-2">
-                    {service.packages.map(pkg => (
-                      <button key={pkg.name} type="button" onClick={() => setForm(f => ({ ...f, packageName: pkg.name }))}
-                        className={`w-full text-left rounded-[16px] border px-4 py-3.5 transition-all duration-200 ${form.packageName === pkg.name ? 'border-violet-500/50 bg-violet-500/10 shadow-[0_0_20px_rgba(99,102,241,0.15)]' : 'border-white/[0.07] bg-white/[0.03] hover:border-white/[0.13] hover:bg-white/[0.05]'}`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[13.5px] font-bold text-white/90">{pkg.name}</span>
-                              <span className={`h-4 w-4 rounded-full border flex items-center justify-center transition-all ${form.packageName === pkg.name ? 'border-violet-500 bg-violet-500' : 'border-white/[0.20]'}`}>
-                                {form.packageName === pkg.name && <Check className="h-2.5 w-2.5 text-white" />}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-white/40 line-clamp-2">{pkg.description}</p>
-                            {pkg.features.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {pkg.features.slice(0, 3).map(f => (
-                                  <span key={f} className="flex items-center gap-1 text-[9.5px] text-emerald-400/70">
-                                    <Check className="h-2 w-2" /> {f}
-                                  </span>
-                                ))}
-                                {pkg.features.length > 3 && <span className="text-[9.5px] text-white/25">+{pkg.features.length - 3} more</span>}
-                              </div>
-                            )}
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-[14px] font-black text-white/90">{sym}{pkg.price.toLocaleString()}</p>
-                            <p className="text-[9.5px] text-white/30 mt-0.5">{pkg.deliveryTime} {pkg.deliveryUnit}</p>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">Your Name *</label>
-                <input value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} required placeholder="Full name"
-                  className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 focus:bg-violet-500/[0.04] transition-all" />
-              </div>
-              <div>
-                <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">Email Address *</label>
-                <input type="email" value={form.clientEmail} onChange={e => setForm(f => ({ ...f, clientEmail: e.target.value }))} required placeholder="you@example.com"
-                  className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 focus:bg-violet-500/[0.04] transition-all" />
-              </div>
-              <div>
-                <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">Phone Number</label>
-                <input type="tel" value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))} placeholder="+91 98765 43210"
-                  className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 focus:bg-violet-500/[0.04] transition-all" />
-              </div>
-              <div>
-                <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">Preferred Date</label>
-                <input type="date" value={form.scheduledDate} onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))}
-                  className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white/70 outline-none focus:border-violet-500/50 transition-all" />
-              </div>
-              <div>
-                <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">Project Details</label>
-                <textarea rows={4} value={form.clientMessage} onChange={e => setForm(f => ({ ...f, clientMessage: e.target.value }))} placeholder="Tell me about your project, goals, and timeline…"
-                  className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 transition-all resize-none" />
-              </div>
-
-              {error && <p className="text-[12px] text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-[10px] px-3 py-2">{error}</p>}
-
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={onClose} className="flex-1 h-11 rounded-[13px] border border-white/[0.09] text-white/55 text-[13px] font-semibold hover:bg-white/[0.05] hover:text-white/80 transition-all">
-                  Cancel
-                </button>
-                <button type="submit" disabled={submitting}
-                  className="flex-1 h-11 rounded-[13px] font-black text-[13px] text-white transition-all active:scale-[0.98] disabled:opacity-60"
-                  style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 20px rgba(99,102,241,0.45)' }}>
-                  {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <div className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      Sending…
-                    </span>
-                  ) : 'Send Booking Request'}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -1798,7 +1629,19 @@ export default function ServicesPage() {
         />
       )}
       {bookingService && (
-        <BookingModal service={bookingService} onClose={() => setBookingService(null)} />
+        <ServiceBookingWizard
+          service={{
+            id: bookingService.id,
+            title: bookingService.title,
+            currency: bookingService.currency,
+            basePrice: bookingService.basePrice,
+            pricingModel: bookingService.pricingModel,
+            packages: bookingService.packages,
+            providerName: provider?.user.name,
+            userId: provider?.user.id,
+          }}
+          onClose={() => setBookingService(null)}
+        />
       )}
       {enquiryService && (
         <ServiceEnquiryModal

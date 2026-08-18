@@ -1,137 +1,233 @@
 /**
- * Service enquiries and the provider leads they create.
+ * Service Enquiries — §17/§18.
  *
- * Deliberately separate from `serviceBookings`. The existing catalogue enquiry
- * form writes a *booking* row with an "[ENQUIRY]" prefix on the message, which
- * conflates two things the specification keeps apart: an enquiry is a question,
- * a booking is a commitment. This store keeps enquiries as their own record so
- * a lead can carry its own status without polluting booking status.
+ * An enquiry is a lightweight "I have a question / I need a quote" message.
+ * It is deliberately NOT a booking: it creates no `ServiceBooking`, and it never
+ * touches `service.bookingCount`. The two flows stay separate all the way down
+ * so §24's distinction holds at the data layer, not just in the UI.
  *
- * One record serves as both the enquiry and its lead — the relationship
- * (requester → service → provider) is intrinsic to the row, so there is no
- * second table to keep in sync and no way for the two to disagree.
- *
- * Storage follows the same JSON-file convention as the rest of the service
- * layer, and the path is declared here rather than in the shared storage
- * module to keep this feature self-contained.
+ * Persistence mirrors `lib/server/service-leads.ts` — a dedicated Mongo
+ * collection when configured, JSON file otherwise. Never the whole-array
+ * app_state blob used by bookings.
  */
+import crypto from 'node:crypto';
 import path from 'path';
-import { randomUUID } from 'crypto';
-import { readJsonFile, writeJsonFile, dataDir } from '@/lib/server/storage';
+import { getMongoDb } from '@/lib/server/database';
+import { dataDir, readJsonFile, writeJsonFile } from '@/lib/server/storage';
+import type {
+  ServiceContactMethod,
+  ServiceLeadAttachment,
+  ServiceLeadBudget,
+  ServiceLeadTimeline,
+} from '@/lib/server/service-leads';
 
-export const serviceEnquiriesPath = path.join(dataDir, 'service-enquiries.json');
+const COL = 'service_enquiries';
+const serviceEnquiriesPath = path.join(dataDir, 'service-enquiries.json');
 
-/** The specification's initial lead state. Later states belong to the
- *  provider lead-management task and are intentionally not modelled here. */
-export type LeadStatus = 'new';
+/**
+ * Window in which an identical enquiry from the same customer for the same
+ * service is treated as a double-submit rather than a new enquiry.
+ */
+export const DUPLICATE_ENQUIRY_WINDOW_MS = 10 * 60 * 1000;
 
-export type ContactMethod = 'platform' | 'email' | 'phone';
+export const CONTACT_METHODS: ServiceContactMethod[] = ['docrud_chat', 'email', 'phone'];
+
+export const REQUIREMENT_MIN_LENGTH = 10;
+export const REQUIREMENT_MAX_LENGTH = 4000;
+export const COMPANY_INFO_MAX_LENGTH = 600;
+export const MAX_ATTACHMENTS = 5;
 
 export interface ServiceEnquiry {
   id: string;
-  /** Short human-quotable reference shown on the success screen. */
-  reference: string;
 
-  /* relationship — all resolved server-side, never from the client */
   serviceId: string;
   serviceTitle: string;
   providerId: string;
-  requesterId: string;
 
-  /* enquiry content */
-  message: string;
-  budget?: string;
-  preferredStartDate?: string;
-  expectedCompletionDate?: string;
-  contactMethod: ContactMethod;
-  phone?: string;
-  company?: string;
+  /* Always derived from the authenticated session — never from the request body. */
+  customerId: string;
+  customerName: string;
 
-  /* lead */
-  status: LeadStatus;
+  requirement: string;
+
+  /* Only the channel the customer picked is stored (§25: no needless contact data). */
+  contactMethod: ServiceContactMethod;
+  contactEmail?: string;
+  contactPhone?: string;
+
+  budget?: ServiceLeadBudget;
+  timeline?: ServiceLeadTimeline;
+  attachments: ServiceLeadAttachment[];
+  companyInfo?: string;
+
+  conversationId?: string;
+  leadId?: string;
+
+  /** Dedupe key: customer + service + normalized requirement. */
+  fingerprint: string;
+
   createdAt: string;
+  updatedAt: string;
 }
 
-type EnquiryStore = ServiceEnquiry[];
+type EnquiryDoc = ServiceEnquiry & { _id: string };
 
-async function readStore(): Promise<EnquiryStore> {
-  return readJsonFile<EnquiryStore>(serviceEnquiriesPath, []);
+function strip({ _id: _unused, ...rest }: EnquiryDoc): ServiceEnquiry {
+  return rest;
 }
 
-/** Reference is short and unambiguous — no ambiguous 0/O or 1/I. */
-function makeReference(): string {
-  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-  let out = '';
-  for (let i = 0; i < 6; i += 1) {
-    out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return `ENQ-${out}`;
+function nowIso() {
+  return new Date().toISOString();
 }
 
-/** How long an identical repeat from the same person is treated as a double-submit. */
-const DUPLICATE_WINDOW_MS = 60_000;
+export function buildEnquiryFingerprint(customerId: string, serviceId: string, requirement: string) {
+  const normalized = requirement.trim().toLowerCase().replace(/\s+/g, ' ');
+  return crypto.createHash('sha256').update(`${customerId}|${serviceId}|${normalized}`).digest('hex').slice(0, 32);
+}
+
+export interface CreateServiceEnquiryInput {
+  serviceId: string;
+  serviceTitle: string;
+  providerId: string;
+  customerId: string;
+  customerName: string;
+  requirement: string;
+  contactMethod: ServiceContactMethod;
+  contactEmail?: string;
+  contactPhone?: string;
+  budget?: ServiceLeadBudget;
+  timeline?: ServiceLeadTimeline;
+  attachments?: ServiceLeadAttachment[];
+  companyInfo?: string;
+}
 
 /**
- * The most recent enquiry this requester made about this service, if it is
- * recent enough to be a double-submit rather than a genuine second question.
+ * Most recent identical enquiry inside the duplicate window, if any.
+ * Used to short-circuit double-submits before any lead/conversation work.
  */
-export async function findRecentDuplicate(
-  requesterId: string,
+export async function findRecentDuplicateEnquiry(
+  customerId: string,
   serviceId: string,
-  message: string,
+  requirement: string,
 ): Promise<ServiceEnquiry | null> {
-  const store = await readStore();
-  const cutoff = Date.now() - DUPLICATE_WINDOW_MS;
-  const normalised = message.trim();
-  for (let i = store.length - 1; i >= 0; i -= 1) {
-    const e = store[i];
-    if (e.requesterId !== requesterId || e.serviceId !== serviceId) continue;
-    if (e.message.trim() !== normalised) continue;
-    if (Date.parse(e.createdAt) < cutoff) break;
-    return e;
+  const fingerprint = buildEnquiryFingerprint(customerId, serviceId, requirement);
+  const cutoff = new Date(Date.now() - DUPLICATE_ENQUIRY_WINDOW_MS).toISOString();
+
+  const db = await getMongoDb();
+  if (db) {
+    const doc = await db.collection<EnquiryDoc>(COL)
+      .find({ fingerprint, customerId, createdAt: { $gte: cutoff } })
+      .sort({ createdAt: -1 })
+      .limit(1)
+      .toArray();
+    return doc[0] ? strip(doc[0]) : null;
   }
-  return null;
+
+  const all = await readJsonFile<ServiceEnquiry[]>(serviceEnquiriesPath, []);
+  return (
+    all.find((e) => e.fingerprint === fingerprint && e.customerId === customerId && e.createdAt >= cutoff)
+    ?? null
+  );
 }
 
-export async function createEnquiry(
-  input: Omit<ServiceEnquiry, 'id' | 'reference' | 'status' | 'createdAt'>,
-): Promise<ServiceEnquiry> {
-  const store = await readStore();
+export async function createServiceEnquiry(input: CreateServiceEnquiryInput): Promise<ServiceEnquiry> {
+  const now = nowIso();
   const enquiry: ServiceEnquiry = {
-    ...input,
-    id: randomUUID(),
-    reference: makeReference(),
-    status: 'new',
-    createdAt: new Date().toISOString(),
+    id: `enq_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+    serviceId: input.serviceId,
+    serviceTitle: input.serviceTitle,
+    providerId: input.providerId,
+    customerId: input.customerId,
+    customerName: input.customerName,
+    requirement: input.requirement,
+    contactMethod: input.contactMethod,
+    ...(input.contactEmail ? { contactEmail: input.contactEmail } : {}),
+    ...(input.contactPhone ? { contactPhone: input.contactPhone } : {}),
+    ...(input.budget ? { budget: input.budget } : {}),
+    ...(input.timeline ? { timeline: input.timeline } : {}),
+    attachments: input.attachments ?? [],
+    ...(input.companyInfo ? { companyInfo: input.companyInfo } : {}),
+    fingerprint: buildEnquiryFingerprint(input.customerId, input.serviceId, input.requirement),
+    createdAt: now,
+    updatedAt: now,
   };
-  store.push(enquiry);
-  await writeJsonFile(serviceEnquiriesPath, store);
+
+  const db = await getMongoDb();
+  if (db) {
+    await db.collection<EnquiryDoc>(COL).insertOne({ ...enquiry, _id: enquiry.id });
+    return enquiry;
+  }
+
+  const all = await readJsonFile<ServiceEnquiry[]>(serviceEnquiriesPath, []);
+  await writeJsonFile(serviceEnquiriesPath, [enquiry, ...all].slice(0, 6000));
   return enquiry;
 }
 
-/** Leads for a provider — their own services only. */
-export async function getEnquiriesForProvider(providerId: string): Promise<ServiceEnquiry[]> {
-  const store = await readStore();
-  return store.filter((e) => e.providerId === providerId).reverse();
-}
-
-/** Enquiries a person has sent. */
-export async function getEnquiriesForRequester(requesterId: string): Promise<ServiceEnquiry[]> {
-  const store = await readStore();
-  return store.filter((e) => e.requesterId === requesterId).reverse();
-}
-
-/**
- * A single enquiry, readable only by the two parties to it. Returns null for
- * anybody else, so an unauthorised id guess is indistinguishable from a miss.
- */
-export async function getEnquiryForViewer(
+/** Attach the lead / conversation ids once those exist. Best-effort by design. */
+export async function linkServiceEnquiry(
   enquiryId: string,
-  viewerId: string,
+  links: { leadId?: string; conversationId?: string },
 ): Promise<ServiceEnquiry | null> {
-  const store = await readStore();
-  const found = store.find((e) => e.id === enquiryId || e.reference === enquiryId);
-  if (!found) return null;
-  if (found.requesterId !== viewerId && found.providerId !== viewerId) return null;
-  return found;
+  const patch: Record<string, unknown> = { updatedAt: nowIso() };
+  if (links.leadId) patch.leadId = links.leadId;
+  if (links.conversationId) patch.conversationId = links.conversationId;
+
+  const db = await getMongoDb();
+  if (db) {
+    await db.collection<EnquiryDoc>(COL).updateOne({ _id: enquiryId }, { $set: patch });
+    const doc = await db.collection<EnquiryDoc>(COL).findOne({ _id: enquiryId });
+    return doc ? strip(doc) : null;
+  }
+
+  const all = await readJsonFile<ServiceEnquiry[]>(serviceEnquiriesPath, []);
+  const idx = all.findIndex((e) => e.id === enquiryId);
+  if (idx === -1) return null;
+  all[idx] = { ...all[idx], ...patch } as ServiceEnquiry;
+  await writeJsonFile(serviceEnquiriesPath, all);
+  return all[idx];
+}
+
+export async function getServiceEnquiryById(enquiryId: string): Promise<ServiceEnquiry | null> {
+  const id = (enquiryId || '').trim();
+  if (!id) return null;
+
+  const db = await getMongoDb();
+  if (db) {
+    const doc = await db.collection<EnquiryDoc>(COL).findOne({ _id: id });
+    return doc ? strip(doc) : null;
+  }
+
+  const all = await readJsonFile<ServiceEnquiry[]>(serviceEnquiriesPath, []);
+  return all.find((e) => e.id === id) ?? null;
+}
+
+export async function listServiceEnquiries(params: {
+  role: 'customer' | 'provider';
+  userId: string;
+  serviceId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ enquiries: ServiceEnquiry[]; total: number }> {
+  const limit = Math.min(60, Math.max(1, params.limit ?? 24));
+  const offset = Math.max(0, params.offset ?? 0);
+  const key = params.role === 'provider' ? 'providerId' : 'customerId';
+
+  const db = await getMongoDb();
+  if (db) {
+    const filter: Record<string, unknown> = { [key]: params.userId };
+    if (params.serviceId) filter.serviceId = params.serviceId;
+    const [total, docs] = await Promise.all([
+      db.collection(COL).countDocuments(filter),
+      db.collection<EnquiryDoc>(COL)
+        .find(filter).sort({ createdAt: -1 }).skip(offset).limit(limit).toArray(),
+    ]);
+    return { enquiries: docs.map(strip), total };
+  }
+
+  const all = await readJsonFile<ServiceEnquiry[]>(serviceEnquiriesPath, []);
+  const filtered = all
+    .filter((e) => (params.role === 'provider' ? e.providerId === params.userId : e.customerId === params.userId))
+    .filter((e) => (params.serviceId ? e.serviceId === params.serviceId : true))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return { enquiries: filtered.slice(offset, offset + limit), total: filtered.length };
 }

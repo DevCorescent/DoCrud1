@@ -2188,7 +2188,7 @@ function hpWriteTrend(item: HpFeedItem, next: boolean) {
   } catch {}
 }
 
-function HomepageLiveFeed() {
+function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
   const [allItems,   setAllItems]   = React.useState<HpFeedItem[]>([]);
   const [page,       setPage]       = React.useState(1);
   const [loading,    setLoading]    = React.useState(true);
@@ -2209,6 +2209,59 @@ function HomepageLiveFeed() {
   const [refreshing, setRefreshing] = React.useState(false);
   const knownIds = React.useRef<Set<string>>(new Set());
   const sentinelRef = React.useRef<HTMLDivElement>(null);
+
+  /* ── mobile category marquee: no idle animation — the strip only moves while
+        the user scrolls (down → right, up → left) and on cursor/touch drag ── */
+  const catViewRef = React.useRef<HTMLDivElement>(null);
+  const catDragRef = React.useRef({ down: false, moved: false, startX: 0, startLeft: 0 });
+
+  /* wrap a target scrollLeft into the first of the two identical copies */
+  const catWrap = React.useCallback((el: HTMLDivElement, next: number) => {
+    const half = el.scrollWidth / 2;
+    if (half <= 0) return { next, shift: 0 };
+    if (next < 0)          return { next: next + half, shift:  half };
+    if (next >= half)      return { next: next - half, shift: -half };
+    return { next, shift: 0 };
+  }, []);
+
+  React.useEffect(() => {
+    const lastTops = new WeakMap<EventTarget, number>();
+    const onScroll = (e: Event) => {
+      const el = catViewRef.current;
+      if (!el || catDragRef.current.down) return;
+      const node = (e.target === document || e.target === window)
+        ? (document.scrollingElement as HTMLElement | null)
+        : (e.target as HTMLElement);
+      if (!node) return;
+      const top  = node.scrollTop;
+      const prev = lastTops.get(node);
+      lastTops.set(node, top);
+      if (prev === undefined) return;
+      const delta = top - prev;
+      if (!delta) return;
+      el.scrollLeft = catWrap(el, el.scrollLeft + delta * 0.8).next;
+    };
+    /* capture phase so scroll from any inner scroller reaches us */
+    document.addEventListener('scroll', onScroll, true);
+    return () => document.removeEventListener('scroll', onScroll, true);
+  }, [catWrap]);
+
+  const catOnPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = catViewRef.current;
+    if (!el) return;
+    catDragRef.current = { down: true, moved: false, startX: e.clientX, startLeft: el.scrollLeft };
+  };
+  const catOnPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = catViewRef.current;
+    const d  = catDragRef.current;
+    if (!el || !d.down) return;
+    const dx = e.clientX - d.startX;
+    if (Math.abs(dx) > 4) d.moved = true;
+    const { next, shift } = catWrap(el, d.startLeft - dx);
+    d.startLeft += shift;
+    el.scrollLeft = next;
+  };
+  const catOnPointerUp = () => { catDragRef.current.down = false; };
 
   /* initial load */
   React.useEffect(() => {
@@ -2575,33 +2628,73 @@ function HomepageLiveFeed() {
           </div>
 
           {/* Task 13 — the same HP_TABS category filters the lg+ sidebar shows,
-              exposed on small screens as a horizontally scrollable row. Reuses
-              activecat/setActivecat and the Task 11 category treatment. */}
-          <div className="lg:hidden shrink-0 overflow-x-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="flex min-w-max gap-2">
-              {HP_TABS.map(tab => {
-                const isActive = activecat === tab.id;
-                const count    = tab.id === 'all' ? allItems.length : (catCounts[tab.id] ?? 0);
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
-                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
-                      isActive
-                        ? feedCategoryTreatment(tab.id).badgeCls
-                        : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
-                    }`}
-                  >
-                    <tab.icon className="h-3 w-3 shrink-0" />
-                    {tab.label}
-                    {count > 0 && (
-                      <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
-                    )}
-                  </button>
-                );
-              })}
+              exposed on small screens as a single row: a FIXED Publish button,
+              a divider, then every category inside an infinite marquee that also
+              follows cursor/touch drag in either direction. */}
+          <div className="lg:hidden shrink-0 flex items-center gap-2 pl-3 pr-0 py-3 min-w-0">
+            <style>{`
+              .hp-cat-viewport { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; touch-action: pan-y; cursor: grab; overscroll-behavior-x: contain; }
+              .hp-cat-viewport::-webkit-scrollbar { display: none; }
+              .hp-cat-viewport:active { cursor: grabbing; }
+            `}</style>
+
+            {/* fixed Publish — never animates, never scrolls */}
+            <button
+              type="button"
+              onClick={() => onPublish?.()}
+              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-white px-3 py-2 text-[11.5px] font-bold tracking-tight text-neutral-900 shadow-[0_2px_12px_rgba(0,0,0,0.35)] transition hover:bg-white/90 active:scale-[0.97]"
+            >
+              <Send className="h-3.5 w-3.5 shrink-0 -rotate-12 text-neutral-900" />
+              Publish
+            </button>
+
+            {/* divider — stays with Publish */}
+            <div aria-hidden className="h-5 w-px shrink-0 bg-white/[0.14]" />
+
+            {/* marquee viewport — only this overflows, page never scrolls */}
+            <div
+              ref={catViewRef}
+              className="hp-cat-viewport relative min-w-0 flex-1"
+              onPointerDown={catOnPointerDown}
+              onPointerMove={catOnPointerMove}
+              onPointerUp={catOnPointerUp}
+              onPointerCancel={catOnPointerUp}
+              onMouseLeave={() => { catDragRef.current.down = false; }}
+            >
+              <div className="flex w-max gap-2">
+                {[0, 1].map(copy => (
+                  <div key={copy} className="flex w-max shrink-0 gap-2 pr-2" aria-hidden={copy === 1 ? true : undefined}>
+                    {HP_TABS.map(tab => {
+                      const isActive = activecat === tab.id;
+                      const count    = tab.id === 'all' ? allItems.length : (catCounts[tab.id] ?? 0);
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          aria-pressed={isActive}
+                          tabIndex={copy === 1 ? -1 : undefined}
+                          onClick={() => {
+                            if (catDragRef.current.moved) return;
+                            setActivecat(tab.id);
+                            setTagSearch('');
+                          }}
+                          className={`inline-flex shrink-0 select-none items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
+                            isActive
+                              ? feedCategoryTreatment(tab.id).badgeCls
+                              : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
+                          }`}
+                        >
+                          <tab.icon className="h-3 w-3 shrink-0" />
+                          {tab.label}
+                          {count > 0 && (
+                            <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -6247,7 +6340,7 @@ function NewHomepageContent({
         {hpSections.adBanners && <AdBannerSlider />}
 
         {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
-        <div className="flex flex-col w-full min-w-0" style={{ gap: 14 }}>
+        <div className="hidden lg:flex flex-col w-full min-w-0" style={{ gap: 14 }}>
           <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
         </div>
 
@@ -6350,7 +6443,7 @@ function NewHomepageContent({
         </div>}
 
 
-        <HomepageLiveFeed />
+        <HomepageLiveFeed onPublish={() => onPublishClick()} />
 
         {/* ── Live Gigs section + Gig CTA banner ── DISABLED */}
         {false && <><div className="mb-3 flex items-center justify-between gap-3">

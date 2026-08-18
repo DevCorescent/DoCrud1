@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAllServices, type Service } from '@/lib/server/services';
 import { getStoredUsers, type StoredUser } from '@/lib/server/users';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
+import { listBusinessPages } from '@/lib/server/business-pages';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,7 @@ function deliveryHours(s: Service): number | null {
 }
 
 /** Weighted match score. Title matches outrank description mentions. */
-function relevance(s: Service, providerName: string, terms: string[]): number {
+function relevance(s: Service, providerName: string, terms: string[], businessName = ''): number {
   if (!terms.length) return 0;
   const fields: Array<[string, number]> = [
     [s.title ?? '', 10],
@@ -57,6 +58,9 @@ function relevance(s: Service, providerName: string, terms: string[]): number {
     [(s.tags ?? []).join(' '), 3],
     [(s.skills ?? []).join(' '), 4],
     [providerName, 3],
+    /* Same weight as the provider's own name — the specification lists them
+       side by side and gives no separate priority. */
+    [businessName, 3],
     [s.location ?? '', 3],
     [s.description ?? '', 1],
   ];
@@ -82,6 +86,8 @@ export async function GET(req: NextRequest) {
        so both sides normalise to hours to compare. */
     const maxDeliveryHours = sp.get('maxDelivery') !== null ? Number(sp.get('maxDelivery')) : null;
     const subcategories = (sp.get('subcategories') || '').split(',').map(v => v.trim()).filter(Boolean);
+    /* Provider type is the account's own type — the client cannot claim it. */
+    const providerTypes = (sp.get('providerType') || '').split(',').map(v => v.trim()).filter(Boolean);
     const skills = (sp.get('skills') || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
     const languages = (sp.get('languages') || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
     const locationQ = (sp.get('location') || '').trim().toLowerCase();
@@ -93,8 +99,20 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Math.max(parseInt(sp.get('limit') || '24', 10), 1), 48);
     const page = Math.max(parseInt(sp.get('page') || '1', 10), 1);
 
-    const [store, users] = await Promise.all([getAllServices(), getStoredUsers()]);
+    const [store, users, pages] = await Promise.all([
+      getAllServices(),
+      getStoredUsers(),
+      /* One read for the whole request — never one lookup per service. */
+      listBusinessPages({ limit: 500 }).then(r => r.pages).catch(() => []),
+    ]);
     const userById = new Map(users.map((u) => [u.id, u]));
+    /* A provider's business/company name, when they own a business page. */
+    const businessNameByOwner = new Map<string, string>();
+    for (const page of pages) {
+      if (page.ownerUserId && page.name && !businessNameByOwner.has(page.ownerUserId)) {
+        businessNameByOwner.set(page.ownerUserId, page.name);
+      }
+    }
 
     /* Flatten to visible (service, provider) pairs once. */
     const rows: Array<{ service: Service; provider: StoredUser }> = [];
@@ -113,7 +131,7 @@ export async function GET(req: NextRequest) {
        this set so selecting one category cannot hide the others — otherwise
        multi-select would be impossible. */
     const matchesNonCategory = ({ service: s, provider }: { service: Service; provider: StoredUser }) => {
-      if (terms.length && relevance(s, providerName(provider), terms) === 0) return false;
+      if (terms.length && relevance(s, providerName(provider), terms, businessNameByOwner.get(provider.id) ?? '') === 0) return false;
       if (pricingModels.length && !pricingModels.includes(s.pricingModel)) return false;
       if (tags.length) {
         const own = (s.tags ?? []).map(t => t.toLowerCase());
@@ -123,6 +141,7 @@ export async function GET(req: NextRequest) {
         const h = deliveryHours(s);
         if (h === null || h > maxDeliveryHours) return false; // unstated delivery is not a match
       }
+      if (providerTypes.length && !providerTypes.includes(provider.accountType ?? 'individual')) return false;
       if (skills.length) {
         const own = (s.skills ?? []).map(v => v.toLowerCase());
         if (!skills.some(v => own.includes(v))) return false;
@@ -174,6 +193,11 @@ export async function GET(req: NextRequest) {
         subcategoryFacets[r.service.subcategory] = (subcategoryFacets[r.service.subcategory] ?? 0) + 1;
       }
     }
+    const providerTypeFacets: Record<string, number> = {};
+    for (const r of base) {
+      const t = r.provider.accountType ?? 'individual';
+      providerTypeFacets[t] = (providerTypeFacets[t] ?? 0) + 1;
+    }
     const skillFacets: Record<string, number> = {};
     const languageFacets: Record<string, number> = {};
     for (const r of base) {
@@ -192,7 +216,7 @@ export async function GET(req: NextRequest) {
     }
 
     const rel = (r: { service: Service; provider: StoredUser }) =>
-      relevance(r.service, providerName(r.provider), terms);
+      relevance(r.service, providerName(r.provider), terms, businessNameByOwner.get(r.provider.id) ?? '');
 
     const comparators: Record<string, (a: typeof filtered[number], b: typeof filtered[number]) => number> = {
       recommended: (a, b) =>
@@ -246,13 +270,16 @@ export async function GET(req: NextRequest) {
           provider: {
             id: provider.id,
             name: providerName(provider),
+            /* Derived from the account record, never client-supplied. */
+            type: provider.accountType ?? 'individual',
+            businessName: businessNameByOwner.get(provider.id) ?? null,
             avatarUrl: avatars.get(provider.id) ?? null,
           },
         })),
         total,
         hasMore: page * limit < total,
         page,
-        facets: { categories: categoryFacets, subcategories: subcategoryFacets, pricing: pricingFacets, tags: tagFacets, skills: skillFacets, languages: languageFacets, workMode: workModeFacets, availability: availabilityFacets },
+        facets: { categories: categoryFacets, subcategories: subcategoryFacets, pricing: pricingFacets, tags: tagFacets, skills: skillFacets, languages: languageFacets, providerType: providerTypeFacets, workMode: workModeFacets, availability: availabilityFacets },
         /* Total visible services, so the page can tell "nothing published yet"
            apart from "nothing matches your filters". */
         libraryTotal: rows.length,

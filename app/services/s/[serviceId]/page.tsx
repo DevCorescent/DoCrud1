@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ArrowLeft, ArrowRight, MapPin, Star, Clock, CalendarDays, Layers, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MapPin, Star, Clock, CalendarDays, Layers, ChevronDown, BadgeCheck, CheckCircle2 } from 'lucide-react';
 import { serviceCategory, formatServicePrice, formatDelivery, currencySymbol } from '@/lib/services-ui';
 import { ServiceSummaryCard } from '@/components/services/ServiceSummaryCard';
 import { EnquireDialog } from '@/components/services/EnquireDialog';
@@ -49,6 +49,8 @@ type Detail = {
     headline: string | null; bio: string | null; location: string | null;
     memberSince: string | null; activeServiceCount: number;
     rating: number | null; reviewCount: number; completedBookings: number;
+    businessName: string | null; businessSlug: string | null;
+    verifiedBusiness: boolean; responseTime: string | null;
   };
   otherServices: Array<{
     id: string; title: string; tagline: string; category: string; subcategory: string | null;
@@ -441,9 +443,21 @@ export default function ServiceDetailPage() {
             <div className="rounded-[20px] border border-white/[0.07] bg-[#0d0d10] p-5">
               <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Provider</p>
               <div className="mt-3 flex items-center gap-3">
-                <Avatar src={p.avatarUrl} name={p.name} size={48} />
+                {/* The service's own image, per the specification's provider
+                    block — falls back to the provider's photo, then initials. */}
+                <Avatar src={identityImage} name={p.name} size={48} />
                 <div className="min-w-0">
-                  <p className="truncate text-[14px] font-bold">{p.name}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-[14px] font-bold">{p.businessName || p.name}</p>
+                    {/* Shown only when a business page the provider owns is
+                        genuinely verified. Never inferred from anything else. */}
+                    {p.verifiedBusiness && (
+                      <span title="Verified business" className="inline-flex shrink-0 items-center gap-1 rounded-full border border-sky-200/[0.18] bg-sky-200/[0.10] px-2 py-0.5 text-[10px] font-semibold text-sky-200/90">
+                        <BadgeCheck className="h-3 w-3" />Verified
+                      </span>
+                    )}
+                  </div>
+                  {p.businessName && <p className="truncate text-[11.5px] text-white/40">{p.name}</p>}
                   {p.headline && <p className="truncate text-[11.5px] text-white/40">{p.headline}</p>}
                 </div>
               </div>
@@ -466,6 +480,21 @@ export default function ServiceDetailPage() {
                     {p.rating.toFixed(1)} across {p.reviewCount} {p.reviewCount === 1 ? 'review' : 'reviews'}
                   </p>
                 )}
+                {/* A real tracked figure — omitted entirely at zero rather
+                    than advertising "0 completed". */}
+                {p.completedBookings > 0 && (
+                  <p className="inline-flex items-center gap-1.5 text-[12px] text-white/45">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {p.completedBookings} completed {p.completedBookings === 1 ? 'service' : 'services'}
+                  </p>
+                )}
+                {/* Response time has no data source; it renders only if one
+                    ever arrives. Nothing is estimated in its place. */}
+                {p.responseTime && (
+                  <p className="inline-flex items-center gap-1.5 text-[12px] text-white/45">
+                    <Clock className="h-3.5 w-3.5" />Typically responds in {p.responseTime}
+                  </p>
+                )}
               </div>
 
               <Link
@@ -473,6 +502,13 @@ export default function ServiceDetailPage() {
                 className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-full bg-white px-4 py-2.5 text-[12.5px] font-bold text-[#0D0D0F] transition hover:bg-white/90"
               >
                 View Full Catalogue <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+              {/* The existing profile route — a real destination, not a stub. */}
+              <Link
+                href={`/u/${p.id}`}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.03] px-4 py-2.5 text-[12.5px] font-bold text-white/75 transition hover:bg-white/[0.07]"
+              >
+                View Profile
               </Link>
             </div>
           </aside>

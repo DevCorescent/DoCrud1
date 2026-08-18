@@ -1,185 +1,354 @@
 /**
- * The provider lead pipeline.
+ * Service Leads — the single lead store behind the Services feature.
  *
- * The specification says every enquiry *and* every booking request becomes a
- * lead, so this module presents both as one list without merging the two
- * stores. Each keeps its own record and its own semantics; a lead is a *view*
- * over them plus a pipeline status.
+ * Every meaningful conversion event on a service (an enquiry today, a booking
+ * request later) produces exactly one lead for the provider. There is
+ * deliberately ONE lead architecture: `type` distinguishes where the lead came
+ * from, so the provider's Leads screen never has to merge two shapes.
  *
- * The enquiry and booking modules are deliberately not edited — this reads
- * their exported paths and types and adds the pipeline status as an
- * additive field, so the two features stay independently owned and the change
- * carries no merge risk for whoever is working in them.
- *
- * A lead's status starts where its origin implies: an enquiry enters at "New",
- * a booking request enters at "Booking Requested" — a status the
- * specification lists precisely because a booking arrives further along the
- * pipeline than a cold enquiry does.
+ * Persistence follows `lib/server/resume-leads.ts` structurally — a dedicated
+ * Mongo collection when the database is configured, a JSON file otherwise.
+ * It intentionally does NOT use the whole-array app_state blob pattern that
+ * `lib/server/services.ts` uses for bookings: a lead insert must never
+ * read-modify-write every other lead, or concurrent enquiries lose each other.
  */
-import { readJsonFile, writeJsonFile } from '@/lib/server/storage';
-import { serviceEnquiriesPath, type ServiceEnquiry } from '@/lib/server/service-enquiries';
-import {
-  serviceBookingRequestsPath,
-  type ServiceBookingRequest,
-} from '@/lib/server/service-booking-requests';
-import { type LeadStatus } from '@/lib/service-lead-status';
+import path from 'path';
+import { getMongoDb } from '@/lib/server/database';
+import { dataDir, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 
-/** Pipeline status is stored alongside the source record, added on demand. */
-type WithLeadStatus<T> = T & { leadStatus?: LeadStatus };
+const COL = 'service_leads';
+const serviceLeadsPath = path.join(dataDir, 'service-leads.json');
 
-type StoredEnquiry = WithLeadStatus<ServiceEnquiry>;
-type StoredBooking = WithLeadStatus<ServiceBookingRequest>;
+export type ServiceLeadType = 'enquiry' | 'booking';
 
-export type LeadSource = 'enquiry' | 'booking';
+/** §23 lead lifecycle. Providers move a lead through these. */
+export type ServiceLeadStatus =
+  | 'new'
+  | 'contacted'
+  | 'discussion'
+  | 'quote_sent'
+  | 'booking_requested'
+  | 'accepted'
+  | 'in_progress'
+  | 'completed'
+  | 'declined'
+  | 'cancelled';
 
-/** One row of the provider's pipeline, from either origin. */
-export interface Lead {
+export const SERVICE_LEAD_STATUSES: ServiceLeadStatus[] = [
+  'new',
+  'contacted',
+  'discussion',
+  'quote_sent',
+  'booking_requested',
+  'accepted',
+  'in_progress',
+  'completed',
+  'declined',
+  'cancelled',
+];
+
+/** How the customer asked to be reached. `docrud_chat` keeps contact details private. */
+export type ServiceContactMethod = 'docrud_chat' | 'email' | 'phone';
+
+export interface ServiceLeadAttachment {
+  url: string;
+  name: string;
+  size?: number;
+  mimeType?: string;
+}
+
+export interface ServiceLeadBudget {
+  min?: number;
+  max?: number;
+  currency: string;
+}
+
+export interface ServiceLeadTimeline {
+  startDate?: string;      // YYYY-MM-DD
+  completionDate?: string; // YYYY-MM-DD
+}
+
+export interface ServiceLeadNote {
   id: string;
-  reference: string;
-  source: LeadSource;
+  body: string;
+  createdAt: string;
+  createdByUserId: string;
+}
 
+export interface ServiceLead {
+  id: string;
+  type: ServiceLeadType;
+
+  /* Who / what */
+  providerId: string;
+  customerId: string;
+  customerName: string;
   serviceId: string;
   serviceTitle: string;
-  providerId: string;
-  requesterId: string;
 
+  /* Source records — exactly one of these is set, matching `type`. */
+  enquiryId?: string;
+  bookingId?: string;
+
+  /* What the customer wants */
   requirement: string;
-  budget: string | null;
-  /** Human-readable timeline built from whichever dates the record carries. */
-  timeline: string | null;
-  contactMethod: string | null;
-  phone: string | null;
-  company: string | null;
+  budget?: ServiceLeadBudget;
+  timeline?: ServiceLeadTimeline;
+  attachments: ServiceLeadAttachment[];
+  companyInfo?: string;
 
-  /** Booking-only: the package and the server-resolved price. */
-  packageName: string | null;
-  price: number | null;
-  currency: string | null;
+  /* How to reach them — only the channel the customer chose is stored. */
+  contactMethod: ServiceContactMethod;
+  contactEmail?: string;
+  contactPhone?: string;
 
-  status: LeadStatus;
+  /* Where the discussion lives */
+  conversationId?: string;
+
+  status: ServiceLeadStatus;
+  notes: ServiceLeadNote[];
   createdAt: string;
+  updatedAt: string;
 }
 
-function readEnquiries() {
-  return readJsonFile<StoredEnquiry[]>(serviceEnquiriesPath, []);
-}
-function readBookings() {
-  return readJsonFile<StoredBooking[]>(serviceBookingRequestsPath, []);
-}
+type LeadDoc = ServiceLead & { _id: string };
 
-function timelineOf(start?: string, end?: string): string | null {
-  if (start && end) return `${start} → ${end}`;
-  if (start) return `From ${start}`;
-  if (end) return `By ${end}`;
-  return null;
+function strip({ _id: _unused, ...rest }: LeadDoc): ServiceLead {
+  return rest;
 }
 
-function enquiryToLead(e: StoredEnquiry): Lead {
-  return {
-    id: e.id,
-    reference: e.reference,
-    source: 'enquiry',
-    serviceId: e.serviceId,
-    serviceTitle: e.serviceTitle,
-    providerId: e.providerId,
-    requesterId: e.requesterId,
-    requirement: e.message,
-    budget: e.budget ?? null,
-    timeline: timelineOf(e.preferredStartDate, e.expectedCompletionDate),
-    contactMethod: e.contactMethod ?? null,
-    phone: e.phone ?? null,
-    company: e.company ?? null,
-    packageName: null,
-    price: null,
-    currency: null,
-    // An enquiry begins at the start of the pipeline.
-    status: e.leadStatus ?? 'new',
-    createdAt: e.createdAt,
-  };
+function nowIso() {
+  return new Date().toISOString();
 }
 
-function bookingToLead(b: StoredBooking): Lead {
-  return {
-    id: b.id,
-    reference: b.reference,
-    source: 'booking',
-    serviceId: b.serviceId,
-    serviceTitle: b.serviceTitle,
-    providerId: b.providerId,
-    requesterId: b.requesterId,
-    requirement: b.requirements,
-    budget: b.price !== null && b.price !== undefined ? String(b.price) : null,
-    timeline: timelineOf(b.preferredStartDate, b.expectedCompletionDate),
-    contactMethod: null,
-    phone: b.phone ?? null,
-    company: null,
-    packageName: b.packageName ?? null,
-    price: b.price ?? null,
-    currency: b.currency ?? null,
-    /* A booking request arrives already at "Booking Requested" — the
-       specification lists that status for exactly this case. */
-    status: b.leadStatus ?? 'booking_requested',
-    createdAt: b.createdAt,
-  };
+function normalize(value?: string) {
+  return (value || '').trim();
 }
 
-const newestFirst = (a: Lead, b: Lead) => Date.parse(b.createdAt) - Date.parse(a.createdAt);
-
-/** Every lead addressed to this provider's own services. */
-export async function getLeadsForProvider(providerId: string): Promise<Lead[]> {
-  const [enquiries, bookings] = await Promise.all([readEnquiries(), readBookings()]);
-  return [
-    ...enquiries.filter((e) => e.providerId === providerId).map(enquiryToLead),
-    ...bookings.filter((b) => b.providerId === providerId).map(bookingToLead),
-  ].sort(newestFirst);
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Everything this person has sent, so they can track their own requests. */
-export async function getLeadsForRequester(requesterId: string): Promise<Lead[]> {
-  const [enquiries, bookings] = await Promise.all([readEnquiries(), readBookings()]);
-  return [
-    ...enquiries.filter((e) => e.requesterId === requesterId).map(enquiryToLead),
-    ...bookings.filter((b) => b.requesterId === requesterId).map(bookingToLead),
-  ].sort(newestFirst);
+function parseNotes(raw: unknown): ServiceLeadNote[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => ({
+      id: normalize((item as ServiceLeadNote)?.id),
+      body: normalize((item as ServiceLeadNote)?.body),
+      createdAt: normalize((item as ServiceLeadNote)?.createdAt),
+      createdByUserId: normalize((item as ServiceLeadNote)?.createdByUserId),
+    }))
+    .filter((note) => note.id && note.body && note.createdAt && note.createdByUserId)
+    .slice(0, 300);
 }
-
-export type UpdateResult =
-  | { ok: true; lead: Lead }
-  | { ok: false; reason: 'not_found' | 'forbidden' };
 
 /**
- * Set a lead's pipeline status.
+ * Deterministic lead id, derived from the source record.
  *
- * Authorisation is decided here rather than by the caller: the write only
- * happens when the stored record's own `providerId` matches the acting
- * provider, so a client cannot reach another provider's lead whatever it
- * sends. A lead that exists but belongs to somebody else is reported as
- * `forbidden` and surfaced as a 404, so ids cannot be probed.
+ * This is what makes lead creation idempotent: two concurrent requests that
+ * somehow reach `createServiceLead` for the same enquiry resolve to the same
+ * `_id`, and the upsert's `$setOnInsert` keeps the first write. No duplicate
+ * lead can exist for one enquiry, with or without a unique index.
  */
-export async function updateLeadStatus(
-  leadId: string,
-  actingProviderId: string,
-  status: LeadStatus,
-): Promise<UpdateResult> {
-  const enquiries = await readEnquiries();
-  const eIndex = enquiries.findIndex((e) => e.id === leadId || e.reference === leadId);
-  if (eIndex !== -1) {
-    const row = enquiries[eIndex];
-    if (row.providerId !== actingProviderId) return { ok: false, reason: 'forbidden' };
-    enquiries[eIndex] = { ...row, leadStatus: status };
-    await writeJsonFile(serviceEnquiriesPath, enquiries);
-    return { ok: true, lead: enquiryToLead(enquiries[eIndex]) };
+export function serviceLeadIdFor(type: ServiceLeadType, sourceId: string) {
+  return `svclead_${type}_${sourceId}`;
+}
+
+export interface CreateServiceLeadInput {
+  type: ServiceLeadType;
+  providerId: string;
+  customerId: string;
+  customerName: string;
+  serviceId: string;
+  serviceTitle: string;
+  enquiryId?: string;
+  bookingId?: string;
+  requirement: string;
+  budget?: ServiceLeadBudget;
+  timeline?: ServiceLeadTimeline;
+  attachments?: ServiceLeadAttachment[];
+  companyInfo?: string;
+  contactMethod: ServiceContactMethod;
+  contactEmail?: string;
+  contactPhone?: string;
+  conversationId?: string;
+}
+
+/**
+ * Create the lead for a conversion event. Idempotent per source record —
+ * calling it twice for the same enquiry returns the original lead unchanged.
+ */
+export async function createServiceLead(input: CreateServiceLeadInput): Promise<ServiceLead> {
+  const sourceId = input.type === 'enquiry' ? input.enquiryId : input.bookingId;
+  if (!sourceId) {
+    throw new Error(`A ${input.type} lead requires its source id.`);
   }
 
-  const bookings = await readBookings();
-  const bIndex = bookings.findIndex((b) => b.id === leadId || b.reference === leadId);
-  if (bIndex !== -1) {
-    const row = bookings[bIndex];
-    if (row.providerId !== actingProviderId) return { ok: false, reason: 'forbidden' };
-    bookings[bIndex] = { ...row, leadStatus: status };
-    await writeJsonFile(serviceBookingRequestsPath, bookings);
-    return { ok: true, lead: bookingToLead(bookings[bIndex]) };
+  const now = nowIso();
+  const lead: ServiceLead = {
+    id: serviceLeadIdFor(input.type, sourceId),
+    type: input.type,
+    providerId: input.providerId,
+    customerId: input.customerId,
+    customerName: input.customerName,
+    serviceId: input.serviceId,
+    serviceTitle: input.serviceTitle,
+    ...(input.enquiryId ? { enquiryId: input.enquiryId } : {}),
+    ...(input.bookingId ? { bookingId: input.bookingId } : {}),
+    requirement: input.requirement,
+    ...(input.budget ? { budget: input.budget } : {}),
+    ...(input.timeline ? { timeline: input.timeline } : {}),
+    attachments: input.attachments ?? [],
+    ...(input.companyInfo ? { companyInfo: input.companyInfo } : {}),
+    contactMethod: input.contactMethod,
+    ...(input.contactEmail ? { contactEmail: input.contactEmail } : {}),
+    ...(input.contactPhone ? { contactPhone: input.contactPhone } : {}),
+    ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+    status: 'new',
+    notes: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const db = await getMongoDb();
+  if (db) {
+    await db.collection(COL).updateOne(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { _id: lead.id as any },
+      { $setOnInsert: { ...lead, _id: lead.id } },
+      { upsert: true },
+    );
+    const saved = await db.collection<LeadDoc>(COL).findOne({ _id: lead.id });
+    return saved ? strip(saved) : lead;
   }
 
-  return { ok: false, reason: 'not_found' };
+  const existing = await readJsonFile<ServiceLead[]>(serviceLeadsPath, []);
+  const already = existing.find((item) => item.id === lead.id);
+  if (already) return already;
+  await writeJsonFile(serviceLeadsPath, [lead, ...existing].slice(0, 6000));
+  return lead;
+}
+
+export async function getServiceLeadById(leadId: string): Promise<ServiceLead | null> {
+  const id = normalize(leadId);
+  if (!id) return null;
+
+  const db = await getMongoDb();
+  if (db) {
+    const doc = await db.collection<LeadDoc>(COL).findOne({ _id: id });
+    return doc ? strip(doc) : null;
+  }
+
+  const existing = await readJsonFile<ServiceLead[]>(serviceLeadsPath, []);
+  return existing.find((lead) => lead.id === id) ?? null;
+}
+
+/** Lead already created for a given source record, if any. */
+export async function getServiceLeadForSource(
+  type: ServiceLeadType,
+  sourceId: string,
+): Promise<ServiceLead | null> {
+  return getServiceLeadById(serviceLeadIdFor(type, sourceId));
+}
+
+export interface ListServiceLeadsParams {
+  providerId: string;
+  q?: string;
+  status?: string;
+  type?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** Provider-side listing. §22 UI will build on this; nothing else uses it yet. */
+export async function listServiceLeadsForProvider(
+  params: ListServiceLeadsParams,
+): Promise<{ leads: ServiceLead[]; total: number }> {
+  const providerId = normalize(params.providerId);
+  const q = normalize(params.q);
+  const status = normalize(params.status);
+  const type = normalize(params.type);
+  const limit = Math.min(60, Math.max(1, params.limit ?? 24));
+  const offset = Math.max(0, params.offset ?? 0);
+
+  const db = await getMongoDb();
+  if (db) {
+    const filter: Record<string, unknown> = { providerId };
+    if (status && SERVICE_LEAD_STATUSES.includes(status as ServiceLeadStatus)) filter.status = status;
+    if (type === 'enquiry' || type === 'booking') filter.type = type;
+    if (q) {
+      const re = new RegExp(escapeRegex(q), 'i');
+      filter.$or = [
+        { customerName: re },
+        { serviceTitle: re },
+        { requirement: re },
+        { companyInfo: re },
+      ];
+    }
+    const [total, docs] = await Promise.all([
+      db.collection(COL).countDocuments(filter),
+      db.collection<LeadDoc>(COL)
+        .find(filter).sort({ updatedAt: -1 }).skip(offset).limit(limit).toArray(),
+    ]);
+    return { leads: docs.map(strip), total };
+  }
+
+  const raw = await readJsonFile<ServiceLead[]>(serviceLeadsPath, []);
+  const qLow = q.toLowerCase();
+  const filtered = raw
+    .filter((lead) => lead.providerId === providerId)
+    .filter((lead) => (status ? lead.status === status : true))
+    .filter((lead) => (type === 'enquiry' || type === 'booking' ? lead.type === type : true))
+    .filter((lead) => {
+      if (!qLow) return true;
+      return [lead.customerName, lead.serviceTitle, lead.requirement, lead.companyInfo]
+        .filter(Boolean).join(' ').toLowerCase().includes(qLow);
+    })
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  return { leads: filtered.slice(offset, offset + limit), total: filtered.length };
+}
+
+/** Provider-only mutation. Ownership is enforced by the `providerId` filter. */
+export async function updateServiceLead(params: {
+  providerId: string;
+  leadId: string;
+  status?: string;
+  noteBody?: string;
+}): Promise<ServiceLead> {
+  const providerId = normalize(params.providerId);
+  const leadId = normalize(params.leadId);
+  const requestedStatus = normalize(params.status);
+  const noteBody = normalize(params.noteBody).slice(0, 1400);
+  const nextStatus = SERVICE_LEAD_STATUSES.includes(requestedStatus as ServiceLeadStatus)
+    ? (requestedStatus as ServiceLeadStatus)
+    : undefined;
+  const now = nowIso();
+
+  const db = await getMongoDb();
+  if (db) {
+    const doc = await db.collection<LeadDoc>(COL).findOne({ _id: leadId, providerId });
+    if (!doc) throw new Error('Lead not found.');
+    const nextNotes = noteBody
+      ? [{ id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, body: noteBody, createdAt: now, createdByUserId: providerId }, ...parseNotes(doc.notes)].slice(0, 240)
+      : parseNotes(doc.notes);
+    const setFields: Record<string, unknown> = { notes: nextNotes, updatedAt: now };
+    if (nextStatus) setFields.status = nextStatus;
+    await db.collection<LeadDoc>(COL).updateOne({ _id: leadId, providerId }, { $set: setFields });
+    const saved = await db.collection<LeadDoc>(COL).findOne({ _id: leadId });
+    if (!saved) throw new Error('Lead not found.');
+    return strip(saved);
+  }
+
+  const existing = await readJsonFile<ServiceLead[]>(serviceLeadsPath, []);
+  const idx = existing.findIndex((lead) => lead.id === leadId && lead.providerId === providerId);
+  if (idx === -1) throw new Error('Lead not found.');
+  const current = existing[idx];
+  const nextNotes = noteBody
+    ? [{ id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, body: noteBody, createdAt: now, createdByUserId: providerId }, ...(current.notes || [])].slice(0, 240)
+    : current.notes || [];
+  const updated: ServiceLead = { ...current, status: nextStatus || current.status, notes: nextNotes, updatedAt: now };
+  existing[idx] = updated;
+  await writeJsonFile(serviceLeadsPath, existing.slice(0, 6000));
+  return updated;
 }

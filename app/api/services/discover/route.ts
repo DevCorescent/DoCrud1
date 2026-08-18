@@ -55,6 +55,7 @@ function relevance(s: Service, providerName: string, terms: string[]): number {
     [s.category ?? '', 5],
     [s.subcategory ?? '', 5],
     [(s.tags ?? []).join(' '), 3],
+    [(s.skills ?? []).join(' '), 4],
     [providerName, 3],
     [s.location ?? '', 3],
     [s.description ?? '', 1],
@@ -81,6 +82,8 @@ export async function GET(req: NextRequest) {
        so both sides normalise to hours to compare. */
     const maxDeliveryHours = sp.get('maxDelivery') !== null ? Number(sp.get('maxDelivery')) : null;
     const subcategories = (sp.get('subcategories') || '').split(',').map(v => v.trim()).filter(Boolean);
+    const skills = (sp.get('skills') || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
+    const languages = (sp.get('languages') || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
     const locationQ = (sp.get('location') || '').trim().toLowerCase();
     const workModes = (sp.get('workMode') || '').split(',').map(v => v.trim()).filter(Boolean);
     const availabilities = (sp.get('availability') || '').split(',').map(v => v.trim()).filter(Boolean);
@@ -119,6 +122,14 @@ export async function GET(req: NextRequest) {
       if (maxDeliveryHours !== null) {
         const h = deliveryHours(s);
         if (h === null || h > maxDeliveryHours) return false; // unstated delivery is not a match
+      }
+      if (skills.length) {
+        const own = (s.skills ?? []).map(v => v.toLowerCase());
+        if (!skills.some(v => own.includes(v))) return false;
+      }
+      if (languages.length) {
+        const own = (s.languages ?? []).map(v => v.toLowerCase());
+        if (!languages.some(v => own.includes(v))) return false;
       }
       if (locationQ && !(s.location ?? '').toLowerCase().includes(locationQ)) return false;
       /* A service that never stated a work mode or availability is not a
@@ -162,6 +173,12 @@ export async function GET(req: NextRequest) {
       if (r.service.subcategory) {
         subcategoryFacets[r.service.subcategory] = (subcategoryFacets[r.service.subcategory] ?? 0) + 1;
       }
+    }
+    const skillFacets: Record<string, number> = {};
+    const languageFacets: Record<string, number> = {};
+    for (const r of base) {
+      for (const v of r.service.skills ?? []) skillFacets[v] = (skillFacets[v] ?? 0) + 1;
+      for (const v of r.service.languages ?? []) languageFacets[v] = (languageFacets[v] ?? 0) + 1;
     }
     const workModeFacets: Record<string, number> = {};
     const availabilityFacets: Record<string, number> = {};
@@ -235,7 +252,7 @@ export async function GET(req: NextRequest) {
         total,
         hasMore: page * limit < total,
         page,
-        facets: { categories: categoryFacets, subcategories: subcategoryFacets, pricing: pricingFacets, tags: tagFacets, workMode: workModeFacets, availability: availabilityFacets },
+        facets: { categories: categoryFacets, subcategories: subcategoryFacets, pricing: pricingFacets, tags: tagFacets, skills: skillFacets, languages: languageFacets, workMode: workModeFacets, availability: availabilityFacets },
         /* Total visible services, so the page can tell "nothing published yet"
            apart from "nothing matches your filters". */
         libraryTotal: rows.length,

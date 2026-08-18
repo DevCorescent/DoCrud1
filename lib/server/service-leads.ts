@@ -320,6 +320,35 @@ export async function listServiceLeadsForProvider(
   return { leads: filtered.slice(offset, offset + limit), total: filtered.length };
 }
 
+/**
+ * Customer-side listing — the requests a person has sent themselves.
+ *
+ * The mirror of `listServiceLeadsForProvider`, scoped by `customerId` so a
+ * caller only ever sees leads they raised. No filtering options: the sent box
+ * is a plain chronological list.
+ */
+export async function listServiceLeadsForCustomer(
+  customerId: string,
+  limit = 60,
+): Promise<ServiceLead[]> {
+  const id = normalize(customerId);
+  if (!id) return [];
+  const capped = Math.min(200, Math.max(1, limit));
+
+  const db = await getMongoDb();
+  if (db) {
+    const docs = await db.collection<LeadDoc>(COL)
+      .find({ customerId: id }).sort({ updatedAt: -1 }).limit(capped).toArray();
+    return docs.map(strip);
+  }
+
+  const raw = await readJsonFile<ServiceLead[]>(serviceLeadsPath, []);
+  return raw
+    .filter((lead) => lead.customerId === id)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, capped);
+}
+
 /** Provider-only mutation. Ownership is enforced by the `providerId` filter. */
 export async function updateServiceLead(params: {
   providerId: string;

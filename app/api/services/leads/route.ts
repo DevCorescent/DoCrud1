@@ -14,7 +14,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getStoredUserByEmail, getStoredUserById, getUserNames } from '@/lib/server/users';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
-import { getLeadsForProvider, getLeadsForRequester, updateLeadStatus, type Lead } from '@/lib/server/service-leads';
+import {
+  listServiceLeadsForProvider,
+  listServiceLeadsForCustomer,
+  updateServiceLead,
+  type ServiceLead,
+} from '@/lib/server/service-leads';
 import { isLeadStatus } from '@/lib/service-lead-status';
 
 export const dynamic = 'force-dynamic';
@@ -40,26 +45,46 @@ async function currentUser() {
  * read somebody's account. Internal ids are dropped except the service id,
  * which the provider needs to link back to their own listing.
  */
-function shape(lead: Lead, names: Map<string, string>, avatars: Map<string, string | null>) {
+/** Budget and timeline are stored structurally; the client renders text. */
+function budgetText(budget: ServiceLead['budget']) {
+  if (!budget) return null;
+  const { min, max, currency } = budget;
+  if (min != null && max != null) return `${currency} ${min.toLocaleString()} – ${max.toLocaleString()}`;
+  if (min != null) return `${currency} ${min.toLocaleString()}+`;
+  if (max != null) return `Up to ${currency} ${max.toLocaleString()}`;
+  return null;
+}
+
+function timelineText(timeline: ServiceLead['timeline']) {
+  if (!timeline) return null;
+  const { startDate, completionDate } = timeline;
+  if (startDate && completionDate) return `${startDate} → ${completionDate}`;
+  return startDate || completionDate || null;
+}
+
+function shape(lead: ServiceLead, names: Map<string, string>, avatars: Map<string, string | null>) {
   return {
     id: lead.id,
-    reference: lead.reference,
-    source: lead.source,
+    /* The source record is the human-facing reference for the lead. */
+    reference: lead.enquiryId ?? lead.bookingId ?? lead.id,
+    source: lead.type,
     serviceId: lead.serviceId,
     serviceTitle: lead.serviceTitle,
     requester: {
-      name: names.get(lead.requesterId) || 'Docrud member',
-      avatarUrl: avatars.get(lead.requesterId) ?? null,
+      name: names.get(lead.customerId) || lead.customerName || 'Docrud member',
+      avatarUrl: avatars.get(lead.customerId) ?? null,
     },
     requirement: lead.requirement,
-    budget: lead.budget,
-    timeline: lead.timeline,
+    budget: budgetText(lead.budget),
+    timeline: timelineText(lead.timeline),
     contactMethod: lead.contactMethod,
-    phone: lead.phone,
-    company: lead.company,
-    packageName: lead.packageName,
-    price: lead.price,
-    currency: lead.currency,
+    phone: lead.contactPhone ?? null,
+    company: lead.companyInfo ?? null,
+    packageName: lead.packageName ?? null,
+    price: lead.price ?? null,
+    /* Currency is only recorded alongside a budget, so it is only reported
+       when the record actually holds one. */
+    currency: lead.budget?.currency ?? null,
     status: lead.status,
     createdAt: lead.createdAt,
   };
@@ -74,11 +99,11 @@ export async function GET(req: NextRequest) {
 
     const box = new URL(req.url).searchParams.get('box') === 'sent' ? 'sent' : 'received';
     const leads = box === 'sent'
-      ? await getLeadsForRequester(viewer.id)
-      : await getLeadsForProvider(viewer.id);
+      ? await listServiceLeadsForCustomer(viewer.id)
+      : (await listServiceLeadsForProvider({ providerId: viewer.id, limit: 60 })).leads;
 
     /* Two batched lookups for the whole list — never one per lead. */
-    const ids = Array.from(new Set(leads.map((l) => l.requesterId)));
+    const ids = Array.from(new Set(leads.map((l) => l.customerId)));
     const [names, avatars] = await Promise.all([
       getUserNames(ids).catch(() => new Map<string, string>()),
       getProfileAvatars(ids).catch(() => new Map<string, string | null>()),
@@ -112,14 +137,16 @@ export async function PATCH(req: NextRequest) {
 
     /* The store decides whether this provider owns the lead. A lead owned by
        somebody else is reported as not-found so ids cannot be probed. */
-    const result = await updateLeadStatus(leadId, viewer.id, body.status);
-    if (!result.ok) {
+    let lead: ServiceLead;
+    try {
+      lead = await updateServiceLead({ providerId: viewer.id, leadId, status: body.status });
+    } catch {
       return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
     }
 
-    const names = await getUserNames([result.lead.requesterId]).catch(() => new Map<string, string>());
-    const avatars = await getProfileAvatars([result.lead.requesterId]).catch(() => new Map<string, string | null>());
-    return NextResponse.json({ lead: shape(result.lead, names, avatars) });
+    const names = await getUserNames([lead.customerId]).catch(() => new Map<string, string>());
+    const avatars = await getProfileAvatars([lead.customerId]).catch(() => new Map<string, string | null>());
+    return NextResponse.json({ lead: shape(lead, names, avatars) });
   } catch (error) {
     console.error('[services/leads] PATCH error', error);
     return NextResponse.json({ error: 'Could not update the lead.' }, { status: 500 });

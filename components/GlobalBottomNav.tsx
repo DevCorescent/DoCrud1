@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import {
-  Building2,
   Globe,
   Home,
+  LayoutGrid,
   Users,
 } from 'lucide-react';
+import OpportunityHub from './OpportunityHub';
 
 /* ── Recents icon ────────────────────────────────────────────────── */
 function RecentsIcon({ size = 20 }: { size?: number }) {
@@ -36,6 +37,7 @@ export default function GlobalBottomNav() {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(true);
   const [inChat,  setInChat]  = useState(false);
+  const [hubOpen, setHubOpen] = useState(false);
   const lastY     = useRef(0);
   const ticking   = useRef(false);
 
@@ -119,8 +121,8 @@ export default function GlobalBottomNav() {
     };
   }, []);
 
-  /* Every route starts with the bar visible. */
-  useEffect(() => { setVisible(true); }, [pathname]);
+  /* Every route starts with the bar visible, and with the hub closed. */
+  useEffect(() => { setVisible(true); setHubOpen(false); }, [pathname]);
 
   /* ── Hide entirely inside an open conversation ──
      The chat screen owns the bottom of the viewport with its own composer,
@@ -217,6 +219,7 @@ export default function GlobalBottomNav() {
           border-radius: 20px;
         }
         .gnb-item:active { transform: scale(0.84); opacity: 0.65; }
+        .gnb-item:focus-visible { outline: 2px solid #a78bfa; outline-offset: -2px; }
 
         .gnb-icon {
           width: 26px; height: 26px;
@@ -305,22 +308,30 @@ export default function GlobalBottomNav() {
           );
         })()}
 
-        {/* Businesses */}
+        {/* More — opens the Opportunity Hub (businesses, services, projects, jobs, gigs) */}
         {(() => {
-          const active = pathname.startsWith('/businesses');
-          const color  = active ? '#818cf8' : 'rgba(255,255,255,0.50)';
+          const color = hubOpen ? '#818cf8' : 'rgba(255,255,255,0.50)';
           return (
-            <a href="/businesses" className="gnb-item" aria-label="Businesses" aria-current={active ? 'page' : undefined}>
-              <span className="gnb-icon" style={{ color, background: active ? 'rgba(129,140,248,0.18)' : 'transparent' }}>
-                <Building2 width={19} height={19} />
+            <button
+              type="button"
+              className="gnb-item"
+              aria-label="More opportunities"
+              aria-haspopup="dialog"
+              aria-expanded={hubOpen}
+              onClick={() => setHubOpen(v => !v)}
+            >
+              <span className="gnb-icon" style={{ color, background: hubOpen ? 'rgba(129,140,248,0.18)' : 'transparent' }}>
+                <LayoutGrid width={19} height={19} />
               </span>
-              <span className="gnb-label" style={{ color }}>Businesses</span>
-              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#818cf8' }} />
-            </a>
+              <span className="gnb-label" style={{ color }}>More</span>
+              <span className="gnb-dot" style={{ opacity: hubOpen ? 1 : 0, background: '#818cf8' }} />
+            </button>
           );
         })()}
 
       </nav>
+
+      <OpportunityHub open={hubOpen} onClose={() => setHubOpen(false)} />
     </>
   );
 

@@ -34,6 +34,7 @@ import {
   Zap,
 } from 'lucide-react';
 import InfinityUpgradeModal from '@/components/InfinityUpgradeModal';
+import ServiceEnquiryModal from '@/components/services/ServiceEnquiryModal';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 interface ServicePackage {
@@ -588,88 +589,6 @@ function ServiceDetailModal({ service, reviews, onClose, onBook }: { service: Se
             style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 20px rgba(99,102,241,0.40)' }}>
             Book This Service
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Enquiry Modal ─────────────────────────────────────────────────── */
-function EnquiryModal({ service, onClose }: { service: Service; onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' });
-  const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState(false);
-  const [err, setErr] = useState('');
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSending(true); setErr('');
-    try {
-      const res = await fetch('/api/services/bookings', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ serviceId: service.id, clientName: form.name, clientEmail: form.email, clientPhone: form.phone, clientMessage: `[ENQUIRY] ${form.message}` }),
-      });
-      if (!res.ok) { const d = await res.json() as { error?: string }; setErr(d.error ?? 'Failed'); return; }
-      setSent(true);
-    } catch { setErr('Network error. Try again.'); }
-    finally { setSending(false); }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md bg-[#111113] border border-white/[0.09] rounded-[22px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
-          <div>
-            <h3 className="font-bold text-white text-[14.5px]">Quick Enquiry</h3>
-            <p className="text-[11px] text-white/35 mt-0.5">{service.title}</p>
-          </div>
-          <button onClick={onClose} className="h-7 w-7 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.10] transition-colors">
-            <X className="h-3.5 w-3.5 text-white/60" />
-          </button>
-        </div>
-        <div className="px-5 py-5">
-          {sent ? (
-            <div className="py-8 text-center">
-              <div className="h-12 w-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
-                <Check className="h-6 w-6 text-white" />
-              </div>
-              <p className="font-bold text-white text-[15px]">Enquiry Sent!</p>
-              <p className="text-[12px] text-white/40 mt-1">The provider will get back to you shortly.</p>
-              <button onClick={onClose} className="mt-4 rounded-[11px] bg-white/[0.07] border border-white/[0.09] px-5 py-2 text-[12px] font-semibold text-white/60 hover:text-white transition">Done</button>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10.5px] font-semibold text-white/40 mb-1 uppercase tracking-wide">Name *</label>
-                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required placeholder="Your name"
-                    className="w-full rounded-[10px] border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-[12.5px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 transition-all" />
-                </div>
-                <div>
-                  <label className="block text-[10.5px] font-semibold text-white/40 mb-1 uppercase tracking-wide">Phone</label>
-                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91 ..."
-                    className="w-full rounded-[10px] border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-[12.5px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 transition-all" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10.5px] font-semibold text-white/40 mb-1 uppercase tracking-wide">Email *</label>
-                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required placeholder="your@email.com"
-                  className="w-full rounded-[10px] border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-[12.5px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 transition-all" />
-              </div>
-              <div>
-                <label className="block text-[10.5px] font-semibold text-white/40 mb-1 uppercase tracking-wide">Message *</label>
-                <textarea value={form.message} onChange={e => setForm(f => ({ ...f, message: e.target.value }))} required rows={3} placeholder="What do you need help with?"
-                  className="w-full rounded-[10px] border border-white/[0.09] bg-white/[0.04] px-3 py-2 text-[12.5px] text-white placeholder-white/20 outline-none focus:border-violet-500/50 transition-all resize-none" />
-              </div>
-              {err && <p className="text-[11.5px] text-red-400">{err}</p>}
-              <button type="submit" disabled={sending}
-                className="w-full h-10 rounded-[11px] font-bold text-[13px] text-white transition-all active:scale-[0.98] disabled:opacity-50"
-                style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
-                {sending ? 'Sending…' : 'Send Enquiry'}
-              </button>
-            </form>
-          )}
         </div>
       </div>
     </div>
@@ -1882,7 +1801,16 @@ export default function ServicesPage() {
         <BookingModal service={bookingService} onClose={() => setBookingService(null)} />
       )}
       {enquiryService && (
-        <EnquiryModal service={enquiryService} onClose={() => setEnquiryService(null)} />
+        <ServiceEnquiryModal
+          service={{
+            id: enquiryService.id,
+            title: enquiryService.title,
+            userId: provider?.user.id,
+            providerName: provider?.user.name,
+            currency: enquiryService.currency,
+          }}
+          onClose={() => setEnquiryService(null)}
+        />
       )}
       {showServiceForm && (
         <ServiceEditModal

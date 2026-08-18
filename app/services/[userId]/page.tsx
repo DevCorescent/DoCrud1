@@ -36,6 +36,9 @@ import {
   Zap,
 } from 'lucide-react';
 import InfinityUpgradeModal from '@/components/InfinityUpgradeModal';
+import ServiceEnquiryModal from '@/components/services/ServiceEnquiryModal';
+import ServiceBookingWizard from '@/components/services/ServiceBookingWizard';
+import SaveServiceButton from '@/components/services/SaveServiceButton';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 interface ServicePackage {
@@ -96,6 +99,10 @@ interface ServiceReview {
   body: string;
   testimonial?: string;
   createdAt: string;
+  /* §28 */
+  images?: string[];
+  aspects?: { quality?: number; communication?: number; delivery?: number };
+  verified?: boolean;
 }
 
 interface CatalogueSettings {
@@ -563,7 +570,14 @@ function ServiceDetailModal({ service, reviews, onClose, onBook }: { service: Se
                           : <span className="text-[11px] font-bold text-white/50">{rev.reviewerName.charAt(0).toUpperCase()}</span>}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[12.5px] font-bold text-white/80">{rev.reviewerName}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-[12.5px] font-bold text-white/80">{rev.reviewerName}</p>
+                          {rev.verified && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[8.5px] font-bold uppercase tracking-[0.08em] text-emerald-300">
+                              <Check className="h-2 w-2" /> Verified Service
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <StarRow rating={rev.rating} />
                           <span className="text-[9.5px] text-white/30">{new Date(rev.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
@@ -572,6 +586,28 @@ function ServiceDetailModal({ service, reviews, onClose, onBook }: { service: Se
                     </div>
                     <p className="text-[12.5px] font-semibold text-white/75 mb-1">{rev.headline}</p>
                     <p className="text-[12px] text-white/50 leading-relaxed">{rev.body}</p>
+                    {rev.aspects && Object.keys(rev.aspects).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                        {([['quality', 'Quality'], ['communication', 'Communication'], ['delivery', 'Delivery']] as const)
+                          .filter(([k]) => rev.aspects?.[k])
+                          .map(([k, label]) => (
+                            <span key={k} className="inline-flex items-center gap-1 text-[10px] text-white/35">
+                              {label}
+                              <span className="flex items-center gap-0.5 text-amber-400/80">
+                                <Star className="h-2 w-2 fill-amber-400/80" />{rev.aspects?.[k]}
+                              </span>
+                            </span>
+                          ))}
+                      </div>
+                    )}
+                    {rev.images && rev.images.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {rev.images.slice(0, 6).map((src) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={src} src={src} alt="" className="h-14 w-14 rounded-[8px] border border-white/[0.08] object-cover" />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -584,6 +620,8 @@ function ServiceDetailModal({ service, reviews, onClose, onBook }: { service: Se
           <button onClick={onClose} className="h-11 px-5 rounded-[13px] border border-white/[0.09] text-white/55 text-[13px] font-semibold hover:bg-white/[0.05] transition-all">
             Close
           </button>
+          {/* §26 Save Service */}
+          <SaveServiceButton serviceId={service.id} variant="full" className="h-11 px-4 shrink-0" />
           <button onClick={() => { onClose(); onBook(); }}
             className="flex-1 h-11 rounded-[13px] font-black text-[13px] text-white transition-all active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 20px rgba(99,102,241,0.40)' }}>
@@ -1188,10 +1226,14 @@ function ServiceCard({ service, reviews, shared, editMode, settings, onView, onB
           </div>
         </div>
         {!editMode && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); onShare(); }}
-            className="w-full flex items-center justify-center gap-1.5 rounded-[10px] border border-white/[0.06] bg-white/[0.02] py-1.5 text-[10.5px] font-medium text-white/30 hover:text-white/55 hover:border-white/[0.10] transition-all">
-            {shared ? <><Check className="h-3 w-3 text-emerald-400" /><span className="text-emerald-400">Link copied!</span></> : <><Share2 className="h-3 w-3" /> Share this service</>}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {/* §26 Save Service */}
+            <SaveServiceButton serviceId={service.id} variant="full" className="shrink-0" />
+            <button type="button" onClick={(e) => { e.stopPropagation(); onShare(); }}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-[10px] border border-white/[0.06] bg-white/[0.02] py-1.5 text-[10.5px] font-medium text-white/30 hover:text-white/55 hover:border-white/[0.10] transition-all">
+              {shared ? <><Check className="h-3 w-3 text-emerald-400" /><span className="text-emerald-400">Link copied!</span></> : <><Share2 className="h-3 w-3" /> Share this service</>}
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -1261,6 +1303,8 @@ function ServiceListCard({ service, reviews, shared, editMode, settings, onView,
           </div>
         ) : (
           <div className="flex items-center gap-1.5">
+            {/* §26 Save Service */}
+            <SaveServiceButton serviceId={service.id} variant="icon" />
             <button type="button" onClick={(e) => { e.stopPropagation(); onShare(); }}
               className="h-7 w-7 rounded-[8px] border border-white/[0.08] bg-white/[0.03] flex items-center justify-center text-white/30 hover:text-white/60 hover:border-white/[0.14] transition-all"
               title="Share">

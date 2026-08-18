@@ -319,6 +319,16 @@ export interface ServiceReview {
   testimonial?: string;     // optional public quote
   createdAt: string;
   updatedAt: string;
+  /* ── §28 additions. Optional, so reviews written before these stay valid. ── */
+  /** Optional photos of the delivered work. */
+  images?: string[];
+  /** Service-specific feedback — per-aspect 1–5 scores, all optional. */
+  aspects?: { quality?: number; communication?: number; delivery?: number };
+  /**
+   * "Verified Service" indicator. Set by the server only after a completed
+   * booking for this reviewer/service is found; never accepted from a client.
+   */
+  verified?: boolean;
 }
 
 type ReviewsStore = ServiceReview[];

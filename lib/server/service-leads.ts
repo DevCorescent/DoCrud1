@@ -102,6 +102,10 @@ export interface ServiceLead {
   contactEmail?: string;
   contactPhone?: string;
 
+  /* Booking specifics — unset on enquiry leads. */
+  packageName?: string;
+  price?: number;
+
   /* Where the discussion lives */
   conversationId?: string;
 
@@ -172,6 +176,11 @@ export interface CreateServiceLeadInput {
   contactEmail?: string;
   contactPhone?: string;
   conversationId?: string;
+  /** Package / pricing chosen, for booking leads. */
+  packageName?: string;
+  price?: number;
+  /** Defaults to 'new'. Booking leads open at 'booking_requested' (§23). */
+  status?: ServiceLeadStatus;
 }
 
 /**
@@ -204,7 +213,9 @@ export async function createServiceLead(input: CreateServiceLeadInput): Promise<
     ...(input.contactEmail ? { contactEmail: input.contactEmail } : {}),
     ...(input.contactPhone ? { contactPhone: input.contactPhone } : {}),
     ...(input.conversationId ? { conversationId: input.conversationId } : {}),
-    status: 'new',
+    ...(input.packageName ? { packageName: input.packageName } : {}),
+    ...(input.price != null ? { price: input.price } : {}),
+    status: input.status && SERVICE_LEAD_STATUSES.includes(input.status) ? input.status : 'new',
     notes: [],
     createdAt: now,
     updatedAt: now,
@@ -307,6 +318,35 @@ export async function listServiceLeadsForProvider(
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   return { leads: filtered.slice(offset, offset + limit), total: filtered.length };
+}
+
+/**
+ * Customer-side listing — the requests a person has sent themselves.
+ *
+ * The mirror of `listServiceLeadsForProvider`, scoped by `customerId` so a
+ * caller only ever sees leads they raised. No filtering options: the sent box
+ * is a plain chronological list.
+ */
+export async function listServiceLeadsForCustomer(
+  customerId: string,
+  limit = 60,
+): Promise<ServiceLead[]> {
+  const id = normalize(customerId);
+  if (!id) return [];
+  const capped = Math.min(200, Math.max(1, limit));
+
+  const db = await getMongoDb();
+  if (db) {
+    const docs = await db.collection<LeadDoc>(COL)
+      .find({ customerId: id }).sort({ updatedAt: -1 }).limit(capped).toArray();
+    return docs.map(strip);
+  }
+
+  const raw = await readJsonFile<ServiceLead[]>(serviceLeadsPath, []);
+  return raw
+    .filter((lead) => lead.customerId === id)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, capped);
 }
 
 /** Provider-only mutation. Ownership is enforced by the `providerId` filter. */

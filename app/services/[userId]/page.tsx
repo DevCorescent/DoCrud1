@@ -1392,6 +1392,23 @@ export default function ServicesPage() {
     .finally(() => setLoading(false));
   }, [userId]);
 
+  /* Deep link: /services/[userId]?new=1 opens the existing create form directly
+     (used by the mobile Opportunity Hub's "+ Add" for Services). Owner only. */
+  const newParamHandled = useRef(false);
+  useEffect(() => {
+    if (newParamHandled.current || !isOwner) return;
+    if (typeof window === 'undefined') return;
+    if (new URLSearchParams(window.location.search).get('new') !== '1') return;
+
+    newParamHandled.current = true;
+    setEditingService(null);
+    setShowServiceForm(true);
+    // Drop the param so a refresh or Back does not re-open the form.
+    const url = new URL(window.location.href);
+    url.searchParams.delete('new');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, [isOwner]);
+
   const filteredServices = useCallback(() => {
     // In edit mode, show all services (including inactive) so owner can manage them
     let list = editMode ? [...services] : services.filter(s => s.isActive);

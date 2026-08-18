@@ -11,8 +11,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import {
+  ArrowLeft, Briefcase, LayoutGrid, Loader2, MapPin, Search, SlidersHorizontal, X, Zap,
+} from 'lucide-react';
 import { SERVICE_CATEGORIES, serviceCategory } from '@/lib/services-ui';
 import { ServiceSummaryCard, type ServiceSummary } from '@/components/services/ServiceSummaryCard';
 
@@ -66,7 +68,83 @@ const DELIVERY_OPTIONS: Array<{ id: string; label: string; hours: number }> = [
   { id: '720', label: 'Within a month', hours: 720 },
 ];
 
+/* ─── Presentation tokens ────────────────────────────────────────────
+   Lifted from app/people/page.tsx so the two directories share one
+   sidebar/grid/empty-state language. People itself is untouched. */
+const HEADER_H = 56;
+const GRID = 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4';
+const LABEL = 'text-[10px] font-bold uppercase tracking-[0.14em] text-white/28 mb-2.5';
+const DIVIDER = 'h-px bg-white/[0.06] mb-6';
+const ROW = 'flex items-center gap-2 h-9 px-3 rounded-[10px] text-[12.5px] font-medium transition-all';
+const ROW_ON = 'bg-white/[0.10] border border-white/[0.22] text-white';
+const ROW_OFF = 'border border-transparent text-white/38 hover:text-white/62 hover:bg-white/[0.04]';
+const PILL = 'h-[26px] px-2.5 rounded-full text-[10.5px] font-medium transition-all';
+const PILL_ON = 'bg-white/[0.12] border border-white/[0.22] text-white';
+const PILL_OFF = 'border border-white/[0.07] text-white/32 hover:text-white/55 hover:border-white/[0.13]';
+const INPUT = 'h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-[12.5px] placeholder:text-white/18 focus:outline-none focus:border-white/20 transition-colors';
+const EMPTY_ICON_BOX = 'h-18 w-18 rounded-[22px] border border-white/[0.07] flex items-center justify-center mb-6 p-5';
+const EMPTY_BTN = 'h-10 px-7 rounded-[13px] border border-white/[0.10] bg-white/[0.04] text-[13.5px] font-semibold text-white/52 hover:bg-white/[0.08] hover:text-white/72 transition-all';
+
+/* ─── Skeleton card ──────────────────────────────────────────────────
+   Mirrors the discovery card's two silhouettes so the grid does not
+   reflow when results land. */
+function SkeletonCard() {
+  return (
+    <>
+      <div className="sm:hidden rounded-[20px] overflow-hidden border border-white/[0.07]" style={{ background: '#0d0d10' }}>
+        <div className="h-[80px] animate-pulse" style={{ background: 'rgba(255,255,255,0.04)' }} />
+        <div className="px-4 pb-4" style={{ marginTop: -26 }}>
+          <div className="flex items-end gap-3">
+            <div className="h-[58px] w-[58px] rounded-full animate-pulse shrink-0" style={{ background: 'rgba(255,255,255,0.07)' }} />
+            <div className="flex-1 pb-1 pt-[24px]">
+              <div className="h-2.5 animate-pulse rounded-full w-1/2" style={{ background: 'rgba(255,255,255,0.05)' }} />
+            </div>
+            <div className="h-8 w-24 animate-pulse rounded-[10px] pb-1 mt-[24px] shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          </div>
+          <div className="mt-3 space-y-2">
+            <div className="h-3.5 animate-pulse rounded-full w-3/4" style={{ background: 'rgba(255,255,255,0.07)' }} />
+            <div className="h-2.5 animate-pulse rounded-full w-1/2" style={{ background: 'rgba(255,255,255,0.05)' }} />
+          </div>
+          <div className="flex gap-1.5 mt-3">
+            {[1, 2, 3].map(j => <div key={j} className="h-6 w-16 animate-pulse rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
+          </div>
+          <div className="h-px mt-3.5 mb-3" style={{ background: 'rgba(255,255,255,0.05)' }} />
+          <div className="flex gap-3">
+            {[1, 2].map(j => <div key={j} className="h-2.5 w-16 animate-pulse rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden sm:block rounded-[20px] overflow-hidden border border-white/[0.07]" style={{ background: '#0d0d10' }}>
+        <div className="h-[104px] animate-pulse" style={{ background: 'rgba(255,255,255,0.04)' }} />
+        <div className="px-4 pb-4">
+          <div className="flex items-end justify-between" style={{ marginTop: -30 }}>
+            <div className="h-[64px] w-[64px] rounded-full animate-pulse shrink-0" style={{ background: 'rgba(255,255,255,0.07)' }} />
+            <div className="flex gap-1.5 pb-1">
+              <div className="h-8 w-20 animate-pulse rounded-[10px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
+              <div className="h-8 w-8 animate-pulse rounded-[10px]" style={{ background: 'rgba(255,255,255,0.06)' }} />
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            <div className="h-2.5 animate-pulse rounded-full w-2/5" style={{ background: 'rgba(255,255,255,0.05)' }} />
+            <div className="h-3.5 animate-pulse rounded-full w-3/5" style={{ background: 'rgba(255,255,255,0.07)' }} />
+            <div className="h-2.5 animate-pulse rounded-full w-1/2" style={{ background: 'rgba(255,255,255,0.05)' }} />
+          </div>
+          <div className="flex gap-1.5 mt-3.5">
+            {[1, 2, 3].map(j => <div key={j} className="h-6 w-16 animate-pulse rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
+          </div>
+          <div className="h-px mt-4 mb-3.5" style={{ background: 'rgba(255,255,255,0.05)' }} />
+          <div className="flex gap-3">
+            {[1, 2].map(j => <div key={j} className="h-2.5 w-16 animate-pulse rounded-full" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function ServicesDiscoveryPage() {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [categories, setCategories] = useState<string[]>([]);
@@ -194,12 +272,51 @@ export default function ServicesDiscoveryPage() {
   const catKeys = Array.from(new Set([...Object.keys(facetCats), ...categories]))
     .sort((a, b) => (facetCats[b] ?? 0) - (facetCats[a] ?? 0));
 
+
+  /* ── Filter panel ──────────────────────────────────────────────────
+     Every existing filter, redrawn in the People page's sidebar language:
+     uppercase micro-labels, 36px list rows, pill groups and hairline
+     dividers. Sort moved here from the header select so that — exactly as
+     on People — one panel serves the desktop sidebar and the mobile sheet. */
   const FilterPanel = (
-    <div className="space-y-5">
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Category</p>
-        {catKeys.length === 0 && <p className="text-[12px] text-white/30">No categories yet</p>}
-        <div className="space-y-1">
+    <div className="flex flex-col gap-0">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-white/35">Filters</span>
+        {activeChips.length > 0 && (
+          <button type="button" onClick={clearAll} className="text-[11px] font-semibold text-white/32 hover:text-white/58 transition-colors">
+            Clear {activeChips.length}
+          </button>
+        )}
+      </div>
+
+      {/* Sort */}
+      <div className="mb-6">
+        <p className={LABEL}>Sort by</p>
+        <div className="flex flex-col gap-0.5">
+          {SORTS.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setSort(s.id)}
+              aria-pressed={sort === s.id}
+              className={`flex items-center h-9 px-3 rounded-[10px] text-[12.5px] font-medium text-left transition-all ${
+                sort === s.id ? 'bg-white text-[#0D0D0F] font-semibold' : 'text-white/42 hover:text-white/68 hover:bg-white/[0.05]'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={DIVIDER} />
+
+      {/* Category */}
+      <div className="mb-6">
+        <p className={LABEL}>Category</p>
+        {catKeys.length === 0 && <p className="text-[12px] text-white/25">No categories yet</p>}
+        <div className="flex flex-col gap-1">
           {catKeys.map(c => {
             const on = categories.includes(c);
             const meta = SERVICE_CATEGORIES[c] ?? SERVICE_CATEGORIES.other;
@@ -209,13 +326,11 @@ export default function ServicesDiscoveryPage() {
                 type="button"
                 onClick={() => toggle(categories, setCategories, c)}
                 aria-pressed={on}
-                className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
-                  on ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
-                }`}
+                className={`${ROW} ${on ? ROW_ON : ROW_OFF}`}
               >
-                <span aria-hidden>{meta.icon}</span>
-                <span className="min-w-0 flex-1 truncate">{meta.label}</span>
-                <span className="text-[11px] text-white/30">{facetCats[c] ?? 0}</span>
+                <span aria-hidden className="text-[12px] shrink-0">{meta.icon}</span>
+                <span className="min-w-0 flex-1 truncate text-left">{meta.label}</span>
+                <span className="text-[10.5px] opacity-60 shrink-0">{facetCats[c] ?? 0}</span>
               </button>
             );
           })}
@@ -225,30 +340,31 @@ export default function ServicesDiscoveryPage() {
       {/* Subcategory follows the category selection, so it appears only when
           the current results actually have subcategories to offer. */}
       {subKeys.length > 0 && (
-        <div>
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Subcategory</p>
-          <div className="space-y-1">
+        <div className="mb-6">
+          <p className={LABEL}>Subcategory</p>
+          <div className="flex flex-col gap-1">
             {subKeys.map(sc => (
               <button
                 key={sc}
                 type="button"
                 onClick={() => toggle(subcategories, setSubcategories, sc)}
                 aria-pressed={subcategories.includes(sc)}
-                className={`flex w-full items-center rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
-                  subcategories.includes(sc) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
-                }`}
+                className={`${ROW} ${subcategories.includes(sc) ? ROW_ON : ROW_OFF}`}
               >
-                <span className="min-w-0 flex-1 truncate">{sc}</span>
-                <span className="text-[11px] text-white/30">{facetSubs[sc] ?? 0}</span>
+                <span className="min-w-0 flex-1 truncate text-left">{sc}</span>
+                <span className="text-[10.5px] opacity-60 shrink-0">{facetSubs[sc] ?? 0}</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Pricing</p>
-        <div className="space-y-1">
+      <div className={DIVIDER} />
+
+      {/* Pricing */}
+      <div className="mb-6">
+        <p className={LABEL}>Pricing</p>
+        <div className="flex flex-col gap-1">
           {Object.keys(PRICING_LABELS).map(m => {
             const on = pricing.includes(m);
             return (
@@ -257,362 +373,536 @@ export default function ServicesDiscoveryPage() {
                 type="button"
                 onClick={() => toggle(pricing, setPricing, m)}
                 aria-pressed={on}
-                className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
-                  on ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
-                }`}
+                className={`${ROW} ${on ? ROW_ON : ROW_OFF}`}
               >
-                <span className="min-w-0 flex-1 truncate">{PRICING_LABELS[m]}</span>
-                <span className="text-[11px] text-white/30">{facetPricing[m] ?? 0}</span>
+                <span className="min-w-0 flex-1 truncate text-left">{PRICING_LABELS[m]}</span>
+                <span className="text-[10.5px] opacity-60 shrink-0">{facetPricing[m] ?? 0}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Price range</p>
+      {/* Price range */}
+      <div className="mb-6">
+        <p className={LABEL}>Price range</p>
         <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <label className="text-[10.5px] text-white/28 mb-1 block" htmlFor="svc-min-price">Min</label>
+            <input
+              id="svc-min-price"
+              value={minPrice} onChange={e => setMinPrice(e.target.value.replace(/[^\d]/g, ''))}
+              inputMode="numeric" placeholder="0" aria-label="Minimum price"
+              className={INPUT}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-[10.5px] text-white/28 mb-1 block" htmlFor="svc-max-price">Max</label>
+            <input
+              id="svc-max-price"
+              value={maxPrice} onChange={e => setMaxPrice(e.target.value.replace(/[^\d]/g, ''))}
+              inputMode="numeric" placeholder="Any" aria-label="Maximum price"
+              className={INPUT}
+            />
+          </div>
+        </div>
+        <p className="mt-1.5 text-[10.5px] leading-relaxed text-white/22">Custom-quote services have no set price and are excluded from a range.</p>
+      </div>
+
+      <div className={DIVIDER} />
+
+      {/* Location */}
+      <div className="mb-6">
+        <p className={LABEL}>Location</p>
+        <div className="relative">
+          <MapPin className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-white/22" />
           <input
-            value={minPrice} onChange={e => setMinPrice(e.target.value.replace(/[^\d]/g, ''))}
-            inputMode="numeric" placeholder="Min" aria-label="Minimum price"
-            className="h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12.5px] text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none"
-          />
-          <span className="text-white/25">–</span>
-          <input
-            value={maxPrice} onChange={e => setMaxPrice(e.target.value.replace(/[^\d]/g, ''))}
-            inputMode="numeric" placeholder="Max" aria-label="Maximum price"
-            className="h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12.5px] text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none"
+            value={location}
+            onChange={e => setLocation(e.target.value)}
+            placeholder="City or area…"
+            aria-label="Filter by location"
+            className={`${INPUT} pl-8`}
           />
         </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-white/25">Custom-quote services have no set price and are excluded from a range.</p>
       </div>
 
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Location</p>
-        <input
-          value={location}
-          onChange={e => setLocation(e.target.value)}
-          placeholder="City or area"
-          aria-label="Filter by location"
-          className="h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12.5px] text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none"
-        />
-      </div>
-
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Remote / on-site</p>
+      {/* Remote / on-site */}
+      <div className="mb-6">
+        <p className={LABEL}>Remote / on-site</p>
         <div className="flex flex-wrap gap-1.5">
-          {WORK_MODES.map(w => (
-            <button
-              key={w.id}
-              type="button"
-              onClick={() => toggle(workMode, setWorkMode, w.id)}
-              aria-pressed={workMode.includes(w.id)}
-              className={`rounded-full border px-2.5 py-1 text-[12px] transition ${
-                workMode.includes(w.id) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'
-              }`}
-            >
-              {w.label} <span className="text-white/30">{data?.facets.workMode?.[w.id] ?? 0}</span>
-            </button>
-          ))}
+          {WORK_MODES.map(w => {
+            const on = workMode.includes(w.id);
+            return (
+              <button
+                key={w.id}
+                type="button"
+                onClick={() => toggle(workMode, setWorkMode, w.id)}
+                aria-pressed={on}
+                className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}
+              >
+                {w.label} <span className="opacity-55">{data?.facets.workMode?.[w.id] ?? 0}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Availability</p>
-        <div className="space-y-1">
+      {/* Availability */}
+      <div className="mb-6">
+        <p className={LABEL}>Availability</p>
+        <div className="flex flex-col gap-1">
           {AVAILABILITIES.map(a => (
             <button
               key={a.id}
               type="button"
               onClick={() => toggle(availability, setAvailability, a.id)}
               aria-pressed={availability.includes(a.id)}
-              className={`flex w-full items-center rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
-                availability.includes(a.id) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
-              }`}
+              className={`${ROW} ${availability.includes(a.id) ? ROW_ON : ROW_OFF}`}
             >
-              <span className="flex-1">{a.label}</span>
-              <span className="text-[11px] text-white/30">{data?.facets.availability?.[a.id] ?? 0}</span>
+              <span className="min-w-0 flex-1 truncate text-left">{a.label}</span>
+              <span className="text-[10.5px] opacity-60 shrink-0">{data?.facets.availability?.[a.id] ?? 0}</span>
             </button>
           ))}
         </div>
       </div>
 
-      <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Delivery time</p>
-        <div className="space-y-1">
+      {/* Delivery time */}
+      <div className="mb-6">
+        <p className={LABEL}>Delivery time</p>
+        <div className="flex flex-col gap-1">
           {DELIVERY_OPTIONS.map(d => (
             <button
               key={d.id}
               type="button"
               onClick={() => setMaxDelivery(maxDelivery === d.id ? '' : d.id)}
               aria-pressed={maxDelivery === d.id}
-              className={`flex w-full items-center rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
-                maxDelivery === d.id ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
-              }`}
+              className={`${ROW} ${maxDelivery === d.id ? ROW_ON : ROW_OFF}`}
             >
-              {d.label}
+              <span className="min-w-0 flex-1 truncate text-left">{d.label}</span>
             </button>
           ))}
         </div>
       </div>
 
+      <div className={DIVIDER} />
+
       {/* Provider type comes from the account record, not the service. */}
       {Object.keys(data?.facets.providerType ?? {}).length > 0 && (
-        <div>
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Provider type</p>
+        <div className="mb-6">
+          <p className={LABEL}>Provider type</p>
           <div className="flex flex-wrap gap-1.5">
             {([['individual','Individual'],['business','Company / agency']] as const)
               .filter(([id]) => (data?.facets.providerType?.[id] ?? 0) > 0 || providerType.includes(id))
-              .map(([id,label]) => (
-              <button key={id} type="button" onClick={() => toggle(providerType, setProviderType, id)} aria-pressed={providerType.includes(id)}
-                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${providerType.includes(id) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'}`}>
-                {label} <span className="text-white/30">{data?.facets.providerType?.[id] ?? 0}</span>
-              </button>
-            ))}
+              .map(([id,label]) => {
+                const on = providerType.includes(id);
+                return (
+                  <button key={id} type="button" onClick={() => toggle(providerType, setProviderType, id)} aria-pressed={on}
+                    className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}>
+                    {label} <span className="opacity-55">{data?.facets.providerType?.[id] ?? 0}</span>
+                  </button>
+                );
+              })}
           </div>
         </div>
       )}
 
       {/* Skills — the specification lists these separately from tags. */}
       {Object.keys(data?.facets.skills ?? {}).length > 0 && (
-        <div>
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Skills</p>
+        <div className="mb-6">
+          <p className={LABEL}>Skills</p>
           <div className="flex flex-wrap gap-1.5">
-            {Object.keys(data?.facets.skills ?? {}).sort((a,b)=>(data!.facets.skills![b])-(data!.facets.skills![a])).slice(0,12).map(v => (
-              <button key={v} type="button" onClick={() => toggle(skills, setSkills, v)} aria-pressed={skills.includes(v)}
-                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${skills.includes(v) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'}`}>
-                {v} <span className="text-white/30">{data?.facets.skills?.[v] ?? 0}</span>
-              </button>
-            ))}
+            {Object.keys(data?.facets.skills ?? {}).sort((a,b)=>(data!.facets.skills![b])-(data!.facets.skills![a])).slice(0,12).map(v => {
+              const on = skills.includes(v);
+              return (
+                <button key={v} type="button" onClick={() => toggle(skills, setSkills, v)} aria-pressed={on}
+                  className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}>
+                  {v} <span className="opacity-55">{data?.facets.skills?.[v] ?? 0}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
       {Object.keys(data?.facets.languages ?? {}).length > 0 && (
-        <div>
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Language</p>
+        <div className="mb-6">
+          <p className={LABEL}>Language</p>
           <div className="flex flex-wrap gap-1.5">
-            {Object.keys(data?.facets.languages ?? {}).map(v => (
-              <button key={v} type="button" onClick={() => toggle(languages, setLanguages, v)} aria-pressed={languages.includes(v)}
-                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${languages.includes(v) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'}`}>
-                {v} <span className="text-white/30">{data?.facets.languages?.[v] ?? 0}</span>
-              </button>
-            ))}
+            {Object.keys(data?.facets.languages ?? {}).map(v => {
+              const on = languages.includes(v);
+              return (
+                <button key={v} type="button" onClick={() => toggle(languages, setLanguages, v)} aria-pressed={on}
+                  className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}>
+                  {v} <span className="opacity-55">{data?.facets.languages?.[v] ?? 0}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
       {tagKeys.length > 0 && (
-        <div>
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Skills &amp; tags</p>
+        <div className="mb-6">
+          <p className={LABEL}>Skills &amp; tags</p>
           <div className="flex flex-wrap gap-1.5">
-            {tagKeys.map(t => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => toggle(tags, setTags, t)}
-                aria-pressed={tags.includes(t)}
-                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${
-                  tags.includes(t) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'
-                }`}
-              >
-                {t} <span className="text-white/30">{facetTags[t] ?? 0}</span>
-              </button>
-            ))}
+            {tagKeys.map(t => {
+              const on = tags.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggle(tags, setTags, t)}
+                  aria-pressed={on}
+                  className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}
+                >
+                  {t} <span className="opacity-55">{facetTags[t] ?? 0}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
+      {/* Rating */}
       <div>
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Rating</p>
+        <p className={LABEL}>Rating</p>
         <div className="flex flex-wrap gap-1.5">
-          {RATINGS.map(r => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => setMinRating(minRating === r ? 0 : r)}
-              aria-pressed={minRating === r}
-              className={`rounded-full border px-2.5 py-1 text-[12px] transition ${
-                minRating === r ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'
-              }`}
-            >
-              {r}+
-            </button>
-          ))}
+          {RATINGS.map(r => {
+            const on = minRating === r;
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setMinRating(minRating === r ? 0 : r)}
+                aria-pressed={on}
+                className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}
+              >
+                {r}+
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 
+  /* ── Quick-filter chips ────────────────────────────────────────────
+     People's chip strip, wired only to filters this page already has. */
+  const topCategoryChips = catKeys.slice(0, 4);
+  const quickChipActive = (id: string) => {
+    if (id === 'all') return !hasFilters && sort === 'recommended';
+    if (id === 'remote') return workMode.includes('remote');
+    if (id === 'available') return availability.includes('available');
+    if (id === 'rating45') return minRating === 4.5;
+    if (id === 'bookings') return sort === 'bookings';
+    if (id === 'ratingSort') return sort === 'rating';
+    if (id === 'newest') return sort === 'newest';
+    return categories.includes(id);
+  };
+  const quickChipClick = (id: string) => {
+    if (id === 'all') { clearAll(); return; }
+    if (id === 'remote') { toggle(workMode, setWorkMode, 'remote'); return; }
+    if (id === 'available') { toggle(availability, setAvailability, 'available'); return; }
+    if (id === 'rating45') { setMinRating(minRating === 4.5 ? 0 : 4.5); return; }
+    if (id === 'bookings') { setSort('bookings'); return; }
+    if (id === 'ratingSort') { setSort('rating'); return; }
+    if (id === 'newest') { setSort('newest'); return; }
+    toggle(categories, setCategories, id);
+  };
+  const quickChips: Array<{ id: string; label: string }> = [
+    { id: 'all', label: '◈ All' },
+    ...topCategoryChips.map(c => ({ id: c, label: `${serviceCategory(c).icon} ${serviceCategory(c).label}` })),
+    { id: 'available', label: 'Available now' },
+    { id: 'remote', label: 'Remote' },
+    { id: 'rating45', label: '★ 4.5+' },
+    { id: 'bookings', label: '▲ Most booked' },
+    { id: 'ratingSort', label: '◉ Highest rated' },
+    { id: 'newest', label: '✦ Recently added' },
+  ];
+
+  const categoryCount = Object.keys(facetCats).length;
+  const availableCount = data?.facets.availability?.available ?? 0;
+
   return (
     <div className="min-h-screen bg-[#0A0A0C] text-white">
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-[#0A0A0C]/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4">
-          <h1 className="text-[15px] font-bold tracking-[-0.01em]">Services</h1>
-          <span className="hidden text-[12.5px] text-white/30 sm:inline">Have a skill? List it. Need a service? Find it.</span>
-          {data && state === 'ready' && (
-            <span className="ml-auto shrink-0 text-[12px] text-white/30">{data.total} {data.total === 1 ? 'service' : 'services'}</span>
-          )}
-        </div>
-      </header>
+      <style>{`
+        @keyframes cardIn {
+          from { opacity:0; transform:translateY(20px) scale(0.96); }
+          to   { opacity:1; transform:translateY(0)    scale(1);    }
+        }
+        .pc-anim { animation: cardIn 0.42s cubic-bezier(0.22,1,0.36,1) both; }
+        .no-sb::-webkit-scrollbar { display:none; }
+        .no-sb { scrollbar-width:none; }
 
-      <main className="mx-auto max-w-6xl px-4 py-5">
-        {/* search + sort */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
+        .chip-strip-fade-right {
+          mask-image: linear-gradient(to right, black 85%, transparent 100%);
+          -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+        }
+      `}</style>
+
+      {/* ══ Sticky header ══════════════════════════════════════════════════ */}
+      <header className="sticky top-0 z-30 border-b border-white/[0.06]"
+        style={{ height: HEADER_H, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px) saturate(180%)' }}>
+        <div className="h-full px-3 sm:px-5 lg:px-8 flex items-center gap-3">
+
+          {/* Back */}
+          <button type="button" onClick={() => router.back()} aria-label="Go back"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-white/48 hover:text-white hover:bg-white/[0.08] transition-all">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+
+          {/* Title */}
+          <div className="hidden sm:flex items-baseline gap-2 shrink-0">
+            <h1 className="text-[15px] font-bold tracking-[-0.01em] text-white">Services</h1>
+            {state === 'ready' && data && (
+              <span className="text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                {data.total.toLocaleString()}
+              </span>
+            )}
+          </div>
+
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'rgba(255,255,255,0.25)' }} />
             <input
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Search services, skills or providers"
+              placeholder="Search services, skills or providers…"
               aria-label="Search services"
-              className="h-10 w-full rounded-full border border-white/[0.08] bg-white/[0.03] pl-9 pr-9 text-[13px] text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none"
+              className="h-9 w-full rounded-[11px] text-white pl-9 pr-9 text-[13px] transition-all focus:outline-none"
+              style={{ background: 'rgba(255,255,255,0.055)', border: '1px solid rgba(255,255,255,0.09)' }}
+              onFocus={e => { e.target.style.borderColor = 'rgba(255,255,255,0.20)'; e.target.style.background = 'rgba(255,255,255,0.07)'; }}
+              onBlur={e => { e.target.style.borderColor = 'rgba(255,255,255,0.09)'; e.target.style.background = 'rgba(255,255,255,0.055)'; }}
             />
             {query && (
               <button type="button" onClick={() => setQuery('')} aria-label="Clear search"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
-                <X className="h-4 w-4" />
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/28 hover:text-white/55 transition-colors">
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
 
-          <select
-            value={sort}
-            onChange={e => setSort(e.target.value)}
-            aria-label="Sort services"
-            className="h-10 shrink-0 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 text-[12.5px] text-white/70 focus:border-white/25 focus:outline-none"
-          >
-            {SORTS.map(s => <option key={s.id} value={s.id} className="bg-[#0d0d10]">{s.label}</option>)}
-          </select>
+          {/* Desktop stats */}
+          {state === 'ready' && data && (
+            <div className="hidden lg:flex items-center gap-4 shrink-0 text-[11.5px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
+              <span className="flex items-center gap-1.5 font-medium">
+                <Briefcase className="h-3 w-3" />
+                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{data.total.toLocaleString()}</span>
+                services
+              </span>
+              <span className="flex items-center gap-1.5">
+                <LayoutGrid className="h-3 w-3" />
+                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{categoryCount}</span>
+                categories
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Zap className="h-3 w-3" />
+                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{availableCount}</span>
+                available
+              </span>
+            </div>
+          )}
 
-          <button
-            type="button"
-            onClick={() => setSheetOpen(true)}
-            className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3.5 text-[12.5px] font-semibold text-white/70 lg:hidden"
-          >
-            <SlidersHorizontal className="h-4 w-4" /> Filters
-            {activeChips.length > 0 && <span className="rounded-full bg-white/15 px-1.5 text-[11px]">{activeChips.length}</span>}
+          {/* Mobile filter button */}
+          <button type="button" onClick={() => setSheetOpen(true)} aria-label="Filters and sort"
+            className={`lg:hidden flex items-center gap-1.5 h-9 px-3 rounded-[10px] text-[12.5px] font-semibold shrink-0 transition-all ${
+              activeChips.length > 0
+                ? 'bg-white text-[#0A0A0C]'
+                : 'border border-white/[0.08] bg-white/[0.04] text-white/48 hover:text-white/72'
+            }`}>
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {activeChips.length > 0 && <span className="text-[10.5px] font-bold">{activeChips.length}</span>}
           </button>
         </div>
+      </header>
 
-        {activeChips.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {activeChips.map(chip => (
+      {/* ══ Quick-filter chip strip ══════════════════════════════════════ */}
+      <div className="sticky z-20 border-b border-white/[0.05]"
+        style={{ top: HEADER_H, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px)' }}>
+        <div className="px-3 sm:px-5 lg:px-8 py-2.5 flex items-center gap-1.5 overflow-x-auto no-sb chip-strip-fade-right">
+          {quickChips.map(chip => {
+            const on = quickChipActive(chip.id);
+            return (
               <button
-                key={chip.label}
+                key={chip.id}
                 type="button"
-                onClick={chip.clear}
-                className="inline-flex items-center gap-1 rounded-full border border-white/[0.10] bg-white/[0.05] px-2.5 py-1 text-[11.5px] text-white/70 hover:bg-white/[0.09]"
+                onClick={() => quickChipClick(chip.id)}
+                aria-pressed={on}
+                className="shrink-0 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-all duration-150 whitespace-nowrap"
+                style={on
+                  ? { background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)', color: '#ffffff' }
+                  : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.40)' }}
               >
-                {chip.label} <X className="h-3 w-3" />
+                {chip.label}
               </button>
-            ))}
-            <button type="button" onClick={clearAll} className="px-1.5 text-[11.5px] font-semibold text-white/40 hover:text-white">Clear all</button>
+            );
+          })}
+
+          {/* Every active filter stays individually removable, as before. */}
+          {activeChips.map(chip => (
+            <button
+              key={`active-${chip.label}`}
+              type="button"
+              onClick={chip.clear}
+              aria-label={`Remove filter: ${chip.label}`}
+              className="shrink-0 inline-flex items-center gap-1 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-all whitespace-nowrap"
+              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
+            >
+              {chip.label} <X className="h-2.5 w-2.5" />
+            </button>
+          ))}
+
+          {activeChips.length > 1 && (
+            <button type="button" onClick={clearAll}
+              className="shrink-0 h-[30px] px-3 rounded-full text-[11px] text-white/26 hover:text-white/52 transition-colors whitespace-nowrap">
+              Clear all
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ══ Body ════════════════════════════════════════════════════════ */}
+      <div className="flex">
+
+        {/* Desktop sidebar */}
+        <aside className="hidden lg:flex shrink-0 w-[248px] xl:w-[264px] flex-col border-r border-white/[0.05]">
+          <div className="sticky overflow-y-auto px-5 py-6 no-sb"
+            style={{ top: HEADER_H + 47, height: `calc(100vh - ${HEADER_H + 47}px)` }}>
+            {FilterPanel}
           </div>
-        )}
+        </aside>
 
-        <div className="mt-5 grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <aside className="hidden lg:block"><div className="sticky top-20">{FilterPanel}</div></aside>
+        {/* Main content */}
+        <main className="flex-1 min-w-0 px-3 sm:px-4 lg:px-6 xl:px-8 pt-5 pb-12">
 
-          <section className="min-w-0">
-            {state === 'loading' && (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="animate-pulse overflow-hidden rounded-[20px] border border-white/[0.07] bg-[#0d0d10]">
-                    <div className="h-28 w-full bg-white/[0.04]" />
-                    <div className="space-y-2 p-3.5">
-                      <div className="h-3 w-16 rounded bg-white/[0.04]" />
-                      <div className="h-3.5 w-3/4 rounded bg-white/[0.04]" />
-                      <div className="h-3 w-1/2 rounded bg-white/[0.04]" />
-                    </div>
+          {/* Mobile stats */}
+          {state === 'ready' && data && items.length > 0 && (
+            <div className="sm:hidden flex items-center gap-3.5 mb-4 text-[11.5px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
+              <span className="flex items-center gap-1.5"><Briefcase className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{data.total.toLocaleString()}</span> services</span>
+              <span className="flex items-center gap-1.5"><LayoutGrid className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{categoryCount}</span> categories</span>
+              <span className="flex items-center gap-1.5"><Zap className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{availableCount}</span> available</span>
+            </div>
+          )}
+
+          {state === 'loading' && (
+            <div className={GRID}>
+              {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
+            </div>
+          )}
+
+          {state === 'error' && (
+            <div className="flex flex-col items-center justify-center py-36 text-center">
+              <div className={EMPTY_ICON_BOX}>
+                <Briefcase className="h-9 w-9" style={{ color: 'rgba(255,255,255,0.15)' }} />
+              </div>
+              <p className="text-[17px] font-bold text-white/42 mb-2">Couldn&apos;t load services</p>
+              <p className="text-[13.5px] text-white/22 mb-7 max-w-xs leading-relaxed">
+                Something went wrong while fetching results. Try again in a moment.
+              </p>
+              <button type="button" onClick={() => void fetchPage(1, false)} className={EMPTY_BTN}>
+                Try again
+              </button>
+            </div>
+          )}
+
+          {state === 'ready' && items.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-36 text-center">
+              <div className={EMPTY_ICON_BOX}>
+                <Briefcase className="h-9 w-9" style={{ color: 'rgba(255,255,255,0.15)' }} />
+              </div>
+              {/* "Nothing published yet" is a different message from
+                  "nothing matches" — the API sends libraryTotal so the page
+                  can tell them apart instead of guessing. */}
+              <p className="text-[17px] font-bold text-white/42 mb-2">
+                {hasFilters ? 'No services match your filters' : 'No services found'}
+              </p>
+              <p className="text-[13.5px] text-white/22 mb-7 max-w-xs leading-relaxed">
+                {hasFilters
+                  ? 'Try removing a filter or searching for something broader.'
+                  : (data?.libraryTotal ?? 0) === 0
+                    ? 'Nobody has published a service yet. Add yours from Profile → Services.'
+                    : 'Nothing to show right now.'}
+              </p>
+              {hasFilters && (
+                <button type="button" onClick={clearAll} className={EMPTY_BTN}>
+                  Clear all filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {state === 'ready' && items.length > 0 && (
+            <>
+              <div className={GRID}>
+                {items.map((s, i) => (
+                  <div key={s.id} className="pc-anim" style={{ animationDelay: `${Math.min(i, 11) * 0.04}s` }}>
+                    <ServiceSummaryCard service={s} variant="discovery" />
                   </div>
                 ))}
               </div>
-            )}
 
-            {state === 'error' && (
-              <div className="rounded-[20px] border border-white/[0.07] bg-[#0d0d10] py-16 text-center">
-                <p className="text-[14px] font-semibold">Couldn&apos;t load services.</p>
-                <button
-                  type="button"
-                  onClick={() => void fetchPage(1, false)}
-                  className="mt-3 rounded-full bg-white px-4 py-2 text-[12px] font-bold text-[#0D0D0F] hover:bg-white/90"
-                >
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {state === 'ready' && items.length === 0 && (
-              <div className="rounded-[20px] border border-white/[0.07] bg-[#0d0d10] py-16 text-center">
-                {/* "Nothing published yet" is a different message from
-                    "nothing matches" — the API sends libraryTotal so the page
-                    can tell them apart instead of guessing. */}
-                <p className="text-[14px] font-semibold">
-                  {hasFilters ? 'No services match your filters.' : 'No services found'}
+              {/* Result footer. Services pages results with an append-style
+                  "Load more" rather than People's numbered pages, so the
+                  paging behaviour is unchanged — only its frame matches. */}
+              <div className="mt-10 flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 pb-2 border-t border-white/[0.06]">
+                <p className="text-[12px] text-white/28">
+                  Showing <span className="text-white/52 font-semibold">{items.length.toLocaleString()}</span> of{' '}
+                  <span className="text-white/52 font-semibold">{(data?.total ?? items.length).toLocaleString()}</span>{' '}
+                  {(data?.total ?? items.length) === 1 ? 'service' : 'services'}
                 </p>
-                <p className="mx-auto mt-1.5 max-w-xs text-[12.5px] leading-relaxed text-white/40">
-                  {hasFilters
-                    ? 'Try removing a filter or searching for something broader.'
-                    : (data?.libraryTotal ?? 0) === 0
-                      ? 'Nobody has published a service yet. Add yours from Profile → Services.'
-                      : 'Nothing to show right now.'}
-                </p>
-                {hasFilters && (
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                    <button type="button" onClick={clearAll} className="rounded-full bg-white px-4 py-2 text-[12px] font-bold text-[#0D0D0F] hover:bg-white/90">
-                      Clear filters
-                    </button>
-                    <button type="button" onClick={clearAll} className="rounded-full border border-white/[0.10] px-4 py-2 text-[12px] font-semibold text-white/60 hover:bg-white/[0.06]">
-                      Browse all services
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {state === 'ready' && items.length > 0 && (
-              <>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {items.map(s => <ServiceSummaryCard key={s.id} service={s} />)}
-                </div>
                 {data?.hasMore && (
-                  <div className="mt-5 flex justify-center">
-                    <button
-                      type="button"
-                      disabled={loadingMore}
-                      onClick={() => { const next = page + 1; setPage(next); void fetchPage(next, true); }}
-                      className="inline-flex items-center gap-2 rounded-full border border-white/[0.10] bg-white/[0.04] px-4 py-2 text-[12.5px] font-semibold text-white/70 hover:bg-white/[0.08] disabled:opacity-50"
-                    >
-                      {loadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      Load more
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={loadingMore}
+                    onClick={() => { const next = page + 1; setPage(next); void fetchPage(next, true); }}
+                    className="inline-flex items-center gap-2 h-9 px-5 rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-[12.5px] font-semibold text-white/48 hover:text-white/72 hover:bg-white/[0.08] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {loadingMore && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    Load more
+                  </button>
                 )}
-              </>
-            )}
-          </section>
-        </div>
-      </main>
+              </div>
+            </>
+          )}
+        </main>
+      </div>
 
-      {/* mobile filter sheet */}
+      {/* ══ Mobile filter bottom-sheet ══════════════════════════════════ */}
       {sheetOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setSheetOpen(false)} />
-          <div className="absolute inset-x-0 bottom-0 max-h-[80vh] overflow-y-auto rounded-t-[20px] border-t border-white/[0.08] bg-[#0d0d10] p-5 pb-8">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-[14px] font-bold">Filters</p>
-              <button type="button" onClick={() => setSheetOpen(false)} aria-label="Close filters" className="text-white/40 hover:text-white">
-                <X className="h-5 w-5" />
+        <>
+          <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm" onClick={() => setSheetOpen(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-[90] max-h-[90dvh] flex flex-col rounded-t-[24px] border-t border-white/[0.09] shadow-[0_-32px_80px_rgba(0,0,0,0.90)] lg:hidden"
+            style={{ background: '#0f0f12' }}>
+            <div className="shrink-0 px-5 pt-3.5 pb-4 border-b border-white/[0.07]">
+              <div className="mx-auto mb-3.5 h-[3px] w-10 rounded-full bg-white/[0.14]" />
+              <div className="flex items-center justify-between">
+                <p className="text-[14.5px] font-bold text-white tracking-[-0.01em]">Filters &amp; Sort</p>
+                <div className="flex items-center gap-3">
+                  {activeChips.length > 0 && (
+                    <button type="button" onClick={clearAll}
+                      className="text-[12px] font-semibold text-white/35 hover:text-white/62 transition-colors">
+                      Clear all
+                    </button>
+                  )}
+                  <button type="button" onClick={() => setSheetOpen(false)} aria-label="Close filters"
+                    className="flex h-7 w-7 items-center justify-center rounded-[9px] border border-white/[0.09] bg-white/[0.05] text-white/42 hover:text-white/70 transition-colors">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-5 no-sb">
+              {FilterPanel}
+            </div>
+            <div className="shrink-0 px-5 py-4 border-t border-white/[0.07]" style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+              <button type="button" onClick={() => setSheetOpen(false)}
+                className="w-full h-12 rounded-[14px] font-bold text-[14.5px] tracking-[-0.01em] transition-all"
+                style={{ background: '#ffffff', color: '#0A0A0C', boxShadow: '0 4px 20px rgba(255,255,255,0.15)' }}>
+                Show {(data?.total ?? items.length).toLocaleString()} {(data?.total ?? items.length) === 1 ? 'service' : 'services'}
               </button>
             </div>
-            {FilterPanel}
-            <div className="mt-5 flex gap-2">
-              <button type="button" onClick={clearAll} className="flex-1 rounded-full border border-white/[0.10] py-2.5 text-[12.5px] font-semibold text-white/60">Clear all</button>
-              <button type="button" onClick={() => setSheetOpen(false)} className="flex-1 rounded-full bg-white py-2.5 text-[12.5px] font-bold text-[#0D0D0F]">Show results</button>
-            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

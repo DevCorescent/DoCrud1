@@ -42,6 +42,10 @@ export async function POST(req: NextRequest) {
       headline: string;
       body: string;
       testimonial?: string;
+      images?: unknown;
+      aspects?: { quality?: unknown; communication?: unknown; delivery?: unknown };
+      /* A client-sent `verified` is ignored on purpose — see below. */
+      verified?: unknown;
     };
 
     if (!body.serviceId) return NextResponse.json({ error: 'serviceId required.' }, { status: 400 });
@@ -67,6 +71,25 @@ export async function POST(req: NextRequest) {
     // Fetch reviewer profile for avatar
     const profile = await getProfileData(actor.id);
 
+    /* §28 optional images — only URLs from our own upload endpoint / storage. */
+    const images = Array.isArray(body.images)
+      ? body.images
+        .map((raw) => (typeof raw === 'string' ? raw.trim() : ''))
+        .filter((url) => url && url.length < 2000 && (url.startsWith('/uploads/') || /^https?:\/\//i.test(url)))
+        .slice(0, 6)
+      : [];
+
+    /* §28 service-specific feedback — per-aspect 1–5, each optional. */
+    const aspectScore = (v: unknown) => {
+      const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+      return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : undefined;
+    };
+    const aspects = {
+      ...(aspectScore(body.aspects?.quality) ? { quality: aspectScore(body.aspects?.quality) } : {}),
+      ...(aspectScore(body.aspects?.communication) ? { communication: aspectScore(body.aspects?.communication) } : {}),
+      ...(aspectScore(body.aspects?.delivery) ? { delivery: aspectScore(body.aspects?.delivery) } : {}),
+    };
+
     const review = await createReview({
       serviceId: body.serviceId,
       serviceUserId: completedBooking.serviceUserId,
@@ -78,6 +101,12 @@ export async function POST(req: NextRequest) {
       headline: body.headline.trim(),
       body: body.body.trim(),
       testimonial: body.testimonial?.trim() || undefined,
+      ...(images.length ? { images } : {}),
+      ...(Object.keys(aspects).length ? { aspects } : {}),
+      /* "Verified Service": true because `getCompletedBookingForReviewer`
+         above found a completed engagement for THIS reviewer and service.
+         Derived here, never read from the request. */
+      verified: true,
     });
 
     return NextResponse.json({ review }, { status: 201 });

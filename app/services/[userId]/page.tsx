@@ -36,6 +36,7 @@ import {
 import InfinityUpgradeModal from '@/components/InfinityUpgradeModal';
 import ServiceEnquiryModal from '@/components/services/ServiceEnquiryModal';
 import ServiceBookingWizard from '@/components/services/ServiceBookingWizard';
+import SaveServiceButton from '@/components/services/SaveServiceButton';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 interface ServicePackage {
@@ -415,6 +416,8 @@ function ServiceDetailModal({ service, reviews, onClose, onBook }: { service: Se
           <button onClick={onClose} className="h-11 px-5 rounded-[13px] border border-white/[0.09] text-white/55 text-[13px] font-semibold hover:bg-white/[0.05] transition-all">
             Close
           </button>
+          {/* §26 Save Service */}
+          <SaveServiceButton serviceId={service.id} variant="full" className="h-11 px-4 shrink-0" />
           <button onClick={() => { onClose(); onBook(); }}
             className="flex-1 h-11 rounded-[13px] font-black text-[13px] text-white transition-all active:scale-[0.98]"
             style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 4px 20px rgba(99,102,241,0.40)' }}>
@@ -772,10 +775,14 @@ function ServiceCard({ service, reviews, shared, editMode, settings, onView, onB
           </div>
         </div>
         {!editMode && (
-          <button type="button" onClick={(e) => { e.stopPropagation(); onShare(); }}
-            className="w-full flex items-center justify-center gap-1.5 rounded-[10px] border border-white/[0.06] bg-white/[0.02] py-1.5 text-[10.5px] font-medium text-white/30 hover:text-white/55 hover:border-white/[0.10] transition-all">
-            {shared ? <><Check className="h-3 w-3 text-emerald-400" /><span className="text-emerald-400">Link copied!</span></> : <><Share2 className="h-3 w-3" /> Share this service</>}
-          </button>
+          <div className="flex items-center gap-1.5">
+            {/* §26 Save Service */}
+            <SaveServiceButton serviceId={service.id} variant="full" className="shrink-0" />
+            <button type="button" onClick={(e) => { e.stopPropagation(); onShare(); }}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-[10px] border border-white/[0.06] bg-white/[0.02] py-1.5 text-[10.5px] font-medium text-white/30 hover:text-white/55 hover:border-white/[0.10] transition-all">
+              {shared ? <><Check className="h-3 w-3 text-emerald-400" /><span className="text-emerald-400">Link copied!</span></> : <><Share2 className="h-3 w-3" /> Share this service</>}
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -845,6 +852,8 @@ function ServiceListCard({ service, reviews, shared, editMode, settings, onView,
           </div>
         ) : (
           <div className="flex items-center gap-1.5">
+            {/* §26 Save Service */}
+            <SaveServiceButton serviceId={service.id} variant="icon" />
             <button type="button" onClick={(e) => { e.stopPropagation(); onShare(); }}
               className="h-7 w-7 rounded-[8px] border border-white/[0.08] bg-white/[0.03] flex items-center justify-center text-white/30 hover:text-white/60 hover:border-white/[0.14] transition-all"
               title="Share">

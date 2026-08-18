@@ -47,6 +47,42 @@ export const SERVICE_LEAD_STATUSES: ServiceLeadStatus[] = [
   'cancelled',
 ];
 
+/** PDF §23 display labels. The stored values stay snake_case. */
+export const SERVICE_LEAD_STATUS_LABELS: Record<ServiceLeadStatus, string> = {
+  new: 'New',
+  contacted: 'Contacted',
+  discussion: 'Discussion',
+  quote_sent: 'Quote Sent',
+  booking_requested: 'Booking Requested',
+  accepted: 'Accepted',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  declined: 'Declined',
+  cancelled: 'Cancelled',
+};
+
+/**
+ * Closed states. A lead that is finished, refused or called off stays that way,
+ * which is what blocks Completed → New, Cancelled → In Progress and
+ * Declined → Accepted. Everything still open may move to any other status —
+ * providers work leads in their own order, so no stricter graph is imposed.
+ */
+export const TERMINAL_SERVICE_LEAD_STATUSES: ServiceLeadStatus[] = ['completed', 'declined', 'cancelled'];
+
+export function isTerminalServiceLeadStatus(status: ServiceLeadStatus) {
+  return TERMINAL_SERVICE_LEAD_STATUSES.includes(status);
+}
+
+/** Statuses a lead may move to from `current` (excludes `current` itself). */
+export function allowedServiceLeadTransitions(current: ServiceLeadStatus): ServiceLeadStatus[] {
+  if (isTerminalServiceLeadStatus(current)) return [];
+  return SERVICE_LEAD_STATUSES.filter((s) => s !== current);
+}
+
+export function canTransitionServiceLead(current: ServiceLeadStatus, next: ServiceLeadStatus) {
+  return current === next || allowedServiceLeadTransitions(current).includes(next);
+}
+
 /** How the customer asked to be reached. `docrud_chat` keeps contact details private. */
 export type ServiceContactMethod = 'docrud_chat' | 'email' | 'phone';
 
@@ -340,6 +376,9 @@ export async function updateServiceLead(params: {
   if (db) {
     const doc = await db.collection<LeadDoc>(COL).findOne({ _id: leadId, providerId });
     if (!doc) throw new Error('Lead not found.');
+    if (nextStatus && !canTransitionServiceLead(doc.status, nextStatus)) {
+      throw new Error(`Invalid transition: ${doc.status} cannot become ${nextStatus}.`);
+    }
     const nextNotes = noteBody
       ? [{ id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, body: noteBody, createdAt: now, createdByUserId: providerId }, ...parseNotes(doc.notes)].slice(0, 240)
       : parseNotes(doc.notes);
@@ -355,6 +394,9 @@ export async function updateServiceLead(params: {
   const idx = existing.findIndex((lead) => lead.id === leadId && lead.providerId === providerId);
   if (idx === -1) throw new Error('Lead not found.');
   const current = existing[idx];
+  if (nextStatus && !canTransitionServiceLead(current.status, nextStatus)) {
+    throw new Error(`Invalid transition: ${current.status} cannot become ${nextStatus}.`);
+  }
   const nextNotes = noteBody
     ? [{ id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, body: noteBody, createdAt: now, createdByUserId: providerId }, ...(current.notes || [])].slice(0, 240)
     : current.notes || [];

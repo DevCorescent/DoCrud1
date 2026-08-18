@@ -19,7 +19,14 @@ import {
   type ServiceEnquiry,
 } from '@/lib/server/service-enquiries';
 import {
+  consumeRateLimit,
+  detectSpam,
+  isBlockedBetween,
+  resolveProviderContact,
+} from '@/lib/server/service-safety';
+import {
   createServiceLead,
+  getServiceLeadById,
   getServiceLeadForSource,
   type ServiceContactMethod,
   type ServiceLeadAttachment,
@@ -166,6 +173,22 @@ export async function POST(req: NextRequest) {
     if (!provider) return NextResponse.json({ error: 'Provider not found.' }, { status: 404 });
     if (provider.id === actor.id) return NextResponse.json({ error: 'You cannot enquire about your own service.' }, { status: 400 });
 
+    /* — §25 block: either party having blocked the other ends the flow — */
+    if (await isBlockedBetween(actor.id, provider.id)) {
+      return NextResponse.json({ error: 'You cannot contact this provider.' }, { status: 403 });
+    }
+
+    /* — §25 rate limiting, enforced server-side — */
+    for (const action of ['enquiry', 'daily'] as const) {
+      const rate = await consumeRateLimit(action, actor.id);
+      if (!rate.allowed) {
+        return NextResponse.json(
+          { error: `You have reached the limit of ${rate.limit} ${rate.label}. Please try again later.`, retryAfterSeconds: rate.retryAfterSeconds },
+          { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } },
+        );
+      }
+    }
+
     /* — required fields — */
     const requirement = cleanText(body.requirement ?? body.message, REQUIREMENT_MAX_LENGTH);
     if (requirement.length < REQUIREMENT_MIN_LENGTH) {
@@ -173,6 +196,12 @@ export async function POST(req: NextRequest) {
         { error: `Please describe what you need in at least ${REQUIREMENT_MIN_LENGTH} characters.` },
         { status: 400 },
       );
+    }
+
+    /* — §25 spam heuristics on the free-text requirement — */
+    const spam = detectSpam(requirement);
+    if (spam.spam) {
+      return NextResponse.json({ error: `This message looks like spam (${spam.reason}) Please rewrite it.`, code: 'SPAM_SUSPECTED' }, { status: 400 });
     }
 
     const contactMethodRaw = typeof body.contactMethod === 'string' ? body.contactMethod.trim() : '';
@@ -323,7 +352,25 @@ export async function GET(req: NextRequest) {
         ? { ...publicEnquiry(enquiry), customerName: enquiry.customerName, contactEmail: enquiry.contactEmail, contactPhone: enquiry.contactPhone }
         : publicEnquiry(enquiry);
 
-      return NextResponse.json({ enquiry: payload, role: isProvider ? 'provider' : 'customer' });
+      /* §25 — the customer sees provider contact details only once the lead is
+         accepted AND the provider opted that channel in. Nothing is derived
+         from the profile record on its own. */
+      let providerContact = null;
+      if (isCustomer) {
+        const lead = enquiry.leadId ? await getServiceLeadById(enquiry.leadId) : null;
+        const providerUser = await getStoredUserById(enquiry.providerId);
+        providerContact = await resolveProviderContact({
+          providerId: enquiry.providerId,
+          providerEmail: providerUser?.email,
+          leadStatus: lead?.status ?? null,
+        });
+      }
+
+      return NextResponse.json({
+        enquiry: payload,
+        role: isProvider ? 'provider' : 'customer',
+        ...(isCustomer ? { providerContact } : {}),
+      });
     }
 
     const role = searchParams.get('role') === 'provider' ? 'provider' : 'customer';

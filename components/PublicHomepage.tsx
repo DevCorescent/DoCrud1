@@ -2188,7 +2188,7 @@ function hpWriteTrend(item: HpFeedItem, next: boolean) {
   } catch {}
 }
 
-function HomepageLiveFeed() {
+function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
   const [allItems,   setAllItems]   = React.useState<HpFeedItem[]>([]);
   const [page,       setPage]       = React.useState(1);
   const [loading,    setLoading]    = React.useState(true);
@@ -2579,27 +2579,48 @@ function HomepageLiveFeed() {
               activecat/setActivecat and the Task 11 category treatment. */}
           <div className="lg:hidden shrink-0 overflow-x-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <div className="flex min-w-max gap-2">
-              {HP_TABS.map(tab => {
+              {HP_TABS.map((tab, tabIndex) => {
                 const isActive = activecat === tab.id;
                 const count    = tab.id === 'all' ? allItems.length : (catCounts[tab.id] ?? 0);
                 return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    aria-pressed={isActive}
-                    onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
-                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
-                      isActive
-                        ? feedCategoryTreatment(tab.id).badgeCls
-                        : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
-                    }`}
-                  >
-                    <tab.icon className="h-3 w-3 shrink-0" />
-                    {tab.label}
-                    {count > 0 && (
-                      <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
+                  <React.Fragment key={tab.id}>
+                    {/* Publish sits second, right after "All". Colours are inline on
+                        purpose: globals.css force-lightens any `text-black*`/`bg-white`
+                        class in dark mode, which would render this white-on-white.
+                        Light mode inverts the homepage shell, so this soft off-white
+                        pill reads as matte black with light text there — no second style. */}
+                    {tabIndex === 1 && onPublish && (
+                      <button
+                        type="button"
+                        onClick={onPublish}
+                        className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl px-3 py-1.5 text-[11px] font-semibold transition hover:opacity-90 active:scale-[0.98]"
+                        style={{
+                          background: 'rgba(244,244,246,0.92)',
+                          color: 'rgba(15,23,42,0.88)',
+                          border: '1px solid rgba(255,255,255,0.18)',
+                        }}
+                      >
+                        <Send className="h-3 w-3 shrink-0" />
+                        Publish
+                      </button>
                     )}
-                  </button>
+                    <button
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
+                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
+                        isActive
+                          ? feedCategoryTreatment(tab.id).badgeCls
+                          : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
+                      }`}
+                    >
+                      <tab.icon className="h-3 w-3 shrink-0" />
+                      {tab.label}
+                      {count > 0 && (
+                        <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
+                      )}
+                    </button>
+                  </React.Fragment>
                 );
               })}
             </div>
@@ -4628,230 +4649,6 @@ function PublishHeading({ onPublish }: { onPublish: () => void }) {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   ContentDiscoveryStrip — find-by-type stats bar
-───────────────────────────────────────────────────────────── */
-const CONTENT_TYPES = [
-  { id: 'publish',      label: 'Publish',      count:   0, Icon: Send,         color: '#fb923c', rgb: '251,146,60'   },
-  { id: 'news',         label: 'News',         count:   9, Icon: Newspaper,   color: '#60a5fa', rgb: '96,165,250'   },
-  { id: 'article',      label: 'Articles',     count:   7, Icon: BookOpen,    color: '#818cf8', rgb: '129,140,248'  },
-  { id: 'document',     label: 'Docs',         count:   6, Icon: FileText,    color: '#22d3ee', rgb: '34,211,238'   },
-  { id: 'portfolio',    label: 'Portfolio',    count:   4, Icon: Layers,      color: '#f472b6', rgb: '244,114,182'  },
-  { id: 'all',          label: 'All',         count: 125, Icon: LayoutGrid,  color: '#a78bfa', rgb: '167,139,250'  },
-  { id: 'announcement', label: 'Announce',     count:   5, Icon: Megaphone,   color: '#fb923c', rgb: '251,146,60'   },
-  { id: 'job',          label: 'Jobs',         count:   5, Icon: Briefcase,   color: '#34d399', rgb: '52,211,153'   },
-  { id: 'resume',       label: 'Resumes',      count:   3, Icon: User,        color: '#2dd4bf', rgb: '45,212,191'   },
-  { id: 'product',      label: 'Products',     count:   4, Icon: Package,     color: '#fbbf24', rgb: '251,191,36'   },
-  { id: 'event',        label: 'Events',       count:   7, Icon: CalendarDays,color: '#f87171', rgb: '248,113,113'  },
-  { id: 'hackathon',    label: 'Hackathons',   count:   6, Icon: Terminal,    color: '#4ade80', rgb: '74,222,128'   },
-  { id: 'post',         label: 'Posts',        count:   5, Icon: PenLine,     color: '#c084fc', rgb: '192,132,252'  },
-  { id: 'poll',         label: 'Polls',        count:   5, Icon: ListChecks,  color: '#38bdf8', rgb: '56,189,248'   },
-  { id: 'survey',       label: 'Surveys',      count:   3, Icon: ClipboardList,color:'#f59e0b', rgb: '245,158,11'   },
-  { id: 'chart',        label: 'Charts',       count:   3, Icon: BarChart2,   color: '#10b981', rgb: '16,185,129'   },
-  { id: 'thread',       label: 'Threads',      count:   3, Icon: MessageSquare,color:'#3b82f6', rgb: '59,130,246'   },
-  { id: 'video',        label: 'Videos',       count:   5, Icon: Video,       color: '#ef4444', rgb: '239,68,68'    },
-  { id: 'milestone',    label: 'Milestones',   count:   3, Icon: Award,       color: '#eab308', rgb: '234,179,8'    },
-  { id: 'tutorial',     label: 'Tutorials',    count:   4, Icon: BookMarked,  color: '#84cc16', rgb: '132,204,22'   },
-  { id: 'gig',          label: 'Gigs',         count:  35, Icon: Zap,         color: '#facc15', rgb: '250,204,21'   },
-] as const;
-
-const CDS_VISIBLE_MOBILE = 3; // tabs shown on mobile
-const CDS_VISIBLE_DESKTOP = 7; // tabs shown on desktop
-
-function ContentDiscoveryStrip({ onPublish }: { onPublish?: () => void }) {
-  const [open, setOpen]       = React.useState(false);
-  const [activeId, setActiveId] = React.useState('news');
-  const [isMobile, setIsMobile] = React.useState(false);
-  const dropRef               = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)');
-    setIsMobile(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const visibleCount   = isMobile ? CDS_VISIBLE_MOBILE : CDS_VISIBLE_DESKTOP;
-  const visibleTabs    = CONTENT_TYPES.slice(0, visibleCount);
-  const hiddenTabs     = CONTENT_TYPES.slice(visibleCount);
-  const activeInHidden = hiddenTabs.some(t => t.id === activeId);
-
-  return (
-    /* ── outer wrapper: pills (scrollable) + More button side-by-side ── */
-    <div className="w-full min-w-0" style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', minWidth: 0 }}>
-      <style>{`
-        @keyframes cds-tab-in { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
-        @keyframes cds-panel  { from{opacity:0;transform:translateY(-5px) scale(0.98)} to{opacity:1;transform:none} }
-        .cds-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; flex:1 1 0; min-width:0; width:100%; }
-        .cds-scroll::-webkit-scrollbar { display:none; }
-      `}</style>
-
-      {/* Scrollable pill row — leading 6px spacer (margin cancels flex gap): initial inset only; scrolls away */}
-      <div className="cds-scroll w-full min-w-0" style={{ display:'flex', alignItems:'center', gap: 6, paddingBottom: 2 }}>
-        <div aria-hidden className="shrink-0" style={{ width: 6, height: 1, marginRight: -6 }} />
-        {CONTENT_TYPES.slice(0, isMobile ? undefined : CDS_VISIBLE_DESKTOP).map(({ id, label, count, Icon, color, rgb }, i) => {
-          const isActive = activeId === id;
-          const commonStyle: React.CSSProperties = {
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            height: 31, padding: '0 10px 0 7px',
-            borderRadius: 999, textDecoration: 'none', flexShrink: 0,
-            background: isActive ? `rgba(${rgb},0.13)` : 'rgba(255,255,255,0.04)',
-            border: `1px solid ${isActive ? `rgba(${rgb},0.28)` : 'rgba(255,255,255,0.07)'}`,
-            boxShadow: isActive ? `0 0 14px rgba(${rgb},0.12), inset 0 1px 0 rgba(255,255,255,0.07)` : 'none',
-            transition: 'background 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
-            animation: `cds-tab-in 0.26s ${Math.min(i, 6) * 0.025}s cubic-bezier(0.22,1,0.36,1) both`,
-            whiteSpace: 'nowrap',
-            cursor: 'pointer',
-          };
-          const inner = (
-            <>
-              <div style={{
-                width: 17, height: 17, borderRadius: 6, flexShrink: 0,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: isActive ? `rgba(${rgb},0.26)` : `rgba(${rgb},0.10)`,
-                transition: 'background 160ms ease',
-              }}>
-                <Icon style={{ width: 9.5, height: 9.5, color: isActive ? color : `rgba(${rgb},0.65)` }} />
-              </div>
-              <span
-                className={isActive ? undefined : 'hp-sec'}
-                style={{
-                fontSize: 11.5, fontWeight: isActive ? 700 : 500, letterSpacing: '-0.01em',
-                color: isActive ? 'rgba(255,255,255,0.90)' : 'rgba(255,255,255,0.44)',
-                transition: 'color 160ms ease',
-              }}>{label}</span>
-              {isActive && count > 0 && (
-                <span style={{ fontSize: 9, fontVariantNumeric: 'tabular-nums', fontWeight: 700, color, opacity: 0.68, marginLeft: 1 }}>{count}</span>
-              )}
-            </>
-          );
-          if (id === 'publish') {
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => { setActiveId(id); setOpen(false); onPublish?.(); }}
-                style={{ ...commonStyle, font: 'inherit' }}
-              >
-                {inner}
-              </button>
-            );
-          }
-          return (
-            <Link
-              key={id}
-              href={`/published${id === 'all' ? '' : `?tab=${id}`}`}
-              onClick={() => { setActiveId(id); setOpen(false); }}
-              style={commonStyle}
-            >
-              {inner}
-            </Link>
-          );
-        })}
-      </div>
-
-      {/* More button — OUTSIDE the scroll div so dropdown isn't clipped by overflow */}
-      {!isMobile && (
-        <div ref={dropRef} style={{ position: 'relative', flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={() => setOpen(v => !v)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              height: 31, padding: '0 10px',
-              borderRadius: 999, cursor: 'pointer',
-              background: open || activeInHidden ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.04)',
-              border: `1px solid ${open || activeInHidden ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.07)'}`,
-              transition: 'background 160ms ease, border-color 160ms ease',
-              animation: `cds-tab-in 0.26s ${CDS_VISIBLE_DESKTOP * 0.025}s cubic-bezier(0.22,1,0.36,1) both`,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {activeInHidden && (() => {
-              const at = CONTENT_TYPES.find(t => t.id === activeId)!;
-              return (
-                <div style={{ width: 15, height: 15, borderRadius: 5, background: `rgba(${at.rgb},0.20)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <at.Icon style={{ width: 8, height: 8, color: at.color }} />
-                </div>
-              );
-            })()}
-            <span className={activeInHidden ? undefined : 'hp-sec'} style={{ fontSize: 11, fontWeight: 600, color: activeInHidden ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.32)', letterSpacing: '-0.01em' }}>
-              {activeInHidden ? CONTENT_TYPES.find(t => t.id === activeId)!.label : 'More'}
-            </span>
-            <ChevronDown style={{
-              width: 10, height: 10, color: 'rgba(255,255,255,0.28)',
-              transform: open ? 'rotate(180deg)' : 'none',
-              transition: 'transform 200ms cubic-bezier(0.34,1.56,0.64,1)',
-            }} />
-          </button>
-
-          {open && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-              zIndex: 400, width: 256,
-              borderRadius: 14, overflow: 'hidden',
-              background: 'rgba(8,8,12,0.97)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              backdropFilter: 'blur(48px) saturate(2)',
-              WebkitBackdropFilter: 'blur(48px) saturate(2)',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.82), inset 0 1px 0 rgba(255,255,255,0.04)',
-              animation: 'cds-panel 0.18s cubic-bezier(0.22,1,0.36,1) both',
-            }}>
-              <div style={{ padding: '9px 13px 7px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.11em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.20)' }}>All categories</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, padding: 5 }}>
-                {CONTENT_TYPES.slice(CDS_VISIBLE_DESKTOP).filter(t => t.id !== 'publish').map(({ id, label, count, Icon, color, rgb }) => {
-                  const isActive = activeId === id;
-                  return (
-                    <Link
-                      key={id}
-                      href={`/published?tab=${id}`}
-                      onClick={() => { setActiveId(id); setOpen(false); }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '7px 9px', borderRadius: 9, textDecoration: 'none',
-                        background: isActive ? `rgba(${rgb},0.10)` : 'transparent',
-                        border: `1px solid ${isActive ? `rgba(${rgb},0.18)` : 'transparent'}`,
-                        transition: 'background 140ms ease',
-                      }}
-                      onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)'; }}
-                      onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                    >
-                      <div style={{
-                        width: 22, height: 22, borderRadius: 7, flexShrink: 0,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: `rgba(${rgb},0.14)`,
-                      }}>
-                        <Icon style={{ width: 11, height: 11, color }} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 11.5, fontWeight: isActive ? 700 : 500, color: isActive ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.52)', letterSpacing: '-0.01em', lineHeight: 1.2 }}>{label}</div>
-                        <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.20)', fontVariantNumeric: 'tabular-nums', marginTop: 1 }}>{count}</div>
-                      </div>
-                      {isActive && <div style={{ width: 4, height: 4, borderRadius: '50%', background: color, flexShrink: 0, marginLeft: 'auto' }} />}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────
    LiveLeaderboards — multi-board real-time section
 ───────────────────────────────────────────────────────────── */
 type LBEntry = {
@@ -6246,11 +6043,6 @@ function NewHomepageContent({
         {/* ── Ad banner slider ── */}
         {hpSections.adBanners && <AdBannerSlider />}
 
-        {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
-        <div className="flex flex-col w-full min-w-0" style={{ gap: 14 }}>
-          <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
-        </div>
-
         {/* ── Gigs grid ── */}
         {hpSections.gigsGrid && <div>
           <div className="mb-3 flex items-center justify-between">
@@ -6350,7 +6142,7 @@ function NewHomepageContent({
         </div>}
 
 
-        <HomepageLiveFeed />
+        <HomepageLiveFeed onPublish={() => onPublishClick()} />
 
         {/* ── Live Gigs section + Gig CTA banner ── DISABLED */}
         {false && <><div className="mb-3 flex items-center justify-between gap-3">

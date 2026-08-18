@@ -6,8 +6,6 @@ import { Newspaper } from 'lucide-react';
 import { PresenceDot } from '@/components/PresenceBadge';
 import {
   FEED_AVATAR_CLS,
-  feedCategoryLabel,
-  feedCategoryTreatment,
   shouldShowFeedTitle,
 } from '@/components/feed/feedCardTheme';
 import {
@@ -94,9 +92,6 @@ export function PublishedFeedCard({
   bodyLineClamp = 2,
 }: PublishedFeedCardProps) {
   const cat = item.category || 'post';
-  /* Task 11 — shared category identity (label + icon + pastel treatment). */
-  const category = feedCategoryTreatment(cat);
-  const CategoryIcon = category.icon;
   const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
   const initials = displayName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
   const profileHref = item.businessPageSlug
@@ -107,9 +102,8 @@ export function PublishedFeedCard({
   const canLinkAuthor = linkAuthor && Boolean(profileHref);
   const showTitle = shouldShowFeedTitle(cat, item.title);
   const snippet = showBodySnippet ? getFeedBodySnippet(item.body) : '';
-  /* Label still comes from the existing helper so an unknown category keeps
-     showing its own name rather than the neutral fallback label. */
-  const categoryLabel = feedCategoryLabel(cat);
+  /* Secondary badge line — only when it says something the category does not. */
+  const showExtraBadge = Boolean(item.badge && item.badge.toLowerCase() !== cat.toLowerCase());
   const bodyClampCls = bodyLineClamp === 3 ? 'line-clamp-3' : 'line-clamp-2';
   /* Task 12 — category line under the title. Skipped when it would only repeat
      the author already shown in the header (company pages publish as the company). */
@@ -172,16 +166,16 @@ export function PublishedFeedCard({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${category.badgeCls}`}>
-              <CategoryIcon className="h-2.5 w-2.5 shrink-0" />
-              {categoryLabel}
-            </span>
-            {item.badge && item.badge.toLowerCase() !== cat.toLowerCase() && (
+          {/* Standalone category badge removed — the type already reads in the
+              subtitle line ("Post · 15h ago"), so the pill was duplicate noise.
+              The extra badge line (when it differs from the category) stays, and
+              only then does the name keep its original top margin. */}
+          {showExtraBadge && (
+            <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-[11px] text-white/35">{item.badge}</span>
-            )}
-          </div>
-          <div className="mt-1 flex min-w-0 items-center gap-2">
+            </div>
+          )}
+          <div className={`flex min-w-0 items-center gap-2 ${showExtraBadge ? 'mt-1' : ''}`}>
             {canLinkAuthor ? (
               <Link
                 href={profileHref!}

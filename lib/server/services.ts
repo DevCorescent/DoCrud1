@@ -418,7 +418,46 @@ export async function createReview(data: Omit<ServiceReview, 'id' | 'createdAt' 
 }
 
 /* ─── Analytics ────────────────────────────────────────────────────── */
-export type AnalyticsEventType = 'view' | 'detail_open' | 'book_click' | 'booking_submitted';
+/**
+ * §35 service funnel events.
+ *
+ * `view`, `detail_open`, `book_click` and `booking_submitted` predate §35 and
+ * keep their names so historical rows stay readable; the rest complete the
+ * PDF's 17-event list.
+ */
+export type AnalyticsEventType =
+  /* legacy — still emitted */
+  | 'view'
+  | 'detail_open'
+  /* discovery */
+  | 'services_page_viewed'
+  | 'search_performed'
+  | 'filter_applied'
+  | 'service_impression'
+  | 'service_card_clicked'
+  | 'service_saved'
+  | 'catalogue_opened'
+  | 'provider_profile_opened'
+  /* conversion */
+  | 'enquire_clicked'
+  | 'enquiry_submitted'
+  | 'book_click'
+  | 'booking_submitted'
+  /* provider / lifecycle */
+  | 'provider_responded'
+  | 'booking_accepted'
+  | 'booking_declined'
+  | 'service_completed'
+  | 'review_submitted';
+
+export const ANALYTICS_EVENT_TYPES: AnalyticsEventType[] = [
+  'view', 'detail_open',
+  'services_page_viewed', 'search_performed', 'filter_applied', 'service_impression',
+  'service_card_clicked', 'service_saved', 'catalogue_opened', 'provider_profile_opened',
+  'enquire_clicked', 'enquiry_submitted', 'book_click', 'booking_submitted',
+  'provider_responded', 'booking_accepted', 'booking_declined', 'service_completed',
+  'review_submitted',
+];
 
 export interface ServiceAnalyticsEvent {
   id: string;
@@ -427,6 +466,10 @@ export interface ServiceAnalyticsEvent {
   type: AnalyticsEventType;
   visitorId?: string;
   source?: 'profile' | 'catalogue' | 'direct';
+  /** Signed-in actor, resolved server-side. Never read from the request body. */
+  actorId?: string;
+  /** Small, non-sensitive context (query length, filter key, lead id, …). */
+  metadata?: Record<string, string | number | boolean>;
   createdAt: string;
 }
 
@@ -466,6 +509,30 @@ export interface ProviderAnalytics {
   topService: ServiceAnalyticsSummary | null;
   peakHour: number;           // 0-23
   sourceBreakdown: { profile: number; catalogue: number; direct: number };
+  /** §35 funnel: impressions → views → enquiries → requests → accepted → completed. */
+  funnel: ServiceFunnel;
+}
+
+/** Aggregate counts for the §35 funnel, per provider. */
+export interface ServiceFunnel {
+  impressions: number;
+  serviceViews: number;
+  cardClicks: number;
+  saves: number;
+  enquireClicks: number;
+  enquiries: number;
+  bookClicks: number;
+  bookingRequests: number;
+  acceptedBookings: number;
+  declinedBookings: number;
+  completedServices: number;
+  reviews: number;
+  providerResponses: number;
+  searches: number;
+  filtersApplied: number;
+  catalogueOpens: number;
+  providerProfileOpens: number;
+  servicesPageViews: number;
 }
 
 type AnalyticsStore = ServiceAnalyticsEvent[];
@@ -583,6 +650,31 @@ export async function getProviderAnalytics(userId: string): Promise<ProviderAnal
     null,
   );
 
+  /* §35 funnel — counted from the event log, except the booking lifecycle
+     stages which come from the bookings themselves so historical data (written
+     before these events existed) still reports correctly. */
+  const countOf = (t: AnalyticsEventType) => myEvents.filter((e) => e.type === t).length;
+  const funnel: ServiceFunnel = {
+    impressions: countOf('service_impression'),
+    serviceViews: totViews,
+    cardClicks: countOf('service_card_clicked') + countOf('detail_open'),
+    saves: countOf('service_saved'),
+    enquireClicks: countOf('enquire_clicked'),
+    enquiries: countOf('enquiry_submitted'),
+    bookClicks: countOf('book_click'),
+    bookingRequests: myBookings.length,
+    acceptedBookings: myBookings.filter((b) => b.status === 'confirmed' || b.status === 'completed').length,
+    declinedBookings: myBookings.filter((b) => b.status === 'cancelled').length,
+    completedServices: myBookings.filter((b) => b.status === 'completed').length,
+    reviews: myReviews.length,
+    providerResponses: countOf('provider_responded'),
+    searches: countOf('search_performed'),
+    filtersApplied: countOf('filter_applied'),
+    catalogueOpens: countOf('catalogue_opened'),
+    providerProfileOpens: countOf('provider_profile_opened'),
+    servicesPageViews: countOf('services_page_viewed'),
+  };
+
   return {
     totalViews: totViews,
     totalUniqueViews: new Set(myEvents.filter((e) => e.type === 'view').map((e) => e.visitorId ?? e.id)).size,
@@ -598,6 +690,7 @@ export async function getProviderAnalytics(userId: string): Promise<ProviderAnal
     topService,
     peakHour,
     sourceBreakdown,
+    funnel,
   };
 }
 

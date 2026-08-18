@@ -80,9 +80,11 @@ const OPPORTUNITIES: Opportunity[] = [
     Icon: Rocket,
     color: '#f472b6',
     tint: 'rgba(244,114,182,0.16)',
-    add: { kind: 'unavailable', note: 'Project posting is not available yet.' },
+    // app/projects/create — the single-step post form
+    add: { kind: 'route', href: '/projects/create' },
     addLabel: 'Post Project',
-    open: { kind: 'unavailable', note: 'The Projects page is not available yet.' },
+    // app/projects — the project marketplace
+    open: { kind: 'route', href: '/projects' },
   },
   {
     id: 'jobs',

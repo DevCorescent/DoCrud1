@@ -84,6 +84,7 @@ export const upraisedPath = path.join(dataDir, 'upraised.json');
 export const socialEventsPath = path.join(dataDir, 'social-events.json');
 export const messagesPath = path.join(dataDir, 'messages.json');
 export const servicesPath = path.join(dataDir, 'services.json');
+export const projectsPath = path.join(dataDir, 'projects.json');
 export const serviceBookingsPath = path.join(dataDir, 'service-bookings.json');
 export const serviceReviewsPath = path.join(dataDir, 'service-reviews.json');
 export const serviceAnalyticsPath = path.join(dataDir, 'service-analytics.json');

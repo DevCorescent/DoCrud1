@@ -39,6 +39,8 @@ import InfinityUpgradeModal from '@/components/InfinityUpgradeModal';
 import ServiceEnquiryModal from '@/components/services/ServiceEnquiryModal';
 import ServiceBookingWizard from '@/components/services/ServiceBookingWizard';
 import SaveServiceButton from '@/components/services/SaveServiceButton';
+import type { AnalyticsEventType } from '@/lib/server/services';
+import { trackServiceEvent, trackServiceImpression } from '@/lib/services-analytics';
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 interface ServicePackage {
@@ -1385,13 +1387,46 @@ export default function ServicesPage() {
     };
   }, []);
 
-  function track(serviceId: string, type: 'view' | 'detail_open' | 'book_click' | 'booking_submitted') {
+  /* §35 — the shared funnel tracker; `source: 'catalogue'` is preserved. */
+  function track(
+    serviceId: string,
+    type: AnalyticsEventType,
+    metadata?: Record<string, string | number | boolean>,
+  ) {
     fetch('/api/services/analytics/track', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ serviceId, type, visitorId: visitorId.current, source: 'catalogue' }),
+      body: JSON.stringify({ serviceId, type, visitorId: visitorId.current, source: 'catalogue', ...(metadata ? { metadata } : {}) }),
     }).catch(() => {});
   }
+
+  /* §35 — search and filter events fire on the settled value, not per keystroke. */
+  const firstServiceId = services[0]?.id;
+  useEffect(() => {
+    const term = search.trim();
+    if (!term || !firstServiceId) return;
+    const t = setTimeout(() => {
+      track(firstServiceId, 'search_performed', { queryLength: term.length, results: filtered.length });
+    }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, firstServiceId]);
+
+  useEffect(() => {
+    if (!firstServiceId) return;
+    const active = [
+      activeCategory !== 'all' ? `category:${activeCategory}` : '',
+      activePricing !== 'all' ? `pricing:${activePricing}` : '',
+      ratingFilter !== 'all' ? `rating:${ratingFilter}` : '',
+      deliveryFilter !== 'all' ? `delivery:${deliveryFilter}` : '',
+    ].filter(Boolean);
+    if (!active.length) return;
+    track(firstServiceId, 'filter_applied', { filters: active.join(','), count: active.length });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategory, activePricing, ratingFilter, deliveryFilter, firstServiceId]);
+
+  /* §35 — the page-level events fire once per mount, not per effect run. */
+  const pageViewTracked = useRef(false);
 
   const [copied, setCopied] = useState(false);
 
@@ -1430,7 +1465,15 @@ export default function ServicesPage() {
             method: 'POST', headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ serviceId: svc.id, type: 'view', visitorId: visitorId.current, source: 'catalogue' }),
           }).catch(() => {});
+          /* §35 — one impression per listing, deduped for this page load so a
+             re-render (or React's dev double-invoke) cannot inflate the count. */
+          trackServiceImpression(svc.id, { source: 'catalogue' });
         });
+        if (svcs[0] && !pageViewTracked.current) {
+          pageViewTracked.current = true;
+          trackServiceEvent(svcs[0].id, 'services_page_viewed', { source: 'catalogue' });
+          trackServiceEvent(svcs[0].id, 'catalogue_opened', { source: 'catalogue', metadata: { services: svcs.length } });
+        }
       }
     }).catch(() => setNotFound(true))
     .finally(() => setLoading(false));
@@ -1585,7 +1628,9 @@ export default function ServicesPage() {
     <div className="min-h-screen bg-[#0D0D0F] text-white">
       {/* ── Sticky Header ── */}
       <header className="sticky top-0 z-30 h-14 bg-[#0D0D0F]/85 backdrop-blur-xl border-b border-white/[0.05] flex items-center px-4 md:px-8 gap-4">
-        <Link href={`/u/${user.id}`} className="flex items-center justify-center h-8 w-8 rounded-[10px] border border-white/[0.09] bg-white/[0.05] hover:bg-white/[0.09] transition-colors">
+        <Link href={`/u/${user.id}`}
+          onClick={() => { if (services[0]) track(services[0].id, 'provider_profile_opened', { providerId: user.id }); }}
+          className="flex items-center justify-center h-8 w-8 rounded-[10px] border border-white/[0.09] bg-white/[0.05] hover:bg-white/[0.09] transition-colors">
           <ArrowLeft className="h-4 w-4 text-white/60" />
         </Link>
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -1888,9 +1933,9 @@ export default function ServicesPage() {
               {filtered.map(svc => (
                 <ServiceListCard key={svc.id} service={svc} reviews={reviewsByService[svc.id] ?? []}
                   shared={sharedServiceId === svc.id} editMode={editMode} settings={catSettings}
-                  onView={() => { if (!editMode) { track(svc.id, 'detail_open'); router.push(serviceDetailHref(svc.id)); } }}
+                  onView={() => { if (!editMode) { track(svc.id, 'detail_open'); track(svc.id, 'service_card_clicked'); router.push(serviceDetailHref(svc.id)); } }}
                   onBook={() => { if (!editMode) { setBookingService(svc); track(svc.id, 'book_click'); } }}
-                  onEnquire={() => { if (!editMode) setEnquiryService(svc); }}
+                  onEnquire={() => { if (!editMode) { setEnquiryService(svc); track(svc.id, 'enquire_clicked'); } }}
                   onShare={() => shareService(svc.id)}
                   onEdit={() => { setEditingService(svc); setShowServiceForm(true); }}
                   onToggleActive={() => toggleServiceActive(svc.id)}
@@ -1909,9 +1954,9 @@ export default function ServicesPage() {
               {filtered.map(svc => (
                 <ServiceCard key={svc.id} service={svc} reviews={reviewsByService[svc.id] ?? []}
                   shared={sharedServiceId === svc.id} editMode={editMode} settings={catSettings}
-                  onView={() => { if (!editMode) { track(svc.id, 'detail_open'); router.push(serviceDetailHref(svc.id)); } }}
+                  onView={() => { if (!editMode) { track(svc.id, 'detail_open'); track(svc.id, 'service_card_clicked'); router.push(serviceDetailHref(svc.id)); } }}
                   onBook={() => { if (!editMode) { setBookingService(svc); track(svc.id, 'book_click'); } }}
-                  onEnquire={() => { if (!editMode) setEnquiryService(svc); }}
+                  onEnquire={() => { if (!editMode) { setEnquiryService(svc); track(svc.id, 'enquire_clicked'); } }}
                   onShare={() => shareService(svc.id)}
                   onEdit={() => { setEditingService(svc); setShowServiceForm(true); }}
                   onToggleActive={() => toggleServiceActive(svc.id)}

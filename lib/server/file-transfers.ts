@@ -344,6 +344,48 @@ export function isPreviewableFile(mimeType: string) {
 /* ── Engagement + featuring helpers ── */
 
 /**
+ * Record a viewer's poll vote.
+ *
+ * Same single read-modify-write the reaction path uses: votes ride along on
+ * the publication document, so there is no second store to keep in sync.
+ *
+ * One key per identifier means a person cannot vote twice, and re-selecting
+ * the option they already chose clears the vote (matching how tapping the
+ * same reaction removes it).
+ */
+export async function setPollVote(
+  transferId: string,
+  identifier: string,
+  optionIndex: number | null,
+): Promise<Record<string, number>> {
+  const usingDb = Boolean(getDbPool());
+  const transfers = usingDb ? [] : await getFileTransfers();
+  const current = usingDb
+    ? await selectFileTransferRowById(transferId)
+    : transfers.find((t) => t.id === transferId || t.shareId === transferId) || null;
+  if (!current) throw new Error('Post not found.');
+
+  const pollVotes: Record<string, number> = { ...(current.pollVotes ?? {}) };
+  const previous = pollVotes[identifier];
+
+  if (optionIndex === null || previous === optionIndex) {
+    delete pollVotes[identifier];
+  } else {
+    pollVotes[identifier] = optionIndex;
+  }
+
+  const next = { ...current, pollVotes, updatedAt: new Date().toISOString() };
+  if (usingDb) {
+    await upsertFileTransferRow(next);
+  } else {
+    const idx = transfers.findIndex((t) => t.id === transferId || t.shareId === transferId);
+    transfers[idx] = next;
+    await writeJsonFile(fileTransfersPath, transfers);
+  }
+  return pollVotes;
+}
+
+/**
  * Set, change, or clear a viewer's reaction on a post.
  *
  * `toggleLike` is preserved below as a thin wrapper, so every existing caller

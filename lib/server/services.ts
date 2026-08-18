@@ -83,6 +83,22 @@ export interface Service {
   workMode?: ServiceWorkMode;
   availability?: ServiceAvailability;
   gallery?: string[];
+  /* Content sections the specification names for the detail page. Every one
+     is optional: unset means the section is absent, never empty or invented. */
+  /** Skills — the specification lists these separately from tags. */
+  skills?: string[];
+  /** What the customer receives. */
+  deliverables?: string[];
+  /** What the provider needs from the customer before starting. */
+  requirements?: string;
+  /** How the engagement runs, step by step. */
+  process?: string;
+  /** Languages the service is delivered in. */
+  languages?: string[];
+  /** Geographic area served, distinct from the provider's own location. */
+  serviceArea?: string;
+  /** A single reference video (link only — no upload system is introduced). */
+  videoUrl?: string;
   faqs?: Array<{ question: string; answer: string }>;
   isActive: boolean;
   featured: boolean;

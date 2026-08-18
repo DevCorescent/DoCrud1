@@ -38,6 +38,9 @@ type Detail = {
     coverImageUrl: string | null; serviceImageUrl: string | null; useMainProfileImage: boolean;
     location: string | null; workMode: string | null; availability: string | null;
     faqs: Array<{ question: string; answer: string }> | null;
+    skills: string[] | null; deliverables: string[] | null;
+    requirements: string | null; process: string | null;
+    languages: string[] | null; serviceArea: string | null; videoUrl: string | null;
     featured: boolean; rating: number; reviewCount: number;
     bookingCount: number; createdAt: string;
   };
@@ -327,6 +330,58 @@ export default function ServiceDetailPage() {
                       )}
                     </div>
                   ))}
+                </div>
+              </Section>
+            )}
+
+            {s.deliverables && (
+              <Section title="What you get">
+                <ul className="space-y-1.5">
+                  {s.deliverables.map(d => (
+                    <li key={d} className="flex gap-2 text-[13px] leading-relaxed text-white/60">
+                      <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-white/30" />{d}
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+
+            {s.process && (
+              <Section title="How it works">
+                <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-white/60">{s.process}</p>
+              </Section>
+            )}
+
+            {s.requirements && (
+              <Section title="What the provider needs from you">
+                <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-white/60">{s.requirements}</p>
+              </Section>
+            )}
+
+            {s.skills && (
+              <Section title="Skills & tools">
+                <div className="flex flex-wrap gap-1.5">
+                  {s.skills.map(k => (
+                    <span key={k} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11.5px] text-white/55">{k}</span>
+                  ))}
+                </div>
+              </Section>
+            )}
+
+            {s.videoUrl && (
+              <Section title="Video">
+                <a href={s.videoUrl} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-white/70 underline hover:text-white">
+                  Watch the provider&apos;s video <ArrowRight className="h-3.5 w-3.5" />
+                </a>
+              </Section>
+            )}
+
+            {(s.languages || s.serviceArea) && (
+              <Section title="Languages & service area">
+                <div className="space-y-1.5 text-[13px] text-white/60">
+                  {s.languages && <p>Delivered in <span className="text-white/80">{s.languages.join(', ')}</span></p>}
+                  {s.serviceArea && <p>Serving <span className="text-white/80">{s.serviceArea}</span></p>}
                 </div>
               </Section>
             )}

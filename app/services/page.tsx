@@ -16,7 +16,7 @@ import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 import { SERVICE_CATEGORIES, serviceCategory } from '@/lib/services-ui';
 import { ServiceSummaryCard, type ServiceSummary } from '@/components/services/ServiceSummaryCard';
 
-type Facets = { categories: Record<string, number>; subcategories?: Record<string, number>; pricing: Record<string, number>; tags?: Record<string, number>; workMode?: Record<string, number>; availability?: Record<string, number> };
+type Facets = { categories: Record<string, number>; subcategories?: Record<string, number>; pricing: Record<string, number>; tags?: Record<string, number>; skills?: Record<string, number>; languages?: Record<string, number>; workMode?: Record<string, number>; availability?: Record<string, number> };
 type ApiResponse = {
   services: ServiceSummary[];
   total: number;
@@ -75,6 +75,8 @@ export default function ServicesDiscoveryPage() {
   const [minRating, setMinRating] = useState(0);
   const [maxDelivery, setMaxDelivery] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [skills, setSkills] = useState<string[]>([]);
+  const [languages, setLanguages] = useState<string[]>([]);
   const [location, setLocation] = useState('');
   const [debouncedLocation, setDebouncedLocation] = useState('');
   const [workMode, setWorkMode] = useState<string[]>([]);
@@ -110,6 +112,8 @@ export default function ServicesDiscoveryPage() {
     if (minRating) p.set('minRating', String(minRating));
     if (maxDelivery) p.set('maxDelivery', maxDelivery);
     if (tags.length) p.set('tags', tags.join(','));
+    if (skills.length) p.set('skills', skills.join(','));
+    if (languages.length) p.set('languages', languages.join(','));
     if (debouncedLocation) p.set('location', debouncedLocation);
     if (workMode.length) p.set('workMode', workMode.join(','));
     if (availability.length) p.set('availability', availability.join(','));
@@ -117,7 +121,7 @@ export default function ServicesDiscoveryPage() {
     if (maxPrice.trim()) p.set('maxPrice', maxPrice.trim());
     p.set('sort', sort);
     return p;
-  }, [debounced, categories, subcategories, pricing, minRating, maxDelivery, tags, debouncedLocation, workMode, availability, minPrice, maxPrice, sort]);
+  }, [debounced, categories, subcategories, pricing, minRating, maxDelivery, tags, skills, languages, debouncedLocation, workMode, availability, minPrice, maxPrice, sort]);
 
   /* Monotonic id: a slow earlier response can never overwrite a newer one. */
   const reqId = useRef(0);
@@ -147,7 +151,7 @@ export default function ServicesDiscoveryPage() {
 
   const clearAll = () => {
     setQuery(''); setCategories([]); setSubcategories([]); setPricing([]);
-    setMinRating(0); setMaxDelivery(''); setTags([]);
+    setMinRating(0); setMaxDelivery(''); setTags([]); setSkills([]); setLanguages([]);
     setLocation(''); setWorkMode([]); setAvailability([]);
     setMinPrice(''); setMaxPrice(''); setSort('recommended');
   };
@@ -163,6 +167,8 @@ export default function ServicesDiscoveryPage() {
     ...(minRating ? [{ label: `${minRating}+ rating`, clear: () => setMinRating(0) }] : []),
     ...(maxDelivery ? [{ label: DELIVERY_OPTIONS.find(d => d.id === maxDelivery)?.label ?? 'Delivery', clear: () => setMaxDelivery('') }] : []),
     ...tags.map(t => ({ label: t, clear: () => toggle(tags, setTags, t) })),
+    ...skills.map(v => ({ label: v, clear: () => toggle(skills, setSkills, v) })),
+    ...languages.map(v => ({ label: v, clear: () => toggle(languages, setLanguages, v) })),
     ...(debouncedLocation ? [{ label: debouncedLocation, clear: () => setLocation('') }] : []),
     ...workMode.map(w => ({ label: WORK_MODES.find(x => x.id === w)?.label ?? w, clear: () => toggle(workMode, setWorkMode, w) })),
     ...availability.map(a => ({ label: AVAILABILITIES.find(x => x.id === a)?.label ?? a, clear: () => toggle(availability, setAvailability, a) })),
@@ -346,6 +352,35 @@ export default function ServicesDiscoveryPage() {
           ))}
         </div>
       </div>
+
+      {/* Skills — the specification lists these separately from tags. */}
+      {Object.keys(data?.facets.skills ?? {}).length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Skills</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.keys(data?.facets.skills ?? {}).sort((a,b)=>(data!.facets.skills![b])-(data!.facets.skills![a])).slice(0,12).map(v => (
+              <button key={v} type="button" onClick={() => toggle(skills, setSkills, v)} aria-pressed={skills.includes(v)}
+                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${skills.includes(v) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'}`}>
+                {v} <span className="text-white/30">{data?.facets.skills?.[v] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {Object.keys(data?.facets.languages ?? {}).length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Language</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.keys(data?.facets.languages ?? {}).map(v => (
+              <button key={v} type="button" onClick={() => toggle(languages, setLanguages, v)} aria-pressed={languages.includes(v)}
+                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${languages.includes(v) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'}`}>
+                {v} <span className="text-white/30">{data?.facets.languages?.[v] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {tagKeys.length > 0 && (
         <div>

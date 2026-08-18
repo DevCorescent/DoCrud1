@@ -54,6 +54,13 @@ interface Service {
   description: string;
   category: string;
   subcategory?: string;
+  skills?: string[];
+  deliverables?: string[];
+  requirements?: string;
+  process?: string;
+  languages?: string[];
+  serviceArea?: string;
+  videoUrl?: string;
   tags: string[];
   pricingModel: string;
   basePrice: number;
@@ -676,6 +683,8 @@ type ServiceDraft = {
   tags: string[]; pricingModel: string; basePrice: number; currency: string;
   deliveryTime: number; deliveryUnit: string; isActive: boolean; featured: boolean; imageUrl: string;
   subcategory: string;
+  skills: string; deliverables: string; requirements: string; process: string;
+  languages: string; serviceArea: string; videoUrl: string;
   coverImageUrl: string; serviceImageUrl: string; useMainProfileImage: boolean;
   location: string; workMode: string; availability: string;
 };
@@ -692,6 +701,15 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
     description: service?.description ?? '',
     category: service?.category ?? 'design',
     subcategory: service?.subcategory ?? '',
+    /* Lists are edited as comma-separated text — the same convention the
+       existing tags field already uses in this editor. */
+    skills: (service?.skills ?? []).join(', '),
+    deliverables: (service?.deliverables ?? []).join('\n'),
+    requirements: service?.requirements ?? '',
+    process: service?.process ?? '',
+    languages: (service?.languages ?? []).join(', '),
+    serviceArea: service?.serviceArea ?? '',
+    videoUrl: service?.videoUrl ?? '',
     tags: service?.tags ?? [],
     pricingModel: service?.pricingModel ?? 'fixed',
     basePrice: service?.basePrice ?? 0,
@@ -721,11 +739,22 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
       /* Blank optional fields are sent as undefined, so "not specified"
          stays genuinely absent instead of becoming an empty-string value. */
       const blankToUndefined = (v: string) => (v.trim() ? v.trim() : undefined);
+      const listOrUndefined = (v: string, sep: string) => {
+        const parts = v.split(sep).map(x => x.trim()).filter(Boolean);
+        return parts.length ? parts : undefined;
+      };
       const payload = {
         ...draft,
         tags: draft.tags,
         basePrice: Number(draft.basePrice),
         subcategory: blankToUndefined(draft.subcategory),
+        skills: listOrUndefined(draft.skills, ','),
+        deliverables: listOrUndefined(draft.deliverables, '\n'),
+        requirements: blankToUndefined(draft.requirements),
+        process: blankToUndefined(draft.process),
+        languages: listOrUndefined(draft.languages, ','),
+        serviceArea: blankToUndefined(draft.serviceArea),
+        videoUrl: blankToUndefined(draft.videoUrl),
         coverImageUrl: blankToUndefined(draft.coverImageUrl),
         serviceImageUrl: blankToUndefined(draft.serviceImageUrl),
         location: blankToUndefined(draft.location),
@@ -943,6 +972,43 @@ function ServiceEditModal({ service, onClose, onSaved, onDeleted }: {
                 <option value="unavailable">Not taking work</option>
               </select>
             </div>
+          </div>
+
+          {/* Detail-page content. Each is optional; blank stays absent. */}
+          <div>
+            <label className={lbl}>Skills <span className="text-white/20 normal-case font-normal">(comma separated)</span></label>
+            <input value={draft.skills} onChange={e => setDraft(d => ({ ...d, skills: e.target.value }))} placeholder="Figma, Design systems, Prototyping" className={inp} />
+          </div>
+
+          <div>
+            <label className={lbl}>Deliverables <span className="text-white/20 normal-case font-normal">(one per line)</span></label>
+            <textarea value={draft.deliverables} onChange={e => setDraft(d => ({ ...d, deliverables: e.target.value }))} rows={3} placeholder={'Source files\nStyle guide\n2 revisions'} className={`${inp} h-auto py-2`} />
+          </div>
+
+          <div>
+            <label className={lbl}>How it works <span className="text-white/20 normal-case font-normal">(optional)</span></label>
+            <textarea value={draft.process} onChange={e => setDraft(d => ({ ...d, process: e.target.value }))} rows={3} placeholder="Describe your process step by step." className={`${inp} h-auto py-2`} />
+          </div>
+
+          <div>
+            <label className={lbl}>Requirements from the customer <span className="text-white/20 normal-case font-normal">(optional)</span></label>
+            <textarea value={draft.requirements} onChange={e => setDraft(d => ({ ...d, requirements: e.target.value }))} rows={2} placeholder="What you need before starting." className={`${inp} h-auto py-2`} />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className={lbl}>Languages <span className="text-white/20 normal-case font-normal">(comma separated)</span></label>
+              <input value={draft.languages} onChange={e => setDraft(d => ({ ...d, languages: e.target.value }))} placeholder="English, Hindi" className={inp} />
+            </div>
+            <div>
+              <label className={lbl}>Service area <span className="text-white/20 normal-case font-normal">(optional)</span></label>
+              <input value={draft.serviceArea} onChange={e => setDraft(d => ({ ...d, serviceArea: e.target.value }))} placeholder="e.g. India, or Worldwide" className={inp} />
+            </div>
+          </div>
+
+          <div>
+            <label className={lbl}>Video URL <span className="text-white/20 normal-case font-normal">(optional)</span></label>
+            <input value={draft.videoUrl} onChange={e => setDraft(d => ({ ...d, videoUrl: e.target.value }))} placeholder="https://..." className={inp} />
           </div>
 
           {/* Tags */}

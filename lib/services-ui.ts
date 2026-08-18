@@ -21,6 +21,14 @@ export const SERVICE_CATEGORIES: Record<string, { label: string; color: string; 
   coaching: { label: 'Coaching', color: 'text-sky-400', bg: 'bg-sky-500/10 border-sky-500/20', icon: '🏆' },
   education: { label: 'Education', color: 'text-lime-400', bg: 'bg-lime-500/10 border-lime-500/20', icon: '🎓' },
   health: { label: 'Health', color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20', icon: '❤️' },
+  architecture: { label: 'Architecture', color: 'text-stone-300', bg: 'bg-stone-500/10 border-stone-500/20', icon: '📐' },
+  engineering: { label: 'Engineering', color: 'text-zinc-300', bg: 'bg-zinc-500/10 border-zinc-500/20', icon: '⚙️' },
+  technology: { label: 'Technology', color: 'text-cyan-400', bg: 'bg-cyan-500/10 border-cyan-500/20', icon: '🖥️' },
+  ai: { label: 'AI Services', color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10 border-fuchsia-500/20', icon: '🤖' },
+  data: { label: 'Data', color: 'text-blue-300', bg: 'bg-blue-400/10 border-blue-400/20', icon: '📈' },
+  hr: { label: 'HR & Recruitment', color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/20', icon: '🧑‍💼' },
+  events: { label: 'Events', color: 'text-pink-300', bg: 'bg-pink-400/10 border-pink-400/20', icon: '🎪' },
+  personal: { label: 'Personal Services', color: 'text-orange-300', bg: 'bg-orange-400/10 border-orange-400/20', icon: '🌿' },
   other: { label: 'Other', color: 'text-white/50', bg: 'bg-white/[0.06] border-white/[0.10]', icon: '⭐' },
 };
 

@@ -53,8 +53,10 @@ function relevance(s: Service, providerName: string, terms: string[]): number {
     [s.title ?? '', 10],
     [s.tagline ?? '', 5],
     [s.category ?? '', 5],
+    [s.subcategory ?? '', 5],
     [(s.tags ?? []).join(' '), 3],
     [providerName, 3],
+    [s.location ?? '', 3],
     [s.description ?? '', 1],
   ];
   let score = 0;
@@ -74,6 +76,14 @@ export async function GET(req: NextRequest) {
     const categories = (sp.get('categories') || '').split(',').map((c) => c.trim()).filter(Boolean);
     const pricingModels = (sp.get('pricing') || '').split(',').map((c) => c.trim()).filter(Boolean);
     const minRating = Number(sp.get('minRating') || '0') || 0;
+    const tags = (sp.get('tags') || '').split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    /* Maximum delivery time, in hours. The model stores a number plus a unit,
+       so both sides normalise to hours to compare. */
+    const maxDeliveryHours = sp.get('maxDelivery') !== null ? Number(sp.get('maxDelivery')) : null;
+    const subcategories = (sp.get('subcategories') || '').split(',').map(v => v.trim()).filter(Boolean);
+    const locationQ = (sp.get('location') || '').trim().toLowerCase();
+    const workModes = (sp.get('workMode') || '').split(',').map(v => v.trim()).filter(Boolean);
+    const availabilities = (sp.get('availability') || '').split(',').map(v => v.trim()).filter(Boolean);
     const minPrice = sp.get('minPrice') !== null ? Number(sp.get('minPrice')) : null;
     const maxPrice = sp.get('maxPrice') !== null ? Number(sp.get('maxPrice')) : null;
     const sort = sp.get('sort') || 'recommended';
@@ -102,6 +112,19 @@ export async function GET(req: NextRequest) {
     const matchesNonCategory = ({ service: s, provider }: { service: Service; provider: StoredUser }) => {
       if (terms.length && relevance(s, providerName(provider), terms) === 0) return false;
       if (pricingModels.length && !pricingModels.includes(s.pricingModel)) return false;
+      if (tags.length) {
+        const own = (s.tags ?? []).map(t => t.toLowerCase());
+        if (!tags.some(t => own.includes(t))) return false;
+      }
+      if (maxDeliveryHours !== null) {
+        const h = deliveryHours(s);
+        if (h === null || h > maxDeliveryHours) return false; // unstated delivery is not a match
+      }
+      if (locationQ && !(s.location ?? '').toLowerCase().includes(locationQ)) return false;
+      /* A service that never stated a work mode or availability is not a
+         match for those filters — it is unknown, not "yes". */
+      if (workModes.length && !workModes.includes(s.workMode ?? '')) return false;
+      if (availabilities.length && !availabilities.includes(s.availability ?? '')) return false;
       if (minRating > 0 && (s.rating ?? 0) < minRating) return false;
       if (minPrice !== null || maxPrice !== null) {
         const p = priceOf(s);
@@ -112,18 +135,43 @@ export async function GET(req: NextRequest) {
       return true;
     };
 
-    const nonCategory = rows.filter(matchesNonCategory);
-    const filtered = categories.length
-      ? nonCategory.filter((r) => categories.includes(r.service.category))
-      : nonCategory;
+    /* `base` excludes BOTH the category and subcategory filters, so each of
+       their facet counts can be computed without its own filter applied —
+       otherwise selecting one option would hide every other one and make
+       multi-select impossible. */
+    const base = rows.filter(matchesNonCategory);
+    const byCategory = (r: typeof base[number]) => !categories.length || categories.includes(r.service.category);
+    const bySubcategory = (r: typeof base[number]) => !subcategories.length || subcategories.includes(r.service.subcategory ?? '');
+    const filtered = base.filter((r) => byCategory(r) && bySubcategory(r));
 
     const categoryFacets: Record<string, number> = {};
-    for (const r of nonCategory) {
+    for (const r of base.filter(bySubcategory)) {
       categoryFacets[r.service.category] = (categoryFacets[r.service.category] ?? 0) + 1;
     }
     const pricingFacets: Record<string, number> = {};
-    for (const r of nonCategory) {
+    for (const r of base) {
       pricingFacets[r.service.pricingModel] = (pricingFacets[r.service.pricingModel] ?? 0) + 1;
+    }
+    /* Tag facets, most common first — the card shows skills/tags, so the
+       filter offers the ones that actually appear. */
+    /* Subcategory facets come from the category-filtered set: a subcategory
+       only makes sense inside its category, so the options shown follow the
+       category selection rather than listing every subcategory on the site. */
+    const subcategoryFacets: Record<string, number> = {};
+    for (const r of base.filter(byCategory)) {
+      if (r.service.subcategory) {
+        subcategoryFacets[r.service.subcategory] = (subcategoryFacets[r.service.subcategory] ?? 0) + 1;
+      }
+    }
+    const workModeFacets: Record<string, number> = {};
+    const availabilityFacets: Record<string, number> = {};
+    for (const r of base) {
+      if (r.service.workMode) workModeFacets[r.service.workMode] = (workModeFacets[r.service.workMode] ?? 0) + 1;
+      if (r.service.availability) availabilityFacets[r.service.availability] = (availabilityFacets[r.service.availability] ?? 0) + 1;
+    }
+    const tagFacets: Record<string, number> = {};
+    for (const r of base) {
+      for (const t of r.service.tags ?? []) tagFacets[t] = (tagFacets[t] ?? 0) + 1;
     }
 
     const rel = (r: { service: Service; provider: StoredUser }) =>
@@ -160,10 +208,20 @@ export async function GET(req: NextRequest) {
           title: s.title,
           tagline: s.tagline,
           category: s.category,
+          subcategory: s.subcategory || null,
           pricingModel: s.pricingModel,
           basePrice: s.basePrice,
           currency: s.currency,
           imageUrl: s.imageUrl || null,
+          coverImageUrl: s.coverImageUrl || null,
+          serviceImageUrl: s.serviceImageUrl || null,
+          useMainProfileImage: !!s.useMainProfileImage,
+          location: s.location || null,
+          workMode: s.workMode || null,
+          availability: s.availability || null,
+          tags: s.tags ?? [],
+          deliveryTime: s.deliveryTime ?? null,
+          deliveryUnit: s.deliveryUnit ?? null,
           rating: s.rating ?? 0,
           reviewCount: s.reviewCount ?? 0,
           /* Public identity only. The id is present because the catalogue
@@ -177,7 +235,7 @@ export async function GET(req: NextRequest) {
         total,
         hasMore: page * limit < total,
         page,
-        facets: { categories: categoryFacets, pricing: pricingFacets },
+        facets: { categories: categoryFacets, subcategories: subcategoryFacets, pricing: pricingFacets, tags: tagFacets, workMode: workModeFacets, availability: availabilityFacets },
         /* Total visible services, so the page can tell "nothing published yet"
            apart from "nothing matches your filters". */
         libraryTotal: rows.length,

@@ -23,9 +23,24 @@ export type ServiceCategory =
   | 'coaching'
   | 'education'
   | 'health'
+  /* Added to complete the specification's twenty-category list. The three
+     values above that the list does not name (music, coaching, health) are
+     kept so services already using them keep working. */
+  | 'architecture'
+  | 'engineering'
+  | 'technology'
+  | 'ai'
+  | 'data'
+  | 'hr'
+  | 'events'
+  | 'personal'
   | 'other';
 
 export type PricingModel = 'fixed' | 'hourly' | 'starting_from' | 'contact';
+/** Where the work happens. Absent on services created before this existed. */
+export type ServiceWorkMode = 'remote' | 'onsite' | 'hybrid';
+/** Provider-stated availability. Absent means the provider did not say. */
+export type ServiceAvailability = 'available' | 'limited' | 'unavailable';
 export type DeliveryUnit = 'hours' | 'days' | 'weeks' | 'months';
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
 
@@ -45,6 +60,9 @@ export interface Service {
   tagline: string;
   description: string;
   category: ServiceCategory;
+  /** Optional per the specification ("where appropriate"). Services created
+   *  before subcategories existed simply have none. */
+  subcategory?: string;
   tags: string[];
   pricingModel: PricingModel;
   basePrice: number;
@@ -53,6 +71,17 @@ export interface Service {
   deliveryTime?: number;
   deliveryUnit?: DeliveryUnit;
   imageUrl?: string;
+  /** Service-specific cover, independent of the user's main profile cover. */
+  coverImageUrl?: string;
+  /** Service-specific profile image, independent of the main profile photo.
+   *  When `useMainProfileImage` is true this is ignored and the provider's
+   *  own avatar is shown instead — the explicit opt-in the spec describes. */
+  serviceImageUrl?: string;
+  useMainProfileImage?: boolean;
+  /** Where the service is offered. */
+  location?: string;
+  workMode?: ServiceWorkMode;
+  availability?: ServiceAvailability;
   gallery?: string[];
   faqs?: Array<{ question: string; answer: string }>;
   isActive: boolean;

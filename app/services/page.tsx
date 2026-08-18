@@ -16,7 +16,7 @@ import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 import { SERVICE_CATEGORIES, serviceCategory } from '@/lib/services-ui';
 import { ServiceSummaryCard, type ServiceSummary } from '@/components/services/ServiceSummaryCard';
 
-type Facets = { categories: Record<string, number>; pricing: Record<string, number> };
+type Facets = { categories: Record<string, number>; subcategories?: Record<string, number>; pricing: Record<string, number>; tags?: Record<string, number>; workMode?: Record<string, number>; availability?: Record<string, number> };
 type ApiResponse = {
   services: ServiceSummary[];
   total: number;
@@ -47,12 +47,38 @@ const SORTS: Array<{ id: string; label: string }> = [
 
 const RATINGS = [4.5, 4, 3];
 
+const WORK_MODES: Array<{ id: string; label: string }> = [
+  { id: 'remote', label: 'Remote' },
+  { id: 'onsite', label: 'On-site' },
+  { id: 'hybrid', label: 'Hybrid' },
+];
+const AVAILABILITIES: Array<{ id: string; label: string }> = [
+  { id: 'available', label: 'Available now' },
+  { id: 'limited', label: 'Limited availability' },
+  { id: 'unavailable', label: 'Not taking work' },
+];
+
+/* Delivery options, expressed in hours so mixed stored units compare. */
+const DELIVERY_OPTIONS: Array<{ id: string; label: string; hours: number }> = [
+  { id: '24', label: 'Within 24 hours', hours: 24 },
+  { id: '72', label: 'Within 3 days', hours: 72 },
+  { id: '168', label: 'Within a week', hours: 168 },
+  { id: '720', label: 'Within a month', hours: 720 },
+];
+
 export default function ServicesDiscoveryPage() {
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
   const [categories, setCategories] = useState<string[]>([]);
+  const [subcategories, setSubcategories] = useState<string[]>([]);
   const [pricing, setPricing] = useState<string[]>([]);
   const [minRating, setMinRating] = useState(0);
+  const [maxDelivery, setMaxDelivery] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [location, setLocation] = useState('');
+  const [debouncedLocation, setDebouncedLocation] = useState('');
+  const [workMode, setWorkMode] = useState<string[]>([]);
+  const [availability, setAvailability] = useState<string[]>([]);
   const [minPrice, setMinPrice] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [sort, setSort] = useState('recommended');
@@ -70,17 +96,28 @@ export default function ServicesDiscoveryPage() {
     return () => clearTimeout(t);
   }, [query]);
 
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedLocation(location.trim()); setPage(1); }, 250);
+    return () => clearTimeout(t);
+  }, [location]);
+
   const params = useMemo(() => {
     const p = new URLSearchParams();
     if (debounced) p.set('q', debounced);
     if (categories.length) p.set('categories', categories.join(','));
+    if (subcategories.length) p.set('subcategories', subcategories.join(','));
     if (pricing.length) p.set('pricing', pricing.join(','));
     if (minRating) p.set('minRating', String(minRating));
+    if (maxDelivery) p.set('maxDelivery', maxDelivery);
+    if (tags.length) p.set('tags', tags.join(','));
+    if (debouncedLocation) p.set('location', debouncedLocation);
+    if (workMode.length) p.set('workMode', workMode.join(','));
+    if (availability.length) p.set('availability', availability.join(','));
     if (minPrice.trim()) p.set('minPrice', minPrice.trim());
     if (maxPrice.trim()) p.set('maxPrice', maxPrice.trim());
     p.set('sort', sort);
     return p;
-  }, [debounced, categories, pricing, minRating, minPrice, maxPrice, sort]);
+  }, [debounced, categories, subcategories, pricing, minRating, maxDelivery, tags, debouncedLocation, workMode, availability, minPrice, maxPrice, sort]);
 
   /* Monotonic id: a slow earlier response can never overwrite a newer one. */
   const reqId = useRef(0);
@@ -109,8 +146,10 @@ export default function ServicesDiscoveryPage() {
   useEffect(() => { setPage(1); void fetchPage(1, false); }, [fetchPage]);
 
   const clearAll = () => {
-    setQuery(''); setCategories([]); setPricing([]);
-    setMinRating(0); setMinPrice(''); setMaxPrice(''); setSort('recommended');
+    setQuery(''); setCategories([]); setSubcategories([]); setPricing([]);
+    setMinRating(0); setMaxDelivery(''); setTags([]);
+    setLocation(''); setWorkMode([]); setAvailability([]);
+    setMinPrice(''); setMaxPrice(''); setSort('recommended');
   };
 
   const toggle = (list: string[], setList: (v: string[]) => void, value: string) => {
@@ -119,14 +158,27 @@ export default function ServicesDiscoveryPage() {
 
   const activeChips = [
     ...categories.map(c => ({ label: serviceCategory(c).label, clear: () => toggle(categories, setCategories, c) })),
+    ...subcategories.map(sc => ({ label: sc, clear: () => toggle(subcategories, setSubcategories, sc) })),
     ...pricing.map(p => ({ label: PRICING_LABELS[p] ?? p, clear: () => toggle(pricing, setPricing, p) })),
     ...(minRating ? [{ label: `${minRating}+ rating`, clear: () => setMinRating(0) }] : []),
+    ...(maxDelivery ? [{ label: DELIVERY_OPTIONS.find(d => d.id === maxDelivery)?.label ?? 'Delivery', clear: () => setMaxDelivery('') }] : []),
+    ...tags.map(t => ({ label: t, clear: () => toggle(tags, setTags, t) })),
+    ...(debouncedLocation ? [{ label: debouncedLocation, clear: () => setLocation('') }] : []),
+    ...workMode.map(w => ({ label: WORK_MODES.find(x => x.id === w)?.label ?? w, clear: () => toggle(workMode, setWorkMode, w) })),
+    ...availability.map(a => ({ label: AVAILABILITIES.find(x => x.id === a)?.label ?? a, clear: () => toggle(availability, setAvailability, a) })),
     ...(minPrice.trim() ? [{ label: `Min ${minPrice}`, clear: () => setMinPrice('') }] : []),
     ...(maxPrice.trim() ? [{ label: `Max ${maxPrice}`, clear: () => setMaxPrice('') }] : []),
   ];
-  const hasFilters = activeChips.length > 0 || debounced.length > 0;
+  const hasFilters = activeChips.length > 0 || debounced.length > 0 || debouncedLocation.length > 0;
 
   const facetCats = data?.facets.categories ?? {};
+  const facetSubs = data?.facets.subcategories ?? {};
+  const subKeys = Array.from(new Set([...Object.keys(facetSubs), ...subcategories]))
+    .sort((a, b) => (facetSubs[b] ?? 0) - (facetSubs[a] ?? 0));
+  const facetTags = data?.facets.tags ?? {};
+  const tagKeys = Array.from(new Set([...Object.keys(facetTags), ...tags]))
+    .sort((a, b) => (facetTags[b] ?? 0) - (facetTags[a] ?? 0))
+    .slice(0, 12);
   const facetPricing = data?.facets.pricing ?? {};
   /* Every category with results, plus any currently selected one so a
      selection never vanishes from the list. */
@@ -160,6 +212,30 @@ export default function ServicesDiscoveryPage() {
           })}
         </div>
       </div>
+
+      {/* Subcategory follows the category selection, so it appears only when
+          the current results actually have subcategories to offer. */}
+      {subKeys.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Subcategory</p>
+          <div className="space-y-1">
+            {subKeys.map(sc => (
+              <button
+                key={sc}
+                type="button"
+                onClick={() => toggle(subcategories, setSubcategories, sc)}
+                aria-pressed={subcategories.includes(sc)}
+                className={`flex w-full items-center rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
+                  subcategories.includes(sc) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
+                }`}
+              >
+                <span className="min-w-0 flex-1 truncate">{sc}</span>
+                <span className="text-[11px] text-white/30">{facetSubs[sc] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Pricing</p>
@@ -201,6 +277,96 @@ export default function ServicesDiscoveryPage() {
         </div>
         <p className="mt-1.5 text-[11px] leading-relaxed text-white/25">Custom-quote services have no set price and are excluded from a range.</p>
       </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Location</p>
+        <input
+          value={location}
+          onChange={e => setLocation(e.target.value)}
+          placeholder="City or area"
+          aria-label="Filter by location"
+          className="h-9 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 text-[12.5px] text-white placeholder:text-white/25 focus:border-white/25 focus:outline-none"
+        />
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Remote / on-site</p>
+        <div className="flex flex-wrap gap-1.5">
+          {WORK_MODES.map(w => (
+            <button
+              key={w.id}
+              type="button"
+              onClick={() => toggle(workMode, setWorkMode, w.id)}
+              aria-pressed={workMode.includes(w.id)}
+              className={`rounded-full border px-2.5 py-1 text-[12px] transition ${
+                workMode.includes(w.id) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'
+              }`}
+            >
+              {w.label} <span className="text-white/30">{data?.facets.workMode?.[w.id] ?? 0}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Availability</p>
+        <div className="space-y-1">
+          {AVAILABILITIES.map(a => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => toggle(availability, setAvailability, a.id)}
+              aria-pressed={availability.includes(a.id)}
+              className={`flex w-full items-center rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
+                availability.includes(a.id) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
+              }`}
+            >
+              <span className="flex-1">{a.label}</span>
+              <span className="text-[11px] text-white/30">{data?.facets.availability?.[a.id] ?? 0}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Delivery time</p>
+        <div className="space-y-1">
+          {DELIVERY_OPTIONS.map(d => (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => setMaxDelivery(maxDelivery === d.id ? '' : d.id)}
+              aria-pressed={maxDelivery === d.id}
+              className={`flex w-full items-center rounded-lg border px-2.5 py-1.5 text-left text-[12.5px] transition ${
+                maxDelivery === d.id ? 'border-white/25 bg-white/[0.08] text-white' : 'border-transparent text-white/55 hover:bg-white/[0.04]'
+              }`}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {tagKeys.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Skills &amp; tags</p>
+          <div className="flex flex-wrap gap-1.5">
+            {tagKeys.map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggle(tags, setTags, t)}
+                aria-pressed={tags.includes(t)}
+                className={`rounded-full border px-2.5 py-1 text-[12px] transition ${
+                  tags.includes(t) ? 'border-white/25 bg-white/[0.08] text-white' : 'border-white/[0.08] text-white/55 hover:bg-white/[0.04]'
+                }`}
+              >
+                {t} <span className="text-white/30">{facetTags[t] ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/35">Rating</p>
@@ -338,9 +504,14 @@ export default function ServicesDiscoveryPage() {
                       : 'Nothing to show right now.'}
                 </p>
                 {hasFilters && (
-                  <button type="button" onClick={clearAll} className="mt-3 rounded-full bg-white px-4 py-2 text-[12px] font-bold text-[#0D0D0F] hover:bg-white/90">
-                    Clear filters
-                  </button>
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                    <button type="button" onClick={clearAll} className="rounded-full bg-white px-4 py-2 text-[12px] font-bold text-[#0D0D0F] hover:bg-white/90">
+                      Clear filters
+                    </button>
+                    <button type="button" onClick={clearAll} className="rounded-full border border-white/[0.10] px-4 py-2 text-[12px] font-semibold text-white/60 hover:bg-white/[0.06]">
+                      Browse all services
+                    </button>
+                  </div>
                 )}
               </div>
             )}

@@ -14,20 +14,32 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Star } from 'lucide-react';
-import { serviceCategory, formatServicePrice, serviceDetailHref } from '@/lib/services-ui';
+import { Star, MapPin } from 'lucide-react';
+import { serviceCategory, formatServicePrice, formatDelivery, serviceDetailHref } from '@/lib/services-ui';
 
 export type ServiceSummary = {
   id: string;
   title: string;
   tagline: string;
   category: string;
+  subcategory?: string | null;
   pricingModel: string;
   basePrice: number;
   currency: string;
   imageUrl: string | null;
+  /** Service-specific identity — independent of the provider's main profile. */
+  coverImageUrl?: string | null;
+  serviceImageUrl?: string | null;
+  useMainProfileImage?: boolean;
+  location?: string | null;
+  workMode?: string | null;
+  availability?: string | null;
   rating: number;
   reviewCount: number;
+  /** Skills/tags the provider entered. Rendered only when non-empty. */
+  tags?: string[];
+  deliveryTime?: number | null;
+  deliveryUnit?: string | null;
   provider?: { id: string; name: string; avatarUrl: string | null };
 };
 
@@ -54,11 +66,13 @@ function CardImage({ src, category, alt }: { src: string | null; category: strin
   );
 }
 
-function ProviderAvatar({ src, name }: { src: string | null; name: string }) {
+function ProviderAvatar({ src, name, size = 'sm' }: { src: string | null; name: string; size?: 'sm' | 'lg' }) {
   const [broken, setBroken] = useState(false);
+  const box = size === 'lg' ? 'h-9 w-9 text-[13px]' : 'h-5 w-5 text-[9px]';
+  const ring = size === 'lg' ? 'ring-2 ring-[#0d0d10]' : 'ring-1 ring-white/[0.07]';
   if (!src || broken) {
     return (
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[9px] font-bold text-white/55 ring-1 ring-white/[0.07]">
+      <span className={`flex ${box} shrink-0 items-center justify-center rounded-full bg-white/[0.10] font-bold text-white/60 ${ring}`}>
         {(name || '?').trim().charAt(0).toUpperCase()}
       </span>
     );
@@ -69,54 +83,129 @@ function ProviderAvatar({ src, name }: { src: string | null; name: string }) {
       src={src}
       alt=""
       onError={() => setBroken(true)}
-      className="h-5 w-5 shrink-0 rounded-full object-cover ring-1 ring-white/[0.07]"
+      className={`${box} shrink-0 rounded-full object-cover ${ring}`}
       data-no-invert
     />
   );
 }
 
+const WORK_MODE_LABELS: Record<string, string> = { remote: 'Remote', onsite: 'On-site', hybrid: 'Hybrid' };
+const AVAILABILITY_LABELS: Record<string, string> = {
+  available: 'Available now', limited: 'Limited availability', unavailable: 'Not taking work',
+};
+
 export function ServiceSummaryCard({ service }: { service: ServiceSummary }) {
   const cat = serviceCategory(service.category);
+  /* Cover falls back to the service image, then to a category placeholder. */
+  const cover = service.coverImageUrl || service.imageUrl;
+  /* The service's own image wins unless the provider opted into their main
+     profile photo. Neither is substituted for the other silently. */
+  const identityImage = service.useMainProfileImage
+    ? (service.provider?.avatarUrl ?? null)
+    : (service.serviceImageUrl || service.provider?.avatarUrl || null);
+  const workMode = service.workMode ? WORK_MODE_LABELS[service.workMode] : null;
+  const availability = service.availability ? AVAILABILITY_LABELS[service.availability] : null;
+  const delivery = formatDelivery(service.deliveryTime, service.deliveryUnit);
+  const tags = (service.tags ?? []).filter(Boolean).slice(0, 3);
+  const detail = serviceDetailHref(service.id);
+
+  /* Hierarchy follows the specification: cover → identity → title →
+     description → category/skills → rating · delivery → price → actions. */
   return (
     <div className="group flex flex-col overflow-hidden rounded-[20px] border border-white/[0.07] bg-[#0d0d10] transition hover:border-white/[0.14]">
-      <Link href={serviceDetailHref(service.id)} className="block">
-        <CardImage src={service.imageUrl} category={service.category} alt={service.title} />
-      </Link>
+      <div className="relative">
+        <Link href={detail} className="block">
+          <CardImage src={cover} category={service.category} alt={service.title} />
+        </Link>
+        {/* Identity overlaps the cover edge so the provider-service
+            relationship reads immediately, as the specification asks. */}
+        {service.provider && (
+          <div className="absolute -bottom-4 left-3.5">
+            <ProviderAvatar src={identityImage} name={service.provider.name} size="lg" />
+          </div>
+        )}
+      </div>
 
-      <div className="flex flex-1 flex-col p-3.5">
-        <Link href={serviceDetailHref(service.id)} className="block">
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cat.bg} ${cat.color}`}>
-            <span aria-hidden>{cat.icon}</span>{cat.label}
-          </span>
-          <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-snug text-white/90">{service.title}</p>
+      <div className={`flex flex-1 flex-col p-3.5 ${service.provider ? 'pt-5' : ''}`}>
+        {service.provider && (
+          <Link
+            href={`/services/${service.provider.id}`}
+            className="mb-1.5 inline-flex min-w-0 items-center text-[11.5px] font-semibold text-white/55 transition hover:text-white"
+          >
+            <span className="truncate">{service.provider.name}</span>
+          </Link>
+        )}
+
+        <Link href={detail} className="block">
+          <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-white/90">{service.title}</p>
           {service.tagline && (
             <p className="mt-1 line-clamp-1 text-[11.5px] text-white/40">{service.tagline}</p>
           )}
         </Link>
 
-        {/* Provider is its own link so the card can reach the catalogue
-            without nesting an anchor inside the service link. */}
-        {service.provider && (
-          <Link
-            href={`/services/${service.provider.id}`}
-            className="mt-2.5 inline-flex min-w-0 items-center gap-1.5 text-[11.5px] text-white/45 transition hover:text-white/80"
-          >
-            <ProviderAvatar src={service.provider.avatarUrl} name={service.provider.name} />
-            <span className="truncate">{service.provider.name}</span>
-          </Link>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${cat.bg} ${cat.color}`}>
+            <span aria-hidden>{cat.icon}</span>{cat.label}
+          </span>
+          {/* Subcategory sits with the category, only when one was chosen. */}
+          {service.subcategory && (
+            <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] text-white/50">
+              {service.subcategory}
+            </span>
+          )}
+          {/* Skills/tags, only when the provider entered any. */}
+          {tags.map(t => (
+            <span key={t} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] text-white/45">{t}</span>
+          ))}
+        </div>
+
+        {/* Rating · location · delivery — each only when the record has it. */}
+        {(service.reviewCount > 0 || service.location || workMode || delivery) && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/40">
+            {service.reviewCount > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                <span className="font-semibold text-white/70">{service.rating.toFixed(1)}</span>
+                ({service.reviewCount})
+              </span>
+            )}
+            {service.location && (
+              <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" />{service.location}</span>
+            )}
+            {workMode && <span>{workMode}</span>}
+            {delivery && <span>Delivery {delivery}</span>}
+          </div>
+        )}
+
+        {availability && (
+          <span className={`mt-2 inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+            service.availability === 'available'
+              ? 'border-emerald-200/[0.18] bg-emerald-200/[0.10] text-emerald-200/90'
+              : service.availability === 'limited'
+                ? 'border-amber-200/[0.18] bg-amber-200/[0.10] text-amber-200/90'
+                : 'border-white/[0.10] bg-white/[0.05] text-white/45'
+          }`}>
+            {availability}
+          </span>
         )}
 
         <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-white/[0.05] pt-2.5">
           <span className="text-[12.5px] font-bold text-white">{formatServicePrice(service)}</span>
-          {/* Ratings appear only once a service has been reviewed. */}
-          {service.reviewCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-white/40">
-              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-              <span className="font-semibold text-white/70">{service.rating.toFixed(1)}</span>
-              ({service.reviewCount})
-            </span>
-          )}
+          <Link href={detail} className="shrink-0 text-[11.5px] font-semibold text-white/50 transition hover:text-white">
+            View Service →
+          </Link>
         </div>
+
+        {/* The specification requires every card to reach the provider's full
+            catalogue — a real destination, so never a dead control. */}
+        {service.provider && (
+          <Link
+            href={`/services/${service.provider.id}`}
+            className="mt-2 block rounded-full border border-white/[0.10] py-1.5 text-center text-[11.5px] font-semibold text-white/60 transition hover:bg-white/[0.06] hover:text-white"
+          >
+            View Full Catalogue
+          </Link>
+        )}
       </div>
     </div>
   );

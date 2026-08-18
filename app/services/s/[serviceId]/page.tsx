@@ -30,11 +30,13 @@ type Pkg = {
 type Detail = {
   service: {
     id: string; title: string; tagline: string; description: string;
-    category: string; tags: string[];
+    category: string; subcategory: string | null; tags: string[];
     pricingModel: string; basePrice: number; currency: string;
     packages: Pkg[] | null;
     deliveryTime: number | null; deliveryUnit: string | null;
     imageUrl: string | null; gallery: string[] | null;
+    coverImageUrl: string | null; serviceImageUrl: string | null; useMainProfileImage: boolean;
+    location: string | null; workMode: string | null; availability: string | null;
     faqs: Array<{ question: string; answer: string }> | null;
     featured: boolean; rating: number; reviewCount: number;
     bookingCount: number; createdAt: string;
@@ -46,9 +48,12 @@ type Detail = {
     rating: number | null; reviewCount: number; completedBookings: number;
   };
   otherServices: Array<{
-    id: string; title: string; tagline: string; category: string;
+    id: string; title: string; tagline: string; category: string; subcategory: string | null;
     pricingModel: string; basePrice: number; currency: string;
-    imageUrl: string | null; rating: number; reviewCount: number;
+    imageUrl: string | null; coverImageUrl: string | null;
+    serviceImageUrl: string | null; useMainProfileImage: boolean;
+    location: string | null; workMode: string | null; availability: string | null;
+    rating: number; reviewCount: number;
   }>;
 };
 
@@ -127,7 +132,7 @@ export default function ServiceDetailPage() {
       if (!res.ok) { setState('error'); return; }
       const json = (await res.json()) as Detail;
       setData(json);
-      setActiveImage(json.service.imageUrl ?? json.service.gallery?.[0] ?? null);
+      setActiveImage(json.service.coverImageUrl ?? json.service.imageUrl ?? json.service.gallery?.[0] ?? null);
       setState('ready');
     } catch {
       setState('error');
@@ -172,7 +177,15 @@ export default function ServiceDetailPage() {
   const cat = serviceCategory(s.category);
   const delivery = formatDelivery(s.deliveryTime, s.deliveryUnit);
   const catalogueHref = `/services/${p.id}`;
-  const gallery = [s.imageUrl, ...(s.gallery ?? [])].filter((u): u is string => Boolean(u));
+  const gallery = [s.coverImageUrl, s.imageUrl, ...(s.gallery ?? [])]
+    .filter((u): u is string => Boolean(u))
+    .filter((u, i, a) => a.indexOf(u) === i);
+  const WORK_MODES: Record<string, string> = { remote: 'Remote', onsite: 'On-site', hybrid: 'Hybrid' };
+  const AVAILABILITY: Record<string, string> = {
+    available: 'Available now', limited: 'Limited availability', unavailable: 'Not taking work',
+  };
+  /* Service-specific image unless the provider opted into their main photo. */
+  const identityImage = s.useMainProfileImage ? p.avatarUrl : (s.serviceImageUrl || p.avatarUrl);
   const memberSince = p.memberSince
     ? new Date(p.memberSince).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
     : null;
@@ -221,6 +234,11 @@ export default function ServiceDetailPage() {
                 <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${cat.bg} ${cat.color}`}>
                   <span aria-hidden>{cat.icon}</span>{cat.label}
                 </span>
+                {s.subcategory && (
+                  <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-white/55">
+                    {s.subcategory}
+                  </span>
+                )}
                 {s.featured && (
                   <span className="rounded-full border border-amber-200/[0.18] bg-amber-200/[0.10] px-2.5 py-0.5 text-[11px] font-semibold text-amber-200/90">
                     Featured
@@ -233,13 +251,33 @@ export default function ServiceDetailPage() {
                     <span className="text-white/35">({s.reviewCount})</span>
                   </span>
                 )}
+                {/* Shown only when the provider actually supplied them. */}
+                {s.location && (
+                  <span className="inline-flex items-center gap-1 text-[12px] text-white/50">
+                    <MapPin className="h-3.5 w-3.5" />{s.location}
+                  </span>
+                )}
+                {s.workMode && WORK_MODES[s.workMode] && (
+                  <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-0.5 text-[11px] text-white/55">
+                    {WORK_MODES[s.workMode]}
+                  </span>
+                )}
+                {s.availability && AVAILABILITY[s.availability] && (
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                    s.availability === 'available'
+                      ? 'border-emerald-200/[0.18] bg-emerald-200/[0.10] text-emerald-200/90'
+                      : s.availability === 'limited'
+                        ? 'border-amber-200/[0.18] bg-amber-200/[0.10] text-amber-200/90'
+                        : 'border-white/[0.10] bg-white/[0.05] text-white/45'
+                  }`}>{AVAILABILITY[s.availability]}</span>
+                )}
               </div>
 
               <h1 className="mt-2.5 text-[22px] font-bold leading-tight tracking-[-0.02em] sm:text-[26px]">{s.title}</h1>
               {s.tagline && <p className="mt-1.5 text-[13.5px] leading-relaxed text-white/50">{s.tagline}</p>}
 
               <Link href={catalogueHref} className="mt-3.5 inline-flex items-center gap-2.5 rounded-full border border-white/[0.07] bg-white/[0.02] py-1.5 pl-1.5 pr-4 transition hover:border-white/[0.14] hover:bg-white/[0.05]">
-                <Avatar src={p.avatarUrl} name={p.name} size={28} />
+                <Avatar src={identityImage} name={p.name} size={28} />
                 <span className="min-w-0">
                   <span className="block truncate text-[12.5px] font-semibold text-white/85">{p.name}</span>
                   {p.headline && <span className="block truncate text-[11px] text-white/35">{p.headline}</span>}
@@ -384,6 +422,14 @@ export default function ServiceDetailPage() {
             </div>
           </aside>
         </div>
+
+        {/* The specification asks for an explicit message here rather than a
+            silently missing section. */}
+        {otherServices.length === 0 && (
+          <p className="mt-6 rounded-[20px] border border-white/[0.07] bg-[#0d0d10] px-5 py-6 text-center text-[12.5px] text-white/40">
+            This is currently the only service offered by this provider.
+          </p>
+        )}
 
         {/* ── other services by the same provider ── */}
         {otherServices.length > 0 && (

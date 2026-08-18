@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       tagline: body.tagline?.trim() ?? '',
       description: body.description.trim(),
       category: body.category,
+      subcategory: body.subcategory,
       tags: body.tags ?? [],
       pricingModel: body.pricingModel ?? 'fixed',
       basePrice: body.basePrice ?? 0,
@@ -56,6 +57,14 @@ export async function POST(req: NextRequest) {
       deliveryTime: body.deliveryTime,
       deliveryUnit: body.deliveryUnit,
       imageUrl: body.imageUrl,
+      /* Service-specific identity and placement. Undefined when the provider
+         left them blank — never defaulted to a fabricated value. */
+      coverImageUrl: body.coverImageUrl,
+      serviceImageUrl: body.serviceImageUrl,
+      useMainProfileImage: body.useMainProfileImage ?? false,
+      location: body.location,
+      workMode: body.workMode,
+      availability: body.availability,
       gallery: body.gallery,
       faqs: body.faqs,
       isActive: body.isActive ?? true,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStoredUsers, getAuthSession } from '@/lib/server/auth';
 import { getProfileData } from '@/lib/server/user-profiles';
+import { trackAnalyticsEvent } from '@/lib/server/services';
 import {
   getReviewsForService,
   createReview,
@@ -108,6 +109,12 @@ export async function POST(req: NextRequest) {
          Derived here, never read from the request. */
       verified: true,
     });
+
+    /* §35 — only after the review is actually stored. */
+    void trackAnalyticsEvent({
+      serviceId: review.serviceId, serviceUserId: review.serviceUserId, type: 'review_submitted',
+      source: 'direct', actorId: actor.id, metadata: { rating: review.rating, verified: true },
+    }).catch(() => {});
 
     return NextResponse.json({ review }, { status: 201 });
   } catch (error) {

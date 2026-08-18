@@ -14,6 +14,7 @@ import {
   linkBooking,
   updateBookingStatus,
   getServiceById,
+  trackAnalyticsEvent,
   type BookingStatus,
   type ServiceBooking,
 } from '@/lib/server/services';
@@ -352,6 +353,13 @@ export async function POST(req: NextRequest) {
       status: 'booking_requested',
     });
 
+    /* §35 — counted only after the booking request and its lead exist. */
+    void trackAnalyticsEvent({
+      serviceId: service.id, serviceUserId: provider.id, type: 'booking_submitted',
+      source: 'direct', actorId: actor.id,
+      metadata: { leadId: lead.id, ...(selectedPackage ? { packageName: selectedPackage } : {}) },
+    }).catch(() => {});
+
     const linked = await linkBooking(booking.id, { leadId: lead.id, conversationId });
 
     return NextResponse.json({
@@ -400,6 +408,20 @@ export async function PATCH(req: NextRequest) {
 
     const booking = await updateBookingStatus(bookingId, status);
     if (!booking) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 });
+
+    /* §35 lifecycle — emitted at the transition that actually succeeded. */
+    const lifecycle: Partial<Record<BookingStatus, 'booking_accepted' | 'booking_declined' | 'service_completed'>> = {
+      confirmed: 'booking_accepted',
+      cancelled: 'booking_declined',
+      completed: 'service_completed',
+    };
+    const evt = lifecycle[status];
+    if (evt && existing.status !== status) {
+      void trackAnalyticsEvent({
+        serviceId: booking.serviceId, serviceUserId: booking.serviceUserId, type: evt,
+        source: 'direct', actorId: actor.id, metadata: { bookingId: booking.id, from: existing.status },
+      }).catch(() => {});
+    }
 
     return NextResponse.json({ booking });
   } catch (error) {

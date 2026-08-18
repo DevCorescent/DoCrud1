@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getStoredUserById } from '@/lib/server/users';
 import { getProfileData } from '@/lib/server/user-profiles';
-import { getServiceById } from '@/lib/server/services';
+import { getServiceById, trackAnalyticsEvent } from '@/lib/server/services';
 import { getOrCreateConversation, sendMessage } from '@/lib/server/messages';
 import { sanitizeHtml, isValidEmail } from '@/lib/server/security';
 import {
@@ -314,6 +314,12 @@ export async function POST(req: NextRequest) {
       contactPhone,
       conversationId,
     });
+
+    /* §35 — counted only here, after the enquiry and its lead exist. */
+    void trackAnalyticsEvent({
+      serviceId: service.id, serviceUserId: provider.id, type: 'enquiry_submitted',
+      source: 'direct', actorId: actor.id, metadata: { leadId: lead.id },
+    }).catch(() => {});
 
     const linked = await linkServiceEnquiry(enquiry.id, { leadId: lead.id, conversationId });
 

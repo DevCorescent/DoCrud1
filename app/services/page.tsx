@@ -638,6 +638,45 @@ export default function ServicesDiscoveryPage() {
           mask-image: linear-gradient(to right, black 85%, transparent 100%);
           -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
         }
+
+        /* Quick-filter chip strip scroller — the same hardening applied to
+           the feed category strip.
+
+           Note: this comment deliberately contains no apostrophe or
+           ampersand characters. A style element is HTML raw text, so React
+           escapes those on the server but emits them literally on the client,
+           the two then disagree, and hydration fails with a text mismatch.
+
+           Deliberately its own class rather than an addition to .no-sb: that
+           class is shared with the desktop filter sidebar and the mobile
+           filter sheet, which are VERTICAL scrollers. Giving them
+           overflow-y:hidden / touch-action:pan-x would stop them scrolling.
+
+           touch-action: pan-x     — commits the gesture to the horizontal axis
+             at touchstart instead of holding the first movements back while
+             the browser decides between panning the strip and scrolling the
+             page. That hold is what makes a swipe feel sticky.
+           overscroll-behavior-x   — keeps an over-swipe from chaining into the
+             page or the trackpad back-gesture and rubber-banding mid-flick.
+           overflow-y: hidden      — the strip is a single row; nothing should
+             ever scroll it vertically.
+           scroll-behavior: auto   — never inherit a smooth-scroll animation
+             onto a strip that must track the finger 1:1.
+
+           Scrolling stays native: no JS scroll handler and no React state
+           updates are involved. */
+        .svc-chip-strip {
+          overflow-x: auto;
+          overflow-y: hidden;
+          touch-action: pan-x;
+          overscroll-behavior-x: contain;
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: auto;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .svc-chip-strip button { transition: none !important; }
+        }
       `}</style>
 
       {/* ══ Sticky header ══════════════════════════════════════════════════ */}
@@ -719,7 +758,7 @@ export default function ServicesDiscoveryPage() {
       {/* ══ Quick-filter chip strip ══════════════════════════════════════ */}
       <div className="sticky z-20 border-b border-white/[0.05]"
         style={{ top: HEADER_H, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px)' }}>
-        <div className="px-3 sm:px-5 lg:px-8 py-2.5 flex items-center gap-1.5 overflow-x-auto no-sb chip-strip-fade-right">
+        <div className="svc-chip-strip px-3 sm:px-5 lg:px-8 py-2.5 flex items-center gap-1.5 overflow-x-auto no-sb chip-strip-fade-right">
           {quickChips.map(chip => {
             const on = quickChipActive(chip.id);
             return (
@@ -728,7 +767,7 @@ export default function ServicesDiscoveryPage() {
                 type="button"
                 onClick={() => quickChipClick(chip.id)}
                 aria-pressed={on}
-                className="shrink-0 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-all duration-150 whitespace-nowrap"
+                className="shrink-0 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-colors duration-150 whitespace-nowrap"
                 style={on
                   ? { background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)', color: '#ffffff' }
                   : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.40)' }}
@@ -745,7 +784,7 @@ export default function ServicesDiscoveryPage() {
               type="button"
               onClick={chip.clear}
               aria-label={`Remove filter: ${chip.label}`}
-              className="shrink-0 inline-flex items-center gap-1 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-all whitespace-nowrap"
+              className="shrink-0 inline-flex items-center gap-1 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-colors whitespace-nowrap"
               style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}
             >
               {chip.label} <X className="h-2.5 w-2.5" />

@@ -4157,16 +4157,56 @@ export default function PublishedPage() {
           {/* Task 13 — filters stay horizontally scrollable on small screens
               instead of being compressed. Same TABS config, same activeTab
               state and the Task 11 category treatment for the active chip. */}
+          <style>{`
+            /* Category strip scroller.
+
+               The strip is ~2000px of chips inside a 390px viewport, so its
+               responsiveness is decided entirely by how the compositor is
+               allowed to treat it:
+
+               touch-action: pan-x        — commits the gesture to the
+                 horizontal axis on touchstart. Without it the browser holds
+                 the first movements back while it decides between panning the
+                 strip and scrolling the page, which is the delay that makes a
+                 swipe feel sticky.
+               overscroll-behavior-x      — stops an over-swipe from chaining
+                 into the page/back-gesture and rubber-banding mid-flick.
+               overflow-y: hidden         — the strip is one row; nothing
+                 should ever scroll it vertically.
+               scroll-behavior: auto      — never inherit a smooth-scroll
+                 animation onto a strip that must track the finger 1:1.
+
+               Scrolling stays native — no JS scroll handler runs here. */
+            .cat-strip {
+              overflow-x: auto;
+              overflow-y: hidden;
+              touch-action: pan-x;
+              overscroll-behavior-x: contain;
+              -webkit-overflow-scrolling: touch;
+              scroll-behavior: auto;
+              scrollbar-width: none;
+              -ms-overflow-style: none;
+            }
+            .cat-strip::-webkit-scrollbar { display: none; }
+
+            @media (prefers-reduced-motion: reduce) {
+              .cat-strip-wrap { transition: none !important; }
+            }
+          `}</style>
           <div
+            className="cat-strip-wrap"
             style={{
               maxHeight: !isSearching && tabBarVisible ? '52px' : '0px',
               opacity:   !isSearching && tabBarVisible ? 1 : 0,
               overflow:  'hidden',
               transition: 'max-height 0.32s cubic-bezier(0.22,1,0.36,1), opacity 0.22s ease',
-              willChange: 'max-height, opacity',
+              /* No will-change here: max-height is a layout property, so
+                 will-change buys nothing on the compositor and instead keeps
+                 this subtree permanently flagged for layout work — which the
+                 scroller underneath pays for on every frame. */
             }}
           >
-            <div className="overflow-x-auto px-4 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="cat-strip px-4 pb-3">
               <div className="flex min-w-max gap-2">
                 {TABS.map(tab => {
                   const isActive = tab.id === activeTab;
@@ -4177,7 +4217,7 @@ export default function PublishedPage() {
                       type="button"
                       aria-pressed={isActive}
                       onClick={() => { setActiveTab(tab.id as TabId); setSearch(''); }}
-                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
+                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                         isActive
                           ? feedCategoryTreatment(tab.id).badgeCls
                           : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'

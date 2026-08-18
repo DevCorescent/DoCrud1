@@ -7,8 +7,14 @@ import { readJsonFile, businessPagesPath } from '@/lib/server/storage';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
 import { getUserNames } from '@/lib/server/users';
 import { summarizeReactions } from '@/lib/reactions';
+import { summarizePollVotes } from '@/lib/polls';
+import { feedChips, isNoisyFeedTag } from '@/lib/feed-tags';
 import { createSocialProofBuilder } from '@/lib/server/social-proof';
 
+/* The payload is personalised — it carries the viewer's own reactions, poll
+   choice and social proof. The no-store header on the response below keeps a
+   heuristic browser cache from replaying a stale copy (which made a
+   just-cast vote appear to vanish on refresh). */
 export const dynamic = 'force-dynamic';
 
 /* ── tiny in-process cache (avoids re-reading large JSON on every request) ── */
@@ -88,20 +94,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   tutorial: 'Tutorial', announcement: 'Announcement', chart: 'Chart', gig: 'Gig',
 };
 
-const FILENAME_EXT_RE   = /\.\w{2,5}$/;
-const NOISE_WORD_RE     = /^[a-z]{12,}$/;
-const USERNAME_LIKE_RE  = /^[a-z]+\d{5,}\w*$/i;
-
-function isNoisyTag(tag: string) {
-  const t = tag.trim();
-  return FILENAME_EXT_RE.test(t) || NOISE_WORD_RE.test(t) || USERNAME_LIKE_RE.test(t);
-}
+/* Shared with the poll vote route so chip indices cannot drift apart. */
+const isNoisyTag = isNoisyFeedTag;
 function cleanBadge(tags: string[] | undefined, cat: string) {
   const first = (tags?.[0] ?? '').trim();
   return (first && !isNoisyTag(first) && first.length < 40) ? first : (CATEGORY_LABELS[cat] ?? 'Published');
 }
 function cleanChips(tags: string[] | undefined) {
-  const rest = (tags ?? []).slice(1).filter(t => t.trim().length > 0 && !isNoisyTag(t));
+  const rest = feedChips(tags);
   return rest.length > 0 ? rest : undefined;
 }
 
@@ -232,6 +232,15 @@ export async function GET(request: NextRequest) {
         /* Omitted (undefined) rather than sent empty when nobody the viewer
            knows engaged, so the client renders no row at all. */
         socialProof: proofBuilder ? proofBuilder.hydrate(proofDrafts[i], avatarMap) ?? undefined : undefined,
+        /* Real vote counts ride along on poll rows, so the card renders
+           server-side results without a per-poll request. Omitted entirely for
+           every other category. */
+        poll: cat === 'poll'
+          ? (() => {
+              const p = summarizePollVotes(cleanChips(t.directoryTags), t.pollVotes, viewerIdentifier);
+              return { counts: p.counts, total: p.total, viewerChoice: p.viewerChoice };
+            })()
+          : undefined,
         commentsCount: t.commentsCount ?? 0,
         viewCount: t.viewCount ?? t.openCount ?? 0,
         likedByViewer: viewerIdentifier ? (t.likedBy ?? []).includes(viewerIdentifier) : false,
@@ -263,7 +272,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ items, total, hasMore, page });
+    return NextResponse.json(
+      { items, total, hasMore, page },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (err) {
     console.error(`[/api/public/published] ERROR after ${Date.now() - t0}ms:`, err);
     return NextResponse.json({ items: [] });

@@ -2104,6 +2104,9 @@ export interface SecureFileTransfer {
   /** identifier → reaction type. The key enforces one reaction per user per
       post; `likedBy` remains authoritative for "has reacted". */
   reactions?: Record<string, string>;
+  /** identifier → chosen option index, for poll publications. One key per user
+      enforces a single vote per person, exactly as `reactions` does. */
+  pollVotes?: Record<string, number>;
   trendCount?: number;
   trendedBy?: string[];
   interestedCount?: number;

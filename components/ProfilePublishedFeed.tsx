@@ -19,6 +19,7 @@ import {
   Send,
   Share2,
   Terminal,
+  Trash2,
   TrendingUp,
   MapPin,
   Target,
@@ -36,6 +37,9 @@ import {
 } from 'lucide-react';
 import { REACTION_META, type ReactionType, type ReactionSummary } from '@/lib/reactions';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
+import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { buildCategoryMetaChips, FeedMetaChipRow, getFeedDescription, hasFeedDescription } from '@/components/feed/FeedCardMeta';
+import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import type { PostSocialProof } from '@/lib/social-proof';
 
@@ -269,7 +273,14 @@ function buildChips(body: string, byline: string, category: string): MetaChip[] 
   return bylineChips(byline, category);
 }
 
-function BodyOrChips({ body, byline, category }: { body: string; byline: string; category: string }) {
+function BodyOrChips({ body, byline, category, proseOnly = false }: { body: string; byline: string; category: string; proseOnly?: boolean }) {
+  /* Task 10: when the card renders category metadata separately, the body slot
+     shows the description/summary instead of a generic key-value dump. */
+  if (proseOnly) {
+    const prose = getFeedDescription(body, 200);
+    if (!prose) return null;
+    return <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{prose}</p>;
+  }
   const chips = buildChips(body, byline, category).slice(0, 5);
   if (!chips.length) return (
     <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{getBodySnippet(body)}</p>
@@ -574,9 +585,6 @@ function CommentPanel({ item, onClose, onCountChange }: {
 export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boolean; onDelete?: () => void }) {
   const [saved, toggleSaved]       = useBookmark(item.id, item.category);
   const [modal, setModal]          = useState<ModalVariant | null>(null);
-  const [liked, setLiked]          = useState(item.likedByViewer ?? false);
-  const [likeCount, setLikeCount]  = useState(item.likesCount ?? 0);
-  /* One shared controller — same hook every other post surface uses. */
   const rx = usePostReactions(
     item.id,
     { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: item.reactions },
@@ -584,74 +592,78 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
   );
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(item.commentsCount ?? 0);
-  const likeInFlight               = useRef(false);
-  const cat                        = item.category;
+  const cat = item.category;
+  /* Preserve pre-Task-9 URL construction on profile cards. */
+  const detailHref = `/published/${item.id}`;
+  const authorMeta = item.byline.split(' · ').slice(1).join(' · ');
 
-  useEffect(() => { setLiked(item.likedByViewer ?? false); }, [item.likedByViewer]);
-  useEffect(() => { setLikeCount(item.likesCount ?? 0); }, [item.likesCount]);
   useEffect(() => { if (item.commentsCount !== undefined) setCommentCount(item.commentsCount); }, [item.commentsCount]);
-
-  const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'User';
-  const initials    = displayName.split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase() ?? '').join('');
-  const authorMeta  = item.byline.split(' · ').slice(1).join(' · ');
 
   const primCls  = 'inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-4 text-[12px] font-bold text-[#0D0D0F] transition hover:bg-white/90 active:scale-[0.98]';
   const ghostCls = 'inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.10] px-3.5 text-[12px] font-semibold text-white/55 transition hover:border-white/[0.20] hover:text-white/90';
   const iconCls  = 'flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition hover:bg-white/[0.06] hover:text-white/70';
-
-  const tagCls = TAG_CLS[cat] ?? 'bg-white/[0.07] text-white/45 border-white/[0.08]';
-
   const fmtCount = (n: number) => n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
+
+  /* Task 10 — category-relevant metadata built from fields the item already has. */
+  const catMeta = buildCategoryMetaChips({
+    category: cat,
+    title: item.title,
+    body: item.body,
+    byline: item.byline,
+    chips: item.chips,
+    stats: item.stats,
+  });
+  /* Adopt the Task 10 hierarchy (description + metadata) only when the item has
+     both. Otherwise BodyOrChips keeps its existing rendering and no content is
+     lost or duplicated. */
+  const useCategoryMeta = catMeta.length > 0 && hasFeedDescription(item.body);
+
+  const moderationExtras = isOwn ? (
+    <>
+      {item.moderationStatus === 'suspended' && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2.5 py-0.5">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" strokeLinejoin="round" d="M4.93 4.93l14.14 14.14"/></svg>
+          Suspended
+        </span>
+      )}
+      {item.moderationStatus === 'under_review' && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+          Under Review
+        </span>
+      )}
+      {item.moderationStatus === 'removed' && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-zinc-500 bg-zinc-700/30 border border-zinc-600/20 rounded-full px-2.5 py-0.5">Removed</span>
+      )}
+      {(!item.moderationStatus || item.moderationStatus === 'active') && (item.reportCount ?? 0) > 0 && (
+        <span className="flex items-center gap-1 text-[10px] font-semibold text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-full px-2.5 py-0.5">
+          {item.reportCount} report{(item.reportCount ?? 0) > 1 ? 's' : ''}
+        </span>
+      )}
+    </>
+  ) : null;
 
   return (
     <>
       {modal && <ActionModal variant={modal} itemTitle={item.title} itemId={item.id} onClose={() => setModal(null)} />}
 
-      <article
-        className="group py-5 border-b border-white/[0.05] last:border-0"
-        onDoubleClick={rx.onBodyDoubleTap}
-        onTouchEnd={rx.onBodyDoubleTap}
-      >
-        {/* header */}
-        <div className="flex items-center gap-3 mb-3.5">
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${AVATAR_CLS}`}>
-            {initials.slice(0,2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
-              <span className={`hidden sm:inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${tagCls}`}>
-                {item.badge || cat}
-              </span>
-            </div>
-            <p className="text-[11px] text-white/35 mt-0.5 truncate">
-              {authorMeta ? `${authorMeta} · ` : ''}{timeAgo(item.postedAt)}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {/* Moderation status badges — visible to the post owner */}
-            {isOwn && item.moderationStatus === 'suspended' && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2.5 py-0.5">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10"/><path strokeLinecap="round" strokeLinejoin="round" d="M4.93 4.93l14.14 14.14"/></svg>
-                Suspended
-              </span>
-            )}
-            {isOwn && item.moderationStatus === 'under_review' && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                Under Review
-              </span>
-            )}
-            {isOwn && item.moderationStatus === 'removed' && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-zinc-500 bg-zinc-700/30 border border-zinc-600/20 rounded-full px-2.5 py-0.5">Removed</span>
-            )}
-            {isOwn && (!item.moderationStatus || item.moderationStatus === 'active') && (item.reportCount ?? 0) > 0 && (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-full px-2.5 py-0.5">
-                {item.reportCount} report{(item.reportCount ?? 0) > 1 ? 's' : ''}
-              </span>
-            )}
+      <PublishedFeedCard
+        item={item}
+        timeLabel={timeAgo(item.postedAt)}
+        subtitle={`${authorMeta ? `${authorMeta} · ` : ''}${timeAgo(item.postedAt)}`}
+        detailHref={detailHref}
+        linkAuthor={false}
+        showPresence={false}
+        articleClassName="group py-5 border-b border-white/[0.05] last:border-0"
+        articleProps={{
+          onDoubleClick: rx.onBodyDoubleTap,
+          onTouchEnd: rx.onBodyDoubleTap,
+        }}
+        headerExtras={moderationExtras}
+        headerRight={
+          <>
             {isOwn && (
-              <Link href={`/published/${item.id}`} target="_blank"
+              <Link href={detailHref} target="_blank"
                 className="hidden sm:flex items-center gap-1 text-[11px] text-white/25 hover:text-white/60 transition border border-white/[0.07] rounded-full px-2.5 py-1">
                 <ExternalLink className="h-3 w-3" /> View
               </Link>
@@ -660,193 +672,153 @@ export function FeedCard({ item, isOwn, onDelete }: { item: FeedItem; isOwn: boo
               className={`transition ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}>
               {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
             </button>
-          </div>
-        </div>
-
-        {/* thumbnail */}
-        {item.thumbnailUrl && (
-          <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-0 rounded-xl overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.thumbnailUrl} alt={item.category === 'post' ? '' : item.title}
-              className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]" />
-          </Link>
-        )}
-
-        {/* content */}
-        {/* content — photo posts: body/caption only, never auto title */}
-        <Link href={`/published/${item.id}`} className="block">
-          {item.category !== 'post' && !/\.\w{2,5}$/i.test(item.title.trim()) && !['post', 'poll', 'document', 'file', 'image', 'photo', 'video', 'survey', 'article', 'upload'].includes(item.title.trim().toLowerCase()) && (
-            <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
-              {item.title}
-            </h3>
-          )}
-          {item.body?.trim() && <BodyOrChips body={item.body} byline={item.byline} category={item.category} />}
-        </Link>
-
-
-        {/* Call to action — a real link, outside the card's own <Link> so the
-            click goes to the destination rather than the post. */}
-        {item.cta?.url && item.cta.label && (
-          <div className="mt-3">
-            <a
-              href={item.cta.url}
-              {...(isInternalCtaUrl(item.cta.url) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
-              aria-label={item.cta.label}
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-[11px] border border-white/[0.14] bg-white/[0.08] px-3.5 py-2 text-[12.5px] font-semibold text-white/85 transition duration-150 hover:border-white/[0.22] hover:bg-white/[0.13] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-            >
-              <span className="min-w-0 break-words text-left">{item.cta.label}</span>
-              <span aria-hidden className="shrink-0">&rarr;</span>
-            </a>
-          </div>
-        )}
-
-        {/* chips */}
-        {item.chips && item.chips.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {item.chips.slice(0,5).map(c => (
-              <span key={c} className="rounded-full bg-white/[0.06] px-2.5 py-0.5 text-[11px] text-white/40">{c}</span>
-            ))}
-            {item.chips.length > 5 && (
-              <span className="rounded-full bg-white/[0.04] px-2.5 py-0.5 text-[11px] text-white/20">+{item.chips.length - 5}</span>
-            )}
-          </div>
-        )}
-
-        {/* stats */}
-        {item.stats && (
-          <div className="flex items-center gap-5 mt-3">
-            {item.stats.slice(0,3).map(s => (
-              <div key={s.l} className="flex items-baseline gap-1.5">
-                <span className="text-[13.5px] font-bold text-white/75 tabular-nums">{s.v}</span>
-                <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">{s.l}</span>
+            {/* Task 10 header options — existing handlers only */}
+            <FeedCardMenu
+              items={[
+                { label: 'Share link', icon: <Share2 className="h-3.5 w-3.5" />, onSelect: () => { void shareItem(item.id, item.title); trackCTA('share_item', cat); } },
+                { label: 'Open in new tab', icon: <ExternalLink className="h-3.5 w-3.5" />, onSelect: () => window.open(detailHref, '_blank', 'noopener,noreferrer') },
+                { label: saved ? 'Remove bookmark' : 'Save', icon: saved ? <BookmarkCheck className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />, onSelect: toggleSaved },
+                ...(onDelete ? [{ label: 'Delete post', icon: <Trash2 className="h-3.5 w-3.5" />, onSelect: onDelete, danger: true }] : []),
+              ]}
+            />
+          </>
+        }
+        /* Preserve BodyOrChips (chips OR prose). When category metadata is
+           available it moves to the metadata section, so the body slot shows
+           the description/summary. */
+        renderMainBody={item.body?.trim() ? <BodyOrChips body={item.body} byline={item.byline} category={item.category} proseOnly={useCategoryMeta} /> : null}
+        renderMetadata={useCategoryMeta ? <FeedMetaChipRow chips={catMeta} /> : null}
+        beforeActions={
+          <>
+            {item.cta?.url && item.cta.label && (
+              <div className="mt-3">
+                <a
+                  href={item.cta.url}
+                  {...(isInternalCtaUrl(item.cta.url) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+                  aria-label={item.cta.label}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-[11px] border border-white/[0.14] bg-white/[0.08] px-3.5 py-2 text-[12.5px] font-semibold text-white/85 transition duration-150 hover:border-white/[0.22] hover:bg-white/[0.13] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                >
+                  <span className="min-w-0 break-words text-left">{item.cta.label}</span>
+                  <span aria-hidden className="shrink-0">&rarr;</span>
+                </a>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Reaction summary — compact: top three glyphs plus the total. */}
-        <PostReactionSummaryBar c={rx} postId={item.id} fmtCount={fmtCount} />
-
-        {/* Social proof — reuses the existing who-reacted modal and the existing
-            comments section; renders nothing when the viewer's graph is absent. */}
-        <PostSocialProofRow
-          postId={item.id}
-          socialProof={item.socialProof}
-          onOpenComments={() => setCommentsOpen(true)}
-        />
-
-        {/* engagement row */}
-        <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.preventDefault()}>
-          {/* like / reactions — shared component */}
-          <PostReactionButton c={rx} />
-
-          {/* comments */}
-          <button type="button"
-            onClick={e => { e.stopPropagation(); setCommentsOpen(v => !v); }}
-            className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${commentsOpen ? 'text-white/70' : 'text-white/30 hover:text-white/60'}`}>
-            <MessageSquare className="h-4 w-4" />
-            <span>{commentCount > 0 ? fmtCount(commentCount) : '0'}</span>
-          </button>
-
-          {/* trend */}
-          <TrendButton item={item} />
-
-          {/* category CTAs */}
-          <div className="flex items-center gap-2 ml-auto">
-            {(cat === 'news' || cat === 'article' || cat === 'announcement') && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                Read <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
             )}
-            {cat === 'document' && (
-              <button type="button" onClick={e => { e.stopPropagation(); window.open(`/published/${item.id}`, '_blank'); }} className={ghostCls}>
-                <Download className="h-3.5 w-3.5" /> Download
-              </button>
-            )}
-            {cat === 'portfolio' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                View Work <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'job' && (
-              <button type="button" className={primCls}
-                onClick={e => {
-                  e.stopPropagation(); trackCTA('apply_job', cat);
-                  if (item.applicationUrl) {
-                    try {
-                      const apps = JSON.parse(localStorage.getItem('pub_job_applications') || '[]') as Array<{itemId:string;title:string;appliedAt:number;url:string}>;
-                      apps.unshift({ itemId: item.id, title: item.title, appliedAt: Date.now(), url: item.applicationUrl });
-                      localStorage.setItem('pub_job_applications', JSON.stringify(apps.slice(0, 200)));
-                    } catch {}
-                    window.open(item.applicationUrl, '_blank', 'noopener,noreferrer');
-                  } else setModal('apply');
-                }}>
-                Apply Now <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {cat === 'resume' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                View Profile <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'product' && (() => {
-              const shopUrl = item.body?.match(/^Shop URL:\s*(.+)$/im)?.[1]?.trim() || '';
-              return shopUrl ? (
-                <button type="button" className={primCls} onClick={e => { e.stopPropagation(); window.open(shopUrl, '_blank', 'noopener,noreferrer'); }}>
-                  Shop Now <ExternalLink className="h-3.5 w-3.5" />
-                </button>
-              ) : (
-                <Link href={`/published/${item.id}`} className={primCls} onClick={e => e.stopPropagation()}>
-                  View Product <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              );
-            })()}
-            {(cat === 'event' || cat === 'hackathon') && (
-              <button type="button" className={primCls}
-                onClick={e => {
-                  e.stopPropagation(); trackCTA(cat === 'event' ? 'register_event' : 'register_hackathon', cat);
-                  try {
-                    const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
-                    const raw = localStorage.getItem('pub_registrations') || '[]';
-                    const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>;
-                    if (!regs.find(r => r.itemId === item.id)) {
-                      regs.unshift({ itemId: item.id, title: item.title, category: cat, registeredAt: Date.now() });
-                      localStorage.setItem('pub_registrations', JSON.stringify(regs.slice(0, 200)));
-                    }
-                    if (regUrl) { window.open(regUrl, '_blank', 'noopener,noreferrer'); toast('Redirecting…', 'success', cat === 'event' ? '🎟️' : '🏆'); }
-                    else setModal('register');
-                  } catch { setModal('register'); }
-                }}>
-                Register <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {!['news','article','document','portfolio','announcement','job','resume','product','event','hackathon'].includes(cat) && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                Open <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            <button type="button" className={iconCls}
-              onClick={e => { e.stopPropagation(); void shareItem(item.id, item.title); trackCTA('share_item', cat); }}>
-              <Share2 className="h-4 w-4" />
+            <PostReactionSummaryBar c={rx} postId={item.id} fmtCount={fmtCount} />
+            {/* Social proof (from origin/main) — reuses the existing who-reacted
+                modal and this card's existing comment panel. */}
+            <PostSocialProofRow
+              postId={item.id}
+              socialProof={item.socialProof}
+              onOpenComments={() => setCommentsOpen(true)}
+            />
+          </>
+        }
+        actions={
+          <>
+            <PostReactionButton c={rx} />
+            <button type="button"
+              onClick={e => { e.stopPropagation(); setCommentsOpen(v => !v); }}
+              className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${commentsOpen ? 'text-white/70' : 'text-white/30 hover:text-white/60'}`}>
+              <MessageSquare className="h-4 w-4" />
+              <span>{commentCount > 0 ? fmtCount(commentCount) : '0'}</span>
             </button>
-            {onDelete && (
-              <button type="button"
-                onClick={e => { e.stopPropagation(); onDelete(); }}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-red-400/40 transition hover:bg-red-500/10 hover:text-red-400">
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+            <TrendButton item={item} />
+            <div className="flex items-center gap-2 ml-auto">
+              {(cat === 'news' || cat === 'article' || cat === 'announcement') && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  Read <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'document' && (
+                <button type="button" onClick={e => { e.stopPropagation(); window.open(detailHref, '_blank'); }} className={ghostCls}>
+                  <Download className="h-3.5 w-3.5" /> Download
+                </button>
+              )}
+              {cat === 'portfolio' && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  View Work <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'job' && (
+                <button type="button" className={primCls}
+                  onClick={e => {
+                    e.stopPropagation(); trackCTA('apply_job', cat);
+                    if (item.applicationUrl) {
+                      try {
+                        const apps = JSON.parse(localStorage.getItem('pub_job_applications') || '[]') as Array<{itemId:string;title:string;appliedAt:number;url:string}>;
+                        apps.unshift({ itemId: item.id, title: item.title, appliedAt: Date.now(), url: item.applicationUrl });
+                        localStorage.setItem('pub_job_applications', JSON.stringify(apps.slice(0, 200)));
+                      } catch {}
+                      window.open(item.applicationUrl, '_blank', 'noopener,noreferrer');
+                    } else setModal('apply');
+                  }}>
+                  Apply Now <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {cat === 'resume' && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  View Profile <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'product' && (() => {
+                const shopUrl = item.body?.match(/^Shop URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                return shopUrl ? (
+                  <button type="button" className={primCls} onClick={e => { e.stopPropagation(); window.open(shopUrl, '_blank', 'noopener,noreferrer'); }}>
+                    Shop Now <ExternalLink className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <Link href={detailHref} className={primCls} onClick={e => e.stopPropagation()}>
+                    View Product <ArrowRight className="h-3.5 w-3.5" />
+                  </Link>
+                );
+              })()}
+              {(cat === 'event' || cat === 'hackathon') && (
+                <button type="button" className={primCls}
+                  onClick={e => {
+                    e.stopPropagation(); trackCTA(cat === 'event' ? 'register_event' : 'register_hackathon', cat);
+                    try {
+                      const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                      const raw = localStorage.getItem('pub_registrations') || '[]';
+                      const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>;
+                      if (!regs.find(r => r.itemId === item.id)) {
+                        regs.unshift({ itemId: item.id, title: item.title, category: cat, registeredAt: Date.now() });
+                        localStorage.setItem('pub_registrations', JSON.stringify(regs.slice(0, 200)));
+                      }
+                      if (regUrl) { window.open(regUrl, '_blank', 'noopener,noreferrer'); toast('Redirecting…', 'success', cat === 'event' ? '🎟️' : '🏆'); }
+                      else setModal('register');
+                    } catch { setModal('register'); }
+                  }}>
+                  Register <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {!['news','article','document','portfolio','announcement','job','resume','product','event','hackathon'].includes(cat) && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  Open <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              <button type="button" className={iconCls}
+                onClick={e => { e.stopPropagation(); void shareItem(item.id, item.title); trackCTA('share_item', cat); }}>
+                <Share2 className="h-4 w-4" />
               </button>
-            )}
-          </div>
-        </div>
-
-        {/* inline comments */}
-        {commentsOpen && item.isReal && (
-          <CommentPanel item={item} onClose={() => setCommentsOpen(false)} onCountChange={n => setCommentCount(n)} />
-        )}
-      </article>
+              {onDelete && (
+                <button type="button"
+                  onClick={e => { e.stopPropagation(); onDelete(); }}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-red-400/40 transition hover:bg-red-500/10 hover:text-red-400">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </>
+        }
+        footer={
+          commentsOpen && item.isReal ? (
+            <CommentPanel item={item} onClose={() => setCommentsOpen(false)} onCountChange={n => setCommentCount(n)} />
+          ) : null
+        }
+      />
     </>
   );
 }

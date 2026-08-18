@@ -12,6 +12,10 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import { PresenceDot } from '@/components/PresenceBadge';
+import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { buildCategoryMetaChips, FeedMetaChipRow, omitChipsPresentIn } from '@/components/feed/FeedCardMeta';
+import { feedCategoryTreatment } from '@/components/feed/feedCardTheme';
+import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
 import {
   Activity,
   ArrowLeft,
@@ -1985,14 +1989,12 @@ function HpMetaChips({ body, byline, category }: { body: string; byline: string;
  */
 const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: HpFeedItem }) {
   const router = useRouter();
-  const [liked,      setLiked]      = React.useState(item.likedByViewer ?? false);
   const rxHome = usePostReactions(
     item.id,
     { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: (item as { reactions?: import('@/components/social/PostReactionButton').PostReactionSummary }).reactions },
     { live: Boolean(item.isReal) },
   );
-  const [likeCount,  setLikeCount]  = React.useState(item.likesCount ?? 0);
-  const [trended,    setTrended]    = React.useState(() => {
+  const [trended, setTrended] = React.useState(() => {
     const stored = hpReadTrends()[item.id];
     return stored ? stored.trendedByViewer : (item.trendedByViewer ?? false);
   });
@@ -2000,178 +2002,155 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
     const stored = hpReadTrends()[item.id];
     return stored ? stored.count : (item.trendCount ?? 0);
   });
-  const [saved,      setSaved]      = React.useState(false);
-  const likeInFlight  = React.useRef(false);
+  const [saved, setSaved] = React.useState(false);
   const trendInFlight = React.useRef(false);
+  /* Preserve existing homepage URL construction. */
   const postHref = `/published/${item.shareId || item.id}`;
-
-  React.useEffect(() => { setLiked(item.likedByViewer ?? false); }, [item.likedByViewer]);
-  React.useEffect(() => { setLikeCount(item.likesCount ?? 0); }, [item.likesCount]);
-
-  const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
   const bylineParts = item.byline.split(' · ').map((s: string) => s.trim());
-  const authorMeta  = bylineParts.slice(1).join(' · ');
-  const initials    = displayName.split(/\s+/).slice(0, 2).map((w: string) => w[0]?.toUpperCase() ?? '').join('');
-  const profileHref = item.uploadedByUserId ? `/u/${item.uploadedByUserId}` : null;
+  const authorMeta = bylineParts.slice(1).join(' · ');
+  const showTitle = item.category !== 'post' && !hpIsJunkTitle(item);
+
+  /* Task 10 — category-relevant metadata built from fields the item already has.
+     The homepage body snippet is left untouched, so any value it already shows
+     is dropped here rather than repeated. */
+  const catMeta = omitChipsPresentIn(
+    buildCategoryMetaChips({
+      category: item.category,
+      title: item.title,
+      body: item.body,
+      byline: item.byline,
+      chips: item.chips,
+      stats: item.stats,
+    }),
+    hpHasRealCaption(item.body) ? hpGetBodySnippet(item.body) : '',
+  );
+
+  const sharePost = async () => {
+    const url = `${window.location.origin}${postHref}`;
+    if (navigator.share) { try { await navigator.share({ title: item.title, url }); return; } catch {} }
+    await navigator.clipboard.writeText(url).catch(() => {});
+  };
 
   return (
-    <article
-      className="group py-5 px-4 sm:px-0 cursor-pointer"
-      role="link"
-      tabIndex={0}
-      onClick={() => router.push(postHref)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(postHref); } }}
-    >
-      {/* header */}
-      <div className="flex items-center gap-3 mb-3.5">
-        {profileHref ? (
-          <Link href={profileHref} onClick={e => e.stopPropagation()}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold overflow-hidden ${HP_AVATAR_CLS} hover:opacity-80 transition`}>
-            {item.avatarUrl
-              ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full object-cover" />
-              : (initials.slice(0, 2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />)}
-          </Link>
-        ) : (
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[11px] font-bold overflow-hidden ${HP_AVATAR_CLS}`}>
-            {item.avatarUrl
-              ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full object-cover" />
-              : (initials.slice(0, 2) || <Newspaper className="h-3.5 w-3.5 opacity-60" />)}
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            {profileHref ? (
-              <Link href={profileHref} onClick={e => e.stopPropagation()}
-                className="text-[13.5px] font-semibold text-white leading-tight truncate hover:text-white/80 transition">
-                {displayName}
-              </Link>
-            ) : (
-              <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
-            )}
-            {/* Presence — green only while the author is genuinely online now. */}
-            <PresenceDot userId={item.uploadedByUserId} size="sm" />
-          </div>
-          <p className="text-[11px] text-white/35 mt-0.5 truncate">
-            {item.badge}{authorMeta ? ` · ${authorMeta}` : ''} · {hpTimeAgo(item.postedAt)}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={e => { e.stopPropagation(); setSaved(v => !v); }}
-          className={`transition shrink-0 ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
-        >
-          <Bookmark className={`h-4 w-4 ${saved ? 'fill-current' : ''}`} />
-        </button>
-      </div>
-
-      {/* thumbnail — full-bleed on mobile (matches /published feed) */}
-      {item.thumbnailUrl && (
-        <div className="mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={item.thumbnailUrl}
-            alt={item.category === 'post' || hpIsJunkTitle(item) ? '' : item.title}
-            className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]"
-            loading="lazy"
-            decoding="async"
+    <PublishedFeedCard
+      item={item}
+      timeLabel={hpTimeAgo(item.postedAt)}
+      subtitle={`${item.badge}${authorMeta ? ` · ${authorMeta}` : ''} · ${hpTimeAgo(item.postedAt)}`}
+      detailHref={postHref}
+      showPresence
+      linkContent={false}
+      /* Task 10 — category-relevant metadata only; nothing when no field applies. */
+      renderMetadata={catMeta.length > 0 ? <FeedMetaChipRow chips={catMeta} /> : null}
+      articleClassName="group py-5 px-4 sm:px-0 cursor-pointer"
+      articleProps={{
+        role: 'link',
+        tabIndex: 0,
+        onClick: () => router.push(postHref),
+        onKeyDown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            router.push(postHref);
+          }
+        },
+      }}
+      headerRight={
+        <>
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); setSaved(v => !v); }}
+            className={`transition shrink-0 ${saved ? 'text-white/70' : 'text-white/25 hover:text-white/60'}`}
+          >
+            <Bookmark className={`h-4 w-4 ${saved ? 'fill-current' : ''}`} />
+          </button>
+          {/* Task 10 header options — existing handlers only */}
+          <FeedCardMenu
+            items={[
+              { label: 'Share link', icon: <Share2 className="h-3.5 w-3.5" />, onSelect: () => { void sharePost(); } },
+              { label: 'Open in new tab', onSelect: () => window.open(postHref, '_blank', 'noopener,noreferrer') },
+              { label: saved ? 'Remove bookmark' : 'Save', icon: <Bookmark className="h-3.5 w-3.5" />, onSelect: () => setSaved(v => !v) },
+            ]}
           />
-        </div>
-      )}
-
-      {/* content — photo posts: caption = body only; never show auto title/filename */}
-      <div>
-        {item.category !== 'post' && !hpIsJunkTitle(item) && (
-          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+        </>
+      }
+      renderTitle={
+        showTitle ? (
+          <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 transition-colors group-hover:text-white/85">
             {item.title}
           </h3>
-        )}
-        {hpHasRealCaption(item.body) && (
-          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${item.category !== 'post' && !hpIsJunkTitle(item) ? 'mt-1.5' : ''}`}>
+        ) : null
+      }
+      renderMainBody={
+        hpHasRealCaption(item.body) ? (
+          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${showTitle ? 'mt-1.5' : ''}`}>
             {hpGetBodySnippet(item.body)}
           </p>
-        )}
-      </div>
-
-      {/* stats */}
-      {item.stats && (
-        <div className="flex items-center gap-5 mt-3">
-          {item.stats.slice(0, 3).map(s => (
-            <div key={s.l} className="flex items-baseline gap-1.5">
-              <span className="text-[13.5px] font-bold text-white/75 tabular-nums">{s.v}</span>
-              <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">{s.l}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Social proof. The home card has no inline comment panel, so the comment
-          half routes to the post's existing comments section — same target the
-          comment count beside it uses. */}
-      <PostSocialProofRow
-        postId={item.id}
-        socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
-        onOpenComments={() => router.push(`${postHref}#comments`)}
-      />
-
-      {/* engagement row */}
-      <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.stopPropagation()}>
-        <PostReactionButton c={rxHome} />
-        <Link
-          href={postHref}
-          className="flex items-center gap-1.5 text-[12px] font-semibold text-white/35 hover:text-white/70 transition"
-          onClick={e => e.stopPropagation()}
-        >
-          <MessageSquare className="h-4 w-4" />
-          <span>{item.commentsCount ? (item.commentsCount >= 1000 ? `${(item.commentsCount/1000).toFixed(1)}k` : String(item.commentsCount)) : 'Comment'}</span>
-        </Link>
-        <button
-          type="button"
-          onClick={async e => {
-            e.stopPropagation();
-            if (trendInFlight.current) return;
-            const next = !trended;
-            setTrended(next);
-            setTrendCount(c => next ? c + 1 : Math.max(0, c - 1));
-            hpWriteTrend(item, next);
-            if (item.isReal) {
-              trendInFlight.current = true;
-              try {
-                const res = await fetch(`/api/published/${item.id}/trend`, { method: 'POST' });
-                if (res.ok) {
-                  const d = await res.json() as { trended: boolean; trendCount: number };
-                  setTrended(d.trended);
-                  setTrendCount(d.trendCount);
-                  hpWriteTrend(item, d.trended);
-                } else {
+        ) : null
+      }
+      /* Social proof (from origin/main). The home card has no inline comment
+         panel, so the comment half routes to the post's comments section —
+         the same target the comment count beside it uses. */
+      beforeActions={
+        <PostSocialProofRow
+          postId={item.id}
+          socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
+          onOpenComments={() => router.push(`${postHref}#comments`)}
+        />
+      }
+      actions={
+        <>
+          <PostReactionButton c={rxHome} />
+          <Link
+            href={postHref}
+            className="flex items-center gap-1.5 text-[12px] font-semibold text-white/35 hover:text-white/70 transition"
+            onClick={e => e.stopPropagation()}
+          >
+            <MessageSquare className="h-4 w-4" />
+            <span>{item.commentsCount ? (item.commentsCount >= 1000 ? `${(item.commentsCount/1000).toFixed(1)}k` : String(item.commentsCount)) : 'Comment'}</span>
+          </Link>
+          <button
+            type="button"
+            onClick={async e => {
+              e.stopPropagation();
+              if (trendInFlight.current) return;
+              const next = !trended;
+              setTrended(next);
+              setTrendCount(c => next ? c + 1 : Math.max(0, c - 1));
+              hpWriteTrend(item, next);
+              if (item.isReal) {
+                trendInFlight.current = true;
+                try {
+                  const res = await fetch(`/api/published/${item.id}/trend`, { method: 'POST' });
+                  if (res.ok) {
+                    const d = await res.json() as { trended: boolean; trendCount: number };
+                    setTrended(d.trended);
+                    setTrendCount(d.trendCount);
+                    hpWriteTrend(item, d.trended);
+                  } else {
+                    setTrended(trended);
+                    setTrendCount(c => next ? Math.max(0, c - 1) : c + 1);
+                    hpWriteTrend(item, trended);
+                  }
+                } catch {
                   setTrended(trended);
-                  setTrendCount(c => next ? Math.max(0, c - 1) : c + 1);
                   hpWriteTrend(item, trended);
-                }
-              } catch {
-                setTrended(trended);
-                hpWriteTrend(item, trended);
-              } finally { trendInFlight.current = false; }
-            }
-          }}
-          className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${trended ? 'text-orange-400' : 'text-white/35 hover:text-white/70'}`}
-        >
-          <TrendingUp className={`h-4 w-4 transition-transform ${trended ? 'scale-110' : ''}`} />
-          <span>{trendCount > 0 ? (trendCount >= 1000 ? `${(trendCount/1000).toFixed(1)}k` : String(trendCount)) : (trended ? 'Trending' : 'Trend')}</span>
-        </button>
-        <button
-          type="button"
-          className="ml-auto flex items-center gap-1.5 text-[12px] font-semibold text-white/25 hover:text-white/55 transition"
-          onClick={async e => {
-            e.stopPropagation();
-            const url = `${window.location.origin}${postHref}`;
-            if (navigator.share) { try { await navigator.share({ title: item.title, url }); return; } catch {} }
-            await navigator.clipboard.writeText(url).catch(() => {});
-          }}
-        >
-          <Share2 className="h-4 w-4" />
-        </button>
-      </div>
-    </article>
+                } finally { trendInFlight.current = false; }
+              }
+            }}
+            className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${trended ? 'text-orange-400' : 'text-white/35 hover:text-white/70'}`}
+          >
+            <TrendingUp className={`h-4 w-4 transition-transform ${trended ? 'scale-110' : ''}`} />
+            <span>{trendCount > 0 ? (trendCount >= 1000 ? `${(trendCount/1000).toFixed(1)}k` : String(trendCount)) : (trended ? 'Trending' : 'Trend')}</span>
+          </button>
+          <button
+            type="button"
+            className="ml-auto flex items-center gap-1.5 text-[12px] font-semibold text-white/25 hover:text-white/55 transition"
+            onClick={e => { e.stopPropagation(); void sharePost(); }}
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
+        </>
+      }
+    />
   );
 });
 
@@ -2593,6 +2572,37 @@ function HomepageLiveFeed() {
               </div>
             )}
 
+          </div>
+
+          {/* Task 13 — the same HP_TABS category filters the lg+ sidebar shows,
+              exposed on small screens as a horizontally scrollable row. Reuses
+              activecat/setActivecat and the Task 11 category treatment. */}
+          <div className="lg:hidden shrink-0 overflow-x-auto px-4 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-w-max gap-2">
+              {HP_TABS.map(tab => {
+                const isActive = activecat === tab.id;
+                const count    = tab.id === 'all' ? allItems.length : (catCounts[tab.id] ?? 0);
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
+                    className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
+                      isActive
+                        ? feedCategoryTreatment(tab.id).badgeCls
+                        : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
+                    }`}
+                  >
+                    <tab.icon className="h-3 w-3 shrink-0" />
+                    {tab.label}
+                    {count > 0 && (
+                      <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* feed cards */}

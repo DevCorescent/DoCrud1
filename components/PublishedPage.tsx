@@ -4,10 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
+import { sanitizeCtaUrl } from '@/lib/cta';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { PresenceDot } from '@/components/PresenceBadge';
+import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { feedCategoryTreatment, shouldShowFeedTitle } from '@/components/feed/feedCardTheme';
+import {
+  buildCategoryMetaChips,
+  FeedMetaChipRow,
+  getFeedDescription,
+  hasFeedDescription,
+  readFeedLabelledValue,
+} from '@/components/feed/FeedCardMeta';
+import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
 const PublishAnythingDialog = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import {
   ArrowLeft,
@@ -528,6 +539,8 @@ type PublishedItem = {
   postedAt: string;
   featured?: boolean;
   isReal?: boolean;
+  /** Real poll results, sent with the feed for poll rows only. */
+  poll?: { counts: number[]; total: number; viewerChoice: number | null };
   // media extras
   videoUrl?: string;
   mimeType?: string | null;
@@ -655,89 +668,6 @@ const FEAT_GLOW: Record<string, string> = {
 
 /* ─── mock data (cleared — all content comes from DB) ───────────── */
 const MOCK_ITEMS: PublishedItem[] = [];
-const _REMOVED_MOCK = [
-  { id:'n1', category:'news', badge:'Breaking', featured:true, title:'Reliance Jio Launches JioSpace Satellite Internet Across 1,200 Rural Districts', byline:'Economic Times · 5 min read · Just now', body:'JioSpace will deliver broadband connectivity to over 6 crore households in Tier-3 and rural areas by Q2 2025, powered by 28 low-orbit satellites in partnership with ISRO.', stats:[{v:'41.2k',l:'reads'},{v:'8.7k',l:'shares'},{v:'2,340',l:'comments'}], postedAt:'2026-05-12T06:00:00Z' },
-  { id:'n2', category:'news', badge:'Markets', title:"SEBI Approves India's First Domestic ETF for Listed AI Companies", byline:'Mint · 3 min read · 2 hrs ago', body:'The Securities & Exchange Board of India has greenlit a first-of-its-kind domestic ETF tracking 28 publicly listed AI and deeptech firms.', stats:[{v:'18.4k',l:'reads'},{v:'3.1k',l:'shares'}], postedAt:'2026-05-12T04:00:00Z' },
-  { id:'n3', category:'news', badge:'M&A', title:'Tata Group Acquires Singapore Fintech for ₹2,400 Crore', byline:'Business Standard · 4 min read · 5 hrs ago', body:"Tata Capital has completed the acquisition of Singapore-headquartered PaySprint, expanding its Southeast Asia footprint in embedded finance.", stats:[{v:'22.1k',l:'reads'},{v:'5.6k',l:'shares'}], postedAt:'2026-05-12T01:00:00Z' },
-  { id:'n4', category:'news', badge:'Policy', title:'RBI Issues New Framework for Real-Time Cross-Border UPI Payments', byline:'LiveMint · 6 min read · 1 day ago', body:'The Reserve Bank of India has released comprehensive guidelines for interoperable UPI-based cross-border transfers covering 14 countries.', stats:[{v:'34.7k',l:'reads'},{v:'9.2k',l:'shares'}], postedAt:'2026-05-11T10:00:00Z' },
-  { id:'n5', category:'news', badge:'Startup', title:'Zepto Raises $340M Series F at $5B Valuation', byline:'TechCrunch India · 5 min read · 2 days ago', body:"Zepto's latest round led by General Atlantic and Lightspeed values the quick-commerce pioneer at $5 billion.", stats:[{v:'51.3k',l:'reads'},{v:'12k',l:'shares'}], postedAt:'2026-05-10T08:00:00Z' },
-  { id:'n6', category:'news', badge:'Budget', title:'Union Budget 2026: ₹80,000 Crore Allocated for Digital India Phase III', byline:'Hindustan Times · 7 min read · 3 days ago', body:'Finance Minister Nirmala Sitharaman announced a record ₹80,000 crore outlay for Digital India Phase III.', stats:[{v:'89.4k',l:'reads'},{v:'21k',l:'shares'}], postedAt:'2026-05-09T06:00:00Z' },
-  /* Article */
-  { id:'a1', category:'article', badge:'Editorial', featured:true, title:'How Bengaluru Startups Are Quietly Rewriting Global SaaS Playbooks', byline:'Saurabh Mukherjea · Marcellus Investment · 14 min read', body:"India's SaaS founders aren't copying Silicon Valley anymore — they're building products that global enterprises actually prefer.", stats:[{v:'29.6k',l:'reads'},{v:'6.1k',l:'saves'},{v:'11.4k',l:'shares'}], postedAt:'2026-05-12T05:00:00Z' },
-  { id:'a2', category:'article', badge:'Commerce', title:"The Meesho Effect: Why Social Commerce Will Define India's Next Wave", byline:'Aparna Jain · 9 min read · 1 day ago', body:"Meesho's reseller model has unlocked 140M users who had never shopped online before.", stats:[{v:'17.2k',l:'reads'},{v:'4.3k',l:'shares'}], postedAt:'2026-05-11T09:00:00Z' },
-  { id:'a3', category:'article', badge:'AI', title:"Sarvam AI Is Building India's First Full-Stack LLM in 22 Languages", byline:'Vivek Seshadri · 8 min read · 4 days ago', body:"Sarvam AI's mission is radical: train foundational AI models from scratch using Indic-language data.", stats:[{v:'44.1k',l:'reads'},{v:'15.2k',l:'shares'}], postedAt:'2026-05-08T10:00:00Z' },
-  { id:'a4', category:'article', badge:'Design', title:'Designing for Bharat: Why 800M Users Need a Different UX Playbook', byline:'Priya Ramesh · 11 min read · 3 days ago', body:'Bandwidth constraints, feature phone users, multilingual inputs, and trust patterns unique to India demand different UX decisions.', stats:[{v:'31.4k',l:'reads'},{v:'9.1k',l:'saves'}], postedAt:'2026-05-09T08:00:00Z' },
-  /* Document */
-  { id:'d1', category:'document', badge:'Official', featured:true, title:'DPDP Act 2023 — Enterprise Compliance Handbook, 2nd Edition', byline:'64 pages · 4.1 MB · PDF · Updated today', body:'Comprehensive guide covering Data Principal rights, Data Fiduciary obligations, consent frameworks, and breach notification timelines.', stats:[{v:'64',l:'pages'},{v:'4.1 MB',l:'size'},{v:'318',l:'downloads'}], postedAt:'2026-05-12T07:00:00Z' },
-  { id:'d2', category:'document', badge:'Tax', title:'GST Annual Return Filing Guide FY 2024–25', byline:'38 pages · PDF · Updated yesterday', body:'Step-by-step GSTR-9 and GSTR-9C filing guide with screenshots, reconciliation templates, and common error fixes.', stats:[{v:'38',l:'pages'},{v:'1.8 MB',l:'size'},{v:'541',l:'downloads'}], postedAt:'2026-05-11T06:00:00Z' },
-  { id:'d3', category:'document', badge:'Legal', title:'Model NDA Template — Bilateral & Unilateral, India-Law Governed', byline:'8 pages · DOCX · Free to use', body:'Dual-template NDA with GDPR + DPDP compatible confidentiality clauses, auto-fill fields for parties.', stats:[{v:'8',l:'pages'},{v:'340 KB',l:'size'},{v:'1.2k',l:'downloads'}], postedAt:'2026-05-09T11:00:00Z' },
-  { id:'d4', category:'document', badge:'Finance', title:'GST Invoice Format Pack — 6 Clean Templates for SMBs', byline:'6 pages · XLSX + PDF · Ready to print', body:'Print-ready GST invoice formats with UPI QR code, GSTIN field, HSN/SAC codes, and e-way bill reference column.', stats:[{v:'6',l:'templates'},{v:'1.1 MB',l:'size'},{v:'2.3k',l:'downloads'}], postedAt:'2026-05-07T09:00:00Z' },
-  /* Portfolio */
-  { id:'p1', category:'portfolio', badge:'Case Study', featured:true, title:"Reimagining IRCTC's Next Billion User Journey", byline:'Client: Ministry of Railways · UX Design · 2024', body:"Complete UX overhaul of India's busiest consumer platform — 8.5 lakh daily bookings. Reduced drop-off 52%.", chips:['Figma','Design System','Hindi/Regional UI','A11y Research'], postedAt:'2026-05-12T04:00:00Z' },
-  { id:'p2', category:'portfolio', badge:'Fintech', title:'PhonePe Wealth: Mutual Fund Investment in Under 60 Seconds', byline:'Client: PhonePe · Product Design · 2024', body:"End-to-end design of PhonePe's wealth product — KYC to first SIP in 52 seconds.", chips:['Figma','Prototyping','Motion Design','Financial UX'], postedAt:'2026-05-11T07:00:00Z' },
-  { id:'p3', category:'portfolio', badge:'Hyperlocal', title:'Zepto 10-Minute Delivery UX — From Zero to 10M Orders', byline:'Client: Zepto · Mobile UX · 2023', body:"Designed the onboarding and checkout flow powering Zepto's first 10M orders.", chips:['React Native','Motion','A/B Testing','Hindi'], postedAt:'2026-05-10T08:00:00Z' },
-  /* Announcement */
-  { id:'an1', category:'announcement', badge:'HIGH PRIORITY', featured:true, title:'Docrud Now Available in Hindi, Tamil, Telugu & 9 More Indian Languages', byline:'Product Team · Sent to 12,400 workspace members · 2 hrs ago', body:'Full UI localisation across 12 Indian languages is now live — including right-to-left support for Urdu.', stats:[{v:'12.4k',l:'reached'},{v:'91%',l:'opened'},{v:'7 days',l:'active'}], postedAt:'2026-05-12T04:00:00Z' },
-  { id:'an2', category:'announcement', badge:'Feature', title:'GST Invoice Generation Now Supports UPI QR & GSTIN Validation', byline:'Product Team · Sent 3 days ago', body:'Generate GST-compliant invoices with embedded UPI QR codes, live GSTIN lookup, SAC/HSN auto-fill, and one-click PDF export.', stats:[{v:'8.2k',l:'reached'},{v:'86%',l:'opened'}], postedAt:'2026-05-09T10:00:00Z' },
-  { id:'an3', category:'announcement', badge:'Partnership', title:'Docrud × DigiLocker: Upload Government Docs Directly to Workspace', byline:'Partnerships Team · Sent 6 days ago', body:'Connect your DigiLocker and pull Aadhaar, PAN, driving licence, and marksheets directly into your workspace.', stats:[{v:'10.8k',l:'reached'},{v:'91%',l:'opened'}], postedAt:'2026-05-06T08:00:00Z' },
-  /* Job */
-  { id:'j1', category:'job', badge:'Hybrid · Full-time', featured:true, title:'Senior Product Designer — Design Systems', byline:'Razorpay · Design · Bengaluru', body:"Own the design language across Razorpay's merchant dashboard and payment flows — used by 10M+ businesses across India.", chips:['₹35–55 LPA','ESOP','Design Systems','Figma','Remote Fridays'], postedAt:'2026-05-12T06:00:00Z' },
-  { id:'j2', category:'job', badge:'Remote · Full-time', title:'Staff Backend Engineer (Go)', byline:'CRED · Engineering · ₹45–70 LPA', body:"Build the distributed financial infrastructure powering CRED's credit, reward, and lending products.", chips:['₹45–70 LPA','ESOP','Go','Kafka','Kubernetes'], postedAt:'2026-05-11T07:00:00Z' },
-  { id:'j3', category:'job', badge:'Hybrid · Full-time', title:'ML Engineer — Fraud & Risk', byline:'PhonePe · Data Science · Bengaluru · ₹40–65 LPA', body:'Build real-time fraud detection models protecting ₹80,000 crore in monthly UPI transaction volume.', chips:['₹40–65 LPA','Python','PyTorch','Real-time ML','ESOP'], postedAt:'2026-05-09T08:00:00Z' },
-  /* Resume */
-  { id:'r1', category:'resume', badge:'✦ Open to Work', featured:true, title:'Ananya Krishnan', byline:'Senior Product Designer · 9 yrs · Bengaluru, KA', body:'Decade of designing products for 100M+ Indians — CRED credit interface, Swiggy reorder flow.', chips:['Figma','Design Systems','Bharat UX','User Research','Hindi UI'], postedAt:'2026-05-12T05:00:00Z' },
-  { id:'r2', category:'resume', badge:'Available', title:'Rohan Mehta', byline:'ML Engineer & AI Researcher · 6 yrs · Hyderabad, TS', body:'Ex-Microsoft Research. Builds LLM-powered products that ship to production. Specialises in RAG pipelines.', chips:['Python','PyTorch','LLMs','RAG','MLOps'], postedAt:'2026-05-11T08:00:00Z' },
-  { id:'r3', category:'resume', badge:'Freelance', title:'Siddharth Joshi', byline:'Full-Stack Developer · 5 yrs · Pune, MH', body:"Indie developer who's shipped three SaaS products from scratch. Owns the full stack — Go APIs, Postgres, React.", chips:['TypeScript','Next.js','Go','Postgres','Docker'], postedAt:'2026-05-10T07:00:00Z' },
-  /* Product */
-  { id:'pr1', category:'product', badge:'Most Popular', featured:true, title:'DocOps Pro Suite', byline:'₹3,999 / workspace / month · Annual billing · GST inclusive', body:"India's most complete document operations layer — unlimited templates, AI generation in 12 languages, Aadhaar eSign.", chips:['Unlimited templates','AI (Hindi + English)','Aadhaar eSign','GST invoicing','DPDP compliant'], postedAt:'2026-05-12T07:00:00Z' },
-  { id:'pr2', category:'product', badge:'Add-on', title:'GST-Ready Invoice Automation Pack', byline:'₹999/mo · E-way bills, GSTR-1, UPI QR, IRN generation', body:'Automated GST invoice creation with UPI QR codes, e-way bill generation, GSTR-1 export, and IRN integration via IRP.', chips:['GST','UPI QR','E-way Bill','IRN','GSTR-1 export'], postedAt:'2026-05-11T06:00:00Z' },
-  { id:'pr3', category:'product', badge:'New', title:'AI Contract Intelligence — Hindi + English', byline:'₹1,499/mo · Unlimited contract reviews', body:'Upload any contract and get instant risk analysis, missing clause detection, key date extraction.', chips:['AI Review','Risk Analysis','Hindi','Unlimited','PDF + DOCX'], postedAt:'2026-05-09T09:00:00Z' },
-  /* Event */
-  { id:'ev1', category:'event', badge:'Conference', featured:true, title:'React India 2026 — The Largest React Conference in Asia', byline:'React India · NSCI Dome, Mumbai · Sep 19–21, 2026', body:'3-day immersive React conference with 80+ speakers, 3,000 attendees, workshops on Next.js, RSC, and React Native.', chips:['React','Next.js','TypeScript','₹2,499 early bird','In-person'], postedAt:'2026-05-12T08:00:00Z' },
-  { id:'ev2', category:'event', badge:'Meetup', title:'Bengaluru AI/ML Monthly — May Edition', byline:'GDG Bengaluru · IKEA Experience Centre · May 25, 2026', body:'Monthly gathering of AI/ML engineers. This month: LLM fine-tuning on Indic datasets, live demos, and networking dinner.', chips:['AI/ML','LLMs','Free entry','Bengaluru'], postedAt:'2026-05-11T09:00:00Z' },
-  { id:'ev3', category:'event', badge:'Summit', title:'India SaaS Summit 2026 — Building Global from Bharat', byline:'SaaSBOOMi · ITC Grand Chola, Chennai · Jul 11–12, 2026', body:"India's premier SaaS gathering — 1,200 founders, 150 investors, 60 workshops.", chips:['SaaS','Founders','₹8,999','Chennai','Networking'], postedAt:'2026-05-10T07:00:00Z' },
-  { id:'ev4', category:'event', badge:'Workshop', title:'GST Filing Masterclass for CA Firms — Online Batch', byline:'Taxmann · Online (Zoom) · Jun 7, 2026', body:'Full-day live workshop on GSTR-9, GSTR-9C, ITC reconciliation and the new e-invoice mandates.', chips:['GST','CPE Credit','Online','₹1,499','CA firms'], postedAt:'2026-05-09T10:00:00Z' },
-  { id:'ev5', category:'event', badge:'Hacknight', title:'Delhi Open Source Hack Night #38', byline:'FOSS United Delhi · 91springboard, Okhla · May 30, 2026', body:'12-hour hack night for open-source contributors. Bring your laptop and an open issue.', chips:['Open Source','Free','Delhi','Overnight','FOSS'], postedAt:'2026-05-08T11:00:00Z' },
-  { id:'ev6', category:'event', badge:'Expo', title:'India FinTech Festival 2026', byline:'Payments Council of India · Bombay Exhibition Centre · Oct 3–5, 2026', body:"Asia's largest fintech expo — 400+ exhibitors, 50,000 visitors, keynotes from RBI, NPCI, and top global fintech CEOs.", chips:['FinTech','UPI','NPCI','Expo','Mumbai'], postedAt:'2026-05-07T08:00:00Z' },
-  /* Hackathon */
-  { id:'h1', category:'hackathon', badge:'₹50L Prize', featured:true, title:'HackIndia 2026 — Build AI for the Next Billion', byline:'HackIndia Foundation · Pan-India · Online + Finals in Delhi · Jun 14–16, 2026', body:"India's largest student hackathon — 50,000 registrations, ₹50 lakh prize pool, tracks in AI/ML, FinTech, HealthTech, and GovTech.", chips:['AI/ML','₹50L Prize','Students','48 hrs','Devfolio'], postedAt:'2026-05-12T09:00:00Z' },
-  { id:'h2', category:'hackathon', badge:'₹10L Prize', title:'Smart India Hackathon 2026 — Government Problem Statements', byline:'Ministry of Education · IITs & NITs · Aug 22–23, 2026', body:'Official GoI hackathon with 1,000+ problem statements from 50+ central ministries.', chips:['GovTech','₹1L/team','Students','IIT/NIT','Government'], postedAt:'2026-05-11T08:00:00Z' },
-  { id:'h3', category:'hackathon', badge:'$10k Prize', title:'Devfolio Build for Bharat — Web3 Edition', byline:'Devfolio + Polygon · Online · Jun 28 – Jul 6, 2026', body:'10-day async hackathon focused on DeFi, NFT utility, and blockchain for public services.', chips:['Web3','DeFi','$10k','Polygon','Async'], postedAt:'2026-05-10T10:00:00Z' },
-  { id:'h4', category:'hackathon', badge:'₹5L Prize', title:'Razorpay Raze The Hackathon 5.0', byline:'Razorpay · Bengaluru HQ · Jun 7–8, 2026', body:'24-hour in-person hackathon at Razorpay HQ. Build the future of payments, lending, and financial infrastructure.', chips:['FinTech','Payments','₹5L','In-person','Bengaluru'], postedAt:'2026-05-09T07:00:00Z' },
-  { id:'h5', category:'hackathon', badge:'₹3L Prize', title:'HealthTech Hackathon by Apollo × IIT Madras', byline:'Apollo Hospitals + IIT Madras · Online · Jul 19–20, 2026', body:'48-hour hackathon solving for rural diagnostics, teleconsult triage, and ABHA health records integration.', chips:['HealthTech','ABHA','₹3L','IIT Madras','Rural Health'], postedAt:'2026-05-08T09:00:00Z' },
-  { id:'h6', category:'hackathon', badge:'₹2L Prize', title:'ClimateX India Hackathon — Carbon & Clean Energy', byline:'Climake × DST · Online · Aug 9–10, 2026', body:'Build tech solutions for carbon tracking, renewable energy optimisation, and sustainable agriculture.', chips:['Climate','Clean Energy','₹2L','Open to All','DST'], postedAt:'2026-05-07T11:00:00Z' },
-  /* Post */
-  { id:'po1', category:'post', badge:'Photo', featured:true, title:'Shipped our new dashboard — 6 months of work in one release 🚀', byline:'Kushagra Sharma · Docrud · Just now', body:'Every pixel debated, every API endpoint stress-tested. This is what building in public looks like. The new workspace is live for all users.', stats:[{v:'2.4k',l:'likes'},{v:'312',l:'comments'},{v:'89',l:'shares'}], chips:['product','launch','buildinpublic'], postedAt:'2026-05-12T08:30:00Z' },
-  { id:'po2', category:'post', badge:'Team', title:"Team offsite in Coorg — sometimes you need to step away from the IDE 🌿", byline:'Priya Ramesh · Designer · 2h ago', body:'3 days, 12 engineers, zero laptops (almost). Came back with more ideas than we left with.', stats:[{v:'1.8k',l:'likes'},{v:'204',l:'comments'}], postedAt:'2026-05-12T06:00:00Z' },
-  { id:'po3', category:'post', badge:'Milestone', title:'1 million documents generated on Docrud 🎉', byline:'Docrud Team · 1d ago', body:"We didn't plan a party. We just checked the counter, screamed a little, and got back to building. Thank you.", stats:[{v:'14.2k',l:'likes'},{v:'1.3k',l:'comments'},{v:'5.2k',l:'shares'}], postedAt:'2026-05-11T10:00:00Z' },
-  /* Poll */
-  { id:'pl1', category:'poll', badge:'Active', featured:true, title:'What is your primary programming language in 2026?', byline:'Developer Community · 4,230 votes · Ends in 3 days', body:'TypeScript has been climbing — but Go is making serious moves in backend. Cast your vote.', chips:['TypeScript · 38%','Python · 27%','Go · 21%','Rust · 14%'], stats:[{v:'4.2k',l:'votes'},{v:'3',l:'days left'},{v:'38%',l:'TypeScript leading'}], postedAt:'2026-05-12T07:00:00Z' },
-  { id:'pl2', category:'poll', badge:'Closed', title:'Should Indian startups prioritise profitability over growth in 2026?', byline:'Startup Community · 11,840 votes · Closed', body:'The funding winter changed the narrative. What does the community think?', chips:['Yes, profit first · 61%','No, grow fast · 39%'], stats:[{v:'11.8k',l:'votes'},{v:'Closed',l:'status'}], postedAt:'2026-05-09T09:00:00Z' },
-  { id:'pl3', category:'poll', badge:'Active', title:'Best city for a software engineer to live and work in India?', byline:'Tech Community · 7,650 votes · Ends tomorrow', body:'Cost of living, opportunities, quality of life — which city wins for tech folks?', chips:['Bengaluru · 44%','Pune · 22%','Hyderabad · 19%','Remote · 15%'], stats:[{v:'7.6k',l:'votes'},{v:'1',l:'day left'}], postedAt:'2026-05-11T06:00:00Z' },
-  /* Survey */
-  { id:'sv1', category:'survey', badge:'Open', featured:true, title:'India Developer Experience Survey 2026', byline:'JetBrains × Docrud · 5 min · 2,140 responses', body:'Annual survey on tools, workflows, salaries, and team dynamics across the Indian developer ecosystem. Results published in June.', chips:['5 min','Anonymous','Tools','Salary','Work culture'], stats:[{v:'2.1k',l:'responses'},{v:'5',l:'questions'},{v:'Open',l:'status'}], postedAt:'2026-05-12T06:00:00Z' },
-  { id:'sv2', category:'survey', badge:'Open', title:'Startup Founder Mental Health Check-In — Q2 2026', byline:'iSPIRT Foundation · 3 min · 890 responses', body:'Quarterly pulse check for startup founders. Anonymous. Results go back to the community with no attribution.', chips:['3 min','Anonymous','Founders','Mental health'], stats:[{v:'890',l:'responses'},{v:'8',l:'questions'}], postedAt:'2026-05-10T08:00:00Z' },
-  /* Chart */
-  { id:'ch1', category:'chart', badge:'Market Data', featured:true, title:'India SaaS ARR Growth by Vertical — 2023 to 2026', byline:'SaaSBOOMi Research · Published today', body:'FinTech SaaS grew 3.4× while HR-tech and EdTech saw consolidation. B2B infrastructure quietly became the biggest segment.', chips:['FinTech +240%','HR-tech +45%','LegalTech +180%','EdTech +12%'], stats:[{v:'6',l:'verticals'},{v:'3yr',l:'data range'},{v:'340%',l:'top growth'}], postedAt:'2026-05-12T05:00:00Z' },
-  { id:'ch2', category:'chart', badge:'Hiring Trends', title:'Tech Hiring Recovery Index — Jan to May 2026', byline:'LinkedIn India · Published 2 days ago', body:'After 18 months of contraction, tech hiring has rebounded 68% YoY. AI/ML and cloud roles leading recovery.', chips:['AI/ML +210%','Cloud +95%','Frontend +55%','QA +12%'], stats:[{v:'+68%',l:'YoY recovery'},{v:'5',l:'months tracked'}], postedAt:'2026-05-10T07:00:00Z' },
-  /* Thread */
-  { id:'th1', category:'thread', badge:'🧵 Thread', featured:true, title:"Why I stopped using Redux in 2026 — and what I use instead (7-part thread)", byline:'Arjun Nair · Frontend Architect · 15 min read', body:"1/ Redux was the answer to a problem we no longer have. In 2026, with React Server Components, Zustand, and TanStack Query, you almost never need it.\n\n2/ Let me show you the 4 patterns I use instead...", stats:[{v:'18.4k',l:'reads'},{v:'3.2k',l:'likes'},{v:'7',l:'parts'}], chips:['React','Redux','Zustand','Architecture','Thread'], postedAt:'2026-05-12T08:00:00Z' },
-  { id:'th2', category:'thread', badge:'🧵 Thread', title:'How I went from ₹4 LPA to ₹42 LPA in 4 years — without a CS degree (12-part thread)', byline:'Vikram Soni · Self-taught Engineer · 22 min read', body:"1/ In 2022, I was making ₹4 LPA doing manual QA at a Pune startup. Today I'm a senior engineer at a Series-B.\n\n2/ This is the exact roadmap I followed — no fluff, no courses to sell...", stats:[{v:'94.2k',l:'reads'},{v:'22.1k',l:'likes'},{v:'12',l:'parts'}], chips:['Career','SelfTaught','Salary','Thread'], postedAt:'2026-05-11T07:00:00Z' },
-  { id:'th3', category:'thread', badge:'🧵 Thread', title:"India's most underrated cities for remote tech workers — a ranked breakdown", byline:'Meera Iyer · Tech Writer · 10 min read', body:'1/ Everyone talks about Bengaluru, Pune, and Hyderabad. But there are 6 cities that offer better quality of life, lower cost, and a growing community...', stats:[{v:'41.3k',l:'reads'},{v:'9.8k',l:'likes'},{v:'8',l:'parts'}], chips:['Remote Work','Cities','India','Thread'], postedAt:'2026-05-10T09:00:00Z' },
-  /* Video */
-  { id:'vi1', category:'video', badge:'Tutorial', featured:true, title:'Build a Full-Stack SaaS with Next.js 15, Supabase & Stripe in 4 Hours', byline:'Hrishikesh Kale · YouTube · 4h 12m · 340k views', body:'Complete walkthrough: auth, database, payments, email, deployment. All free-tier. No paid courses.', chips:['Next.js 15','Supabase','Stripe','Full-stack','Free'], stats:[{v:'340k',l:'views'},{v:'28k',l:'likes'},{v:'4h 12m',l:'duration'}], postedAt:'2026-05-12T06:00:00Z' },
-  { id:'vi2', category:'video', badge:'Talk', title:'Scaling to 10M users on ₹0 infrastructure cost — IndiaFOSS 2026 Keynote', byline:'Tanmay Bakshi · IndiaFOSS · YouTube · 52m · 180k views', body:'How we used Cloudflare Workers, Turso, and edge caching to serve 10M users without a single EC2 instance.', chips:['CloudFlare','Edge','FOSS','Architecture'], stats:[{v:'180k',l:'views'},{v:'12k',l:'likes'},{v:'52 min',l:'duration'}], postedAt:'2026-05-11T08:00:00Z' },
-  { id:'vi3', category:'video', badge:'Demo', title:'Docrud AI Document Generator — Full Product Demo', byline:'Docrud Team · Product Demo · 18m · 42k views', body:'Full walkthrough of the AI-powered document generator, template editor, eSign, and workspace sharing.', chips:['Docrud','Product Demo','AI','Documents'], stats:[{v:'42k',l:'views'},{v:'3.4k',l:'likes'},{v:'18 min',l:'duration'}], postedAt:'2026-05-10T10:00:00Z' },
-  /* Milestone */
-  { id:'mi1', category:'milestone', badge:'🏆 Achievement', featured:true, title:"We just crossed ₹1 Crore ARR — bootstrapped, profitable, and building from Jaipur 🎉", byline:'Tanmay Sharma · Founder, FinSight · Just now', body:"18 months ago I quit my Deloitte job and started FinSight in a co-working space in Jaipur. Today we crossed ₹1 Crore ARR.\n\nNo VC money. No fancy office. Just 4 engineers and a real problem.", stats:[{v:'₹1Cr',l:'ARR hit'},{v:'18',l:'months'},{v:'4',l:'team size'}], chips:['Bootstrapped','SaaS','Jaipur','Profitable'], postedAt:'2026-05-12T09:00:00Z' },
-  { id:'mi2', category:'milestone', badge:'Career', title:"Promoted to Principal Engineer at 27 — here's what actually helped", byline:'Divya Menon · Principal Engineer, Swiggy · 1d ago', body:"5 years ago I joined Swiggy as a junior. Yesterday I got promoted to Principal Engineer — the youngest in the company's history.", stats:[{v:'5',l:'years at Swiggy'},{v:'27',l:'years old'},{v:'4',l:'promotions'}], chips:['Career','Engineering','Swiggy','Milestone'], postedAt:'2026-05-11T08:00:00Z' },
-  { id:'mi3', category:'milestone', badge:'Community', title:"GDG India hits 500,000 active members across 48 cities", byline:'GDG India · Community Milestone · 3d ago', body:"From a small meetup in Bengaluru in 2009, Google Developer Groups India now spans 48 cities and 500k members.", stats:[{v:'500k',l:'members'},{v:'48',l:'cities'},{v:'17',l:'years active'}], chips:['GDG','Community','Google','India'], postedAt:'2026-05-09T07:00:00Z' },
-  /* Tutorial */
-  { id:'tu1', category:'tutorial', badge:'Beginner', featured:true, title:'Build Your First REST API with Go and Gin — Complete Guide for Beginners', byline:'Nikhil Sharma · 12 min read · 8 steps · 34k reads', body:'Go is fast, simple, and perfect for APIs. This guide walks you from zero to a fully working REST API with auth, database, and deployment.', chips:['Go','REST API','Gin','PostgreSQL','8 steps'], stats:[{v:'34k',l:'reads'},{v:'2.8k',l:'bookmarks'},{v:'8',l:'steps'}], postedAt:'2026-05-12T07:00:00Z' },
-  { id:'tu2', category:'tutorial', badge:'Intermediate', title:'Mastering Tailwind CSS v4 — The Complete Migration and New Features Guide', byline:'Anjali Singh · 18 min read · 12 steps · 51k reads', body:'Tailwind v4 introduces a brand new engine, cascade layers, and CSS-first config. This guide covers everything you need to upgrade.', chips:['Tailwind CSS','v4','CSS','Migration','12 steps'], stats:[{v:'51k',l:'reads'},{v:'7.2k',l:'bookmarks'},{v:'12',l:'steps'}], postedAt:'2026-05-11T09:00:00Z' },
-  { id:'tu3', category:'tutorial', badge:'Advanced', title:'Implementing DPDP-Compliant Consent Management in a SaaS App — From Scratch', byline:'Rahul Gupta · Legal Engineer · 24 min read · 6 steps · 18k reads', body:'Walk through building a DPDP Act-compliant consent management module: consent capture, withdrawal, audit logs, and breach notification hooks.', chips:['DPDP','Privacy','Compliance','Node.js','6 steps'], stats:[{v:'18k',l:'reads'},{v:'4.1k',l:'bookmarks'},{v:'6',l:'steps'}], postedAt:'2026-05-10T08:00:00Z' },
-  { id:'tu4', category:'tutorial', badge:'Intermediate', title:'Deploy Next.js 15 to Fly.io with Zero Downtime — Detailed Walkthrough', byline:'Siddharth Joshi · DevOps Guide · 15 min read · 9 steps', body:'Fly.io is the best alternative to Vercel for self-hosted Next.js. This guide covers Docker, health checks, secrets, and blue-green deployments.', chips:['Next.js','Fly.io','Docker','DevOps','9 steps'], stats:[{v:'27k',l:'reads'},{v:'5.6k',l:'bookmarks'},{v:'9',l:'steps'}], postedAt:'2026-05-09T10:00:00Z' },
-] as PublishedItem[];
 
 const RECENT_COUNT = 6;
 
@@ -794,11 +724,13 @@ function getBodySnippet(raw: string, maxLen = 180): string {
   return prose.length > maxLen ? `${prose.slice(0, maxLen).trimEnd()}…` : prose;
 }
 
-/** Renders body as structured key-value chips OR plain prose */
-function BodyDisplay({ body, searchQuery = '' }: { body: string; searchQuery?: string }) {
+/** Renders body as structured key-value chips OR plain prose.
+ *  `proseOnly` — Task 10: the card renders category metadata separately, so the
+ *  body slot shows the description instead of a generic key-value dump. */
+function BodyDisplay({ body, searchQuery = '', proseOnly = false }: { body: string; searchQuery?: string; proseOnly?: boolean }) {
   if (!body) return null;
 
-  if (isStructuredBody(body)) {
+  if (!proseOnly && isStructuredBody(body)) {
     const pairs = parseBodyPairs(body);
     if (pairs.length >= 2) {
       /* Icon hints for common keys */
@@ -836,7 +768,8 @@ function BodyDisplay({ body, searchQuery = '' }: { body: string; searchQuery?: s
   }
 
   /* Plain prose */
-  const snippet = getBodySnippet(body);
+  const snippet = proseOnly ? getFeedDescription(body) : getBodySnippet(body);
+  if (!snippet) return null;
   return (
     <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-3">
       {searchQuery ? highlight(snippet, searchQuery) : snippet}
@@ -885,6 +818,42 @@ function highlight(text: string, q: string): React.ReactNode {
 
 /* ─── avatar — monochrome, no category colours ───────────────────── */
 const AVATAR_CLS = 'bg-white/[0.08] text-white/55 ring-1 ring-white/[0.07]';
+
+/* ─── Task 14 discovery readers ───────────────────────────────────────
+ * All of these read fields the item already carries — the labelled body
+ * lines the publish flow writes (and the cards display), existing gigData,
+ * existing tags and the existing author name. Nothing is invented.
+ */
+/** City / venue / work location, '' when the item carries none. */
+function itemLocation(item: PublishedItem): string {
+  if (item.gigData?.locationPreference) return item.gigData.locationPreference;
+  return readFeedLabelledValue(item.body ?? '', ['Job Location', 'Location', 'Venue', 'City']);
+}
+/** Employment / work type for jobs. */
+function itemEmploymentType(item: PublishedItem): string {
+  return readFeedLabelledValue(item.body ?? '', ['Employment Type', 'Job Type', 'Type', 'Work Mode', 'Mode']);
+}
+/** Tutorial difficulty — labelled body value, else the badge/tag convention. */
+function itemTutorialLevel(item: PublishedItem): string {
+  const labelled = readFeedLabelledValue(item.body ?? '', ['Difficulty', 'Level']);
+  if (labelled) return labelled;
+  return /beginner|intermediate|advanced/i.exec(`${item.badge} ${(item.chips ?? []).join(' ')}`)?.[0] ?? '';
+}
+/** Numeric price for products — labelled `Price:` first, then legacy byline. */
+function itemPriceValue(item: PublishedItem): number {
+  const raw = readFeedLabelledValue(item.body ?? '', ['Price', 'Pricing']) || item.byline;
+  const m = raw.match(/[₹$€£]\s*([\d,]+)/);
+  return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+}
+/** Event start date from the labelled `Date:` / `Event Dates:` value. */
+function itemEventDate(item: PublishedItem): Date | null {
+  const raw = readFeedLabelledValue(item.body ?? '', ['Event Dates?', 'Date']);
+  if (!raw) return null;
+  const iso = raw.match(/\d{4}-\d{2}-\d{2}/);
+  const d = new Date(iso ? iso[0] : raw.split(/\s*[–-]\s*/)[0]);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+const eqi = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 /* ─── trend button ───────────────────────────────────────────────── */
 function TrendButton({ item }: { item: PublishedItem }) {
@@ -1299,78 +1268,55 @@ function UpraiseMiniButton({ itemId, uploadedByUserId, category }: { itemId: str
   );
 }
 
-/* ─── instagram-style feed post card ────────────────────────────── */
+/* ─── feed post card (Task 9 shared shell) ───────────────────────── */
 function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery: string }) {
   const [saved, toggleSaved] = useBookmark(item.id, item.category);
   const [modal, setModal]    = useState<ModalVariant | null>(null);
-  const [liked, setLiked]    = useState(item.likedByViewer ?? false);
   const rx1 = usePostReactions(
     item.id,
     { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: (item as { reactions?: import('@/components/social/PostReactionButton').PostReactionSummary }).reactions },
     { live: Boolean(item.isReal) },
   );
-  const [likeCount, setLikeCount] = useState(item.likesCount ?? 0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentCount, setCommentCount] = useState(item.commentsCount ?? 0);
-  const likeInFlight = useRef(false);
+  const cat = item.category;
+  /* Preserve pre-Task-9 URL construction on /published cards. */
+  const detailHref = `/published/${item.id}`;
 
-  useEffect(() => { setLiked(item.likedByViewer ?? false); }, [item.likedByViewer]);
-  useEffect(() => { setLikeCount(item.likesCount ?? 0); }, [item.likesCount]);
   useEffect(() => { if (item.commentsCount !== undefined) setCommentCount(item.commentsCount); }, [item.commentsCount]);
 
-  const TabIcon = TABS.find(t => t.id === item.category)?.icon ?? Newspaper;
-  const cat     = item.category;
-
-  const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
-  const initials    = displayName.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
-  // Route to company page if published by a business, else to user profile
-  const profileHref = item.businessPageSlug
-    ? `/businesses/${item.businessPageSlug}`
-    : item.uploadedByUserId ? `/u/${item.uploadedByUserId}` : null;
-
-  /* button classes — clean, borderless style */
   const primCls  = 'inline-flex h-8 items-center gap-1.5 rounded-full bg-white px-4 text-[12px] font-bold text-[#0D0D0F] transition hover:bg-white/90 active:scale-[0.98]';
   const ghostCls = 'inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.10] px-3.5 text-[12px] font-semibold text-white/55 transition hover:border-white/[0.20] hover:text-white/90';
   const iconCls  = 'flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition hover:bg-white/[0.06] hover:text-white/70';
 
-  /* shared avatar inner content — image when available, else initials */
-  const avatarInner = item.avatarUrl
-    ? <img src={item.avatarUrl} alt={displayName} className="h-full w-full rounded-full object-cover" />
-    : (initials.slice(0, 2) || <TabIcon className="h-3.5 w-3.5 opacity-60" />);
+  const showTitle = shouldShowFeedTitle(cat, item.title);
+
+  /* Task 10 — category-relevant metadata built from fields the item already has. */
+  const catMeta = buildCategoryMetaChips({
+    category: cat,
+    title: item.title,
+    body: item.body,
+    byline: item.byline,
+    chips: item.chips,
+    stats: item.stats,
+  });
+  /* Adopt the Task 10 hierarchy (description + metadata) only when the item has
+     both. Otherwise BodyDisplay keeps its existing rendering and no content is
+     lost or duplicated. */
+  const useCategoryMeta = catMeta.length > 0 && hasFeedDescription(item.body);
 
   return (
     <>
       {modal && <ActionModal variant={modal} itemTitle={item.title} itemId={item.id} uploadedByUserId={item.uploadedByUserId} onClose={() => setModal(null)} />}
 
-      <article className="group py-5 px-4 sm:px-0">
-        {/* ── header ── */}
-        <div className="flex items-center gap-3 mb-3.5">
-          {profileHref ? (
-            <Link href={profileHref} onClick={e => e.stopPropagation()} className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold ${AVATAR_CLS} hover:opacity-80 transition`}>
-              {avatarInner}
-            </Link>
-          ) : (
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold ${AVATAR_CLS}`}>
-              {avatarInner}
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              {profileHref ? (
-                <Link href={profileHref} onClick={e => e.stopPropagation()} className="text-[13.5px] font-semibold text-white leading-tight truncate hover:text-white/80 transition">
-                  {displayName}
-                </Link>
-              ) : (
-                <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{displayName}</span>
-              )}
-              {/* Presence — green only while the author is genuinely online now. */}
-            <PresenceDot userId={item.uploadedByUserId} size="sm" />
-            </div>
-            <p className="text-[11px] text-white/35 mt-0.5 truncate">
-              {item.badge} · {timeAgo(item.postedAt)}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
+      <PublishedFeedCard
+        item={item}
+        timeLabel={timeAgo(item.postedAt)}
+        subtitle={`${item.badge} · ${timeAgo(item.postedAt)}`}
+        detailHref={detailHref}
+        showPresence
+        headerRight={
+          <>
             <button
               type="button"
               onClick={e => { e.stopPropagation(); toggleSaved(); }}
@@ -1378,172 +1324,179 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
             >
               {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
             </button>
-          </div>
-        </div>
-
-        {/* ── thumbnail — full bleed ── */}
-        {item.thumbnailUrl && (
-          <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
-          </Link>
-        )}
-
-        {/* ── content — photo posts: body only, never title ── */}
-        <Link href={`/published/${item.id}`} className="block">
-          {item.category !== 'post' && !isJunkTitle(item) && (
-            <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 group-hover:text-white/85 transition-colors">
+            {/* Task 10 header options — existing handlers only */}
+            <FeedCardMenu
+              items={[
+                { label: 'Share link', icon: <Share2 className="h-3.5 w-3.5" />, onSelect: () => { void shareItem(item.id, item.title); trackCTA('share_item', cat); } },
+                { label: 'Open in new tab', icon: <ExternalLink className="h-3.5 w-3.5" />, onSelect: () => window.open(detailHref, '_blank', 'noopener,noreferrer') },
+                { label: saved ? 'Remove bookmark' : 'Save', icon: saved ? <BookmarkCheck className="h-3.5 w-3.5" /> : <Bookmark className="h-3.5 w-3.5" />, onSelect: toggleSaved },
+              ]}
+            />
+          </>
+        }
+        renderTitle={
+          showTitle ? (
+            <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 transition-colors group-hover:text-white/85">
               {searchQuery ? highlight(item.title, searchQuery) : item.title}
             </h3>
-          )}
-          <BodyDisplay body={item.body} searchQuery={searchQuery} />
-        </Link>
-
-
-        {/* ── stats ── */}
-        {item.stats && (
-          <div className="flex items-center gap-5 mt-3">
-            {item.stats.slice(0, 3).map(s => (
-              <div key={s.l} className="flex items-baseline gap-1.5">
-                <span className="text-[13.5px] font-bold text-white/75 tabular-nums">{s.v}</span>
-                <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">{s.l}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Social proof — existing who-reacted modal, existing comment panel. */}
-        <PostSocialProofRow
-          postId={item.id}
-          socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
-          onOpenComments={() => setCommentsOpen(true)}
-        />
-
-        {/* ── engagement row ── */}
-        <div className="flex items-center gap-3 mt-3.5 pt-3.5 border-t border-white/[0.05]" onClick={e => e.preventDefault()}>
-          {/* like */}
-          <PostReactionButton c={rx1} />
-
-          {/* comments */}
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); setCommentsOpen(v => !v); }}
-            className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${commentsOpen ? 'text-white/70' : 'text-white/30 hover:text-white/60'}`}
-          >
-            <MessageSquare className="h-4 w-4" />
-            <span>{commentCount > 0 ? (commentCount >= 1000 ? `${(commentCount/1000).toFixed(1)}k` : String(commentCount)) : '0'}</span>
-          </button>
-
-          {/* trend */}
-          <TrendButton item={item} />
-
-          {/* category-specific CTA */}
-          <div className="flex items-center gap-2 ml-auto">
-            {(cat === 'news' || cat === 'article') && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('read_article', cat); }}>
-                Read <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'document' && (
-              <>
-                <button type="button" onClick={e => { e.stopPropagation(); trackCTA('download_doc', cat); window.open(`/published/${item.id}`, '_blank'); }} className={ghostCls}>
-                  <Download className="h-3.5 w-3.5" /> Download
-                </button>
-                <button type="button" onClick={e => { e.stopPropagation(); window.open(`/published/${item.id}`, '_blank'); }} className={iconCls}>
-                  <ExternalLink className="h-4 w-4" />
-                </button>
-              </>
-            )}
-            {cat === 'portfolio' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('view_portfolio', cat); }}>
-                View Work <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'announcement' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                Read <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            {cat === 'job' && (
-              <button type="button" onClick={e => {
-                e.stopPropagation(); trackCTA('apply_job', cat);
-                if (item.applicationUrl) {
-                  try {
-                    const raw = localStorage.getItem('pub_job_applications') || '[]';
-                    const apps = JSON.parse(raw) as Array<{itemId: string; title: string; appliedAt: number; url: string}>;
-                    apps.unshift({ itemId: item.id, title: item.title, appliedAt: Date.now(), url: item.applicationUrl });
-                    localStorage.setItem('pub_job_applications', JSON.stringify(apps.slice(0, 200)));
-                  } catch {}
-                  window.open(item.applicationUrl, '_blank', 'noopener,noreferrer');
-                  toast('Redirecting…', 'success', '💼');
-                } else setModal('apply');
-              }} className={primCls}>
-                Apply Now <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {cat === 'resume' && (
-              <>
-                <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>View Profile <ArrowRight className="h-3.5 w-3.5" /></Link>
-                <UpraiseMiniButton itemId={item.id} uploadedByUserId={item.uploadedByUserId} category={cat} />
-              </>
-            )}
-            {cat === 'product' && (() => {
-              const shopUrl  = item.body?.match(/^Shop URL:\s*(.+)$/im)?.[1]?.trim() || '';
-              const whatsapp = item.body?.match(/^WhatsApp:\s*(.+)$/im)?.[1]?.trim() || '';
-              return shopUrl ? (
-                <button type="button" onClick={e => { e.stopPropagation(); trackCTA('shop_product', cat); window.open(shopUrl, '_blank', 'noopener,noreferrer'); }} className={primCls}>
-                  Shop Now <ExternalLink className="h-3.5 w-3.5" />
-                </button>
-              ) : whatsapp ? (
-                <button type="button" onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${whatsapp.replace(/\D/g,'')}`, '_blank'); }} className={ghostCls}>
-                  <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
-                </button>
-              ) : (
-                <Link href={`/published/${item.id}`} className={primCls} onClick={e => e.stopPropagation()}>View Product <ArrowRight className="h-3.5 w-3.5" /></Link>
-              );
-            })()}
-            {cat === 'event' && (() => {
-              const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
-              return (
-                <button type="button" onClick={e => {
-                  e.stopPropagation(); trackCTA('register_event', cat);
-                  try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
-                  if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🎟️'); } else setModal('register');
-                }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
-              );
-            })()}
-            {cat === 'hackathon' && (() => {
-              const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
-              return (
-                <button type="button" onClick={e => {
-                  e.stopPropagation(); trackCTA('register_hackathon', cat);
-                  try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
-                  if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🏆'); } else setModal('register');
-                }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
-              );
-            })()}
-            {cat !== 'news' && cat !== 'article' && cat !== 'document' && cat !== 'portfolio' &&
-             cat !== 'announcement' && cat !== 'job' && cat !== 'resume' && cat !== 'product' &&
-             cat !== 'event' && cat !== 'hackathon' && (
-              <Link href={`/published/${item.id}`} className={ghostCls} onClick={e => e.stopPropagation()}>
-                Open <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            )}
-            <button type="button" onClick={e => { e.stopPropagation(); void shareItem(item.id, item.title); trackCTA('share_item', cat); }} className={iconCls}>
-              <Share2 className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-      {/* inline comment panel */}
-        {commentsOpen && item.isReal && (
-          <CardCommentPanel
-            item={item}
-            onClose={() => setCommentsOpen(false)}
-            onCommentCountChange={setCommentCount}
+          ) : null
+        }
+        /* Preserve BodyDisplay (structured chips OR highlighted prose). When
+           category metadata is available it moves to the metadata section, so
+           the body slot shows the description/summary instead. */
+        renderMainBody={<BodyDisplay body={item.body} searchQuery={searchQuery} proseOnly={useCategoryMeta} />}
+        renderMetadata={useCategoryMeta ? <FeedMetaChipRow chips={catMeta} /> : null}
+        /* Social proof (from origin/main) — existing who-reacted modal and this
+           card's existing comment panel. */
+        beforeActions={
+          <PostSocialProofRow
+            postId={item.id}
+            socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
+            onOpenComments={() => setCommentsOpen(true)}
           />
-        )}
-      </article>
+        }
+        actions={
+          <>
+            <PostReactionButton c={rx1} />
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); setCommentsOpen(v => !v); }}
+              className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${commentsOpen ? 'text-white/70' : 'text-white/30 hover:text-white/60'}`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              <span>{commentCount > 0 ? (commentCount >= 1000 ? `${(commentCount/1000).toFixed(1)}k` : String(commentCount)) : '0'}</span>
+            </button>
+            <TrendButton item={item} />
+            <div className="flex items-center gap-2 ml-auto">
+              {(cat === 'news' || cat === 'article') && (
+                <Link href={detailHref} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('read_article', cat); }}>
+                  Read <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'document' && (
+                <>
+                  <button type="button" onClick={e => { e.stopPropagation(); trackCTA('download_doc', cat); window.open(detailHref, '_blank'); }} className={ghostCls}>
+                    <Download className="h-3.5 w-3.5" /> Download
+                  </button>
+                  <button type="button" onClick={e => { e.stopPropagation(); window.open(detailHref, '_blank'); }} className={iconCls}>
+                    <ExternalLink className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+              {cat === 'portfolio' && (
+                <Link href={detailHref} className={ghostCls} onClick={e => { e.stopPropagation(); trackCTA('view_portfolio', cat); }}>
+                  View Work <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'announcement' && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  Read <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat === 'job' && (
+                <button type="button" onClick={e => {
+                  e.stopPropagation(); trackCTA('apply_job', cat);
+                  if (item.applicationUrl) {
+                    try {
+                      const raw = localStorage.getItem('pub_job_applications') || '[]';
+                      const apps = JSON.parse(raw) as Array<{itemId: string; title: string; appliedAt: number; url: string}>;
+                      apps.unshift({ itemId: item.id, title: item.title, appliedAt: Date.now(), url: item.applicationUrl });
+                      localStorage.setItem('pub_job_applications', JSON.stringify(apps.slice(0, 200)));
+                    } catch {}
+                    window.open(item.applicationUrl, '_blank', 'noopener,noreferrer');
+                    toast('Redirecting…', 'success', '💼');
+                  } else setModal('apply');
+                }} className={primCls}>
+                  Apply Now <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {cat === 'resume' && (
+                <>
+                  <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>View Profile <ArrowRight className="h-3.5 w-3.5" /></Link>
+                  <UpraiseMiniButton itemId={item.id} uploadedByUserId={item.uploadedByUserId} category={cat} />
+                </>
+              )}
+              {cat === 'product' && (() => {
+                const shopUrl  = item.body?.match(/^Shop URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                const whatsapp = item.body?.match(/^WhatsApp:\s*(.+)$/im)?.[1]?.trim() || '';
+                return shopUrl ? (
+                  <button type="button" onClick={e => { e.stopPropagation(); trackCTA('shop_product', cat); window.open(shopUrl, '_blank', 'noopener,noreferrer'); }} className={primCls}>
+                    Shop Now <ExternalLink className="h-3.5 w-3.5" />
+                  </button>
+                ) : whatsapp ? (
+                  <button type="button" onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${whatsapp.replace(/\D/g,'')}`, '_blank'); }} className={ghostCls}>
+                    <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+                  </button>
+                ) : (
+                  <Link href={detailHref} className={primCls} onClick={e => e.stopPropagation()}>View Product <ArrowRight className="h-3.5 w-3.5" /></Link>
+                );
+              })()}
+              {cat === 'event' && (() => {
+                const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                return (
+                  <button type="button" onClick={e => {
+                    e.stopPropagation(); trackCTA('register_event', cat);
+                    try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
+                    if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🎟️'); } else setModal('register');
+                  }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
+                );
+              })()}
+              {cat === 'hackathon' && (() => {
+                const regUrl = item.body?.match(/^Registration URL:\s*(.+)$/im)?.[1]?.trim() || '';
+                return (
+                  <button type="button" onClick={e => {
+                    e.stopPropagation(); trackCTA('register_hackathon', cat);
+                    try { const raw = localStorage.getItem('pub_registrations') || '[]'; const regs = JSON.parse(raw) as Array<{itemId:string;title:string;category:string;registeredAt:number}>; if (!regs.find(r=>r.itemId===item.id)){regs.unshift({itemId:item.id,title:item.title,category:cat,registeredAt:Date.now()});localStorage.setItem('pub_registrations',JSON.stringify(regs.slice(0,200)));} } catch {}
+                    if (regUrl) { window.open(regUrl,'_blank','noopener,noreferrer'); toast('Redirecting…','success','🏆'); } else setModal('register');
+                  }} className={primCls}>Register <ArrowRight className="h-3.5 w-3.5" /></button>
+                );
+              })()}
+              {/* Only shown when a real playable source exists — never a fake player. */}
+              {cat === 'video' && (() => {
+                const src = sanitizeCtaUrl(item.videoUrl);
+                if (!src) return null;
+                return (
+                  <a
+                    href={src}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => { e.stopPropagation(); trackCTA('watch_video', cat); }}
+                    className={primCls}
+                  >
+                    Watch <ArrowRight className="h-3.5 w-3.5" />
+                  </a>
+                );
+              })()}
+              {/* Points at the existing publication page — no separate tutorial route exists. */}
+              {cat === 'tutorial' && (
+                <Link href={detailHref} className={primCls} onClick={e => { e.stopPropagation(); trackCTA('start_tutorial', cat); }}>
+                  Start Tutorial <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              {cat !== 'news' && cat !== 'article' && cat !== 'document' && cat !== 'portfolio' &&
+               cat !== 'announcement' && cat !== 'job' && cat !== 'resume' && cat !== 'product' &&
+               cat !== 'event' && cat !== 'hackathon' && cat !== 'tutorial' &&
+               !(cat === 'video' && sanitizeCtaUrl(item.videoUrl)) && (
+                <Link href={detailHref} className={ghostCls} onClick={e => e.stopPropagation()}>
+                  Open <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+              <button type="button" onClick={e => { e.stopPropagation(); void shareItem(item.id, item.title); trackCTA('share_item', cat); }} className={iconCls}>
+                <Share2 className="h-4 w-4" />
+              </button>
+            </div>
+          </>
+        }
+        footer={
+          commentsOpen && item.isReal ? (
+            <CardCommentPanel
+              item={item}
+              onClose={() => setCommentsOpen(false)}
+              onCommentCountChange={setCommentCount}
+            />
+          ) : null
+        }
+      />
     </>
   );
 }
@@ -1560,7 +1513,11 @@ function GigCard({ item }: { item: PublishedItem }) {
   const [err, setErr] = useState('');
 
   const g = item.gigData;
-  if (!g) return null;
+  /* Gigs published through the wizard carry no gigData (that comes from the gigs
+     service). Without this fallback such a gig renders nothing at all, breaking
+     "content appears in the feed using its category-specific card". The shared
+     card already shows the gig's price/delivery/location metadata. */
+  if (!g) return <PublishedCard item={item} searchQuery="" />;
 
   const engLabel = (e: string) => ({ one_time: 'One-time', ongoing: 'Ongoing', retainer: 'Retainer' }[e] ?? e);
 
@@ -2677,7 +2634,8 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
           <img
             src={thumbUrl}
             alt=""
-            className="w-full h-auto"
+            /* Task 15 — same small-screen media cap as the shared card shell. */
+            className="w-full h-auto max-h-[70vh] object-cover sm:max-h-none"
             loading="lazy"
             decoding="async"
           />
@@ -2736,11 +2694,53 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
 
 /* ─── poll card ──────────────────────────────────────────────────── */
 function PollCard({ item }: { item: PublishedItem }) {
-  const [voted, setVoted] = useState<number | null>(null);
-  const options = item.chips ?? [];
+  /* Results come from the server with the feed payload. Local state only ever
+     holds what the server has confirmed — a vote is never shown as counted
+     until the write succeeds. */
+  const [counts, setCounts] = useState<number[]>(item.poll?.counts ?? []);
+  const [total, setTotal] = useState(item.poll?.total ?? 0);
+  const [voted, setVoted] = useState<number | null>(item.poll?.viewerChoice ?? null);
+  const [saving, setSaving] = useState(false);
+  const [voteError, setVoteError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCounts(item.poll?.counts ?? []);
+    setTotal(item.poll?.total ?? 0);
+    setVoted(item.poll?.viewerChoice ?? null);
+  }, [item.poll]);
+
+  const options = (item.chips ?? []).map(o => o.split(/\s*·\s*/)[0].trim()).filter(Boolean);
   const isClosed = item.badge === 'Closed';
-  const totalVotes = item.stats?.find(s => s.l === 'votes')?.v ?? '0';
   const daysLeft = item.stats?.find(s => s.l === 'days left')?.v;
+  /* Votes are only recorded against real publications. */
+  const canVote = Boolean(item.isReal) && !isClosed && !saving;
+  const showResults = voted !== null || isClosed;
+
+  const castVote = async (index: number) => {
+    if (!canVote) return;
+    setSaving(true);
+    setVoteError(null);
+    try {
+      const res = await fetch(`/api/published/${item.id}/poll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ option: index }),
+      });
+      if (res.status === 401) { setVoteError('Sign in to vote.'); return; }
+      if (!res.ok) { setVoteError('Could not record your vote.'); return; }
+      const data = await res.json() as { counts: number[]; total: number; viewerChoice: number | null };
+      setCounts(data.counts);
+      setTotal(data.total);
+      setVoted(data.viewerChoice);
+      trackCTA('vote_poll', 'poll');
+    } catch {
+      setVoteError('Could not record your vote.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const topCount = counts.length ? Math.max(...counts) : 0;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111116] border-white/[0.06] p-4 transition-all hover:border-white/[0.12] relative group">
@@ -2749,29 +2749,28 @@ function PollCard({ item }: { item: PublishedItem }) {
           <ListChecks className="h-2.5 w-2.5" />{item.badge}
         </span>
         {daysLeft && !isClosed && <span className="text-[10px] text-white/30">{daysLeft} days left</span>}
-        <span className="ml-auto text-[10px] text-white/25">{totalVotes} votes</span>
+        <span className="ml-auto text-[10px] text-white/25">{total} {total === 1 ? 'vote' : 'votes'}</span>
       </div>
       <p className="text-[13.5px] font-bold leading-snug text-white tracking-[-0.02em] mb-3">{item.title}</p>
       <div className="space-y-2">
-        {options.map((opt, i) => {
-          const [label, pct] = opt.includes('·') ? opt.split(' · ') : [opt, null];
-          const pctNum = pct ? parseInt(pct) : null;
-          const isWinner = pctNum !== null && options.every(o => {
-            const p = o.split(' · ')[1]; return !p || parseInt(p) <= pctNum;
-          });
+        {options.map((label, i) => {
+          const count = counts[i] ?? 0;
+          const pctNum = total > 0 ? Math.round((count / total) * 100) : 0;
           const isVoted = voted === i;
+          const isWinner = showResults && count > 0 && count === topCount;
           return (
             <button
               key={i}
               type="button"
-              disabled={isClosed || voted !== null}
-              onClick={() => { if (!isClosed && voted === null) { setVoted(i); trackCTA('vote_poll', 'poll'); toast('Vote submitted!', 'success', '🗳️'); } }}
+              disabled={!canVote}
+              aria-pressed={isVoted}
+              onClick={() => castVote(i)}
               className={`relative w-full overflow-hidden rounded-[10px] border text-left transition ${
                 isVoted ? 'border-violet-500/30 bg-violet-500/10' :
                 'border-white/[0.06] bg-white/[0.03] hover:border-white/[0.10] hover:bg-white/[0.05]'
-              } ${isClosed || voted !== null ? 'cursor-default' : 'cursor-pointer'}`}
+              } ${canVote ? 'cursor-pointer' : 'cursor-default'}`}
             >
-              {pctNum !== null && (
+              {showResults && (
                 <div
                   className={`absolute inset-y-0 left-0 ${isWinner ? 'bg-violet-500/15' : 'bg-white/[0.04]'}`}
                   style={{ width: `${pctNum}%` }}
@@ -2779,14 +2778,19 @@ function PollCard({ item }: { item: PublishedItem }) {
               )}
               <div className="relative flex items-center justify-between px-3 py-2">
                 <span className={`text-[12px] font-semibold ${isVoted ? 'text-violet-300' : 'text-white/65'}`}>{label}</span>
-                {pct && <span className={`text-[11px] font-bold tabular-nums ${isWinner ? 'text-violet-300' : 'text-white/30'}`}>{pct}</span>}
+                {showResults && (
+                  <span className={`text-[11px] font-bold tabular-nums ${isWinner ? 'text-violet-300' : 'text-white/30'}`}>{pctNum}%</span>
+                )}
               </div>
             </button>
           );
         })}
       </div>
-      {voted !== null && (
-        <p className="mt-2.5 text-[10.5px] text-violet-400/60 text-center">Thanks for voting!</p>
+      {voteError && (
+        <p className="mt-2.5 text-[10.5px] text-amber-400/80 text-center">{voteError}</p>
+      )}
+      {!voteError && voted !== null && (
+        <p className="mt-2.5 text-[10.5px] text-violet-400/60 text-center">Your vote is saved. Tap it again to undo.</p>
       )}
       <p className="mt-3 text-[11px] leading-relaxed text-white/35 line-clamp-2">{getBodySnippet(item.body)}</p>
       <Link
@@ -3519,6 +3523,12 @@ export default function PublishedPage() {
   /* product */
   const [productPrice, setProductPrice] = useState('');
 
+  /* Task 14 discovery filters — tags, location, creator, tutorial difficulty */
+  const [tagFilter, setTagFilter]           = useState('');
+  const [locationFilter, setLocationFilter] = useState('');
+  const [creatorFilter, setCreatorFilter]   = useState('');
+  const [tutorialLevel, setTutorialLevel]   = useState('');
+
   const clearAllFilters = () => {
     setDateRange('all'); setSortBy('recent'); setFeaturedOnly(false); setLiveOnly(false);
     setReadTime(''); setDocFileType('');
@@ -3526,6 +3536,7 @@ export default function PublishedPage() {
     setEventType(''); setEventMode(''); setUpcomingOnly(false);
     setHackPrize(''); setHackFormat('');
     setResumeAvail(''); setProductPrice('');
+    setTagFilter(''); setLocationFilter(''); setCreatorFilter(''); setTutorialLevel('');
     setGigCat(''); setGigEngagement(''); setGigLocation('');
     setGigBidMode(''); setGigSkill(''); setGigUrgent(false); setGigSort('recent');
     setVisibleCount(10);
@@ -3538,6 +3549,7 @@ export default function PublishedPage() {
     dateRange, featuredOnly, liveOnly, readTime, docFileType,
     jobWorkMode, jobType, salaryRange, eventType, eventMode, upcomingOnly,
     hackPrize, hackFormat, resumeAvail, productPrice,
+    tagFilter, locationFilter, creatorFilter, tutorialLevel,
     gigCat, gigEngagement, gigLocation, gigBidMode, gigSkill, gigUrgent,
   ]);
 
@@ -3568,9 +3580,36 @@ export default function PublishedPage() {
     readTime, docFileType, jobWorkMode, jobType, salaryRange,
     eventType, eventMode, upcomingOnly, hackPrize, hackFormat,
     resumeAvail, productPrice, sortBy !== 'recent',
+    tagFilter, locationFilter, creatorFilter, tutorialLevel,
   ].filter(Boolean).length;
 
   const totalFilterCount = activeGlobalFilterCount + activeGigFilterCount;
+
+  /* Task 14 — discovery options derived from the unfiltered pool, so choosing
+     one value never removes the others from the list. Mirrors the existing
+     gigCategoryOptions/gigSkillOptions pattern. */
+  const discoveryOptions = useMemo(() => {
+    const pool = [...realItems, ...gigItems, ...MOCK_ITEMS];
+    const tally = (m: Map<string, number>, v?: string) => {
+      const k = (v ?? '').trim();
+      if (k && k.length < 28) m.set(k, (m.get(k) ?? 0) + 1);
+    };
+    const tags = new Map<string, number>();
+    const locations = new Map<string, number>();
+    const creators = new Map<string, number>();
+    for (const it of pool) {
+      (it.chips ?? []).forEach(c => tally(tags, c));
+      (it.gigData?.skills ?? []).forEach(s => tally(tags, s));
+      tally(locations, itemLocation(it));
+      tally(creators, it.uploadedByName);
+    }
+    const top = (m: Map<string, number>, n: number) => {
+      const rows: { v: string; c: number }[] = [];
+      m.forEach((c, v) => rows.push({ v, c }));
+      return rows.sort((a, b) => b.c - a.c || a.v.localeCompare(b.v)).slice(0, n).map(r => r.v);
+    };
+    return { tags: top(tags, 12), locations: top(locations, 8), creators: top(creators, 8) };
+  }, [realItems, gigItems]);
 
   /* merge real + gigs + mock, real-first, deduped, all filters applied */
   const allItems = useMemo<PublishedItem[]>(() => {
@@ -3589,6 +3628,15 @@ export default function PublishedPage() {
     /* status flags */
     if (featuredOnly) items = items.filter(i => i.featured);
     if (liveOnly)     items = items.filter(i => i.isReal);
+
+    /* Task 14 — tag / location / creator discovery (existing item data) */
+    if (tagFilter) {
+      items = items.filter(i =>
+        (i.chips ?? []).some(c => eqi(c, tagFilter)) ||
+        (i.gigData?.skills ?? []).some(s => eqi(s, tagFilter)));
+    }
+    if (locationFilter) items = items.filter(i => eqi(itemLocation(i), locationFilter));
+    if (creatorFilter)  items = items.filter(i => eqi(i.uploadedByName ?? '', creatorFilter));
 
     /* category-specific */
     items = items.filter(item => {
@@ -3610,13 +3658,15 @@ export default function PublishedPage() {
         if (docFileType !== 'free' && !hay.includes(docFileType.toLowerCase())) return false;
       }
 
-      /* job → work mode */
+      /* job → work mode (labelled Type/Mode value first, then legacy badge/byline) */
       if (jobWorkMode && cat === 'job') {
-        if (!`${item.badge} ${item.byline}`.toLowerCase().includes(jobWorkMode.toLowerCase())) return false;
+        const hay = `${itemEmploymentType(item)} ${item.badge} ${item.byline}`.toLowerCase();
+        if (!hay.includes(jobWorkMode.toLowerCase())) return false;
       }
       /* job → employment type */
       if (jobType && cat === 'job') {
-        if (!`${item.badge} ${item.byline}`.toLowerCase().includes(jobType.toLowerCase())) return false;
+        const hay = `${itemEmploymentType(item)} ${item.badge} ${item.byline}`.toLowerCase();
+        if (!hay.includes(jobType.toLowerCase())) return false;
       }
       /* job → salary range */
       if (salaryRange && cat === 'job') {
@@ -3631,17 +3681,22 @@ export default function PublishedPage() {
       if (eventType && cat === 'event') {
         if (!item.badge.toLowerCase().includes(eventType.toLowerCase())) return false;
       }
-      /* event → mode */
+      /* event → mode (labelled Mode/Venue value first, then legacy byline/chips) */
       if (eventMode && cat === 'event') {
-        const hay = `${item.byline} ${(item.chips ?? []).join(' ')}`.toLowerCase();
+        const hay = `${readFeedLabelledValue(item.body ?? '', ['Mode'])} ${itemLocation(item)} ${item.byline} ${(item.chips ?? []).join(' ')}`.toLowerCase();
         const isOnline = hay.includes('online') || hay.includes('zoom') || hay.includes('virtual');
         if (eventMode === 'online'   && !isOnline) return false;
         if (eventMode === 'inperson' && isOnline)  return false;
       }
-      /* event → upcoming */
+      /* event → upcoming (labelled event date first, then legacy byline month) */
       if (upcomingOnly && cat === 'event') {
-        const m = item.byline.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/i);
-        if (m) { const evDate = new Date(`${m[0]}, 2026`); if (evDate < new Date()) return false; }
+        const labelled = itemEventDate(item);
+        if (labelled) {
+          if (labelled < new Date()) return false;
+        } else {
+          const m = item.byline.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+/i);
+          if (m) { const evDate = new Date(`${m[0]}, 2026`); if (evDate < new Date()) return false; }
+        }
       }
 
       /* hackathon → prize */
@@ -3668,10 +3723,14 @@ export default function PublishedPage() {
         if (!item.badge.toLowerCase().includes(resumeAvail.toLowerCase())) return false;
       }
 
-      /* product → price */
+      /* tutorial → difficulty */
+      if (tutorialLevel && cat === 'tutorial') {
+        if (!eqi(itemTutorialLevel(item), tutorialLevel)) return false;
+      }
+
+      /* product → price (labelled Price: value first, then legacy byline) */
       if (productPrice && cat === 'product') {
-        const m = item.byline.match(/[₹]([\d,]+)/);
-        const price = m ? parseInt(m[1].replace(/,/g, '')) : 0;
+        const price = itemPriceValue(item);
         if (productPrice === 'free'    && price > 0)             return false;
         if (productPrice === 'budget'  && (price === 0 || price > 999))   return false;
         if (productPrice === 'mid'     && (price < 1000 || price > 4999)) return false;
@@ -3690,6 +3749,7 @@ export default function PublishedPage() {
     eventType, eventMode, upcomingOnly,
     hackPrize, hackFormat,
     resumeAvail, productPrice,
+    tagFilter, locationFilter, creatorFilter, tutorialLevel,
   ]);
 
   const itemsByCategory = useMemo(() => {
@@ -4094,8 +4154,10 @@ export default function PublishedPage() {
             </button>
           </div>
 
-          {/* mobile horizontal tab chips — commented out for now */}
-          {/* <div
+          {/* Task 13 — filters stay horizontally scrollable on small screens
+              instead of being compressed. Same TABS config, same activeTab
+              state and the Task 11 category treatment for the active chip. */}
+          <div
             style={{
               maxHeight: !isSearching && tabBarVisible ? '52px' : '0px',
               opacity:   !isSearching && tabBarVisible ? 1 : 0,
@@ -4113,26 +4175,25 @@ export default function PublishedPage() {
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap transition border ${
-                        tab.id === 'featured' && isActive
-                          ? 'border-amber-500/25 bg-amber-500/10 text-amber-400/85'
-                          : isActive
-                            ? 'border-white/[0.18] bg-white/[0.09] text-white/80'
-                            : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:text-white/65 hover:border-white/[0.12]'
+                      aria-pressed={isActive}
+                      onClick={() => { setActiveTab(tab.id as TabId); setSearch(''); }}
+                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl border px-3 py-1.5 text-[11px] font-semibold transition ${
+                        isActive
+                          ? feedCategoryTreatment(tab.id).badgeCls
+                          : 'border-white/[0.07] bg-white/[0.03] text-white/38 hover:border-white/[0.12] hover:text-white/65'
                       }`}
                     >
-                      <tab.icon className="h-3 w-3" />
+                      <tab.icon className="h-3 w-3 shrink-0" />
                       {tab.label}
                       {count > 0 && (
-                        <span className={`text-[9px] font-bold ${isActive ? 'text-slate-950/50' : 'text-white/20'}`}>{count}</span>
+                        <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
                       )}
                     </button>
                   );
                 })}
               </div>
             </div>
-          </div> */}
+          </div>
         </header>
 
         {/* ── Comprehensive filter panel (all tabs) ── */}
@@ -4296,6 +4357,52 @@ export default function PublishedPage() {
                     <button key={opt.v} type="button" onClick={() => setProductPrice(opt.v)}
                       className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${productPrice === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
                     >{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* ── TUTORIAL: difficulty (Task 14) ── */}
+              {(activeTab === 'tutorial' || activeTab === 'all') && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">Level</span>
+                  {([{v:'',l:'Any level'},{v:'beginner',l:'Beginner'},{v:'intermediate',l:'Intermediate'},{v:'advanced',l:'Advanced'}] as const).map(opt => (
+                    <button key={opt.v} type="button" onClick={() => setTutorialLevel(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${tutorialLevel === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Task 14: tags / location / creator (from existing item data) ── */}
+              {discoveryOptions.tags.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">Tags</span>
+                  {[{v:'',l:'Any tag'}, ...discoveryOptions.tags.map(t => ({ v: t, l: t }))].map(opt => (
+                    <button key={opt.v || 'any-tag'} type="button" onClick={() => setTagFilter(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${tagFilter === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {discoveryOptions.locations.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">Where</span>
+                  {[{v:'',l:'Anywhere'}, ...discoveryOptions.locations.map(l => ({ v: l, l }))].map(opt => (
+                    <button key={opt.v || 'anywhere'} type="button" onClick={() => setLocationFilter(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${locationFilter === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.v && <MapPin className="h-3 w-3" />}{opt.l}</button>
+                  ))}
+                </div>
+              )}
+
+              {discoveryOptions.creators.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide border-t border-white/[0.04] pt-2">
+                  <span className="shrink-0 w-8 text-[8px] font-bold uppercase tracking-[0.2em] text-white/20">By</span>
+                  {[{v:'',l:'Anyone'}, ...discoveryOptions.creators.map(c => ({ v: c, l: c }))].map(opt => (
+                    <button key={opt.v || 'anyone'} type="button" onClick={() => setCreatorFilter(v => v === opt.v ? '' : opt.v)}
+                      className={`shrink-0 flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap border transition-all duration-150 ${creatorFilter === opt.v ? 'bg-white/[0.12] border-white/[0.18] text-white' : 'border-white/[0.06] text-white/35 hover:border-white/[0.12] hover:text-white/65'}`}
+                    >{opt.v && <User className="h-3 w-3" />}{opt.l}</button>
                   ))}
                 </div>
               )}

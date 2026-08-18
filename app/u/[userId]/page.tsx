@@ -10,6 +10,7 @@ import VerifiedBadge from '@/components/VerifiedBadge';
 import PublicFaceBadge, { PublicFaceStarIcon, PUBLIC_FACE_CATEGORY_LABELS } from '@/components/PublicFaceBadge';
 import { PresenceBadge } from '@/components/PresenceBadge';
 import ProfileQRCode from '@/components/ProfileQRCode';
+import ServiceReviewForm from '@/components/services/ServiceReviewForm';
 const InfinityUpgradeModal = dynamic(() => import('@/components/InfinityUpgradeModal'), { ssr: false });
 const ProfileActivityPanel = dynamic(() => import('@/components/ProfileActivityPanel'), { ssr: false });
 const PublicFaceApplicationForm = dynamic(() => import('@/components/PublicFaceApplicationForm'), { ssr: false });
@@ -2998,9 +2999,6 @@ export default function UserProfilePage() {
   }
   const [serviceReviews, setServiceReviews] = useState<Record<string, ServiceReviewItem[]>>({});
   const [reviewServiceId, setReviewServiceId] = useState<string | null>(null);
-  const [reviewForm, setReviewForm] = useState({ rating: 5, headline: '', body: '', testimonial: '' });
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewError, setReviewError] = useState('');
   const [reviewSuccess, setReviewSuccess] = useState(false);
   // client bookings (to check if current user can review)
   const [myServiceBookings, setMyServiceBookings] = useState<Array<{ serviceId: string; status: string }>>([]);
@@ -4447,7 +4445,7 @@ export default function UserProfilePage() {
                         </button>
                       )}
                       {canReview && (
-                        <button type="button" onClick={() => { setReviewServiceId(svc.id); setReviewForm({ rating: 5, headline: '', body: '', testimonial: '' }); setReviewSuccess(false); setReviewError(''); }}
+                        <button type="button" onClick={() => { setReviewServiceId(svc.id); setReviewSuccess(false); }}
                           className="ml-auto flex items-center gap-1 rounded-[8px] border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 text-[10.5px] font-bold text-amber-400 hover:bg-amber-500/20 transition">
                           <Star className="h-2.5 w-2.5" /> Leave Review
                         </button>
@@ -5097,87 +5095,34 @@ export default function UserProfilePage() {
                             <button onClick={() => setReviewServiceId(null)} className="mt-6 rounded-[14px] border border-white/[0.10] bg-white/[0.06] px-6 py-2.5 text-[13px] font-semibold text-white/70 hover:text-white hover:bg-white/[0.10] transition-all">Close</button>
                           </div>
                         ) : (
-                          <form onSubmit={async (e) => {
-                            e.preventDefault();
-                            setReviewSubmitting(true);
-                            setReviewError('');
-                            try {
-                              const res = await fetch('/api/services/reviews', {
-                                method: 'POST',
-                                headers: { 'content-type': 'application/json' },
-                                body: JSON.stringify({ serviceId: reviewServiceId, ...reviewForm }),
-                              });
-                              const d = await res.json() as { review?: ServiceReviewItem; error?: string };
-                              if (!res.ok) { setReviewError(d.error ?? 'Failed to submit.'); return; }
-                              if (d.review) {
-                                setServiceReviews(prev => ({ ...prev, [reviewServiceId]: [d.review!, ...(prev[reviewServiceId] ?? [])] }));
-                                setProfileServices(prev => prev.map(s => s.id === reviewServiceId
-                                  ? { ...s, reviewCount: s.reviewCount + 1, rating: Math.round(((s.rating * s.reviewCount) + reviewForm.rating) / (s.reviewCount + 1) * 10) / 10 }
-                                  : s));
-                              }
+                          /* §28 — the shared review form: rating, written review,
+                             optional service-specific feedback, images and quote.
+                             Eligibility, bookingId and the Verified Service flag
+                             stay server-derived; the client only sends serviceId. */
+                          <ServiceReviewForm
+                            serviceId={reviewServiceId}
+                            serviceTitle={targetSvc?.title}
+                            onCancel={() => setReviewServiceId(null)}
+                            onDone={() => {
+                              const sid = reviewServiceId;
                               setReviewSuccess(true);
-                            } catch { setReviewError('Network error. Please try again.'); }
-                            finally { setReviewSubmitting(false); }
-                          }} className="space-y-5">
-
-                            {/* Star Rating */}
-                            <div>
-                              <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-3">Overall Rating *</label>
-                              <div className="flex items-center gap-2">
-                                {[1,2,3,4,5].map(n => (
-                                  <button key={n} type="button" onClick={() => setReviewForm(f => ({ ...f, rating: n }))}
-                                    className="transition-transform hover:scale-110 active:scale-95">
-                                    <Star className={`h-8 w-8 transition-colors ${n <= reviewForm.rating ? 'text-amber-400 fill-amber-400' : 'text-white/15 hover:text-amber-400/50'}`} />
-                                  </button>
-                                ))}
-                                <span className="ml-2 text-[13px] font-bold text-white/50">
-                                  {['','Poor','Fair','Good','Great','Excellent!'][reviewForm.rating]}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div>
-                              <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">Review Headline *</label>
-                              <input value={reviewForm.headline} onChange={e => setReviewForm(f => ({ ...f, headline: e.target.value }))} required maxLength={100}
-                                placeholder="Summarise your experience in one line"
-                                className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/20 outline-none focus:border-amber-500/40 focus:bg-amber-500/[0.04] transition-all" />
-                            </div>
-
-                            <div>
-                              <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">Detailed Review *</label>
-                              <textarea rows={4} value={reviewForm.body} onChange={e => setReviewForm(f => ({ ...f, body: e.target.value }))} required maxLength={1000}
-                                placeholder="Describe the quality of work, communication, and delivery…"
-                                className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/20 outline-none focus:border-amber-500/40 transition-all resize-none" />
-                              <p className="text-[10px] text-white/20 mt-1 text-right">{reviewForm.body.length}/1000</p>
-                            </div>
-
-                            <div>
-                              <label className="block text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/40 mb-1.5">
-                                Testimonial Quote <span className="text-white/25 normal-case tracking-normal font-normal">(optional — shown publicly on the service card)</span>
-                              </label>
-                              <textarea rows={2} value={reviewForm.testimonial} onChange={e => setReviewForm(f => ({ ...f, testimonial: e.target.value }))} maxLength={200}
-                                placeholder={'A short quote that can be featured publicly, e.g. "Delivered beyond expectations!"'}
-                                className="w-full rounded-[12px] border border-amber-500/20 bg-amber-500/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/20 outline-none focus:border-amber-500/40 transition-all resize-none" />
-                            </div>
-
-                            {reviewError && (
-                              <p className="text-[12px] text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-[10px] px-3 py-2">{reviewError}</p>
-                            )}
-
-                            <div className="flex gap-3 pt-1">
-                              <button type="button" onClick={() => setReviewServiceId(null)} className="flex-1 h-11 rounded-[13px] border border-white/[0.09] text-white/55 text-[13px] font-semibold hover:bg-white/[0.05] transition-all">Cancel</button>
-                              <button type="submit" disabled={reviewSubmitting}
-                                className="flex-1 h-11 rounded-[13px] font-black text-[13px] text-white transition-all active:scale-[0.98] disabled:opacity-60"
-                                style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow: '0 4px 20px rgba(245,158,11,0.35)' }}>
-                                {reviewSubmitting ? (
-                                  <span className="flex items-center justify-center gap-2">
-                                    <div className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                                    Submitting…
-                                  </span>
-                                ) : 'Submit Review'}
-                              </button>
-                            </div>
-                          </form>
+                              /* Re-read from the server so the new review shows with
+                                 its verified badge, and the aggregate comes from the
+                                 same aggregation the API maintains. */
+                              fetch(`/api/services/reviews?serviceId=${sid}`)
+                                .then(r => r.ok ? r.json() : null)
+                                .then((d: { reviews?: ServiceReviewItem[] } | null) => {
+                                  if (d?.reviews) setServiceReviews(prev => ({ ...prev, [sid]: d.reviews! }));
+                                })
+                                .catch(() => {});
+                              fetch(`/api/services/public?userId=${userId}`)
+                                .then(r => r.ok ? r.json() : null)
+                                .then((d: { services?: ServiceItem[] } | null) => {
+                                  if (d?.services) setProfileServices(d.services);
+                                })
+                                .catch(() => {});
+                            }}
+                          />
                         )}
                       </div>
                     </div>

@@ -18,7 +18,14 @@ import {
   type ServiceBooking,
 } from '@/lib/server/services';
 import {
+  consumeRateLimit,
+  detectSpam,
+  isBlockedBetween,
+  resolveProviderContact,
+} from '@/lib/server/service-safety';
+import {
   createServiceLead,
+  getServiceLeadById,
   getServiceLeadForSource,
   type ServiceLeadAttachment,
 } from '@/lib/server/service-leads';
@@ -138,7 +145,25 @@ export async function GET(req: NextRequest) {
       const isProvider = booking.serviceUserId === actor.id;
       const isClient = booking.clientId === actor.id;
       if (!isProvider && !isClient) return NextResponse.json({ error: 'Booking not found.' }, { status: 404 });
-      return NextResponse.json({ booking, role: isProvider ? 'provider' : 'client' });
+
+      /* §25 — provider contact reaches the customer only after acceptance and
+         only for channels the provider opted in. */
+      let providerContact = null;
+      if (isClient) {
+        const lead = booking.leadId ? await getServiceLeadById(booking.leadId) : null;
+        const providerUser = await getStoredUserById(booking.serviceUserId);
+        providerContact = await resolveProviderContact({
+          providerId: booking.serviceUserId,
+          providerEmail: providerUser?.email,
+          leadStatus: lead?.status ?? null,
+        });
+      }
+
+      return NextResponse.json({
+        booking,
+        role: isProvider ? 'provider' : 'client',
+        ...(isClient ? { providerContact } : {}),
+      });
     }
 
     const role = searchParams.get('role') ?? 'provider';
@@ -177,6 +202,22 @@ export async function POST(req: NextRequest) {
     if (!provider) return NextResponse.json({ error: 'Provider not found.' }, { status: 404 });
     if (provider.id === actor.id) return NextResponse.json({ error: 'You cannot book your own service.' }, { status: 400 });
 
+    /* — §25 block: either party having blocked the other ends the flow — */
+    if (await isBlockedBetween(actor.id, provider.id)) {
+      return NextResponse.json({ error: 'You cannot contact this provider.' }, { status: 403 });
+    }
+
+    /* — §25 rate limiting, enforced server-side — */
+    for (const action of ['booking', 'daily'] as const) {
+      const rate = await consumeRateLimit(action, actor.id);
+      if (!rate.allowed) {
+        return NextResponse.json(
+          { error: `You have reached the limit of ${rate.limit} ${rate.label}. Please try again later.`, retryAfterSeconds: rate.retryAfterSeconds },
+          { status: 429, headers: { 'Retry-After': String(rate.retryAfterSeconds) } },
+        );
+      }
+    }
+
     /* — requirements (§20, required). `clientMessage` kept as a legacy alias. — */
     const requirement = cleanText(body.requirement ?? body.clientMessage, REQUIREMENT_MAX_LENGTH);
     if (requirement.length < REQUIREMENT_MIN_LENGTH) {
@@ -184,6 +225,12 @@ export async function POST(req: NextRequest) {
         { error: `Please describe your requirements in at least ${REQUIREMENT_MIN_LENGTH} characters.` },
         { status: 400 },
       );
+    }
+
+    /* — §25 spam heuristics on the free-text requirement — */
+    const spam = detectSpam(requirement);
+    if (spam.spam) {
+      return NextResponse.json({ error: `This request looks like spam (${spam.reason}) Please rewrite it.`, code: 'SPAM_SUSPECTED' }, { status: 400 });
     }
 
     /* — package must belong to THIS service — */

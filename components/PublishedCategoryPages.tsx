@@ -13,7 +13,6 @@ import {
   ChevronUp,
   Crown,
   Heart,
-  Image as ImageIcon,
   MessageCircle,
   MoreHorizontal,
   Pencil,
@@ -28,6 +27,7 @@ import {
   Video as VideoIcon,
   X as XIcon,
 } from 'lucide-react';
+import { CommentAvatar } from '@/components/social/CommentAvatar';
 
 /* ─── Shared Types ────────────────────────────────────────────────── */
 type PublishedItem = {
@@ -59,6 +59,7 @@ type Comment = {
   likes: number;
   parentId?: string;
   userId?: string;
+  avatarUrl?: string | null;
   likedByMe: boolean;
   replies: Comment[];
 };
@@ -83,6 +84,9 @@ interface CategoryPageProps {
   currentUserId?: string;
   totalComments: number;
   commentRef: React.RefObject<HTMLTextAreaElement>;
+  /** "Liked by …" row, injected by the page so it can sit directly under the
+      engagement row rather than after the whole body. */
+  socialProofSlot?: React.ReactNode;
 }
 
 /* ─── Helper Functions ────────────────────────────────────────────── */
@@ -247,7 +251,7 @@ export function PostDetailContent({
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
   editComment, deleteComment, currentUserId,
-  totalComments, commentRef,
+  totalComments, commentRef, socialProofSlot,
 }: CategoryPageProps) {
   const [heartBurst, setHeartBurst] = useState(false);
 
@@ -288,16 +292,8 @@ export function PostDetailContent({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={fallbackThumb} alt="" className="w-full h-auto" loading="lazy" decoding="async" />
         </div>
-      ) : (
-        /* fallback gradient placeholder */
-        <div className="relative h-64 sm:h-80 w-full overflow-hidden sm:rounded-2xl bg-gradient-to-br from-rose-500/20 via-pink-600/15 to-purple-700/20 sm:border sm:border-white/[0.08] flex items-center justify-center">
-          <div className="absolute inset-0 bg-gradient-to-br from-rose-400/10 via-transparent to-purple-600/10" />
-          <div className="relative flex flex-col items-center gap-3 text-white/20">
-            <ImageIcon className="h-16 w-16" />
-          </div>
-          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#0A0A0C]/80 to-transparent" />
-        </div>
-      )}
+      ) : null /* text-only post — render no media container at all, so the
+                  post collapses to its content height (no empty gradient) */}
 
       {/* Text / actions / comments — pad on mobile so content stays inside page margins (parent is px-0) */}
       <div className="space-y-6 px-4 sm:px-0">
@@ -364,6 +360,9 @@ export function PostDetailContent({
           <span className="tabular-nums">{totalComments}</span>
         </button>
       </div>
+
+      {/* "Liked by …" — directly under the engagement row, above the comments */}
+      {socialProofSlot}
 
       {/* Hashtags */}
       {hashtags.length > 0 && (
@@ -2152,9 +2151,12 @@ function CommentRow({
 
   return (
     <div className="flex gap-3">
-      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${c.color}`}>
-        {c.initials}
-      </div>
+      <CommentAvatar
+        src={c.avatarUrl}
+        initials={c.initials}
+        colorClass={c.color}
+        className="mt-0.5 h-8 w-8 text-[11px]"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold text-white/80">{c.author}</span>
@@ -2276,9 +2278,12 @@ function CommentRow({
               const isEditingReply = editingReplyId === r.id;
               return (
                 <div key={r.id} className="flex gap-3">
-                  <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${r.color}`}>
-                    {r.initials}
-                  </div>
+                  <CommentAvatar
+                    src={r.avatarUrl}
+                    initials={r.initials}
+                    colorClass={r.color}
+                    className="mt-0.5 h-7 w-7 text-[10px]"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-semibold text-white/75">{r.author}</span>

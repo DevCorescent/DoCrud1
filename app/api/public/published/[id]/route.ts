@@ -3,6 +3,7 @@ import { getUserNames } from '@/lib/server/users';
 import { getFileTransferById, updateFileTransfer } from '@/lib/server/file-transfers';
 import { getAuthSession } from '@/lib/server/auth';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
+import { mapPublishedComments } from '@/lib/server/published-comments';
 import { createSocialProofBuilder } from '@/lib/server/social-proof';
 
 export const dynamic = 'force-dynamic';
@@ -96,16 +97,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       interestedByViewer: viewerIdentifier ? (t.interestedBy ?? []).includes(viewerIdentifier) : false,
       socialProof: proofBuilder ? proofBuilder.hydrate(proofDraft, proofAvatars) ?? undefined : undefined,
       commentsCount: t.commentsCount ?? 0,
-      comments: (t.comments ?? []).map((c) => ({
-        id: c.id,
-        author: c.userName,
-        text: c.text,
-        createdAt: c.createdAt,
-        userId: c.userId,
-        parentId: c.parentId ?? null,
-        likesCount: (c.likedBy ?? []).length,
-        likedByViewer: viewerIdentifier ? (c.likedBy ?? []).includes(viewerIdentifier) : false,
-      })),
+      comments: await mapPublishedComments(t.comments, viewerIdentifier),
       dataUrl: t.dataUrl || null,
       mimeType: t.mimeType || null,
       videoUrl: t.videoUrl || null,

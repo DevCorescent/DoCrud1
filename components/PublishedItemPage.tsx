@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSPrope
 import { isInternalCtaUrl } from '@/lib/cta';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
+import { CommentAvatar } from '@/components/social/CommentAvatar';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -154,6 +155,7 @@ const SEED_LIKES: Record<string, number> = {
 type RawComment = {
   id: string; author: string; initials: string; color: string;
   text: string; timestamp: string; likes: number; parentId?: string; userId?: string;
+  avatarUrl?: string | null;
 };
 type Comment = RawComment & { likedByMe: boolean; replies: Comment[]; isOwner?: boolean };
 
@@ -373,10 +375,10 @@ function stableColor(seed: string): string {
   let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
-type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean; isOwner?: boolean; userId?: string };
+type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean; isOwner?: boolean; userId?: string; avatarUrl?: string | null };
 
 function apiCommentToComment(c: ApiComment): Comment {
-  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, replies:[], isOwner:c.isOwner ?? false, userId:c.userId };
+  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, replies:[], isOwner:c.isOwner ?? false, userId:c.userId, avatarUrl:c.avatarUrl ?? null };
 }
 
 function buildCommentTree(flat: ApiComment[]): Comment[] {
@@ -1753,7 +1755,20 @@ export default function PublishedItemPage({ id }: { id: string }) {
             </div>
           )}
           <div className="px-0 sm:px-6 lg:px-10 xl:px-14 2xl:px-20 py-8 lg:py-12">
-            {item.category === 'post'      && <PostDetailContent      {...sharedCatProps} />}
+            {item.category === 'post'      && (
+              <PostDetailContent
+                {...sharedCatProps}
+                /* Posts place the row themselves, right under the engagement
+                   row — see the trailing row below, which posts opt out of. */
+                socialProofSlot={
+                  <PostSocialProofRow
+                    postId={item.id}
+                    socialProof={item.socialProof}
+                    onOpenComments={() => commentRef.current?.focus()}
+                  />
+                }
+              />
+            )}
             {item.category === 'poll'      && <PollDetailContent      {...sharedCatProps} />}
             {item.category === 'survey'    && <SurveyDetailContent    {...sharedCatProps} />}
             {item.category === 'chart'     && <ChartDetailContent     {...sharedCatProps} />}
@@ -1763,13 +1778,17 @@ export default function PublishedItemPage({ id }: { id: string }) {
             {item.category === 'tutorial'  && <TutorialDetailContent  {...sharedCatProps} />}
 
             {/* Social proof — the new-category layouts render their own body, so
-                the row is attached here rather than to the classic byline row. */}
-            <PostSocialProofRow
-              postId={item.id}
-              socialProof={item.socialProof}
-              onOpenComments={() => commentRef.current?.focus()}
-              className="px-4 sm:px-0"
-            />
+                the row is attached here rather than to the classic byline row.
+                Posts are the exception: they place it inline via
+                `socialProofSlot`, directly under their engagement row. */}
+            {item.category !== 'post' && (
+              <PostSocialProofRow
+                postId={item.id}
+                socialProof={item.socialProof}
+                onOpenComments={() => commentRef.current?.focus()}
+                className="px-4 sm:px-0"
+              />
+            )}
           </div>
         </div>
       )}
@@ -2680,9 +2699,12 @@ function CommentItem({
 
   return (
     <div className="flex gap-3">
-      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${c.color}`}>
-        {c.initials}
-      </div>
+      <CommentAvatar
+        src={c.avatarUrl}
+        initials={c.initials}
+        colorClass={c.color}
+        className="mt-0.5 h-8 w-8 text-[11px]"
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold text-white/80">{c.author}</span>
@@ -2797,7 +2819,7 @@ function CommentItem({
               const replyDeleting = deletingReplyId === r.id;
               return (
                 <div key={r.id} className="flex gap-3">
-                  <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${r.color}`}>{r.initials}</div>
+                  <CommentAvatar src={r.avatarUrl} initials={r.initials} colorClass={r.color} className="mt-0.5 h-7 w-7 text-[10px]" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[12px] font-semibold text-white/75">{r.author}</span>

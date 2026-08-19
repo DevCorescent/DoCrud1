@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { addComment, getFileTransferById } from '@/lib/server/file-transfers';
+import { mapPublishedComments } from '@/lib/server/published-comments';
 import { addSocialEvent } from '@/lib/server/social-events';
 
 export const dynamic = 'force-dynamic';
@@ -15,13 +16,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       found && found.directoryVisibility === 'public' && !found.revokedAt ? found : null;
     if (!t) return NextResponse.json({ comments: [] });
     return NextResponse.json({
-      comments: (t.comments ?? []).map((c) => ({
-        id: c.id, author: c.userName, text: c.text,
-        createdAt: c.createdAt, userId: c.userId,
-        parentId: c.parentId ?? null,
-        likesCount: (c.likedBy ?? []).length,
-        likedByViewer: viewerIdentifier ? (c.likedBy ?? []).includes(viewerIdentifier) : false,
-      })),
+      comments: await mapPublishedComments(t.comments, viewerIdentifier),
     });
   } catch {
     return NextResponse.json({ comments: [] });
@@ -39,14 +34,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const userName = session?.user?.name || 'Anonymous';
 
     const updated = await addComment(id, userId, userName, body.text.trim(), body.parentId ?? undefined);
-    const viewerIdentifier = userId;
-    const comments = (updated.comments ?? []).map((c) => ({
-      id: c.id, author: c.userName, text: c.text,
-      createdAt: c.createdAt, userId: c.userId,
-      parentId: c.parentId ?? null,
-      likesCount: (c.likedBy ?? []).length,
-      likedByViewer: (c.likedBy ?? []).includes(viewerIdentifier),
-    }));
+    const comments = await mapPublishedComments(updated.comments, userId);
 
     // Fire social event if the commenter is not the post author
     if (updated.uploadedByUserId && updated.uploadedByUserId !== userId) {

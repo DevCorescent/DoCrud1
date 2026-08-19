@@ -81,11 +81,9 @@ const OPPORTUNITIES: Opportunity[] = [
     Icon: Rocket,
     color: '#8b5cf6',
     tint: 'rgba(139,92,246,0.12)',
-    // app/projects/create — the single-step post form
-    add: { kind: 'route', href: '/projects/create' },
+    add: { kind: 'unavailable', note: 'Project posting is not available yet.' },
     addLabel: 'Post Project',
-    // app/projects — the project marketplace
-    open: { kind: 'route', href: '/projects' },
+    open: { kind: 'unavailable', note: 'The Projects page is not available yet.' },
   },
   {
     id: 'jobs',
@@ -178,6 +176,9 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
   const sheet = (
     <>
       <style>{`
+        /* The hub is a mobile surface only - the desktop nav is untouched. */
+        @media (min-width: 640px) { .oph-root { display: none !important; } }
+
         .oph-root { position: fixed; inset: 0; z-index: 9998; }
 
         .oph-backdrop {
@@ -210,25 +211,6 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
           will-change: transform;
         }
         .oph-root.oph-shown .oph-panel { transform: translateY(0); }
-        .oph-panel:focus { outline: none; }
-
-        /* Opened from the mobile bottom nav and, at sm+, from the More
-           control beside the desktop search bar. Rows, colours, spacing and
-           actions are identical at every width; the panel is simply given a
-           readable width on wide screens instead of stretching edge to edge. */
-        @media (min-width: 640px) {
-          .oph-panel {
-            left: 50%;
-            right: auto;
-            width: min(520px, calc(100vw - 48px));
-            transform: translate(-50%, 100%);
-            border-radius: 28px;
-            border-bottom: 1px solid rgba(255,255,255,0.09);
-            bottom: 24px;
-          }
-          .oph-root.oph-shown .oph-panel { transform: translate(-50%, 0); }
-          .oph-grip { display: none; }
-        }
 
         .oph-grip {
           width: 38px; height: 4px; border-radius: 999px;
@@ -246,6 +228,7 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
           color: rgba(255,255,255,0.72);
           cursor: pointer;
         }
+        .oph-panel:focus { outline: none; }
         .oph-close:focus-visible,
         .oph-act:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
@@ -281,8 +264,8 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
           color: rgba(255,255,255,0.96);
         }
 
-        /* The reference puts the category name alone on the row, so the
-           descriptions are kept for assistive tech only rather than dropped. */
+        /* The descriptions are kept for assistive tech only: the visual
+           design puts the category name alone on the row. */
         .oph-sr {
           position: absolute; width: 1px; height: 1px;
           padding: 0; margin: -1px; overflow: hidden;
@@ -299,7 +282,7 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
           transition: transform 0.16s ease, opacity 0.14s ease;
         }
         .oph-act:active { transform: scale(0.92); opacity: 0.8; }
-        .oph-act[aria-disabled=true] { opacity: 0.45; }
+        .oph-act[aria-disabled='true'] { opacity: 0.45; }
 
         .oph-add {
           width: 44px; height: 44px;

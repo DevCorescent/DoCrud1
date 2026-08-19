@@ -12,7 +12,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import { PresenceDot } from '@/components/PresenceBadge';
-import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { PublishedFeedCard, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
 import { buildCategoryMetaChips, FeedMetaChipRow, omitChipsPresentIn } from '@/components/feed/FeedCardMeta';
 import { feedCategoryTreatment } from '@/components/feed/feedCardTheme';
 import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
@@ -2035,7 +2035,7 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
     <PublishedFeedCard
       item={item}
       timeLabel={hpTimeAgo(item.postedAt)}
-      subtitle={`${item.badge}${authorMeta ? ` · ${authorMeta}` : ''} · ${hpTimeAgo(item.postedAt)}`}
+      subtitle={[nonTypeBadge(item), authorMeta, hpTimeAgo(item.postedAt)].filter(Boolean).join(' · ')}
       detailHref={postHref}
       showPresence
       linkContent={false}

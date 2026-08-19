@@ -7,7 +7,6 @@ import { PresenceDot } from '@/components/PresenceBadge';
 import {
   FEED_AVATAR_CLS,
   feedCategoryLabel,
-  feedCategoryTreatment,
   shouldShowFeedTitle,
 } from '@/components/feed/feedCardTheme';
 import {
@@ -16,6 +15,30 @@ import {
   FeedCardMetaChips,
   getFeedBodySnippet,
 } from '@/components/feed/FeedCardMeta';
+
+/**
+ * The item's own label, or '' when that label is only the content type
+ * restated.
+ *
+ * `badge` comes from the API's cleanBadge(), which falls back to the
+ * category's display label when an item carries no real tag — so for most
+ * items it is just "Post" / "Article" / "Docs". Comparing against both the
+ * raw category and its display label removes the content type wherever the
+ * badge is shown, for existing categories and any added later, without
+ * hardcoding a list of type names.
+ *
+ * Genuine labels (a poll's "Closed", a tutorial's "Beginner", a news
+ * section) are not the category, so they still come through.
+ */
+export function nonTypeBadge(item: { badge?: string; category?: string }): string {
+  const badge = (item.badge ?? '').trim();
+  if (!badge) return '';
+  const cat = (item.category || 'post').trim();
+  const b = badge.toLowerCase();
+  if (b === cat.toLowerCase()) return '';
+  if (b === feedCategoryLabel(cat).toLowerCase()) return '';
+  return badge;
+}
 
 export type FeedCardShellItem = {
   id: string;
@@ -93,10 +116,9 @@ export function PublishedFeedCard({
   showBodySnippet = true,
   bodyLineClamp = 2,
 }: PublishedFeedCardProps) {
+  /* The publishing category. Kept for filtering, routing, title/meta rules and
+     analytics - it is deliberately never rendered as a badge. */
   const cat = item.category || 'post';
-  /* Task 11 — shared category identity (label + icon + pastel treatment). */
-  const category = feedCategoryTreatment(cat);
-  const CategoryIcon = category.icon;
   const displayName = item.uploadedByName || item.byline.split(' · ')[0] || 'Docrud User';
   const initials = displayName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
   const profileHref = item.businessPageSlug
@@ -107,9 +129,7 @@ export function PublishedFeedCard({
   const canLinkAuthor = linkAuthor && Boolean(profileHref);
   const showTitle = shouldShowFeedTitle(cat, item.title);
   const snippet = showBodySnippet ? getFeedBodySnippet(item.body) : '';
-  /* Label still comes from the existing helper so an unknown category keeps
-     showing its own name rather than the neutral fallback label. */
-  const categoryLabel = feedCategoryLabel(cat);
+  const secondaryBadge = nonTypeBadge(item);
   const bodyClampCls = bodyLineClamp === 3 ? 'line-clamp-3' : 'line-clamp-2';
   /* Task 12 — category line under the title. Skipped when it would only repeat
      the author already shown in the header (company pages publish as the company). */
@@ -172,15 +192,16 @@ export function PublishedFeedCard({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${category.badgeCls}`}>
-              <CategoryIcon className="h-2.5 w-2.5 shrink-0" />
-              {categoryLabel}
-            </span>
-            {item.badge && item.badge.toLowerCase() !== cat.toLowerCase() && (
-              <span className="truncate text-[11px] text-white/35">{item.badge}</span>
-            )}
-          </div>
+          {/* No content-type badge. The publishing category drives filtering,
+              routing and analytics only - it is never surfaced as a pill on the
+              card, for existing categories or any added later. `item.badge` is
+              the item's own editorial label (for example a news section), not a
+              type, and is still shown when it differs from the category. */}
+          {secondaryBadge && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-[11px] text-white/35">{secondaryBadge}</span>
+            </div>
+          )}
           <div className="mt-1 flex min-w-0 items-center gap-2">
             {canLinkAuthor ? (
               <Link

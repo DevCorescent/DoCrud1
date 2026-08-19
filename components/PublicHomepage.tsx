@@ -80,6 +80,9 @@ import {
   User,
   UserPlus,
   Users,
+  Wrench,
+  Rocket,
+  type LucideIcon,
   Video,
   Wand2,
   X,
@@ -5498,6 +5501,94 @@ type AdBanner = {
   createdAt: string;
 };
 
+/* ─── Explore ─────────────────────────────────────────────────────────
+   Six entry points into the opportunity network, using routes that
+   already exist. Deliberately static: no state, no effect, no timer, no
+   scroll handler and no request — the strip is plain markup plus native
+   overflow scrolling, hardened the same way the other DoCrud strips are. */
+const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = [
+  { label: 'Businesses', href: '/businesses',        Icon: Building2 },
+  { label: 'Services',   href: '/services',          Icon: Wrench    },
+  { label: 'Projects',   href: '/projects',          Icon: Rocket    },
+  { label: 'Jobs',       href: '/published?tab=job', Icon: Briefcase },
+  { label: 'Gigs',       href: '/published?tab=gig', Icon: Zap       },
+  { label: 'People',     href: '/people',            Icon: Users     },
+];
+
+function ExploreSection() {
+  return (
+    <div>
+      <style>{`
+        .exp-strip { overflow-x: auto; overflow-y: hidden; touch-action: pan-x;
+                     overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
+                     scroll-behavior: auto; scrollbar-width: none; -ms-overflow-style: none; }
+        .exp-strip::-webkit-scrollbar { display: none; }
+
+        /* Monochrome square tiles: the icon sits centred inside the bordered
+           box, the label sits underneath it, outside the box. No category
+           colour, no gradient, no shadow, no scale. */
+        .exp-tile {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          flex-shrink: 0;
+          text-decoration: none;
+        }
+        .exp-square {
+          width: 82px; height: 82px;
+          display: flex; align-items: center; justify-content: center;
+          border-radius: 10px;
+          background: rgba(255,255,255,0.025);
+          border: 1px solid rgba(255,255,255,0.12);
+          color: rgba(255,255,255,0.75);
+          transition: background 0.15s ease, border-color 0.15s ease;
+        }
+        .exp-tile:hover .exp-square {
+          background: rgba(255,255,255,0.045);
+          border-color: rgba(255,255,255,0.20);
+        }
+        .exp-icon { width: 28px; height: 28px; }
+        .exp-label {
+          margin-top: 8px;
+          font-size: 11.5px;
+          font-weight: 600;
+          color: rgba(255,255,255,0.65);
+          text-align: center;
+          transition: color 0.15s ease;
+        }
+        .exp-tile:hover .exp-label { color: rgba(255,255,255,0.9); }
+        @media (min-width: 640px) {
+          .exp-square { width: 92px; height: 92px; }
+          .exp-icon { width: 30px; height: 30px; }
+        }
+      `}</style>
+
+      {/* Section heading — identical treatment to the removed Promotions heading */}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <div className="flex items-center gap-2">
+          <span
+            className="hp-sec text-[11px] font-semibold tracking-[0.10em] uppercase"
+            style={{ color: 'rgba(255,255,255,0.28)' }}
+          >
+            Explore
+          </span>
+        </div>
+      </div>
+
+      <div className="exp-strip flex items-start gap-3.5 px-1 pb-1">
+        {EXPLORE_ITEMS.map((it) => (
+          <Link key={it.label} href={it.href} className="exp-tile">
+            <span className="exp-square">
+              <it.Icon className="exp-icon" />
+            </span>
+            <span className="exp-label">{it.label}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const BANNER_HEADING_FALLBACK = 'Featured & Promotions';
 
 function AdBannerSlider() {
@@ -6336,8 +6427,15 @@ function NewHomepageContent({
           {/* Feature cards — mobile: hidden (strip at top handles mobile) */}
         </div>}
 
-        {/* ── Ad banner slider ── */}
-        {hpSections.adBanners && <AdBannerSlider />}
+        {/* ── Promotions / ad banner slider — REMOVED ──
+             Uncomment to restore. Kept commented rather than deleted so the
+             AdBannerSlider component and its admin `adBanners` flag stay intact.
+             While commented the carousel never mounts, so its ad-banners fetch,
+             autoplay interval and snap logic do not run at all.
+        {hpSections.adBanners && <AdBannerSlider />} */}
+
+        {/* ── Explore — same heading treatment the Promotions section used ── */}
+        <ExploreSection />
 
         {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
         <div className="hidden lg:flex flex-col w-full min-w-0" style={{ gap: 14 }}>

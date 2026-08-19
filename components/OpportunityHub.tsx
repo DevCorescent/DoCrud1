@@ -19,6 +19,7 @@ import {
   Building2,
   Plus,
   Rocket,
+  ShieldCheck,
   Wrench,
   X,
   Zap,
@@ -51,8 +52,8 @@ const OPPORTUNITIES: Opportunity[] = [
     label: 'Businesses',
     description: 'Discover businesses or create yours.',
     Icon: Building2,
-    color: '#818cf8',
-    tint: 'rgba(129,140,248,0.16)',
+    color: '#3b82f6',
+    tint: 'rgba(59,130,246,0.12)',
     // components/BusinessPageCreator via app/businesses/create
     add: { kind: 'route', href: '/businesses/create' },
     addLabel: 'Add Business',
@@ -65,7 +66,7 @@ const OPPORTUNITIES: Opportunity[] = [
     description: 'Offer your expertise or find someone who can help.',
     Icon: Wrench,
     color: '#22d3ee',
-    tint: 'rgba(34,211,238,0.16)',
+    tint: 'rgba(34,211,238,0.12)',
     // The canonical service creation system: the provider catalogue's
     // ServiceEditModal at app/services/[userId] (?new=1 opens it directly).
     add: { kind: 'ownServiceCatalogue' },
@@ -78,8 +79,8 @@ const OPPORTUNITIES: Opportunity[] = [
     label: 'Projects',
     description: 'Find opportunities or post something you need built.',
     Icon: Rocket,
-    color: '#f472b6',
-    tint: 'rgba(244,114,182,0.16)',
+    color: '#8b5cf6',
+    tint: 'rgba(139,92,246,0.12)',
     // app/projects/create — the single-step post form
     add: { kind: 'route', href: '/projects/create' },
     addLabel: 'Post Project',
@@ -91,8 +92,8 @@ const OPPORTUNITIES: Opportunity[] = [
     label: 'Jobs',
     description: 'Discover roles or hire the right professional.',
     Icon: Briefcase,
-    color: '#4ade80',
-    tint: 'rgba(74,222,128,0.16)',
+    color: '#22c55e',
+    tint: 'rgba(34,197,94,0.12)',
     // Hiring Desk publishes roles (components/HiringDeskCenter)
     add: { kind: 'route', href: '/workspace?tab=hiring-desk' },
     addLabel: 'Post Job',
@@ -104,8 +105,8 @@ const OPPORTUNITIES: Opportunity[] = [
     label: 'Gigs',
     description: 'Find quick opportunities or publish one.',
     Icon: Zap,
-    color: '#facc15',
-    tint: 'rgba(250,204,21,0.16)',
+    color: '#f97316',
+    tint: 'rgba(249,115,22,0.12)',
     // Gigs Center publishes gigs (components/GigsCenter)
     add: { kind: 'route', href: '/workspace?tab=gigs' },
     addLabel: 'Post Gig',
@@ -137,7 +138,7 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
     document.addEventListener('keydown', onKey);
-    const t = setTimeout(() => closeRef.current?.focus(), 60);
+    const t = setTimeout(() => panelRef.current?.focus(), 60);
 
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -177,12 +178,11 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
   const sheet = (
     <>
       <style>{`
-
         .oph-root { position: fixed; inset: 0; z-index: 9998; }
 
         .oph-backdrop {
           position: absolute; inset: 0;
-          background: rgba(0,0,0,0.62);
+          background: rgba(0,0,0,0.66);
           backdrop-filter: blur(6px);
           -webkit-backdrop-filter: blur(6px);
           opacity: 0;
@@ -193,22 +193,24 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
         .oph-panel {
           position: absolute;
           left: 0; right: 0; bottom: 0;
-          max-height: 86vh;
+          max-height: 92vh;
           overflow-y: auto;
           -webkit-overflow-scrolling: touch;
-          padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
-          background: rgba(11,11,16,0.97);
+          overscroll-behavior-y: contain;
+          padding: 8px 18px calc(18px + env(safe-area-inset-bottom));
+          background: rgba(11,11,16,0.98);
           backdrop-filter: blur(28px) saturate(180%);
           -webkit-backdrop-filter: blur(28px) saturate(180%);
           border: 1px solid rgba(255,255,255,0.09);
           border-bottom: none;
-          border-radius: 24px 24px 0 0;
+          border-radius: 28px 28px 0 0;
           box-shadow: 0 -12px 48px rgba(0,0,0,0.62);
           transform: translateY(100%);
           transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
           will-change: transform;
         }
         .oph-root.oph-shown .oph-panel { transform: translateY(0); }
+        .oph-panel:focus { outline: none; }
 
         /* Opened from the mobile bottom nav and, at sm+, from the More
            control beside the desktop search bar. Rows, colours, spacing and
@@ -231,90 +233,119 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
         .oph-grip {
           width: 38px; height: 4px; border-radius: 999px;
           background: rgba(255,255,255,0.18);
-          margin: 6px auto 12px;
+          margin: 6px auto 4px;
         }
 
         .oph-close {
-          position: absolute; top: 14px; right: 14px;
-          width: 32px; height: 32px;
+          position: absolute; top: 18px; right: 18px;
+          width: 42px; height: 42px;
           display: flex; align-items: center; justify-content: center;
-          border-radius: 10px;
-          border: 1px solid rgba(255,255,255,0.09);
-          background: rgba(255,255,255,0.05);
-          color: rgba(255,255,255,0.55);
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.07);
+          background: rgba(255,255,255,0.06);
+          color: rgba(255,255,255,0.72);
           cursor: pointer;
         }
-        .oph-close:focus-visible, .oph-act:focus-visible {
-          outline: 2px solid #a78bfa; outline-offset: 2px;
-        }
+        .oph-close:focus-visible,
+        .oph-act:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
 
         .oph-title {
-          font-size: 17px; font-weight: 700; line-height: 1.25;
-          color: rgba(255,255,255,0.94);
-          text-align: center;
-          margin: 0 36px 4px;
-          letter-spacing: -0.01em;
+          font-size: 30px; font-weight: 800; line-height: 1.18;
+          letter-spacing: -0.02em;
+          color: #ffffff;
+          margin: 26px 64px 26px 4px;
         }
-        .oph-sub {
-          font-size: 11.5px; font-weight: 500;
-          color: rgba(255,255,255,0.36);
-          text-align: center;
-          margin: 0 0 14px;
-        }
+        .oph-title em { font-style: normal; color: #3b82f6; }
 
+        /* Row: icon tile - name - actions, on one baseline. */
         .oph-row {
-          display: flex; align-items: flex-start; gap: 12px;
-          padding: 12px;
-          border-radius: 16px;
-          border: 1px solid rgba(255,255,255,0.07);
-          background: rgba(255,255,255,0.03);
+          display: flex; align-items: center; gap: 14px;
+          padding: 16px;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.022);
         }
-        .oph-row + .oph-row { margin-top: 8px; }
+        .oph-row + .oph-row { margin-top: 16px; }
 
         .oph-ic {
           flex: none;
-          width: 38px; height: 38px;
+          width: 52px; height: 52px;
           display: flex; align-items: center; justify-content: center;
-          border-radius: 12px;
-        }
-        .oph-body { flex: 1; min-width: 0; }
-        .oph-name {
-          font-size: 14px; font-weight: 700; line-height: 1.2;
-          color: rgba(255,255,255,0.92);
-        }
-        .oph-desc {
-          font-size: 11.5px; font-weight: 500; line-height: 1.45;
-          color: rgba(255,255,255,0.42);
-          margin-top: 2px;
+          border-radius: 15px;
         }
 
-        .oph-acts { display: flex; gap: 8px; margin-top: 10px; }
+        .oph-body { flex: 1; min-width: 0; }
+        .oph-name {
+          font-size: 18px; font-weight: 700; line-height: 1.2;
+          letter-spacing: -0.01em;
+          color: rgba(255,255,255,0.96);
+        }
+
+        /* The reference puts the category name alone on the row, so the
+           descriptions are kept for assistive tech only rather than dropped. */
+        .oph-sr {
+          position: absolute; width: 1px; height: 1px;
+          padding: 0; margin: -1px; overflow: hidden;
+          clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+        }
+
+        .oph-acts { display: flex; align-items: center; gap: 10px; flex: none; }
+
         .oph-act {
-          display: inline-flex; align-items: center; gap: 4px;
-          min-height: 34px;
-          padding: 0 12px;
-          border-radius: 10px;
-          font-size: 12px; font-weight: 700;
-          border: 1px solid rgba(255,255,255,0.09);
-          background: rgba(255,255,255,0.05);
-          color: rgba(255,255,255,0.72);
+          display: inline-flex; align-items: center; justify-content: center;
+          border: none;
           cursor: pointer;
-          text-decoration: none;
           -webkit-tap-highlight-color: transparent;
           transition: transform 0.16s ease, opacity 0.14s ease;
         }
-        .oph-act:active { transform: scale(0.94); opacity: 0.75; }
-        .oph-act[aria-disabled='true'] { opacity: 0.4; }
+        .oph-act:active { transform: scale(0.92); opacity: 0.8; }
+        .oph-act[aria-disabled=true] { opacity: 0.45; }
+
+        .oph-add {
+          width: 44px; height: 44px;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.07);
+          background: rgba(255,255,255,0.055);
+          color: rgba(255,255,255,0.82);
+        }
+        .oph-open {
+          width: 62px; height: 44px;
+          border-radius: 16px;
+          color: #ffffff;
+        }
+
+        .oph-trust {
+          display: flex; align-items: center; gap: 12px;
+          margin-top: 18px;
+          padding: 14px 16px;
+          border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.05);
+          background: rgba(255,255,255,0.022);
+        }
+        .oph-trust-ic { flex: none; color: #3b82f6; display: flex; }
+        .oph-trust-t {
+          font-size: 14px; font-weight: 600; line-height: 1.25;
+          color: rgba(255,255,255,0.88);
+        }
+        .oph-trust-s {
+          font-size: 12px; font-weight: 500; line-height: 1.3;
+          color: rgba(255,255,255,0.38);
+          margin-top: 2px;
+        }
 
         .oph-notice {
-          margin-top: 12px;
-          padding: 9px 12px;
-          border-radius: 10px;
-          border: 1px solid rgba(250,204,21,0.22);
-          background: rgba(250,204,21,0.08);
-          color: rgba(253,230,138,0.9);
-          font-size: 11.5px; font-weight: 600;
+          margin-top: 14px;
+          padding: 10px 14px;
+          border-radius: 12px;
+          border: 1px solid rgba(249,115,22,0.22);
+          background: rgba(249,115,22,0.08);
+          color: rgba(253,186,116,0.92);
+          font-size: 12px; font-weight: 600;
           text-align: center;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .oph-panel, .oph-backdrop, .oph-act { transition: none !important; }
         }
       `}</style>
 
@@ -324,59 +355,71 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
         <div
           ref={panelRef}
           className="oph-panel"
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-labelledby="oph-title"
         >
           <div className="oph-grip" aria-hidden="true" />
           <button ref={closeRef} type="button" className="oph-close" onClick={onClose} aria-label="Close opportunities menu">
-            <X width={16} height={16} />
+            <X width={19} height={19} />
           </button>
 
-          <h2 id="oph-title" className="oph-title">What are you looking for today?</h2>
-          <p className="oph-sub">One profile. One network. Multiple opportunities.</p>
+          <h2 id="oph-title" className="oph-title">What are you<br />looking for <em>today?</em></h2>
 
           {OPPORTUNITIES.map(opp => {
             const { Icon } = opp;
-            const addBusy  = pending === `${opp.id}:add`;
-            const addOff   = opp.add.kind === 'unavailable';
-            const openOff  = opp.open.kind === 'unavailable';
+            const addBusy = pending === `${opp.id}:add`;
+            const addOff  = opp.add.kind === 'unavailable';
+            const openOff = opp.open.kind === 'unavailable';
             return (
               <div key={opp.id} className="oph-row">
-                <span className="oph-ic" style={{ color: opp.color, background: opp.tint }}>
-                  <Icon width={19} height={19} />
+                <span className="oph-ic" style={{ color: opp.color, background: opp.tint, border: `1px solid ${opp.color}44` }}>
+                  <Icon width={24} height={24} />
                 </span>
+
                 <div className="oph-body">
                   <div className="oph-name">{opp.label}</div>
-                  <div className="oph-desc">{opp.description}</div>
-                  <div className="oph-acts">
-                    <button
-                      type="button"
-                      className="oph-act"
-                      aria-disabled={addOff || undefined}
-                      aria-label={addOff ? `${opp.addLabel} — not available yet` : opp.addLabel}
-                      onClick={() => void handle(opp, opp.add, 'add')}
-                    >
-                      <Plus width={13} height={13} aria-hidden="true" />
-                      {addBusy ? 'Opening…' : 'Add'}
-                    </button>
-                    <button
-                      type="button"
-                      className="oph-act"
-                      aria-disabled={openOff || undefined}
-                      aria-label={openOff ? `Open ${opp.label} — not available yet` : `Open ${opp.label}`}
-                      onClick={() => void handle(opp, opp.open, 'open')}
-                    >
-                      Open
-                      <ArrowRight width={13} height={13} aria-hidden="true" />
-                    </button>
-                  </div>
+                  <span className="oph-sr">{opp.description}</span>
+                </div>
+
+                <div className="oph-acts">
+                  <button
+                    type="button"
+                    className="oph-act oph-add"
+                    aria-disabled={addOff || undefined}
+                    aria-busy={addBusy || undefined}
+                    aria-label={addOff ? `${opp.addLabel} — not available yet` : opp.addLabel}
+                    onClick={() => void handle(opp, opp.add, 'add')}
+                  >
+                    <Plus width={19} height={19} aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    className="oph-act oph-open"
+                    style={{ background: openOff ? 'rgba(255,255,255,0.08)' : `linear-gradient(135deg, ${opp.color}, ${opp.color}cc)` }}
+                    aria-disabled={openOff || undefined}
+                    aria-label={openOff ? `Open ${opp.label} — not available yet` : `Open ${opp.label}`}
+                    onClick={() => void handle(opp, opp.open, 'open')}
+                  >
+                    <ArrowRight width={20} height={20} aria-hidden="true" />
+                  </button>
                 </div>
               </div>
             );
           })}
 
           {notice && <div className="oph-notice" role="status">{notice}</div>}
+
+          {/* Informational only. There is no trust/safety page in the app yet,
+              so this deliberately carries no chevron and no dead link. */}
+          <div className="oph-trust">
+            <span className="oph-trust-ic" aria-hidden="true"><ShieldCheck width={22} height={22} /></span>
+            <div>
+              <div className="oph-trust-t">Verified • Trusted • Secure</div>
+              <div className="oph-trust-s">Your safety is our priority</div>
+            </div>
+          </div>
         </div>
       </div>
     </>

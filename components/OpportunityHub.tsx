@@ -177,8 +177,6 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
   const sheet = (
     <>
       <style>{`
-        /* The hub is a mobile surface only — the desktop nav is untouched. */
-        @media (min-width: 640px) { .oph-root { display: none !important; } }
 
         .oph-root { position: fixed; inset: 0; z-index: 9998; }
 
@@ -211,6 +209,24 @@ export default function OpportunityHub({ open, onClose }: { open: boolean; onClo
           will-change: transform;
         }
         .oph-root.oph-shown .oph-panel { transform: translateY(0); }
+
+        /* Opened from the mobile bottom nav and, at sm+, from the More
+           control beside the desktop search bar. Rows, colours, spacing and
+           actions are identical at every width; the panel is simply given a
+           readable width on wide screens instead of stretching edge to edge. */
+        @media (min-width: 640px) {
+          .oph-panel {
+            left: 50%;
+            right: auto;
+            width: min(520px, calc(100vw - 48px));
+            transform: translate(-50%, 100%);
+            border-radius: 28px;
+            border-bottom: 1px solid rgba(255,255,255,0.09);
+            bottom: 24px;
+          }
+          .oph-root.oph-shown .oph-panel { transform: translate(-50%, 0); }
+          .oph-grip { display: none; }
+        }
 
         .oph-grip {
           width: 38px; height: 4px; border-radius: 999px;

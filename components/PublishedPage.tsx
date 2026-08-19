@@ -9,7 +9,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { PresenceDot } from '@/components/PresenceBadge';
-import { PublishedFeedCard } from '@/components/feed/PublishedFeedCard';
+import { PublishedFeedCard, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
 import { feedCategoryTreatment, shouldShowFeedTitle } from '@/components/feed/feedCardTheme';
 import {
   buildCategoryMetaChips,
@@ -1165,7 +1165,7 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
             </span>
           </div>
           <p className="text-[11px] text-white/35 mt-0.5 truncate">
-            {item.badge}{authorMeta ? ` · ${authorMeta}` : ''}
+            {[nonTypeBadge(item), authorMeta].filter(Boolean).join(' · ')}
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -1312,7 +1312,7 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
       <PublishedFeedCard
         item={item}
         timeLabel={timeAgo(item.postedAt)}
-        subtitle={`${item.badge} · ${timeAgo(item.postedAt)}`}
+        subtitle={[nonTypeBadge(item), timeAgo(item.postedAt)].filter(Boolean).join(' · ')}
         detailHref={detailHref}
         showPresence
         headerRight={
@@ -2620,7 +2620,7 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
           )}
           {/* Presence — green only while the author is genuinely online now. */}
           <span className="ml-2 inline-flex align-middle"><PresenceDot userId={item.uploadedByUserId} size="sm" /></span>
-          <p className="text-[11px] text-white/35 mt-0.5">{item.badge} · {timeAgo(item.postedAt)}</p>
+          <p className="text-[11px] text-white/35 mt-0.5">{[nonTypeBadge(item), timeAgo(item.postedAt)].filter(Boolean).join(' · ')}</p>
         </div>
         <button type="button" onClick={e=>{e.stopPropagation();toggleBookmarked();}} className={`transition ${bookmarked?'text-white/70':'text-white/25 hover:text-white/60'}`}>
           {bookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
@@ -2745,9 +2745,11 @@ function PollCard({ item }: { item: PublishedItem }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111116] border-white/[0.06] p-4 transition-all hover:border-white/[0.12] relative group">
       <div className="flex items-center gap-2 mb-3">
-        <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${isClosed ? 'border-white/[0.08] bg-white/[0.04] text-white/35' : 'bg-violet-500/10 text-violet-400 border-violet-500/20'}`}>
-          <ListChecks className="h-2.5 w-2.5" />{item.badge}
-        </span>
+        {nonTypeBadge(item) && (
+          <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${isClosed ? 'border-white/[0.08] bg-white/[0.04] text-white/35' : 'bg-violet-500/10 text-violet-400 border-violet-500/20'}`}>
+            <ListChecks className="h-2.5 w-2.5" />{nonTypeBadge(item)}
+          </span>
+        )}
         {daysLeft && !isClosed && <span className="text-[10px] text-white/30">{daysLeft} days left</span>}
         <span className="ml-auto text-[10px] text-white/25">{total} {total === 1 ? 'vote' : 'votes'}</span>
       </div>
@@ -2816,9 +2818,11 @@ function SurveyCard({ item }: { item: PublishedItem }) {
       onClick={() => trackCTA('take_survey', 'survey')}
     >
       <div className="flex items-center gap-2 mb-3">
-        <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${isOpen ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'border-white/[0.08] text-white/35'}`}>
-          <ClipboardList className="h-2.5 w-2.5" />{item.badge || 'Survey'}
-        </span>
+        {nonTypeBadge(item) && (
+          <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${isOpen ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'border-white/[0.08] text-white/35'}`}>
+            <ClipboardList className="h-2.5 w-2.5" />{nonTypeBadge(item)}
+          </span>
+        )}
         {timeStat && <span className="text-[10px] text-white/30">~{timeStat}</span>}
         <span className="ml-auto text-[10px] text-white/25">{responseStat} responses</span>
       </div>
@@ -2859,9 +2863,11 @@ function ChartCard({ item }: { item: PublishedItem }) {
       className="group block overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111116] border-white/[0.06] p-4 transition-all hover:border-white/[0.12] hover:bg-[#13131b]"
     >
       <div className="flex items-center gap-2 mb-3">
-        <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-          <BarChart2 className="h-2.5 w-2.5" />{item.badge}
-        </span>
+        {nonTypeBadge(item) && (
+          <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+            <BarChart2 className="h-2.5 w-2.5" />{nonTypeBadge(item)}
+          </span>
+        )}
         <span className="ml-auto text-[10px] text-white/25">{timeAgo(item.postedAt)}</span>
       </div>
       <h3 className="text-[13px] font-bold leading-snug text-white tracking-[-0.02em] line-clamp-2">{item.title}</h3>
@@ -2936,7 +2942,7 @@ function ThreadCard({ item, searchQuery }: { item: PublishedItem; searchQuery: s
             <span className="text-[13.5px] font-semibold text-white">{authorName}</span>
           )}
           <p className="text-[11px] text-white/35 mt-0.5">
-            {item.badge}{partsStat ? ` · ${partsStat} parts` : ''} · {timeAgo(item.postedAt)}
+            {[nonTypeBadge(item), partsStat ? `${partsStat} parts` : '', timeAgo(item.postedAt)].filter(Boolean).join(' · ')}
           </p>
         </div>
         <button type="button" onClick={e=>{e.stopPropagation();toggleThreadBookmark();}} className={`transition ${threadBookmarked?'text-white/70':'text-white/25 hover:text-white/60'}`}>
@@ -3016,9 +3022,11 @@ function VideoCard({ item, searchQuery }: { item: PublishedItem; searchQuery: st
       </Link>
       <div className="p-4">
         <div className="flex items-center gap-1.5 mb-2">
-          <span className="inline-flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">
-            <Video className="h-2.5 w-2.5" />{item.badge}
-          </span>
+          {nonTypeBadge(item) && (
+            <span className="inline-flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+              <Video className="h-2.5 w-2.5" />{nonTypeBadge(item)}
+            </span>
+          )}
           {viewsStat && <span className="ml-auto text-[10px] text-white/25">{viewsStat} views</span>}
         </div>
         <Link href={`/published/${item.id}`}>
@@ -3087,7 +3095,7 @@ function MilestoneCard({ item, searchQuery }: { item: PublishedItem; searchQuery
             <span className="text-[13.5px] font-semibold text-white">{authorName}</span>
           )}
           <p className="text-[11px] text-white/35 mt-0.5">
-            {item.badge}{authorMeta ? ` · ${authorMeta}` : ''} · {timeAgo(item.postedAt)}
+            {[nonTypeBadge(item), authorMeta, timeAgo(item.postedAt)].filter(Boolean).join(' · ')}
           </p>
         </div>
       </div>
@@ -3149,9 +3157,11 @@ function TutorialCard({ item, searchQuery }: { item: PublishedItem; searchQuery:
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111116] border-white/[0.06] p-4 transition-all hover:border-white/[0.12] hover:bg-[#13131b]">
       <Link href={`/published/${item.id}`} className="flex flex-col flex-1">
         <div className="flex items-center gap-2 mb-3">
-          <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${difficultyColor[item.badge] ?? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
-            <BookMarked className="h-2.5 w-2.5" />{item.badge}
-          </span>
+          {nonTypeBadge(item) && (
+            <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[10px] font-semibold ${difficultyColor[item.badge] ?? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
+              <BookMarked className="h-2.5 w-2.5" />{nonTypeBadge(item)}
+            </span>
+          )}
           {stepsStat && <span className="text-[10px] text-white/30">{stepsStat} steps</span>}
           <span className="ml-auto text-[10px] text-white/25">{timeAgo(item.postedAt)}</span>
         </div>
@@ -4210,7 +4220,7 @@ export default function PublishedPage() {
               <div className="flex min-w-max gap-2">
                 {TABS.map(tab => {
                   const isActive = tab.id === activeTab;
-                  const count    = tabCount(tab.id);
+                  /* Chips show the category name only — no count badge. */
                   return (
                     <button
                       key={tab.id}
@@ -4225,9 +4235,6 @@ export default function PublishedPage() {
                     >
                       <tab.icon className="h-3 w-3 shrink-0" />
                       {tab.label}
-                      {count > 0 && (
-                        <span className={`text-[9px] font-bold tabular-nums ${isActive ? 'opacity-60' : 'text-white/20'}`}>{count}</span>
-                      )}
                     </button>
                   );
                 })}

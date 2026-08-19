@@ -234,7 +234,6 @@ const notificationsInitializedRef = useRef(false);
 const notifRef = useRef<HTMLDivElement>(null);
 const notifPanelRef = useRef<HTMLDivElement>(null);
   const [badge, setBadge] = useState<{ docrudGo: boolean; avatarUrl: string | null } | null>(null);
-  const [msgUnread, setMsgUnread] = useState(0);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [hubOpen, setHubOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
@@ -435,15 +434,6 @@ useEffect(() => {
     return () => clearTimeout(id);
   }, [isAuthenticated, guestMode]);
 
-  const fetchMsgUnread = useCallback(async () => {
-    try {
-      const res = await fetch('/api/messages/unread');
-      if (!res.ok) return;
-      const d = await res.json() as { unread: number };
-      setMsgUnread(d.unread ?? 0);
-    } catch { /* silent */ }
-  }, []);
-
   /* Notification + unread polling.
      
      There is no SSE connection here any more. app/api/notifications/stream
@@ -463,7 +453,7 @@ useEffect(() => {
     const POLL_MS = 60_000;
     let timer: ReturnType<typeof setInterval> | null = null;
 
-    const refresh = () => { void fetchNotifications(); void fetchMsgUnread(); };
+    const refresh = () => { void fetchNotifications(); };
 
     const start = () => {
       if (timer) return;
@@ -496,7 +486,7 @@ useEffect(() => {
       stop();
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [isAuthenticated, guestMode, fetchNotifications, fetchMsgUnread]);
+  }, [isAuthenticated, guestMode, fetchNotifications]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -703,24 +693,10 @@ useEffect(() => {
           <DdriveIcon size={15} />
         </button> */}
 
-        {/* Messages icon (desktop only — mobile uses the bottom dock) */}
-        {isAuthenticated && !guestMode && (
-          <Link
-            href="/messages"
-            className="md:hidden relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/50 transition hover:bg-white/[0.09] hover:text-white/80 active:scale-95"
-            aria-label={`Messages${msgUnread > 0 ? ` (${msgUnread} unread)` : ''}`}
-          >
-            <MessageSquare className="h-[15px] w-[15px]" />
-            {msgUnread > 0 && (
-              <>
-                <span className="absolute -right-[2px] -top-[2px] h-[11px] w-[11px] rounded-full bg-blue-500/30 animate-ping" />
-                <span className="absolute -right-[2px] -top-[2px] flex h-[11px] w-[11px] items-center justify-center rounded-full bg-blue-500 text-[6.5px] font-black text-white shadow-[0_0_8px_rgba(59,130,246,0.75)]">
-                  {msgUnread > 9 ? '9+' : msgUnread}
-                </span>
-              </>
-            )}
-          </Link>
-        )}
+        {/* The mobile Messages icon used to sit here. It was removed so the
+            search pill (flex-1) reclaims the width between + and the bell.
+            Messages is still reachable from the nav links menu (/messages).
+            Desktop is unaffected — this control was md:hidden. */}
 
         {/* Notification bell */}
         {isAuthenticated && (

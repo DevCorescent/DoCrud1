@@ -2213,58 +2213,12 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
   const knownIds = React.useRef<Set<string>>(new Set());
   const sentinelRef = React.useRef<HTMLDivElement>(null);
 
-  /* ── mobile category marquee: no idle animation — the strip only moves while
-        the user scrolls (down → right, up → left) and on cursor/touch drag ── */
-  const catViewRef = React.useRef<HTMLDivElement>(null);
-  const catDragRef = React.useRef({ down: false, moved: false, startX: 0, startLeft: 0 });
-
-  /* wrap a target scrollLeft into the first of the two identical copies */
-  const catWrap = React.useCallback((el: HTMLDivElement, next: number) => {
-    const half = el.scrollWidth / 2;
-    if (half <= 0) return { next, shift: 0 };
-    if (next < 0)          return { next: next + half, shift:  half };
-    if (next >= half)      return { next: next - half, shift: -half };
-    return { next, shift: 0 };
-  }, []);
-
-  React.useEffect(() => {
-    const lastTops = new WeakMap<EventTarget, number>();
-    const onScroll = (e: Event) => {
-      const el = catViewRef.current;
-      if (!el || catDragRef.current.down) return;
-      const node = (e.target === document || e.target === window)
-        ? (document.scrollingElement as HTMLElement | null)
-        : (e.target as HTMLElement);
-      if (!node) return;
-      const top  = node.scrollTop;
-      const prev = lastTops.get(node);
-      lastTops.set(node, top);
-      if (prev === undefined) return;
-      const delta = top - prev;
-      if (!delta) return;
-      el.scrollLeft = catWrap(el, el.scrollLeft + delta * 0.8).next;
-    };
-    /* capture phase so scroll from any inner scroller reaches us */
-    document.addEventListener('scroll', onScroll, true);
-    return () => document.removeEventListener('scroll', onScroll, true);
-  }, [catWrap]);
-
-  const catOnPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    const el = catViewRef.current;
-    if (!el) return;
-    catDragRef.current = { down: true, moved: false, startX: e.clientX, startLeft: el.scrollLeft };
-  };
-  const catOnPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const el = catViewRef.current;
-    const d  = catDragRef.current;
-    if (!el || !d.down) return;
-    const dx = e.clientX - d.startX;
-    if (Math.abs(dx) > 4) d.moved = true;
-    const { next, shift } = catWrap(el, d.startLeft - dx);
-    d.startLeft += shift;
-    el.scrollLeft = next;
-  };
-  const catOnPointerUp = () => { catDragRef.current.down = false; };
+  /* The mobile category strip is a plain native horizontal scroller.
+     The previous implementation duplicated the chip list and drove it from a
+     capture-phase scroll listener that read scrollWidth and wrote scrollLeft on
+     every scroll event, plus pointer-drag handlers. That produced the duplicate
+     chips and the dead space, and thrashed layout on every scroll. All of it is
+     gone: the browser scrolls the strip natively. */
 
   /* initial load */
   React.useEffect(() => {
@@ -2634,39 +2588,30 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
               exposed on small screens as a single row: a FIXED Publish button,
               a divider, then every category inside an infinite marquee that also
               follows cursor/touch drag in either direction. */}
-          <div className="lg:hidden shrink-0 flex items-center gap-2 pl-3 pr-0 py-3 min-w-0">
+          <div className="lg:hidden shrink-0 flex items-center py-3 min-w-0">
             <style>{`
-              .hp-cat-viewport { overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; touch-action: pan-y; cursor: grab; overscroll-behavior-x: contain; }
+              /* Plain native horizontal scroller: one row, no duplicated list,
+                 no drag handler, no marquee. touch-action is pan-x so a
+                 sideways swipe tracks the finger instead of being held back
+                 while the browser guesses the axis. */
+              .hp-cat-viewport {
+                overflow-x: auto;
+                overflow-y: hidden;
+                white-space: nowrap;
+                touch-action: pan-x;
+                overscroll-behavior-x: contain;
+                -webkit-overflow-scrolling: touch;
+                scroll-behavior: auto;
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+              }
               .hp-cat-viewport::-webkit-scrollbar { display: none; }
-              .hp-cat-viewport:active { cursor: grabbing; }
             `}</style>
 
-            {/* fixed Publish — never animates, never scrolls */}
-            <button
-              type="button"
-              onClick={() => onPublish?.()}
-              className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-white px-3 py-2 text-[11.5px] font-bold tracking-tight text-neutral-900 shadow-[0_2px_12px_rgba(0,0,0,0.35)] transition hover:bg-white/90 active:scale-[0.97]"
-            >
-              <Send className="h-3.5 w-3.5 shrink-0 -rotate-12 text-neutral-900" />
-              Publish
-            </button>
-
-            {/* divider — stays with Publish */}
-            <div aria-hidden className="h-5 w-px shrink-0 bg-white/[0.14]" />
-
-            {/* marquee viewport — only this overflows, page never scrolls */}
-            <div
-              ref={catViewRef}
-              className="hp-cat-viewport relative min-w-0 flex-1"
-              onPointerDown={catOnPointerDown}
-              onPointerMove={catOnPointerMove}
-              onPointerUp={catOnPointerUp}
-              onPointerCancel={catOnPointerUp}
-              onMouseLeave={() => { catDragRef.current.down = false; }}
-            >
-              <div className="flex w-max gap-2">
-                {[0, 1].map(copy => (
-                  <div key={copy} className="flex w-max shrink-0 gap-2 pr-2" aria-hidden={copy === 1 ? true : undefined}>
+            <div className="hp-cat-viewport relative min-w-0 flex-1">
+              <div className="flex w-max flex-nowrap gap-2">
+                {[0].map(copy => (
+                  <div key={copy} className="flex w-max shrink-0 flex-nowrap gap-2 pr-2">
                     {HP_TABS.map(tab => {
                       const isActive = activecat === tab.id;
                       const count    = tab.id === 'all' ? allItems.length : (catCounts[tab.id] ?? 0);
@@ -2675,9 +2620,7 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                           key={tab.id}
                           type="button"
                           aria-pressed={isActive}
-                          tabIndex={copy === 1 ? -1 : undefined}
                           onClick={() => {
-                            if (catDragRef.current.moved) return;
                             setActivecat(tab.id);
                             setTagSearch('');
                           }}

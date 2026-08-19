@@ -27,6 +27,7 @@ export const dropdownOptionsPath = path.join(dataDir, 'dropdown-options.json');
 export const themeSettingsPath = path.join(dataDir, 'theme-settings.json');
 export const platformConfigPath = path.join(dataDir, 'platform-config.json');
 export const landingSettingsPath = path.join(dataDir, 'landing-settings.json');
+export const navAnnouncementSettingsPath = path.join(dataDir, 'nav-announcement-settings.json');
 export const contactRequestsPath = path.join(dataDir, 'contact-requests.json');
 export const saasPlansPath = path.join(dataDir, 'saas-plans.json');
 export const businessSettingsPath = path.join(dataDir, 'business-settings.json');

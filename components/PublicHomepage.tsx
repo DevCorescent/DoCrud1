@@ -95,6 +95,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import HomepageNav from '@/components/HomepageNav';
+import { NavAnnouncementBar, type NavAnnouncementConfig } from '@/components/nav/ProfileCompletion';
 import { AssistantResultCardView } from '@/components/home-chat/AssistantResultCard';
 import type { DocumentHistory } from '@/types/document';
 import type { AssistantResultCard, DocumentQuickAction, UploadedDocument } from '@/types/doc-assistant';
@@ -5446,9 +5447,9 @@ type AdBanner = {
 
 /* ─── Explore ─────────────────────────────────────────────────────────
    Six entry points into the opportunity network, using routes that
-   already exist. Deliberately static: no state, no effect, no timer, no
-   scroll handler and no request — the strip is plain markup plus native
-   overflow scrolling, hardened the same way the other DoCrud strips are. */
+   already exist. Tabs stay plain markup + native overflow scrolling.
+   On lg+ the profile-completion announcement sits on the SAME row, to
+   the right of the tabs (desktop only — mobile keeps the bar under nav). */
 const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = [
   { label: 'Businesses', href: '/businesses',        Icon: Building2 },
   { label: 'Services',   href: '/services',          Icon: Wrench    },
@@ -5458,7 +5459,32 @@ const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = 
   { label: 'People',     href: '/people',            Icon: Users     },
 ];
 
-function ExploreSection() {
+function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
+  const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
+  const [profileScore, setProfileScore] = useState<number | null>(null);
+
+  /* Same sources HomepageNav already uses — Super Admin copy + /api/me/badge
+     score. Desktop placement only; mobile announcement stays in HomepageNav. */
+  useEffect(() => {
+    if (!isAuthenticated || guestMode) return;
+    let cancelled = false;
+    fetch('/api/announcement')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: NavAnnouncementConfig | null) => {
+        if (!cancelled && d) setAnnouncement({ enabled: !!d.enabled, text: d.text ?? '', href: d.href ?? '' });
+      })
+      .catch(() => {});
+    fetch('/api/me/badge')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { profileScore?: number | null } | null) => {
+        if (!cancelled && d && typeof d.profileScore === 'number') setProfileScore(d.profileScore);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAuthenticated, guestMode]);
+
   return (
     <div>
       <style>{`
@@ -5518,15 +5544,29 @@ function ExploreSection() {
         </div>
       </div>
 
-      <div className="exp-strip flex items-start gap-3.5 px-1 pb-1">
-        {EXPLORE_ITEMS.map((it) => (
-          <Link key={it.label} href={it.href} className="exp-tile">
-            <span className="exp-square">
-              <it.Icon className="exp-icon" />
-            </span>
-            <span className="exp-label">{it.label}</span>
-          </Link>
-        ))}
+      {/* Tabs + desktop announcement on one flex row. Below lg the announcement
+          slot is hidden so mobile keeps the bar under HomepageNav. */}
+      <div className="flex min-w-0 items-center gap-3.5 px-1 pb-1">
+        <div className="exp-strip flex min-w-0 flex-1 items-start gap-3.5 lg:flex-none">
+          {EXPLORE_ITEMS.map((it) => (
+            <Link key={it.label} href={it.href} className="exp-tile">
+              <span className="exp-square">
+                <it.Icon className="exp-icon" />
+              </span>
+              <span className="exp-label">{it.label}</span>
+            </Link>
+          ))}
+        </div>
+        {isAuthenticated && !guestMode && (
+          <div className="hidden min-w-0 flex-1 items-center justify-end lg:flex">
+            <NavAnnouncementBar
+              score={profileScore}
+              announcement={announcement}
+              variant="desktop"
+              className="ml-auto"
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5830,6 +5870,7 @@ function NewHomepageContent({
   liveFeeds = [],
   hpSections = DEFAULT_HP_SECTIONS,
   hpConfig = null,
+  guestMode = false,
 }: {
   softwareName: string;
   headlines: string[];
@@ -5848,6 +5889,7 @@ function NewHomepageContent({
   liveFeeds?: NHCLiveFeed[];
   hpSections?: HPSectionVisibility;
   hpConfig?: HPConfig | null;
+  guestMode?: boolean;
 }) {
   const { data: nhcSession } = useSession();
   const [activeFeedTab, setActiveFeedTab] = React.useState<string>('All');
@@ -6378,7 +6420,7 @@ function NewHomepageContent({
         {hpSections.adBanners && <AdBannerSlider />} */}
 
         {/* ── Explore — same heading treatment the Promotions section used ── */}
-        <ExploreSection />
+        <ExploreSection guestMode={guestMode} />
 
         {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
         <div className="hidden lg:flex flex-col w-full min-w-0" style={{ gap: 14 }}>
@@ -8166,6 +8208,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                   liveFeeds={liveFeeds}
                   hpSections={hpSections}
                   hpConfig={hpConfig}
+                  guestMode={guestMode}
                 />
               ) : (
                 <div

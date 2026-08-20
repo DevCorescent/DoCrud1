@@ -232,7 +232,7 @@ const notificationsInitializedRef = useRef(false);
 
 const notifRef = useRef<HTMLDivElement>(null);
 const notifPanelRef = useRef<HTMLDivElement>(null);
-  const [badge, setBadge] = useState<{ docrudGo: boolean; avatarUrl: string | null; profileScore: number | null } | null>(null);
+  const [badge, setBadge] = useState<{ docrudGo: boolean; premium?: boolean; avatarUrl: string | null; profileScore: number | null; freePremium?: { spotsLeft: number; totalSpots: number } | null } | null>(null);
   const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
@@ -425,11 +425,19 @@ useEffect(() => {
     const id = setTimeout(() => {
       fetch('/api/me/badge')
         .then((r) => r.ok ? r.json() : null)
-        .then((d: { docrudGo?: boolean; avatarUrl?: string | null; profileScore?: number | null } | null) => {
+        .then((d: {
+          docrudGo?: boolean;
+          premium?: boolean;
+          avatarUrl?: string | null;
+          profileScore?: number | null;
+          freePremium?: { spotsLeft: number; totalSpots: number } | null;
+        } | null) => {
           if (d) setBadge({
             docrudGo: d.docrudGo ?? false,
+            premium: d.premium ?? false,
             avatarUrl: d.avatarUrl ?? null,
             profileScore: typeof d.profileScore === 'number' ? d.profileScore : null,
+            freePremium: d.freePremium ?? null,
           });
         })
         .catch(() => {});
@@ -1130,12 +1138,14 @@ useEffect(() => {
     {/* Profile-completion announcement — mobile/tablet. Must sit directly under
         the sticky header and ABOVE the scrollable homepage (recents). Kept out
         of overflow-hidden content so it cannot be clipped. Absent at 100%. */}
-    {isAuthenticated && !guestMode && shouldShowAnnouncement(announcement, badge?.profileScore ?? null) && (
+    {isAuthenticated && !guestMode && shouldShowAnnouncement(announcement, badge?.profileScore ?? null, !!badge?.premium) && (
       <div className="relative z-30 lg:hidden shrink-0 border-b border-white/[0.04] bg-[#060608]/92 px-4 pb-2 pt-2 backdrop-blur-md sm:px-6">
         <NavAnnouncementBar
           score={badge?.profileScore ?? null}
           announcement={announcement}
           variant="mobile"
+          premium={!!badge?.premium}
+          freePremium={badge?.freePremium ?? null}
         />
       </div>
     )}

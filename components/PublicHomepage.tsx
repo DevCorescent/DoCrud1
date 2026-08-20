@@ -5591,6 +5591,10 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
   const isAuthenticated = status === 'authenticated';
   const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
   const [profileScore, setProfileScore] = useState<number | null>(null);
+  /* Both come from the same /api/me/badge call below — premium decides whether
+     the bar renders at all, freePremium feeds the spots badge. */
+  const [premium, setPremium] = useState(false);
+  const [freePremium, setFreePremium] = useState<{ spotsLeft: number; totalSpots: number } | null>(null);
 
   /* Same sources HomepageNav already uses — Super Admin copy + /api/me/badge
      score. Desktop placement only; mobile announcement stays in HomepageNav. */
@@ -5605,8 +5609,15 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
       .catch(() => {});
     fetch('/api/me/badge')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { profileScore?: number | null } | null) => {
-        if (!cancelled && d && typeof d.profileScore === 'number') setProfileScore(d.profileScore);
+      .then((d: {
+        profileScore?: number | null;
+        premium?: boolean;
+        freePremium?: { spotsLeft: number; totalSpots: number } | null;
+      } | null) => {
+        if (cancelled || !d) return;
+        if (typeof d.profileScore === 'number') setProfileScore(d.profileScore);
+        setPremium(!!d.premium);
+        setFreePremium(d.freePremium ?? null);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -5725,6 +5736,8 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
               announcement={announcement}
               variant="desktop"
               className="ml-auto"
+              premium={premium}
+              freePremium={freePremium}
             />
           </div>
         )}

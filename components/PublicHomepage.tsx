@@ -2589,7 +2589,7 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
               exposed on small screens as a single row: a FIXED Publish button,
               a divider, then every category inside an infinite marquee that also
               follows cursor/touch drag in either direction. */}
-          <div className="lg:hidden shrink-0 flex items-center py-3 min-w-0">
+          <div className="lg:hidden shrink-0 flex items-center py-3 pl-1 sm:pl-7 min-w-0">
             <style>{`
               /* Plain native horizontal scroller: one row, no duplicated list,
                  no drag handler, no marquee. touch-action is pan-x so a

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { renderWithMentions } from '@/lib/mentions';
 import {
   Award,
   BarChart2,
@@ -2240,7 +2241,7 @@ function CommentRow({
             </div>
           </div>
         ) : (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{renderWithMentions(c.text)}</p>
         )}
 
         {/* Actions */}

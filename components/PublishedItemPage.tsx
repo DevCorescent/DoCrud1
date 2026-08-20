@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { renderWithMentions } from '@/lib/mentions';
 import { isInternalCtaUrl } from '@/lib/cta';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
@@ -2802,7 +2803,7 @@ function CommentItem({
             </div>
           </div>
         ) : (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{renderWithMentions(c.text)}</p>
         )}
         <div className="mt-2 flex items-center gap-3">
           <button type="button" onClick={onLike} className={`inline-flex items-center gap-1 text-[11px] font-semibold transition ${c.likedByMe ? 'text-rose-400' : 'text-white/25 hover:text-white/65'}`}>
@@ -2917,7 +2918,7 @@ function CommentItem({
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-white/55">{renderWithMentions(r.text)}</p>
                     )}
                     <button
                       type="button"

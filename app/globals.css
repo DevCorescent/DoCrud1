@@ -754,6 +754,16 @@
     z-index: 1;
   }
 
+  /* The floating top navigation owns its own positioning. Without this the
+     rule above pins the bar back into the layout flow, which is what stopped
+     the feed from scrolling behind it. Scoped to the overlay wrapper rather
+     than weakened globally, so every other header keeps its current
+     behaviour. */
+  .dc-topnav > header {
+    position: static;
+    z-index: auto;
+  }
+
   img,
   svg,
   video,

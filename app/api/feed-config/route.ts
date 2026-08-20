@@ -17,6 +17,9 @@ export async function GET() {
       ads: { enabled: c.ads.enabled, minGap: c.ads.minGap, maxGap: c.ads.maxGap, maxPerFeed: c.ads.maxPerFeed },
       people: { enabled: c.people.enabled },
       jobs: { enabled: c.jobs.enabled },
+      /* The composer needs the limit to draw its counter; the API remains the
+         authority on whether a body is accepted. */
+      publication: c.publication,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[feed-config] GET error', error);

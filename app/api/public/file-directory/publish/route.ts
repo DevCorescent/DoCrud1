@@ -9,7 +9,8 @@ import path from 'path';
 import fs from 'fs';
 import type { SecureFileTransfer } from '@/types/document';
 import { sanitizeCta } from '@/lib/cta';
-import { PUBLICATION_BODY_ERROR, isPublicationBodyOverLimit } from '@/lib/publication-body';
+import { publicationBodyError, isPublicationBodyOverLimit } from '@/lib/publication-body';
+import { getFeedConfig } from '@/lib/server/feed-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -149,8 +150,10 @@ export async function POST(request: NextRequest) {
        structured fields the composer writes into `notes` are excluded — only
        the author's own body text counts. Nothing is truncated: an oversized
        body is rejected and the author keeps their text. */
-    if (isPublicationBodyOverLimit(payload.notes, payload.directoryCategory)) {
-      return NextResponse.json({ error: PUBLICATION_BODY_ERROR }, { status: 400 });
+    /* The limit is read from server configuration, never from the request. */
+    const publicationMax = (await getFeedConfig()).publication.maxChars;
+    if (isPublicationBodyOverLimit(payload.notes, payload.directoryCategory, publicationMax)) {
+      return NextResponse.json({ error: publicationBodyError(publicationMax) }, { status: 400 });
     }
 
     const directoryVisibility = payload.directoryVisibility === 'private' ? 'private' : 'public';

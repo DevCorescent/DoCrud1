@@ -161,6 +161,12 @@ interface HomepageNavProps {
   onMobileMenuClick?: () => void;
   onAllToolsClick?: () => void;
   guestMode?: boolean;
+  /**
+   * Float the bar over the page instead of sitting in the layout flow, so the
+   * scroll container can pass underneath it and the backdrop blur has real
+   * content to sample. Opt-in: only the homepage shell pads for it.
+   */
+  overlay?: boolean;
 }
 
 /* ── Tools panel data ─────────────────────────────────────────── */
@@ -213,6 +219,7 @@ export default function HomepageNav({
   onMobileMenuClick,
   onAllToolsClick,
   guestMode,
+  overlay = false,
 }: HomepageNavProps) {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
@@ -232,6 +239,22 @@ const notificationsInitializedRef = useRef(false);
 
 const notifRef = useRef<HTMLDivElement>(null);
 const notifPanelRef = useRef<HTMLDivElement>(null);
+  /* Published as a CSS variable so the scroll container can reserve exactly
+     this much room. Measured rather than hardcoded, because the profile
+     announcement below the bar appears and disappears. */
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!overlay) return;
+    const el = overlayRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty('--dc-topnav-h', `${Math.round(el.getBoundingClientRect().height)}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty('--dc-topnav-h'); };
+  }, [overlay]);
+
   const [badge, setBadge] = useState<{ docrudGo: boolean; premium?: boolean; avatarUrl: string | null; profileScore: number | null; freePremium?: { spotsLeft: number; totalSpots: number } | null } | null>(null);
   const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -561,15 +584,20 @@ useEffect(() => {
     }, 80);
   }
 
-  return (
+  const topStack = (
     <>
-    <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12 sticky top-0 z-40" style={{
-      /* Match GlobalBottomNav glassmorphism tokens */
-      background: 'rgba(0, 0, 0, 0.82)',
+    <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12" style={{
+      /* Glass material matched to GlobalBottomNav: translucent tint, blur and
+         saturation, a hairline top highlight and a hairline bottom edge.
+         Note the shell keeps the scroll container below this bar, so nothing
+         passes underneath it — the blur has no content to sample and the
+         depth comes from the gradient and edges rather than see-through. */
+      background:
+        'linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.012) 55%, rgba(255,255,255,0.028) 100%), rgba(10, 10, 12, 0.55)',
       backdropFilter: 'blur(28px) saturate(180%)',
       WebkitBackdropFilter: 'blur(28px) saturate(180%)',
       borderBottom: '1px solid rgba(255,255,255,0.09)',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.07)',
+      boxShadow: '0 8px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.08)',
       transform: navVisible ? 'translateY(0)' : 'translateY(-100%)',
       transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
       willChange: 'transform',
@@ -1138,7 +1166,7 @@ useEffect(() => {
     {/* Profile-completion announcement — mobile/tablet. Must sit directly under
         the sticky header and ABOVE the scrollable homepage (recents). Kept out
         of overflow-hidden content so it cannot be clipped. Absent at 100%. */}
-    {isAuthenticated && !guestMode && shouldShowAnnouncement(announcement, badge?.profileScore ?? null, !!badge?.premium) && (
+    {isAuthenticated && !guestMode && shouldShowAnnouncement(announcement, badge?.profileScore ?? null) && (
       <div className="relative z-30 lg:hidden shrink-0 border-b border-white/[0.04] bg-[#060608]/92 px-4 pb-2 pt-2 backdrop-blur-md sm:px-6">
         <NavAnnouncementBar
           score={badge?.profileScore ?? null}
@@ -1150,5 +1178,18 @@ useEffect(() => {
       </div>
     )}
     </>
+  );
+
+  /* In flow, exactly as before, unless the host opts into the overlay. */
+  if (!overlay) return topStack;
+
+  return (
+    <div
+      ref={overlayRef}
+      className="dc-topnav"
+      style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50 }}
+    >
+      {topStack}
+    </div>
   );
 }

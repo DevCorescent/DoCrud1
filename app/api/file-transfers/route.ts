@@ -8,7 +8,8 @@ import { attachFileToLocker, createFileLocker, ensureLockerRotation, getVisibleL
 import { checkDriveQuota } from '@/lib/server/drive-storage';
 import { SecureFileTransfer } from '@/types/document';
 import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
-import { PUBLICATION_BODY_ERROR, isPublicationBodyOverLimit } from '@/lib/publication-body';
+import { publicationBodyError, isPublicationBodyOverLimit } from '@/lib/publication-body';
+import { getFeedConfig } from '@/lib/server/feed-config';
 
 export const dynamic = 'force-dynamic';
 
@@ -216,6 +217,9 @@ export async function PATCH(request: NextRequest) {
        one, otherwise the rule could be side-stepped by publishing short and
        editing long. Private transfers keep their existing behaviour: `notes`
        there is a note to the recipient, not a publication body. */
+    /* Resolved before the synchronous updater runs, and read from server
+       configuration rather than the request. */
+    const publicationMax = (await getFeedConfig()).publication.maxChars;
     let bodyTooLong = false;
 
     const updated = await updateFileTransfer(payload.id, (entry) => {
@@ -228,7 +232,7 @@ export async function PATCH(request: NextRequest) {
 
       const nextVisibility = payload.directoryVisibility ?? entry.directoryVisibility;
       const nextCategory = payload.directoryCategory ?? entry.directoryCategory;
-      if (payload.notes !== undefined && nextVisibility === 'public' && isPublicationBodyOverLimit(payload.notes, nextCategory)) {
+      if (payload.notes !== undefined && nextVisibility === 'public' && isPublicationBodyOverLimit(payload.notes, nextCategory, publicationMax)) {
         bodyTooLong = true;
         return null;
       }
@@ -250,7 +254,7 @@ export async function PATCH(request: NextRequest) {
     });
 
     if (bodyTooLong) {
-      return NextResponse.json({ error: PUBLICATION_BODY_ERROR }, { status: 400 });
+      return NextResponse.json({ error: publicationBodyError(publicationMax) }, { status: 400 });
     }
 
     if (!updated) {

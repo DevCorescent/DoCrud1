@@ -9,13 +9,15 @@
  * parallel follow system here. Mutual counts render only when the graph
  * actually produced one, so a zero is never dressed up as a number.
  *
- * The strip is natively scrolled. There is no autoplay, no interval, no scroll
- * listener and no animated marquee — the row moves only when the user moves it.
+ * The strip is natively scrolled and endless: the list is rendered three times
+ * and the scroll offset is silently rewound by one copy width whenever the
+ * viewer crosses a copy boundary. There is no autoplay, no interval and no
+ * animation — the row moves only when the viewer moves it.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { MoreHorizontal, Users, ArrowRight } from 'lucide-react';
+import { Users } from 'lucide-react';
 
 export type PersonRecommendation = {
   userId: string;
@@ -30,11 +32,14 @@ export type PersonRecommendation = {
   isFollowing: boolean;
 };
 
+/** Below this the row is shorter than the viewport and looping is pointless. */
+const MIN_FOR_LOOP = 4;
+
 function initials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 }
 
-function PersonCard({
+function Person({
   person, following, pending, onToggle,
 }: {
   person: PersonRecommendation;
@@ -43,35 +48,23 @@ function PersonCard({
   onToggle: (id: string) => void;
 }) {
   const [broken, setBroken] = useState(false);
-  const profileHref = `/u/${person.userId}`;
   const secondary = person.headline || person.location || person.skills.slice(0, 2).join(' · ');
   const bio = person.shortBio || person.skills.slice(0, 3).join(' · ') || '';
 
   return (
-    <article className="pymk-card">
-      {/* Neutral brand watermark: a soft glass reflection, no colour. */}
-      <span className="pymk-sheen" aria-hidden="true" />
-
-      <Link
-        href={profileHref}
-        className="pymk-more"
-        aria-label={`Open the full profile of ${person.name}`}
-      >
-        <MoreHorizontal className="h-3.5 w-3.5" />
-      </Link>
-
-      <Link href={profileHref} className="pymk-id" aria-label={`View ${person.name}`}>
+    <article className="pymk-person">
+      <Link href={`/u/${person.userId}`} className="pymk-id">
         <span className="pymk-avatar">
           {person.avatarUrl && !broken
             /* eslint-disable-next-line @next/next/no-img-element */
-            ? <img src={person.avatarUrl} alt="" onError={() => setBroken(true)} className="h-full w-full object-cover" data-no-invert />
+            ? <img src={person.avatarUrl} alt={person.name} onError={() => setBroken(true)} className="h-full w-full object-cover" data-no-invert />
             : <span className="text-[15px] font-bold text-white/55">{initials(person.name) || '?'}</span>}
         </span>
         <span className="pymk-name">{person.name}</span>
         {secondary && <span className="pymk-headline">{secondary}</span>}
       </Link>
 
-      {/* Exactly two lines. The three-dot control opens the rest. */}
+      {/* Exactly two lines, clamped, so a long bio cannot grow the row. */}
       <p className="pymk-bio">{bio}</p>
 
       {/* Only rendered when the follow graph actually produced mutuals. */}
@@ -109,10 +102,11 @@ export default function PeopleYouMayKnow() {
   const [following, setFollowing] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState<Set<string>>(new Set());
   /* State alone cannot gate a double submit: several clicks in one tick all
-     read the same stale Set. A ref is updated synchronously, so the second
-     click in the same tick already sees the request in flight. */
+     read the same stale Set. A ref is updated synchronously. */
   const inFlight = useRef<Set<string>>(new Set());
   const fetched = useRef(false);
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const copyWidth = useRef(0);
 
   /* One request for the lifetime of the module. No polling, no refetch on scroll. */
   useEffect(() => {
@@ -123,6 +117,65 @@ export default function PeopleYouMayKnow() {
       .then((d: { people?: PersonRecommendation[] }) => setPeople(Array.isArray(d.people) ? d.people : []))
       .catch(() => setPeople([]));
   }, []);
+
+  const list = useMemo(() => people ?? [], [people]);
+  const loop = list.length >= MIN_FOR_LOOP;
+
+  /* Three identical copies. Only a fraction of one copy is ever on screen, so
+     no viewer sees the same person twice; the copies exist purely to give the
+     scroller room to be rewound without the content changing under the hand. */
+  const rendered = useMemo(
+    () => (loop
+      ? [0, 1, 2].flatMap((copy) => list.map((p) => ({ p, copy })))
+      : list.map((p) => ({ p, copy: 0 }))),
+    [list, loop],
+  );
+
+  /* Park the viewer in the middle copy, and keep the copy width current. */
+  useEffect(() => {
+    if (!loop) return;
+    const el = stripRef.current;
+    if (!el) return;
+    const measure = () => {
+      /* Measure the pitch from the elements themselves. scrollWidth / 3 is
+         off by two thirds of a flex gap, and that error accumulates into a
+         visible drift after a few laps. */
+      const kids = el.children;
+      const n = kids.length / 3;
+      const first = kids[0] as HTMLElement | undefined;
+      const second = kids[n] as HTMLElement | undefined;
+      const one = first && second ? second.offsetLeft - first.offsetLeft : el.scrollWidth / 3;
+      copyWidth.current = one;
+      if (el.scrollLeft < 1) el.scrollLeft = one;
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loop, rendered.length]);
+
+  /* The one scroll listener in the module, and the only way to make a native
+     scroller endless: when the viewer leaves the middle copy, shift the offset
+     by exactly one copy. The pixels either side are identical, so nothing
+     visibly moves and momentum is left to the browser. */
+  useEffect(() => {
+    if (!loop) return;
+    const el = stripRef.current;
+    if (!el) return;
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const one = copyWidth.current;
+        if (one <= 0) return;
+        if (el.scrollLeft < one * 0.5) el.scrollLeft += one;
+        else if (el.scrollLeft > one * 1.5) el.scrollLeft -= one;
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => { el.removeEventListener('scroll', onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, [loop]);
 
   /* Reuses the follow endpoint the People page already calls. Optimistic, with
      rollback if the request fails, and guarded against a double submit. */
@@ -153,87 +206,61 @@ export default function PeopleYouMayKnow() {
   return (
     <section className="pymk-shell" aria-label="People you may know">
       <style>{`
+        /* No container box: the module is a header plus a row of people sitting
+           directly on the feed background, with breathing room either side. */
         .pymk-shell {
-          border-radius: 14px;
-          border: 1px solid rgba(255,255,255,0.07);
-          background: rgba(255,255,255,0.02);
-          padding: 12px 10px;
+          margin-top: 18px;
+          margin-bottom: 22px;
         }
         .pymk-strip {
           display: flex;
-          align-items: stretch;
-          gap: 8px;
+          align-items: flex-start;
+          gap: 10px;
+          padding-bottom: 2px;
           overflow-x: auto;
           overflow-y: hidden;
           flex-wrap: nowrap;
           touch-action: pan-x;
           overscroll-behavior-x: contain;
           -webkit-overflow-scrolling: touch;
-          scroll-snap-type: x proximity;
+          scroll-behavior: auto;
           scrollbar-width: none;
           -ms-overflow-style: none;
         }
         .pymk-strip::-webkit-scrollbar { display: none; }
 
-        /* One full card plus roughly half of the next, so the row announces
-           that it scrolls without a second full card fitting. */
-        .pymk-card, .pymk-tail {
+        /* One full person plus roughly half of the next, which is what tells
+           the viewer the row scrolls. No card, no border, no background. */
+        .pymk-person {
           flex: 0 0 auto;
-          width: calc(62% - 4px);
-          scroll-snap-align: start;
-        }
-
-        .pymk-card {
-          position: relative;
-          overflow: hidden;
+          width: calc(62% - 5px);
+          /* A fixed floor keeps the Follow controls on one line across the row
+             even when a person has no headline. */
+          min-height: 178px;
           display: flex;
           flex-direction: column;
           align-items: center;
           text-align: center;
-          min-height: 182px;
-          padding: 11px 10px 10px;
-          border-radius: 13px;
-          border: 1px solid rgba(255,255,255,0.10);
-          background:
-            linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 46%, rgba(255,255,255,0.028) 100%);
-          backdrop-filter: blur(18px);
-          -webkit-backdrop-filter: blur(18px);
-          box-shadow: 0 1px 2px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05);
+          padding: 2px 4px 0;
+          background: none;
+          border: none;
+          box-shadow: none;
         }
 
-        /* Neutral watermark glow. Silver only, no hue. */
-        .pymk-sheen {
-          position: absolute;
-          top: -46px; left: 50%;
-          width: 168px; height: 104px;
-          transform: translateX(-50%);
-          pointer-events: none;
-          background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.05) 42%, rgba(255,255,255,0) 72%);
-        }
-
-        .pymk-more {
-          position: absolute;
-          top: 5px; right: 5px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 22px; height: 22px;
-          border-radius: 7px;
-          color: rgba(255,255,255,0.30);
-          transition: color 140ms ease, background-color 140ms ease;
-        }
-        .pymk-more:hover { color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.07); }
-
-        .pymk-id { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; }
+        /* Glass is kept to the small interactive parts — the avatar ring and
+           the Follow control. Nothing draws a rectangle around a person. */
+        .pymk-id { display: flex; flex-direction: column; align-items: center; width: 100%; text-decoration: none; }
         .pymk-avatar {
           display: flex; align-items: center; justify-content: center;
-          width: 50px; height: 50px;
+          width: 54px; height: 54px;
           flex-shrink: 0;
           overflow: hidden;
           border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.14);
-          background: rgba(255,255,255,0.06);
-          box-shadow: 0 0 0 3px rgba(255,255,255,0.028);
+          border: 1px solid rgba(255,255,255,0.10);
+          background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
+          box-shadow: 0 0 0 3px rgba(255,255,255,0.022);
         }
         .pymk-name {
           margin-top: 8px;
@@ -257,9 +284,8 @@ export default function PeopleYouMayKnow() {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        /* Exactly two lines, clamped, so the bio can never grow the card. */
         .pymk-bio {
-          margin-top: 6px;
+          margin-top: 5px;
           width: 100%;
           height: 27px;
           font-size: 10.5px;
@@ -276,7 +302,7 @@ export default function PeopleYouMayKnow() {
           justify-content: center;
           gap: 4px;
           min-height: 15px;
-          margin-top: 4px;
+          margin-top: 3px;
           font-size: 10px;
           font-weight: 500;
           color: rgba(255,255,255,0.34);
@@ -284,55 +310,35 @@ export default function PeopleYouMayKnow() {
         .pymk-btn {
           margin-top: auto;
           width: 100%;
-          height: 27px;
+          height: 26px;
           border-radius: 8px;
           font-size: 11.5px;
           font-weight: 600;
-          border: 1px solid rgba(255,255,255,0.16);
-          background: rgba(255,255,255,0.10);
+          border: 1px solid rgba(255,255,255,0.14);
+          background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
           color: rgba(255,255,255,0.88);
-          transition: background-color 140ms ease, color 140ms ease;
+          transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
         }
-        .pymk-btn:hover { background: rgba(255,255,255,0.15); }
+        .pymk-btn:hover { background-color: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.22); }
         .pymk-btn:disabled { opacity: 0.5; }
         .pymk-btn-on {
-          border-color: rgba(255,255,255,0.10);
-          background: rgba(255,255,255,0.04);
+          border-color: rgba(255,255,255,0.09);
           color: rgba(255,255,255,0.46);
         }
-        .pymk-btn-on:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.72); }
+        .pymk-btn-on:hover { color: rgba(255,255,255,0.72); }
 
-        /* Tail card: reaching the end lands on the full People page rather than
-           looping duplicated profiles back around. */
-        .pymk-tail {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 7px;
-          min-height: 182px;
-          border-radius: 13px;
-          border: 1px dashed rgba(255,255,255,0.12);
-          background: rgba(255,255,255,0.015);
-          font-size: 11.5px;
-          font-weight: 600;
-          color: rgba(255,255,255,0.42);
-          transition: background-color 140ms ease, color 140ms ease;
-        }
-        .pymk-tail:hover { background: rgba(255,255,255,0.045); color: rgba(255,255,255,0.78); }
-
-        .pymk-more:focus-visible, .pymk-id:focus-visible, .pymk-btn:focus-visible, .pymk-tail:focus-visible, .pymk-seeall:focus-visible {
+        .pymk-id:focus-visible, .pymk-btn:focus-visible, .pymk-seeall:focus-visible {
           outline: 2px solid rgba(255,255,255,0.55);
           outline-offset: 2px;
           border-radius: 8px;
         }
 
-        /* Exactly three cards from tablet up, sized off the real container width. */
+        /* Three people across from tablet up, with the fourth peeking so the
+           row still reads as scrollable. */
         @media (min-width: 768px) {
-          .pymk-card, .pymk-tail { width: calc((100% - 16px) / 3); }
-          .pymk-card { min-height: 190px; }
-          .pymk-tail { min-height: 190px; }
-          .pymk-avatar { width: 54px; height: 54px; }
+          .pymk-person { width: calc((100% - 34px) / 3.35); }
         }
       `}</style>
 
@@ -348,20 +354,16 @@ export default function PeopleYouMayKnow() {
         </Link>
       </div>
 
-      <div className="pymk-strip">
-        {people.map((p) => (
-          <PersonCard
-            key={p.userId}
+      <div className="pymk-strip" ref={stripRef}>
+        {rendered.map(({ p, copy }) => (
+          <Person
+            key={`${copy}-${p.userId}`}
             person={p}
             following={following.has(p.userId)}
             pending={pending.has(p.userId)}
             onToggle={toggle}
           />
         ))}
-        <Link href="/people" className="pymk-tail" aria-label="See all people">
-          <ArrowRight className="h-4 w-4" />
-          See all people
-        </Link>
       </div>
     </section>
   );

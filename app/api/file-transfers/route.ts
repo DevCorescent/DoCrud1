@@ -8,6 +8,7 @@ import { attachFileToLocker, createFileLocker, ensureLockerRotation, getVisibleL
 import { checkDriveQuota } from '@/lib/server/drive-storage';
 import { SecureFileTransfer } from '@/types/document';
 import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
+import { PUBLICATION_BODY_ERROR, isPublicationBodyOverLimit } from '@/lib/publication-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -211,11 +212,24 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Transfer ID is required.' }, { status: 400 });
     }
 
+    /* Editing a published item must answer to the same body limit as creating
+       one, otherwise the rule could be side-stepped by publishing short and
+       editing long. Private transfers keep their existing behaviour: `notes`
+       there is a note to the recipient, not a publication body. */
+    let bodyTooLong = false;
+
     const updated = await updateFileTransfer(payload.id, (entry) => {
       const allowed = session.user.role === 'admin'
         || entry.uploadedBy.toLowerCase() === (session.user.email || '').toLowerCase()
         || (session.user.role === 'client' && entry.organizationId === session.user.id);
       if (!allowed) {
+        return null;
+      }
+
+      const nextVisibility = payload.directoryVisibility ?? entry.directoryVisibility;
+      const nextCategory = payload.directoryCategory ?? entry.directoryCategory;
+      if (payload.notes !== undefined && nextVisibility === 'public' && isPublicationBodyOverLimit(payload.notes, nextCategory)) {
+        bodyTooLong = true;
         return null;
       }
 
@@ -234,6 +248,10 @@ export async function PATCH(request: NextRequest) {
         updatedAt: new Date().toISOString(),
       };
     });
+
+    if (bodyTooLong) {
+      return NextResponse.json({ error: PUBLICATION_BODY_ERROR }, { status: 400 });
+    }
 
     if (!updated) {
       return NextResponse.json({ error: 'Transfer not found or not permitted.' }, { status: 404 });

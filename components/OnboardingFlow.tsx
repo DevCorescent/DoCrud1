@@ -13,6 +13,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
+  PUBLICATION_BODY_MAX,
+  clampPublicationBody,
+  publicationBodyLength,
+} from '@/lib/publication-body';
+import {
   ArrowRight, BarChart3, BrainCircuit, Briefcase, Check, Code2, FolderOpen,
   GraduationCap, Globe, Hand, Heart, ImageIcon, LineChart, Loader2, Megaphone,
   MoreHorizontal, Palette, PenLine, Plus, Sparkles, X,
@@ -729,11 +734,14 @@ export default function OnboardingFlow({
           <textarea
             id="ob-story"
             value={story}
-            onChange={(e) => setStory(e.target.value.slice(0, 2000))}
+            onChange={(e) => setStory(clampPublicationBody(e.target.value))}
             placeholder="Write something you'd like to share..."
             rows={4}
             className={`${FIELD} resize-none py-3 text-[13.5px] leading-relaxed`}
           />
+          <p className={`mt-1 text-right text-[10.5px] ${publicationBodyLength(story) >= PUBLICATION_BODY_MAX ? 'text-amber-300/70' : 'text-white/25'}`}>
+            {publicationBodyLength(story)} / {PUBLICATION_BODY_MAX}
+          </p>
         </div>
 
         <div className="mt-3.5">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { renderWithMentions } from '@/lib/mentions';
 import {
   Award,
   BarChart2,
@@ -47,6 +48,8 @@ type PublishedItem = {
   mimeType?: string;
   videoUrl?: string;
   thumbnailUrl?: string;
+  /** Publisher's profile picture; null when they genuinely have none. */
+  avatarUrl?: string | null;
 };
 
 type Comment = {
@@ -82,6 +85,8 @@ interface CategoryPageProps {
   editComment?: (commentId: string, text: string) => void;
   deleteComment?: (commentId: string) => void;
   currentUserId?: string;
+  /** Viewer's own profile picture, for the comment box identity row. */
+  viewerAvatarUrl?: string | null;
   totalComments: number;
   commentRef: React.RefObject<HTMLTextAreaElement>;
   /** "Liked by …" row, injected by the page so it can sit directly under the
@@ -250,7 +255,7 @@ export function PostDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef, socialProofSlot,
 }: CategoryPageProps) {
   const [heartBurst, setHeartBurst] = useState(false);
@@ -299,9 +304,12 @@ export function PostDetailContent({
       <div className="space-y-6 px-4 sm:px-0">
       {/* Author row */}
       <div className="flex items-center gap-3">
-        <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-sm font-bold text-white ${randomColor()}`}>
-          {initials(item.byline.split('·')[0].trim())}
-        </div>
+        <CommentAvatar
+          src={item.avatarUrl}
+          initials={initials(item.byline.split('·')[0].trim())}
+          colorClass={randomColor()}
+          className="h-10 w-10 text-sm"
+        />
         <div>
           <p className="text-sm font-semibold text-white">{item.byline.split('·')[0].trim()}</p>
           <p className="text-xs text-white/35">
@@ -390,6 +398,7 @@ export function PostDetailContent({
         editComment={editComment}
         deleteComment={deleteComment}
         currentUserId={currentUserId}
+        viewerAvatarUrl={viewerAvatarUrl}
         totalComments={totalComments}
         commentRef={commentRef}
       />
@@ -405,7 +414,7 @@ export function PollDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const storageKey = `poll_voted_${item.id}`;
@@ -576,7 +585,7 @@ export function PollDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -615,7 +624,7 @@ function parseSurveyQuestions(body: string, title: string): SurveyQuestion[] {
 export function SurveyDetailContent({
   item, comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const questions: SurveyQuestion[] = parseSurveyQuestions(item.body, item.title);
@@ -672,7 +681,7 @@ export function SurveyDetailContent({
         <CommentSection
           comments={comments} commentText={commentText} displayName={displayName}
           setCommentText={setCommentText}
-          submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+          submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
         />
       </div>
     );
@@ -796,7 +805,7 @@ export function SurveyDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -837,7 +846,7 @@ export function ChartDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [animated, setAnimated] = useState(false);
@@ -1120,7 +1129,7 @@ export function ChartDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1133,7 +1142,7 @@ export function ThreadDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const parts = item.body.split('\n\n').filter(Boolean);
@@ -1172,9 +1181,12 @@ export function ThreadDetailContent({
 
       {/* Author */}
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-full bg-sky-600 flex items-center justify-center text-sm font-bold text-white shrink-0">
-          {initials(item.byline.split('·')[0].trim())}
-        </div>
+        <CommentAvatar
+          src={item.avatarUrl}
+          initials={initials(item.byline.split('·')[0].trim())}
+          colorClass="bg-sky-600"
+          className="h-10 w-10 text-sm"
+        />
         <div>
           <p className="text-sm font-semibold text-white">{item.byline.split('·')[0].trim()}</p>
           <p className="text-xs text-white/30">{timeAgo(item.postedAt)}</p>
@@ -1259,7 +1271,7 @@ export function ThreadDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1320,7 +1332,7 @@ export function VideoDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [playing, setPlaying] = useState(false);
@@ -1588,7 +1600,7 @@ export function VideoDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1636,7 +1648,7 @@ export function MilestoneDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [confetti, setConfetti] = useState(false);
@@ -1746,7 +1758,7 @@ export function MilestoneDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1759,7 +1771,7 @@ export function TutorialDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const progressKey = `tutorial_progress_${item.id}`;
@@ -1987,7 +1999,7 @@ export function TutorialDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -2007,6 +2019,8 @@ interface CommentSectionProps {
   editComment?: (commentId: string, text: string) => void;
   deleteComment?: (commentId: string) => void;
   currentUserId?: string;
+  /** Viewer's own profile picture, for the comment box identity row. */
+  viewerAvatarUrl?: string | null;
   totalComments: number;
   commentRef: React.RefObject<HTMLTextAreaElement>;
 }
@@ -2015,7 +2029,7 @@ export function CommentSection({
   comments, commentText, displayName,
   setCommentText,
   submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl,
   totalComments, commentRef,
 }: CommentSectionProps) {
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -2032,9 +2046,12 @@ export function CommentSection({
       {/* Input box */}
       <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 mb-6">
         <div className="mb-3 flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-bold text-white/50">
-            {displayName ? initials(displayName) : '?'}
-          </div>
+          <CommentAvatar
+            src={viewerAvatarUrl}
+            initials={displayName ? initials(displayName) : '?'}
+            colorClass="bg-white/[0.08] text-white/50"
+            className="h-8 w-8 text-[11px]"
+          />
           <span className="text-[13px] font-semibold text-white/70">{displayName}</span>
         </div>
         <textarea
@@ -2224,7 +2241,7 @@ function CommentRow({
             </div>
           </div>
         ) : (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{renderWithMentions(c.text)}</p>
         )}
 
         {/* Actions */}

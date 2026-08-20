@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { renderWithMentions } from '@/lib/mentions';
 import { isInternalCtaUrl } from '@/lib/cta';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
@@ -521,7 +522,7 @@ function CommentPanel({ item, onClose, onCountChange }: {
             <span className="text-[11px] font-semibold text-white/80">{c.author}</span>
             <span className="text-[10px] text-white/25">{ago(c.createdAt)}</span>
           </div>
-          <p className="text-[12px] text-white/65 leading-relaxed mt-0.5 break-words">{c.text}</p>
+          <p className="text-[12px] text-white/65 leading-relaxed mt-0.5 break-words">{renderWithMentions(c.text)}</p>
           <div className="flex items-center gap-3 mt-1">
             <button type="button" onClick={() => void likeComment(c.id)}
               className={`flex items-center gap-1 text-[10px] font-semibold transition ${c.likedByViewer ? 'text-rose-400' : 'text-white/25 hover:text-rose-400'}`}>

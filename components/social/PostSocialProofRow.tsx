@@ -13,6 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { mentionsToPlainText } from '@/lib/mentions';
 import { ChevronDown } from 'lucide-react';
 import { describeSocialProof, type PostSocialProof, type SocialProofActor } from '@/lib/social-proof';
 import { WhoReactedModal, ReactorRow, useReactors } from '@/components/social/PostReactionButton';
@@ -209,12 +210,12 @@ export function PostSocialProofRow({ postId, socialProof, onOpenComments, classN
             className="social-proof-link inline-flex min-w-0 items-center gap-1 rounded-[6px] text-left"
           >
             <span aria-hidden className="shrink-0">{copy.comment.emoji}</span>
-            <span className="truncate">{copy.comment.text}</span>
+            <span className="truncate">{mentionsToPlainText(copy.comment.text)}</span>
           </button>
         ) : (
           <span className="inline-flex min-w-0 items-center gap-1" style={{ color: 'var(--sp-text)' }}>
             <span aria-hidden className="shrink-0">{copy.comment.emoji}</span>
-            <span className="truncate">{copy.comment.text}</span>
+            <span className="truncate">{mentionsToPlainText(copy.comment.text)}</span>
             <span className="sr-only">{copy.comment.aria}</span>
           </span>
         ))}

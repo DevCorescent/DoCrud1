@@ -13,6 +13,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import { PresenceDot } from '@/components/PresenceBadge';
 import { PublishedFeedCard, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
+import { CardCommentPanel } from '@/components/feed/CardCommentPanel';
 import { composeFeed, getSessionSeed, planModuleSlots } from '@/lib/feed-composition';
 import PeopleYouMayKnow from '@/components/recommendations/PeopleYouMayKnow';
 import RecommendedJobs from '@/components/recommendations/RecommendedJobs';
@@ -1995,8 +1996,18 @@ function HpMetaChips({ body, byline, category }: { body: string; byline: string;
  * updates, and without this every visible card re-rendered with it. `item`
  * object identity is stable between fetches, so a shallow compare is enough.
  */
-const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: HpFeedItem }) {
+const HomepageFeedCard = React.memo(function HomepageFeedCard({
+  item, commentOpen = false, onToggleComment,
+}: {
+  item: HpFeedItem;
+  /* Owned by the feed so only one composer is open at a time (spec 13). */
+  commentOpen?: boolean;
+  onToggleComment?: (postId: string) => void;
+}) {
   const router = useRouter();
+  const { data: cardSession, status: cardAuthStatus } = useSession();
+  /* Seeded from the API, then owned by the panel once it reports a real count. */
+  const [commentCount, setCommentCount] = React.useState<number>(item.commentsCount ?? 0);
   const rxHome = usePostReactions(
     item.id,
     { likesCount: item.likesCount, likedByViewer: item.likedByViewer, reactions: (item as { reactions?: import('@/components/social/PostReactionButton').PostReactionSummary }).reactions },
@@ -2107,14 +2118,23 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
       actions={
         <>
           <PostReactionButton c={rxHome} />
-          <Link
-            href={postHref}
-            className="flex items-center gap-1.5 text-[12px] font-semibold text-white/35 hover:text-white/70 transition"
-            onClick={e => e.stopPropagation()}
+          <button
+            type="button"
+            aria-label="Comment on this post"
+            aria-expanded={commentOpen}
+            onClick={e => {
+              e.preventDefault();
+              e.stopPropagation();
+              /* Commenting needs an identity; reuse the existing login route
+                 rather than inventing an anonymous author. */
+              if (cardAuthStatus !== 'authenticated') { window.location.assign('/login'); return; }
+              onToggleComment?.(item.id);
+            }}
+            className={`flex items-center gap-1.5 text-[12px] font-semibold transition ${commentOpen ? 'text-white/70' : 'text-white/35 hover:text-white/70'}`}
           >
             <MessageSquare className="h-4 w-4" />
-            <span>{item.commentsCount ? (item.commentsCount >= 1000 ? `${(item.commentsCount/1000).toFixed(1)}k` : String(item.commentsCount)) : 'Comment'}</span>
-          </Link>
+            <span>{commentCount ? (commentCount >= 1000 ? `${(commentCount/1000).toFixed(1)}k` : String(commentCount)) : 'Comment'}</span>
+          </button>
           <button
             type="button"
             onClick={async e => {
@@ -2157,6 +2177,19 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({ item }: { item: 
             <Share2 className="h-4 w-4" />
           </button>
         </>
+      }
+      /* The composer lives in the card shell footer, so it sits directly under
+         the action row at exactly the post content width. */
+      footer={
+        commentOpen && item.isReal ? (
+          <CardCommentPanel
+            item={{ id: item.id, isReal: item.isReal }}
+            onClose={() => onToggleComment?.(item.id)}
+            onCommentCountChange={setCommentCount}
+            viewAllHref={postHref}
+            viewerName={cardSession?.user?.name ?? null}
+          />
+        ) : null
       }
     />
   );
@@ -2204,6 +2237,8 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
   const [tagSearch,  setTagSearch]  = React.useState<string>('');
   const [sort,       setSort]       = React.useState<'Recent' | 'Popular' | 'Oldest'>('Recent');
   const [tabsVisible, setTabsVisible] = React.useState(true);
+  /* One open composer across the whole feed (spec 13). */
+  const [activeCommentPostId, setActiveCommentPostId] = React.useState<string | null>(null);
   const tabsLastY  = React.useRef(0);
   const tabsTicking = React.useRef(false);
 
@@ -2774,7 +2809,11 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                       if (entry.type === 'post') {
                         return (
                           <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
-                            <HomepageFeedCard item={entry.data} />
+                            <HomepageFeedCard
+                              item={entry.data}
+                              commentOpen={activeCommentPostId === entry.data.id}
+                              onToggleComment={(id) => setActiveCommentPostId(prev => (prev === id ? null : id))}
+                            />
                           </div>
                         );
                       }

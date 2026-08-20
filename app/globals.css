@@ -2097,3 +2097,15 @@ html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
 @media (prefers-reduced-motion: reduce) {
   .publish-dropzone { transition: none; }
 }
+
+/* @mention link inside comment text. Rendered by lib/mentions.tsx, which is
+   shared by the inline composer, the post page, category pages and the
+   profile feed — so the style lives here rather than in one component. */
+.dc-mention {
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 600;
+}
+.dc-mention:hover {
+  color: #fff;
+  text-decoration: underline;
+}

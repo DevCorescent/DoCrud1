@@ -7,6 +7,11 @@ import dynamic from 'next/dynamic';
 const PublishAnythingDialog = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import { FeedCard, type FeedItem } from '@/components/ProfilePublishedFeed';
 import {
+  PUBLICATION_BODY_MAX,
+  clampPublicationBody,
+  publicationBodyLength,
+} from '@/lib/publication-body';
+import {
   ArrowLeft, Award, BadgeCheck, BarChart3, Briefcase,
   Building2, Calendar, Camera, CheckCircle2, ChevronRight,
   Edit3, ExternalLink, Globe, Heart, Mail, MapPin, MessageCircle,
@@ -1190,12 +1195,16 @@ export default function BusinessPageView({ slug }: { slug: string }) {
                       {!page.logoUrl && <span className="text-[12px] font-bold text-white/60">{page.name.charAt(0)}</span>}
                     </div>
                     <textarea
-                      value={postDraft} onChange={e => setPostDraft(e.target.value)}
+                      value={postDraft} onChange={e => setPostDraft(clampPublicationBody(e.target.value))}
                       placeholder={`Share an update from ${page.name}…`} rows={postDraft ? 3 : 1}
                       className="flex-1 resize-none rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-2.5 text-[13.5px] text-white placeholder:text-white/25 outline-none transition focus:border-indigo-500/40 focus:bg-white/[0.06] leading-relaxed"
                     />
                   </div>
                   {postDraft && (
+                    <>
+                    <p className={`mb-2 text-right text-[10.5px] ${publicationBodyLength(postDraft) >= PUBLICATION_BODY_MAX ? 'text-amber-300/70' : 'text-white/20'}`}>
+                      {publicationBodyLength(postDraft)} / {PUBLICATION_BODY_MAX}
+                    </p>
                     <div className="flex items-center justify-between">
                       <button onClick={() => { setPublishOpen(true); setPostDraft(''); }}
                         className="flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-white/45 hover:text-white/80 transition">
@@ -1209,6 +1218,7 @@ export default function BusinessPageView({ slug }: { slug: string }) {
                         </button>
                       </div>
                     </div>
+                    </>
                   )}
                   {!postDraft && (
                     <div className="flex justify-end">

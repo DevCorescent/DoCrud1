@@ -70,9 +70,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
        and nothing at all for logged-out viewers or an empty graph. */
     const proofBuilder = await createSocialProofBuilder(viewerIdentifier).catch(() => null);
     const proofDraft = proofBuilder ? proofBuilder.draft(t) : null;
-    const proofAvatars = proofBuilder && proofDraft
-      ? await getProfileAvatars(proofBuilder.previewIds([proofDraft])).catch(() => new Map<string, string | null>())
+
+    /* One avatar batch for the whole response: the publisher plus the
+       social-proof faces. The publisher rides along here rather than in a
+       second query, the same way the feed list route batches them. */
+    const avatarIds = Array.from(new Set([
+      ...(t.avatarUrl ? [] : [t.uploadedByUserId].filter((id): id is string => Boolean(id))),
+      ...(proofBuilder && proofDraft ? proofBuilder.previewIds([proofDraft]) : []),
+    ]));
+    const avatarMap = avatarIds.length
+      ? await getProfileAvatars(avatarIds).catch(() => new Map<string, string | null>())
       : new Map<string, string | null>();
+    const proofAvatars = avatarMap;
+
+    /* The author's photo, resolved exactly as the feed list route resolves it:
+       the avatar snapshotted on the row first (business pages publish with
+       their logo), then the publisher's current profile picture. Without this
+       the detail view had no avatar to render and fell back to initials for
+       everyone. */
+    const authorAvatarUrl = t.avatarUrl
+      || (t.uploadedByUserId ? avatarMap.get(t.uploadedByUserId) ?? undefined : undefined);
 
     return NextResponse.json({
       id: t.id,
@@ -82,6 +99,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       title: t.title || t.fileName,
       byline: authorName,
       uploadedByName: authorName,
+      avatarUrl: authorAvatarUrl,
       cta: t.cta,
       body: t.notes || '',
       chips: cleanChips(t.directoryTags),

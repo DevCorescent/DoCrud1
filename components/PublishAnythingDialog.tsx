@@ -4,6 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { sanitizeCtaLabel, sanitizeCtaUrl, CTA_LABEL_MAX, type PostCta } from '@/lib/cta';
+import {
+  PUBLICATION_BODY_MAX,
+  PUBLICATION_BODY_ERROR,
+  clampPublicationBody,
+  publicationBodyLength,
+  isPublicationBodyOverLimit,
+} from '@/lib/publication-body';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -245,6 +252,17 @@ function Field({ label, children, span, hint, required }: { label: string; child
       {children}
       {hint && <p className="mt-1 text-[10.5px] text-white/25 leading-relaxed">{hint}</p>}
     </div>
+  );
+}
+
+/* The publication body counter. Mirrors the counter the article editor already
+   showed, now reading the shared limit so composer and API agree. */
+function BodyCounter({ value }: { value: string }) {
+  const used = publicationBodyLength(value);
+  return (
+    <p className={`mt-1 text-right text-[10.5px] ${used >= PUBLICATION_BODY_MAX ? 'text-amber-300/70' : 'text-white/20'}`}>
+      {used} / {PUBLICATION_BODY_MAX}
+    </p>
   );
 }
 
@@ -756,6 +774,15 @@ export default function PublishAnythingDialog({
     }
     if (category === 'tutorial' && !tutorialSteps.some(s => s.title.trim())) { invalid('Add at least one step.'); return; }
 
+    /* The body limit, measured exactly as the publish API measures it — the
+       structured fields and the title never count towards it, so a long
+       headline with a full-length body still publishes. The per-field caps
+       above stop this being reached by typing; it catches the cases where a
+       category composes its body from more than one field. */
+    if (isPublicationBodyOverLimit(category === 'post' ? fields.postCaption : buildTextBody(), category)) {
+      invalid(PUBLICATION_BODY_ERROR); return;
+    }
+
     /* Fields the forms already mark with * but nothing enforced — the UI
        promised a rule the validator did not apply, so a user could publish a
        Job with no title. Wording follows the existing "X is required." style. */
@@ -1102,14 +1129,17 @@ export default function PublishAnythingDialog({
                     bring their own fields instead. */}
                 {category === 'post' ? (
                   (
-                  <textarea
-                    autoFocus
-                    rows={5}
-                    value={fields.postCaption}
-                    onChange={e => set({ postCaption: e.target.value })}
-                    placeholder="What's on your mind?"
-                    className="mt-3.5 w-full resize-none bg-transparent text-[15px] leading-relaxed text-white placeholder:text-white/25 outline-none"
-                  />
+                  <>
+                    <textarea
+                      autoFocus
+                      rows={5}
+                      value={fields.postCaption}
+                      onChange={e => set({ postCaption: clampPublicationBody(e.target.value) })}
+                      placeholder="What's on your mind?"
+                      className="mt-3.5 w-full resize-none bg-transparent text-[15px] leading-relaxed text-white placeholder:text-white/25 outline-none"
+                    />
+                    <BodyCounter value={fields.postCaption} />
+                  </>
                   )
                 ) : (
                   <div className="mt-4">
@@ -1544,9 +1574,10 @@ function PollForm({
             className={textareaCls}
             rows={3}
             value={f.pollQuestion}
-            onChange={e => set({ pollQuestion: e.target.value })}
+            onChange={e => set({ pollQuestion: clampPublicationBody(e.target.value) })}
             placeholder="Ask your audience something…"
           />
+          <BodyCounter value={f.pollQuestion} />
         </Field>
         <Field label="Poll title (optional)" span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Give your poll a name…" />
@@ -1634,9 +1665,10 @@ function SurveyForm({
             className={textareaCls}
             rows={2}
             value={f.surveyDesc}
-            onChange={e => set({ surveyDesc: e.target.value })}
+            onChange={e => set({ surveyDesc: clampPublicationBody(e.target.value) })}
             placeholder="What is this survey about?"
           />
+          <BodyCounter value={f.surveyDesc} />
         </Field>
 
         <div className="sm:col-span-2 space-y-2.5">
@@ -1793,7 +1825,8 @@ function NewsForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fie
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Breaking: Company announces product launch…" />
         </Field>
         <Field label="Body / Summary" required>
-          <textarea className={textareaCls} rows={7} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="Write the full news story here. Cover the who, what, when, where, why…" />
+          <textarea className={textareaCls} rows={7} value={f.notes} onChange={e => set({ notes: clampPublicationBody(e.target.value) })} placeholder="Write the full news story here. Cover the who, what, when, where, why…" />
+          <BodyCounter value={f.notes} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Publisher / Source">
@@ -1831,8 +1864,8 @@ function ArticleForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Why good design is invisible…" />
         </Field>
         <Field label="Write your article" required>
-          <textarea className={textareaCls} rows={9} value={f.content} onChange={e => set({ content: e.target.value })} placeholder="Start writing here. Markdown supported — use # headings, **bold**, _italic_, lists…" />
-          {f.content.length > 0 && <p className="mt-1 text-[10.5px] text-white/20 text-right">{f.content.length} chars</p>}
+          <textarea className={textareaCls} rows={9} value={f.content} onChange={e => set({ content: clampPublicationBody(e.target.value) })} placeholder="Start writing here. Markdown supported — use # headings, **bold**, _italic_, lists…" />
+          <BodyCounter value={f.content} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Author name">
@@ -1893,7 +1926,8 @@ function DocumentForm({ fields: f, set, fileRef }: { fields: FieldState; set: (p
         {!f.file && (
           <>
             <Field label="Or write text" span>
-              <textarea className={textareaCls} rows={5} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="Paste or write document content…" />
+              <textarea className={textareaCls} rows={5} value={f.notes} onChange={e => set({ notes: clampPublicationBody(e.target.value) })} placeholder="Paste or write document content…" />
+              <BodyCounter value={f.notes} />
             </Field>
             <Field label="Export as">
               <select className={selectCls} value={f.textFormat} onChange={e => set({ textFormat: e.target.value as any })}>
@@ -1919,7 +1953,8 @@ function PortfolioForm({ fields: f, set }: { fields: FieldState; set: (p: Partia
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Project Nebula, Mobile App Redesign…" />
         </Field>
         <Field label="Project Description" required>
-          <textarea className={textareaCls} rows={6} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="Describe the project — what was the problem, what did you build, what was the outcome and impact?&#10;&#10;Use bullet points or paragraphs." />
+          <textarea className={textareaCls} rows={6} value={f.notes} onChange={e => set({ notes: clampPublicationBody(e.target.value) })} placeholder="Describe the project — what was the problem, what did you build, what was the outcome and impact?&#10;&#10;Use bullet points or paragraphs." />
+          <BodyCounter value={f.notes} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Client / Company">
@@ -1956,7 +1991,8 @@ function AnnouncementForm({ fields: f, set }: { fields: FieldState; set: (p: Par
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="New feature launch, Platform update…" />
         </Field>
         <Field label="Message" required>
-          <textarea className={textareaCls} rows={6} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="Write your announcement here. Be clear and concise…" />
+          <textarea className={textareaCls} rows={6} value={f.notes} onChange={e => set({ notes: clampPublicationBody(e.target.value) })} placeholder="Write your announcement here. Be clear and concise…" />
+          <BodyCounter value={f.notes} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Priority">
@@ -1992,7 +2028,8 @@ function JobForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fiel
           </Field>
         </div>
         <Field label="Job Description" required>
-          <textarea className={textareaCls} rows={5} value={f.description} onChange={e => set({ description: e.target.value })} placeholder="What will this person do? Describe the role, team, and impact…" />
+          <textarea className={textareaCls} rows={5} value={f.description} onChange={e => set({ description: clampPublicationBody(e.target.value) })} placeholder="What will this person do? Describe the role, team, and impact…" />
+          <BodyCounter value={f.description} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Work Type">
@@ -2160,7 +2197,8 @@ function ProductForm({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Description" span>
-          <textarea className={textareaCls} rows={4} value={f.content} onChange={e => set({ content: e.target.value })} placeholder="What does this product do? What problem does it solve? Who is it for?" />
+          <textarea className={textareaCls} rows={4} value={f.content} onChange={e => set({ content: clampPublicationBody(e.target.value) })} placeholder="What does this product do? What problem does it solve? Who is it for?" />
+          <BodyCounter value={f.content} />
         </Field>
         <Field label="Price">
           <input className={inputCls} value={f.price} onChange={e => set({ price: e.target.value })} placeholder="₹2,499 · Free shipping" />
@@ -2199,7 +2237,8 @@ function EventForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fi
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="React India 2026, Mumbai DevMeetup…" />
         </Field>
         <Field label="Description" required>
-          <textarea className={textareaCls} rows={4} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="What's this event about? Who should attend? What will they gain?" />
+          <textarea className={textareaCls} rows={4} value={f.notes} onChange={e => set({ notes: clampPublicationBody(e.target.value) })} placeholder="What's this event about? Who should attend? What will they gain?" />
+          <BodyCounter value={f.notes} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Mode">
@@ -2258,7 +2297,8 @@ function HackathonForm({ fields: f, set }: { fields: FieldState; set: (p: Partia
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="HackIndia 2026, Build for Bharat…" />
         </Field>
         <Field label="Problem statement / brief" span>
-          <textarea className={textareaCls} rows={4} value={f.hackProblem} onChange={e => set({ hackProblem: e.target.value })} placeholder="What problem are participants solving? Key constraints, data, APIs available…" />
+          <textarea className={textareaCls} rows={4} value={f.hackProblem} onChange={e => set({ hackProblem: clampPublicationBody(e.target.value) })} placeholder="What problem are participants solving? Key constraints, data, APIs available…" />
+          <BodyCounter value={f.hackProblem} />
         </Field>
         <Field label="Prize pool">
           <div className="relative">
@@ -2314,7 +2354,8 @@ function GigForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fiel
       <SectionHeader icon={Zap} label="Gig / freelance brief" />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="What do you need done?" required span>
-          <textarea className={textareaCls} rows={5} value={f.gigSummary} onChange={e => set({ gigSummary: e.target.value })} placeholder="Describe the work, context, and what success looks like…" />
+          <textarea className={textareaCls} rows={5} value={f.gigSummary} onChange={e => set({ gigSummary: clampPublicationBody(e.target.value) })} placeholder="Describe the work, context, and what success looks like…" />
+          <BodyCounter value={f.gigSummary} />
         </Field>
         <Field label="Gig title" required span>
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="e.g. Build a React dashboard, Logo design for startup…" />
@@ -2397,7 +2438,8 @@ function ThreadForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<F
           <input className={inputCls} value={f.title} onChange={e => set({ title: e.target.value })} placeholder="Why I stopped using X — and what I use instead" />
         </Field>
         <Field label="Thread content (use line breaks for each point)" span>
-          <textarea className={textareaCls} rows={8} value={f.threadPoints} onChange={e => set({ threadPoints: e.target.value })} placeholder={"1/ Start with your hook...\n\n2/ Expand the idea...\n\n3/ Add evidence or examples..."} />
+          <textarea className={textareaCls} rows={8} value={f.threadPoints} onChange={e => set({ threadPoints: clampPublicationBody(e.target.value) })} placeholder={"1/ Start with your hook...\n\n2/ Expand the idea...\n\n3/ Add evidence or examples..."} />
+          <BodyCounter value={f.threadPoints} />
         </Field>
       </div>
     </div>
@@ -2467,7 +2509,8 @@ function VideoForm({ fields: f, set }: { fields: FieldState; set: (p: Partial<Fi
           />
         </Field>
         <Field label="Description" span>
-          <textarea className={textareaCls} rows={4} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="What will viewers learn? Who is it for?" />
+          <textarea className={textareaCls} rows={4} value={f.notes} onChange={e => set({ notes: clampPublicationBody(e.target.value) })} placeholder="What will viewers learn? Who is it for?" />
+          <BodyCounter value={f.notes} />
         </Field>
       </div>
     </div>
@@ -2494,7 +2537,8 @@ function MilestoneForm({ fields: f, set }: { fields: FieldState; set: (p: Partia
           </Field>
         </div>
         <Field label="Story" required>
-          <textarea className={textareaCls} rows={6} value={f.notes} onChange={e => set({ notes: e.target.value })} placeholder="Share the journey behind this milestone — what you learned, who helped, what's next. Authentic stories resonate most…" />
+          <textarea className={textareaCls} rows={6} value={f.notes} onChange={e => set({ notes: clampPublicationBody(e.target.value) })} placeholder="Share the journey behind this milestone — what you learned, who helped, what's next. Authentic stories resonate most…" />
+          <BodyCounter value={f.notes} />
         </Field>
       </div>
     </div>

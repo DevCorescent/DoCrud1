@@ -117,6 +117,8 @@ type PublishedItem = {
   viewCount?: number;
   canDelete?: boolean;
   uploadedByUserId?: string;
+  /** Publisher's profile picture; null when they genuinely have none. */
+  avatarUrl?: string | null;
 };
 
 const TABS_MAP: Record<string, React.ElementType> = {
@@ -1202,6 +1204,11 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const { data: session } = useSession();
   const displayName = session?.user?.name || 'Anonymous';
   const currentUserId = session?.user?.id || session?.user?.email || '';
+  /* The session JWT deliberately carries no avatar, so the viewer's own photo
+     comes from /api/me/badge — the app's existing resolver, the same one the
+     nav and the composer use. Null until it answers, which is the initials
+     fallback the comment box already showed. */
+  const [viewerAvatarUrl, setViewerAvatarUrl] = useState<string | null>(null);
   const [item,          setItem]          = useState<PublishedItem | null>(null);
   const [related,       setRelated]       = useState<PublishedItem[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -1237,6 +1244,19 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const likeInFlight  = useRef(false);
   const trendInFlight = useRef(false);
 
+  /* ── viewer's own avatar, for the comment box identity row ── */
+  useEffect(() => {
+    if (!currentUserId) { setViewerAvatarUrl(null); return; }
+    let cancelled = false;
+    fetch('/api/me/badge')
+      .then(r => (r.ok ? r.json() : null))
+      .then((d: { avatarUrl?: string | null } | null) => {
+        if (!cancelled && d) setViewerAvatarUrl(d.avatarUrl ?? null);
+      })
+      .catch(() => { /* keep the initials fallback */ });
+    return () => { cancelled = true; };
+  }, [currentUserId]);
+
   /* ── load item ── */
   useEffect(() => {
     async function load() {
@@ -1245,9 +1265,10 @@ export default function PublishedItemPage({ id }: { id: string }) {
       try {
         const res = await fetch(`/api/public/published/${id}`);
         if (res.ok) {
-          const real = await res.json() as PublishedItem & {
-            comments?: { id: string; author: string; text: string; createdAt: string }[];
-          };
+          /* ApiComment, not a narrower literal: the route returns each
+             commenter's avatarUrl and buildCommentTree reads it, so the type
+             has to say so or the first paint silently drops the photos. */
+          const real = await res.json() as PublishedItem & { comments?: ApiComment[] };
           setItem(real);
           setIsRealItem(true);
           setLikeSeed(real.likesCount ?? 0);
@@ -1607,7 +1628,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
     likeComment: (id: string) => void likeComment(id),
     editComment: (id: string, text: string) => void editComment(id, text),
     deleteComment: (id: string) => void deleteComment(id),
-    currentUserId,
+    currentUserId, viewerAvatarUrl,
     totalComments, commentRef,
   };
 
@@ -2181,9 +2202,12 @@ export default function PublishedItemPage({ id }: { id: string }) {
               {/* comment input */}
               <div className="mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
                 <div className="mb-3 flex items-center gap-2.5">
-                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${stableColor(displayName)}`}>
-                    {initials(displayName)}
-                  </div>
+                  <CommentAvatar
+                    src={viewerAvatarUrl}
+                    initials={initials(displayName)}
+                    colorClass={stableColor(displayName)}
+                    className="h-8 w-8 text-[11px]"
+                  />
                   <span className="text-[13px] font-semibold text-white/70">{displayName}</span>
                 </div>
                 <textarea

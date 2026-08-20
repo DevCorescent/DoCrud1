@@ -7,7 +7,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import GlobalSearchBar, { type GlobalSearchBarHandle, type LocalSearchResult } from '@/components/GlobalSearchBar';
 import { NavAnnouncementBar, ProfileCompletionRing, shouldShowAnnouncement, type NavAnnouncementConfig } from '@/components/nav/ProfileCompletion';
-import OpportunityHub from '@/components/OpportunityHub';
 import { useSession ,signOut } from 'next-auth/react';
 
 /* ── Ddrive premium "D" icon ──────────────────────────────────────── */
@@ -60,7 +59,6 @@ import {
   Globe,
   Heart,
   Home,
-  LayoutGrid,
   LogOut,
   Layers,
   Mail,
@@ -237,7 +235,6 @@ const notifPanelRef = useRef<HTMLDivElement>(null);
   const [badge, setBadge] = useState<{ docrudGo: boolean; avatarUrl: string | null; profileScore: number | null } | null>(null);
   const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
-  const [hubOpen, setHubOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
   const [profileOpen, setProfileOpen] = useState(false);
 const profileTriggerRef = useRef<HTMLButtonElement>(null);
@@ -670,26 +667,9 @@ useEffect(() => {
           <Globe className="h-3 w-3" />Feed
         </Link>
 
-        {/* ── More button — opens the existing Opportunity Hub ──
-             Replaces the Businesses control that used to sit here. Businesses
-             is still reachable, as the first row inside the hub. Sizing,
-             border, hover and active treatment are unchanged so the header
-             keeps its existing dimensions. */}
-        <button
-          type="button"
-          onClick={() => setHubOpen(v => !v)}
-          aria-haspopup="dialog"
-          aria-expanded={hubOpen}
-          aria-label="More opportunities"
-          className={`hidden sm:flex h-8 items-center gap-1.5 rounded-[10px] border px-3 text-[12px] font-semibold transition active:scale-95 ${
-            hubOpen
-              ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300'
-              : 'border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.09] hover:text-white/75'
-          }`}
-        >
-          <LayoutGrid className="h-3 w-3" />
-          More
-        </button>
+        {/* The desktop More button that opened the Opportunity Hub used to sit
+            here, between Feed and Ddrive. It was removed; nothing replaces it,
+            and the remaining header controls keep their existing sizing. */}
 
         {/* ── File Drive button ── */}
         <button
@@ -1145,11 +1125,6 @@ useEffect(() => {
           </Link>
         )}
       </div>
-
-      {/* The same Opportunity Hub the mobile More opens — reused, not
-          reimplemented. Only one can ever be open: this trigger is sm+ and
-          the bottom-nav trigger is hidden at sm+. */}
-      <OpportunityHub open={hubOpen} onClose={() => setHubOpen(false)} />
     </header>
 
     {/* Profile-completion announcement — mobile/tablet. Must sit directly under

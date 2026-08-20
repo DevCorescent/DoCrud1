@@ -9,6 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import type { SecureFileTransfer } from '@/types/document';
 import { sanitizeCta } from '@/lib/cta';
+import { PUBLICATION_BODY_ERROR, isPublicationBodyOverLimit } from '@/lib/publication-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,6 +142,15 @@ export async function POST(request: NextRequest) {
 
     if (!payload.fileName?.trim() || !payload.mimeType?.trim() || !payload.dataUrl?.trim()) {
       return NextResponse.json({ error: 'fileName, mimeType, and dataUrl are required.' }, { status: 400 });
+    }
+
+    /* Body limit. Checked here, not only in the composer, so a direct request
+       cannot publish more than the composer allows. The title and the
+       structured fields the composer writes into `notes` are excluded — only
+       the author's own body text counts. Nothing is truncated: an oversized
+       body is rejected and the author keeps their text. */
+    if (isPublicationBodyOverLimit(payload.notes, payload.directoryCategory)) {
+      return NextResponse.json({ error: PUBLICATION_BODY_ERROR }, { status: 400 });
     }
 
     const directoryVisibility = payload.directoryVisibility === 'private' ? 'private' : 'public';

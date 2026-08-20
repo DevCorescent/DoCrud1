@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { getBusinessPageById, getPagePosts, createPost } from '@/lib/server/business-pages';
 import { randomUUID } from 'crypto';
+import { PUBLICATION_BODY_ERROR, isPublicationBodyOverLimit } from '@/lib/publication-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +29,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const body = await req.json() as { content?: string; mediaUrls?: string[]; postType?: string };
     if (!body.content?.trim()) return NextResponse.json({ error: 'Content required' }, { status: 400 });
+    /* Page posts cross-publish to the feed, so they answer to the same body
+       limit as any other publication — enforced here as well as in the
+       composer so a direct request cannot exceed it. */
+    if (isPublicationBodyOverLimit(body.content, 'post')) {
+      return NextResponse.json({ error: PUBLICATION_BODY_ERROR }, { status: 400 });
+    }
 
     const post = await createPost({
       id: randomUUID(),

@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
+import OpportunityHub from './OpportunityHub';
 import {
   Globe,
   Home,
-  MessageSquare,
+  LayoutGrid,
   Users,
 } from 'lucide-react';
 
@@ -36,6 +37,7 @@ export default function GlobalBottomNav() {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(true);
   const [inChat,  setInChat]  = useState(false);
+  const [hubOpen, setHubOpen] = useState(false);
   const lastY     = useRef(0);
   const ticking   = useRef(false);
 
@@ -119,8 +121,8 @@ export default function GlobalBottomNav() {
     };
   }, []);
 
-  /* Every route starts with the bar visible. */
-  useEffect(() => { setVisible(true); }, [pathname]);
+  /* Every route starts with the bar visible, and with the hub closed. */
+  useEffect(() => { setVisible(true); setHubOpen(false); }, [pathname]);
 
   /* ── Hide entirely inside an open conversation ──
      The chat screen owns the bottom of the viewport with its own composer,
@@ -306,22 +308,30 @@ export default function GlobalBottomNav() {
           );
         })()}
 
-        {/* Messages — the existing /messages chat list */}
+        {/* More — opens the Opportunity Hub (businesses, services, projects, jobs, gigs) */}
         {(() => {
-          const active = pathname.startsWith('/messages');
-          const color  = active ? '#818cf8' : 'rgba(255,255,255,0.50)';
+          const color = hubOpen ? '#818cf8' : 'rgba(255,255,255,0.50)';
           return (
-            <a href="/messages" className="gnb-item" aria-label="Messages" aria-current={active ? 'page' : undefined}>
-              <span className="gnb-icon" style={{ color, background: active ? 'rgba(129,140,248,0.18)' : 'transparent' }}>
-                <MessageSquare width={19} height={19} />
+            <button
+              type="button"
+              className="gnb-item"
+              aria-label="More opportunities"
+              aria-haspopup="dialog"
+              aria-expanded={hubOpen}
+              onClick={() => setHubOpen(v => !v)}
+            >
+              <span className="gnb-icon" style={{ color, background: hubOpen ? 'rgba(129,140,248,0.18)' : 'transparent' }}>
+                <LayoutGrid width={19} height={19} />
               </span>
-              <span className="gnb-label" style={{ color }}>Messages</span>
-              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#818cf8' }} />
-            </a>
+              <span className="gnb-label" style={{ color }}>More</span>
+              <span className="gnb-dot" style={{ opacity: hubOpen ? 1 : 0, background: '#818cf8' }} />
+            </button>
           );
         })()}
 
       </nav>
+
+      <OpportunityHub open={hubOpen} onClose={() => setHubOpen(false)} />
     </>
   );
 

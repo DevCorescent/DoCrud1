@@ -63,8 +63,8 @@ function AnnouncementScoreRing({ score, size = 34 }: { score: number; size?: num
         />
       </svg>
       <span
-        className="relative z-[1] text-[9.5px] font-bold tabular-nums leading-none"
-        style={{ color: s.fg }}
+        className="relative z-[1] font-bold tabular-nums leading-none"
+        style={{ color: s.fg, fontSize: size >= 30 ? 9.5 : 9 }}
       >
         {pct}%
       </span>
@@ -112,10 +112,10 @@ export function NavAnnouncementBar({
 
   const inner = (
     <>
-      <AnnouncementScoreRing score={pct} size={desktop ? 32 : 30} />
+      <AnnouncementScoreRing score={pct} size={desktop ? 28 : 26} />
       <AnnouncementCopy text={text} fg={s.fg} />
       <Sparkles
-        className={`shrink-0 ${desktop ? 'h-3.5 w-3.5' : 'h-3 w-3'}`}
+        className={`shrink-0 ${desktop ? 'h-[13px] w-[13px]' : 'h-[11px] w-[11px]'}`}
         style={{ color: s.ring, opacity: 0.85 }}
         aria-hidden="true"
       />
@@ -125,8 +125,8 @@ export function NavAnnouncementBar({
   /* Desktop: compact pill that sits beside Explore (parent caps width).
      Mobile: full-width strip under the top nav; text may wrap to 2 lines. */
   const base = desktop
-    ? 'flex w-full max-w-[340px] min-w-0 items-center gap-2.5 rounded-2xl border px-2.5 py-2 text-white/80 transition'
-    : 'flex w-full min-w-0 items-center gap-2.5 rounded-2xl border px-2.5 py-2 text-white/80';
+    ? 'flex w-full max-w-[340px] min-w-0 items-center gap-2.5 rounded-2xl border px-2.5 py-1.5 text-white/80 transition'
+    : 'flex w-full min-w-0 items-center gap-2.5 rounded-2xl border px-2.5 py-1.5 text-white/80';
 
   const style: CSSProperties = {
     color: 'rgba(255,255,255,0.78)',

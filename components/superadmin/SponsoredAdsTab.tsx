@@ -24,6 +24,7 @@ type Config = {
   jobs: { enabled: boolean; maxCards: number; domainWeight: number; skillWeight: number; locationWeight: number; recencyWeight: number };
   ads: { enabled: boolean; minGap: number; maxGap: number; maxPerFeed: number; targetingEnabled: boolean };
   composition: { minLeadPosts: number; minModuleGap: number; maxModulesPerPage: number };
+  publication: { maxChars: number };
 };
 
 const CARD = 'rounded-xl border border-white/10 bg-white/[0.03] p-4';
@@ -184,6 +185,13 @@ export default function SponsoredAdsTab() {
               {numField('Lead posts before first module', config.composition.minLeadPosts, v => setC('composition', 'minLeadPosts', v))}
               {numField('Min gap between modules', config.composition.minModuleGap, v => setC('composition', 'minModuleGap', v))}
               {numField('Max modules per page', config.composition.maxModulesPerPage, v => setC('composition', 'maxModulesPerPage', v))}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-zinc-500 mb-2">Publication</div>
+            <div className="grid grid-cols-2 gap-3">
+              {numField('Maximum publication characters', config.publication.maxChars, v => setC('publication', 'maxChars', v))}
             </div>
           </div>
 

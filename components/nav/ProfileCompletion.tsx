@@ -27,12 +27,7 @@ export interface NavAnnouncementConfig {
 export function shouldShowAnnouncement(
   announcement: NavAnnouncementConfig | null,
   score: number | null,
-  /* Members who already hold Premium are outside this promotion entirely, so
-     the bar is not rendered for them at all. Defaults to false so existing
-     callers behave exactly as before. */
-  premium: boolean = false,
 ): boolean {
-  if (premium) return false;
   if (!announcement?.enabled) return false;
   if (!announcement.text) return false;
   if (score === null || !Number.isFinite(score)) return false;
@@ -69,7 +64,7 @@ function AnnouncementScoreRing({ score, size = 34 }: { score: number; size?: num
       </svg>
       <span
         className="relative z-[1] font-bold tabular-nums leading-none"
-        style={{ color: s.fg, fontSize: size >= 30 ? 9.5 : 9 }}
+        style={{ color: s.fg, fontSize: 8 }}
       >
         {pct}%
       </span>
@@ -82,7 +77,7 @@ function AnnouncementCopy({ text, fg, oneLine = false }: { text: string; fg: str
   const parts = text.split(/(Premium)/g);
   return (
     <span
-      className={`min-w-0 flex-1 text-left text-[11.5px] font-medium leading-[1.35]${
+      className={`min-w-0 flex-1 text-left text-[11px] font-medium leading-[1.25]${
         /* With the badge sharing the row the copy would wrap to a second line
            and grow the bar, so it stays on one line and truncates instead. */
         oneLine ? ' overflow-hidden text-ellipsis whitespace-nowrap' : ''
@@ -119,35 +114,44 @@ export function NavAnnouncementBar({
   freePremium?: { spotsLeft: number; totalSpots: number } | null;
 }) {
   // Rendering nothing at all (rather than an empty shell) is what keeps the
-  // navigation from reserving space once the profile hits 100% — and is also
-  // how Premium members see nothing.
-  if (!shouldShowAnnouncement(announcement, score, premium)) return null;
+  // navigation from reserving space once the profile is complete. A complete
+  // profile hides the bar for everyone, Premium or not.
+  if (!shouldShowAnnouncement(announcement, score)) return null;
 
   const pct = score as number;
   const s = profileStatusStyle(pct);
   const desktop = variant === 'desktop';
 
-  /* Once the allocation is gone the offer copy would be a false promise, so
-     the message is replaced and the counter dropped rather than showing a
-     zero next to a claim of free Premium. */
-  const soldOut = freePremium?.spotsLeft === 0;
-  const text = soldOut ? 'Free Premium spots are full' : announcement!.text;
-  const showSpots = !!freePremium && freePremium.spotsLeft > 0;
+  /* Copy depends on who is reading it:
+       - Premium member with an incomplete profile: the nudge still applies,
+         but the reward does not, so the promise is dropped from the wording.
+       - Everyone else: the Super Admin copy, unless the free allocation is
+         gone, in which case promising free Premium would be false.
+     The spots counter is for people who could still claim one, so Premium
+     members never see it. */
+  const soldOut = !premium && freePremium?.spotsLeft === 0;
+  const text = premium
+    ? 'Complete your profile'
+    : soldOut
+      ? 'Free Premium spots are full'
+      : announcement!.text;
+  const showSpots = !premium && !!freePremium && freePremium.spotsLeft > 0;
 
   const inner = (
     <>
-      <AnnouncementScoreRing score={pct} size={desktop ? 28 : 26} />
-      <AnnouncementCopy text={text} fg={s.fg} oneLine={showSpots} />
+      <AnnouncementScoreRing score={pct} size={desktop ? 26 : 22} />
+      {/* Always one line: a wrap is what used to make this a two-row card. */}
+      <AnnouncementCopy text={text} fg={s.fg} oneLine />
       {showSpots && (
         <span
-          className="shrink-0 whitespace-nowrap rounded-full border border-white/[0.12] bg-white/[0.05] px-1.5 py-[1px] text-[9.5px] font-semibold tabular-nums text-white/55"
+          className="shrink-0 whitespace-nowrap rounded-full border border-white/[0.12] bg-white/[0.05] px-1.5 py-0 text-[9px] leading-[13px] font-semibold tabular-nums text-white/55"
           title={`${freePremium!.spotsLeft.toLocaleString()} of ${freePremium!.totalSpots.toLocaleString()} free Premium spots remaining`}
         >
           {freePremium!.spotsLeft.toLocaleString()} spots left
         </span>
       )}
       <Sparkles
-        className={`shrink-0 ${desktop ? 'h-[13px] w-[13px]' : 'h-[11px] w-[11px]'}`}
+        className={`shrink-0 ${desktop ? 'h-[11px] w-[11px]' : 'h-[10px] w-[10px]'}`}
         style={{ color: s.ring, opacity: 0.85 }}
         aria-hidden="true"
       />
@@ -157,8 +161,8 @@ export function NavAnnouncementBar({
   /* Desktop: compact pill that sits beside Explore (parent caps width).
      Mobile: full-width strip under the top nav; text may wrap to 2 lines. */
   const base = desktop
-    ? 'flex w-full max-w-[340px] min-w-0 items-center gap-2.5 rounded-2xl border px-2.5 py-1.5 text-white/80 transition'
-    : 'flex w-full min-w-0 items-center gap-2.5 rounded-2xl border px-2.5 py-1.5 text-white/80';
+    ? 'flex w-full max-w-[340px] min-w-0 items-center gap-2 rounded-2xl border px-2.5 py-1 text-white/80 transition'
+    : 'flex w-full min-w-0 items-center gap-2 rounded-2xl border px-2.5 py-1 text-white/80';
 
   const style: CSSProperties = {
     color: 'rgba(255,255,255,0.78)',

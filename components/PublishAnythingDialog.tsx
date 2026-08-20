@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { sanitizeCtaLabel, sanitizeCtaUrl, CTA_LABEL_MAX, type PostCta } from '@/lib/cta';
 import {
   PUBLICATION_BODY_MAX,
+  getPublicationMax,
+  setConfiguredPublicationMax,
   PUBLICATION_BODY_ERROR,
   clampPublicationBody,
   publicationBodyLength,
@@ -258,12 +260,38 @@ function Field({ label, children, span, hint, required }: { label: string; child
 /* The publication body counter. Mirrors the counter the article editor already
    showed, now reading the shared limit so composer and API agree. */
 function BodyCounter({ value }: { value: string }) {
+  const max = usePublicationMax();
   const used = publicationBodyLength(value);
+  /* A quiet warning as the limit approaches, amber once it is reached. */
+  const tone = used >= max ? 'text-amber-300/70' : used >= max * 0.9 ? 'text-white/45' : 'text-white/20';
   return (
-    <p className={`mt-1 text-right text-[10.5px] ${used >= PUBLICATION_BODY_MAX ? 'text-amber-300/70' : 'text-white/20'}`}>
-      {used} / {PUBLICATION_BODY_MAX}
+    <p className={`mt-1 text-right text-[10.5px] ${tone}`}>
+      {used} / {max}
     </p>
   );
+}
+
+/**
+ * The Super Admin limit, fetched once per mount from the existing public
+ * feed-config endpoint and published to lib/publication-body so that every
+ * clampPublicationBody() call in this file uses it too.
+ */
+function usePublicationMax(): number {
+  const [max, setMax] = useState<number>(getPublicationMax());
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/feed-config')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { publication?: { maxChars?: number } } | null) => {
+        const next = d?.publication?.maxChars;
+        if (cancelled || typeof next !== 'number') return;
+        setConfiguredPublicationMax(next);
+        setMax(next);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  return max;
 }
 
 function OptionalSection({ children, label = 'Add more details' }: { children: React.ReactNode; label?: string }) {

@@ -12,7 +12,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import { PresenceDot } from '@/components/PresenceBadge';
-import { PublishedFeedCard, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
+import { PublishedFeedCard, ExpandableBody, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
 import { CardCommentPanel } from '@/components/feed/CardCommentPanel';
 import { composeFeed, getSessionSeed, planModuleSlots } from '@/lib/feed-composition';
 import PeopleYouMayKnow from '@/components/recommendations/PeopleYouMayKnow';
@@ -2100,9 +2100,13 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({
       }
       renderMainBody={
         hpHasRealCaption(item.body) ? (
-          <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${showTitle ? 'mt-1.5' : ''}`}>
-            {hpGetBodySnippet(item.body)}
-          </p>
+          /* Full cleaned text: the clamp is CSS, so "Read more" can reveal the
+             rest in place instead of sending the reader to the post page. */
+          <ExpandableBody
+            text={hpGetBodySnippet(item.body, Number.MAX_SAFE_INTEGER)}
+            detailHref={postHref}
+            className={showTitle ? 'mt-1.5' : ''}
+          />
         ) : null
       }
       /* Social proof (from origin/main). The home card has no inline comment
@@ -6200,7 +6204,17 @@ function NewHomepageContent({
     <div
       ref={welcomeScrollRef as React.RefObject<HTMLDivElement>}
       className="flex flex-1 flex-col overflow-y-auto overscroll-contain touch-pan-y scrollbar-minimal pb-[env(safe-area-inset-bottom,0px)] [padding-bottom:max(180px,calc(180px+env(safe-area-inset-bottom,0px)))] md:[padding-bottom:max(176px,calc(176px+env(safe-area-inset-bottom,0px)))]"
-      style={{ WebkitOverflowScrolling: 'touch', transform: 'translateZ(0)', willChange: 'scroll-position', contain: 'layout style' }}
+      /* paddingTop reserves the floating bar's height (published by
+         HomepageNav as --dc-topnav-h) while the container itself starts at the
+         top of the shell — which is what lets content pass behind the glass.
+         The 56px fallback is the bar's height before the first measurement. */
+      style={{
+        WebkitOverflowScrolling: 'touch',
+        transform: 'translateZ(0)',
+        willChange: 'scroll-position',
+        contain: 'layout style',
+        paddingTop: 'var(--dc-topnav-h, 56px)',
+      }}
     >
       <div className="mx-auto w-full max-w-[1440px] space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-6 lg:px-10 xl:px-12 pt-5 sm:pt-7 lg:pt-8">
 
@@ -8276,6 +8290,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
         onFileDriveClick={() => setFileDriveOpen(true)}
         onAllToolsClick={() => setMobileToolsDrawerOpen(true)}
         guestMode={guestMode}
+        overlay
       />
 
       {/* Guest mode banner */}

@@ -49,11 +49,17 @@ export type FeedCompositionConfig = {
   maxModulesPerPage: number;
 };
 
+export type PublicationConfig = {
+  /** Maximum characters allowed in a publication body. */
+  maxChars: number;
+};
+
 export type FeedConfig = {
   people: PeopleRecoConfig;
   jobs: JobRecoConfig;
   ads: AdsConfig;
   composition: FeedCompositionConfig;
+  publication: PublicationConfig;
   updatedAt?: string;
   updatedBy?: string;
 };
@@ -63,6 +69,7 @@ export const DEFAULT_FEED_CONFIG: FeedConfig = {
   jobs:   { enabled: true, maxCards: 6, domainWeight: 10, skillWeight: 8, locationWeight: 4, recencyWeight: 1 },
   ads:    { enabled: true, minGap: 5, maxGap: 15, maxPerFeed: 2, targetingEnabled: true },
   composition: { minLeadPosts: 2, minModuleGap: 3, maxModulesPerPage: 3 },
+  publication: { maxChars: 500 },
 };
 
 function num(v: unknown, fallback: number, min: number, max: number): number {
@@ -109,6 +116,11 @@ export function normalizeFeedConfig(raw: unknown): FeedConfig {
       minModuleGap: num(r.composition?.minModuleGap, d.composition.minModuleGap, 1, 20),
       maxModulesPerPage: num(r.composition?.maxModulesPerPage, d.composition.maxModulesPerPage, 0, 10),
     },
+    publication: {
+      /* Bounded so a mistyped value cannot disable the limit or make the
+         composer unusable. */
+      maxChars: num(r.publication?.maxChars, d.publication.maxChars, 50, 10_000),
+    },
     updatedAt: typeof r.updatedAt === 'string' ? r.updatedAt : undefined,
     updatedBy: typeof r.updatedBy === 'string' ? r.updatedBy : undefined,
   };
@@ -125,6 +137,7 @@ export async function saveFeedConfig(patch: unknown, updatedBy: string): Promise
     ...current,
     ...(patch as object),
     people: { ...current.people, ...((patch as FeedConfig)?.people ?? {}) },
+    publication: { ...current.publication, ...((patch as FeedConfig)?.publication ?? {}) },
     jobs: { ...current.jobs, ...((patch as FeedConfig)?.jobs ?? {}) },
     ads: { ...current.ads, ...((patch as FeedConfig)?.ads ?? {}) },
     composition: { ...current.composition, ...((patch as FeedConfig)?.composition ?? {}) },

@@ -21,11 +21,20 @@
  * limit, and inventing one would be a new field, not a limit.
  */
 
+/**
+ * The default limit. Super Admin can raise or lower it (feed-config
+ * `publication.maxChars`); this value is what applies until they do, and what
+ * the client falls back to before the configuration has loaded.
+ */
 export const PUBLICATION_BODY_MAX = 500;
 
 /** The single wording used by the composers and the API for this failure. */
-export const PUBLICATION_BODY_ERROR =
-  `Publication body must be ${PUBLICATION_BODY_MAX} characters or fewer.`;
+export function publicationBodyError(max: number = PUBLICATION_BODY_MAX): string {
+  return `Publication body must be ${max} characters or fewer.`;
+}
+
+/** Kept for callers that have no configured value to hand. */
+export const PUBLICATION_BODY_ERROR = publicationBodyError();
 
 /**
  * Categories whose composer serialises the main body under a label instead of
@@ -60,8 +69,27 @@ export function publicationBodyLength(text: string): number {
   return Array.from(text ?? '').length;
 }
 
+/**
+ * The limit currently in force in this runtime.
+ *
+ * Browsers learn it once from /api/feed-config (see setConfiguredPublicationMax)
+ * so every composer input clamps to the Super Admin value without threading a
+ * prop through each field. Server code never calls the setter — every API route
+ * passes the configured limit explicitly — so this stays at the default there
+ * and cannot leak between requests.
+ */
+let configuredMax = PUBLICATION_BODY_MAX;
+
+export function setConfiguredPublicationMax(max: number): void {
+  if (Number.isFinite(max) && max > 0) configuredMax = Math.floor(max);
+}
+
+export function getPublicationMax(): number {
+  return configuredMax;
+}
+
 /** The first `max` characters, never splitting a surrogate pair. */
-export function clampPublicationBody(text: string, max = PUBLICATION_BODY_MAX): string {
+export function clampPublicationBody(text: string, max = getPublicationMax()): string {
   const value = text ?? '';
   const chars = Array.from(value);
   return chars.length <= max ? value : chars.slice(0, max).join('');
@@ -121,7 +149,9 @@ export function publicationBodyText(notes: string, category?: string | null): st
 export function isPublicationBodyOverLimit(
   notes: string | undefined | null,
   category?: string | null,
+  /* The configured limit. Defaults so existing callers keep the same rule. */
+  max: number = PUBLICATION_BODY_MAX,
 ): boolean {
   if (!notes) return false;
-  return publicationBodyLength(publicationBodyText(notes, category)) > PUBLICATION_BODY_MAX;
+  return publicationBodyLength(publicationBodyText(notes, category)) > max;
 }

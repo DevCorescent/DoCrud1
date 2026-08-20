@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Newspaper } from 'lucide-react';
 import { PresenceDot } from '@/components/PresenceBadge';
@@ -38,6 +39,91 @@ export function nonTypeBadge(item: { badge?: string; category?: string }): strin
   if (b === cat.toLowerCase()) return '';
   if (b === feedCategoryLabel(cat).toLowerCase()) return '';
   return badge;
+}
+
+/**
+ * Publication text that opens in place.
+ *
+ * The feed shows a few lines; "Read more" removes the clamp and keeps the
+ * reader exactly where they are. It is a separate action from "View post",
+ * which is the only control here that navigates. Both stop the click from
+ * reaching the card, which is itself a link on some surfaces.
+ *
+ * "Read more" appears only when the text is actually clipped — measured from
+ * the rendered element rather than guessed from a character count, so it is
+ * correct at every width and font size.
+ */
+export function ExpandableBody({
+  text,
+  detailHref,
+  className = '',
+}: {
+  text: string;
+  /** Omitted hides the "View post" action. */
+  detailHref?: string;
+  className?: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const ref = useRef<HTMLParagraphElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    /* Only meaningful while collapsed: once expanded the element grows to fit
+       and would always report no overflow. */
+    const measure = () => { if (!expanded) setClipped(el.scrollHeight > el.clientHeight + 1); };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [text, expanded]);
+
+  const stop = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  return (
+    <div className={className}>
+      <p
+        ref={ref}
+        className={`whitespace-pre-line text-[13px] leading-relaxed text-white/50 ${
+          expanded ? '' : 'line-clamp-4 sm:line-clamp-3'
+        }`}
+      >
+        {text}
+      </p>
+
+      {(clipped || expanded) && (
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            aria-expanded={expanded}
+            className="pfc-more text-[12px] font-semibold text-white/45 transition-colors hover:text-white/80"
+            onClick={(e) => { stop(e); setExpanded((v) => !v); }}
+            /* The card treats Enter/Space as "open the post", and a keydown on
+               this button would otherwise reach it and navigate. The button's
+               own activation still fires, so the toggle keeps working. */
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+          >
+            {expanded ? 'Show less' : '… Read more'}
+          </button>
+
+          {detailHref && (
+            <Link
+              href={detailHref}
+              className="pfc-view text-[12px] font-semibold text-white/30 transition-colors hover:text-white/70"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+            >
+              View post
+            </Link>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export type FeedCardShellItem = {
@@ -114,7 +200,6 @@ export function PublishedFeedCard({
   linkAuthor = true,
   showPresence = true,
   showBodySnippet = true,
-  bodyLineClamp = 2,
 }: PublishedFeedCardProps) {
   /* The publishing category. Kept for filtering, routing, title/meta rules and
      analytics - it is deliberately never rendered as a badge. */
@@ -129,8 +214,10 @@ export function PublishedFeedCard({
   const canLinkAuthor = linkAuthor && Boolean(profileHref);
   const showTitle = shouldShowFeedTitle(cat, item.title);
   const snippet = showBodySnippet ? getFeedBodySnippet(item.body) : '';
+  /* The same cleaning the snippet does, without the character cut, so the
+     expanded view shows the whole publication. */
+  const fullBody = showBodySnippet ? getFeedBodySnippet(item.body, Number.MAX_SAFE_INTEGER) : '';
   const secondaryBadge = nonTypeBadge(item);
-  const bodyClampCls = bodyLineClamp === 3 ? 'line-clamp-3' : 'line-clamp-2';
   /* Task 12 — category line under the title. Skipped when it would only repeat
      the author already shown in the header (company pages publish as the company). */
   const highlight = buildCategoryHighlight({ category: cat, body: item.body });
@@ -155,9 +242,11 @@ export function PublishedFeedCard({
 
   const defaultBody =
     snippet ? (
-      <p className={`text-[13px] leading-relaxed text-white/50 ${bodyClampCls} ${showTitle ? 'mt-1.5' : ''}`}>
-        {snippet}
-      </p>
+      <ExpandableBody
+        text={fullBody || snippet}
+        detailHref={detailHref}
+        className={showTitle ? 'mt-1.5' : ''}
+      />
     ) : null;
 
   const bodyEl = renderMainBody !== undefined ? renderMainBody : defaultBody;
@@ -246,7 +335,10 @@ export function PublishedFeedCard({
           )}
         </div>
       )}
-      {bodyEl && <div>{linkContent ? wrap(bodyEl, 'body') : bodyEl}</div>}
+      {/* Not wrapped in the card link: the body now carries its own controls,
+          and nesting a button inside an anchor is both invalid and a trap for
+          the expand click. */}
+      {bodyEl && <div>{bodyEl}</div>}
 
       {/* 4. METADATA */}
       {renderMetadata !== undefined ? (

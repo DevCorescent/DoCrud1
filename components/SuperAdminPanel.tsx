@@ -1,5 +1,7 @@
 'use client';
 
+import SponsoredAdsTab from '@/components/superadmin/SponsoredAdsTab';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { profileStatusStyle } from '@/lib/profile-score';
 import dynamic from 'next/dynamic';
@@ -7,7 +9,7 @@ const HomepageCommandCenter = dynamic(() => import('@/components/HomepageCommand
 const AdBannerManager = dynamic(() => import('@/components/AdBannerManagerPanel'), { ssr: false });
 
 // ── Types ──────────────────────────────────────────────────────────────
-type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners' | 'announcements';
+type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners' | 'sponsored-ads' | 'announcements';
 
 interface DashboardData {
   users: { total: number; active: number; suspended: number; disabled: number; business: number; individual: number; newLast30Days: number; newLast7Days: number; planDistribution: Record<string, number>; subscriptionStatusDistribution: Record<string, number>; roleDistribution: Record<string, number>; recentSignups: UserRow[]; dailySignups: { date: string; count: number }[] };
@@ -176,6 +178,7 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
     { group: 'Homepage', items: [
       { id: 'homepage' as Tab, label: 'Command Centre', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18M9 21V9" /></svg> },
       { id: 'ad-banners' as Tab, label: 'Ad Banners', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="7" width="20" height="10" rx="2"/><path strokeLinecap="round" strokeLinejoin="round" d="M6 11h4m-4 3h2" /></svg> },
+      { id: 'sponsored-ads' as Tab, label: 'Sponsored Ads', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="5" width="18" height="14" rx="2"/><path strokeLinecap="round" d="M7 10h6"/></svg> },
       { id: 'announcements' as Tab, label: 'Announcements', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg> },
     ]},
     { group: 'Manage', items: [
@@ -286,6 +289,7 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
           {tab === 'infinity' && <InfinityTab />}
           {tab === 'homepage' && <HomepageCommandCenterTab />}
           {tab === 'ad-banners' && <AdBannersTab />}
+          {tab === 'sponsored-ads' && <SponsoredAdsTab />}
         </div>
       </main>
     </div>

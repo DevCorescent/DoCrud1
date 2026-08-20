@@ -3,11 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
-import OpportunityHub from './OpportunityHub';
 import {
   Globe,
   Home,
-  LayoutGrid,
+  MessageSquare,
   Users,
 } from 'lucide-react';
 
@@ -37,7 +36,8 @@ export default function GlobalBottomNav() {
   const [mounted, setMounted] = useState(false);
   const [visible, setVisible] = useState(true);
   const [inChat,  setInChat]  = useState(false);
-  const [hubOpen, setHubOpen] = useState(false);
+  /* Unread badge count, from the endpoint the app already exposes. */
+  const [unread, setUnread] = useState(0);
   const lastY     = useRef(0);
   const ticking   = useRef(false);
 
@@ -121,8 +121,22 @@ export default function GlobalBottomNav() {
     };
   }, []);
 
-  /* Every route starts with the bar visible, and with the hub closed. */
-  useEffect(() => { setVisible(true); setHubOpen(false); }, [pathname]);
+  /* Every route starts with the bar visible. */
+  useEffect(() => { setVisible(true); }, [pathname]);
+
+  /* Unread count, refreshed whenever the route changes — so opening a
+     conversation and coming back reflects what was just read. Signed-out
+     callers get 0 from the endpoint, so no auth branch is needed here. */
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/messages/unread', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { unread?: number } | null) => {
+        if (!cancelled && typeof d?.unread === 'number') setUnread(d.unread);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [pathname]);
 
   /* ── Hide entirely inside an open conversation ──
      The chat screen owns the bottom of the viewport with its own composer,
@@ -222,6 +236,7 @@ export default function GlobalBottomNav() {
         .gnb-item:focus-visible { outline: 2px solid #a78bfa; outline-offset: -2px; }
 
         .gnb-icon {
+          position: relative;
           width: 26px; height: 26px;
           display: flex; align-items: center; justify-content: center;
           border-radius: 10px;
@@ -238,6 +253,25 @@ export default function GlobalBottomNav() {
           transition: color 0.14s ease;
         }
 
+        /* Unread pill, pinned to the icon. The icon box is the positioning
+           context, so the badge rides with it on every breakpoint. */
+        .gnb-badge {
+          position: absolute;
+          top: -3px;
+          left: 50%;
+          transform: translateX(4px);
+          min-width: 14px;
+          height: 14px;
+          padding: 0 3px;
+          border-radius: 999px;
+          background: #f43f5e;
+          color: #fff;
+          font-size: 9px;
+          font-weight: 700;
+          line-height: 14px;
+          text-align: center;
+          pointer-events: none;
+        }
         .gnb-dot {
           width: 3px; height: 3px;
           border-radius: 50%;
@@ -308,30 +342,35 @@ export default function GlobalBottomNav() {
           );
         })()}
 
-        {/* More — opens the Opportunity Hub (businesses, services, projects, jobs, gigs) */}
+        {/* Messages — the existing /messages chat list, with live unread count */}
         {(() => {
-          const color = hubOpen ? '#818cf8' : 'rgba(255,255,255,0.50)';
+          const active = pathname.startsWith('/messages');
+          const color  = active ? '#818cf8' : 'rgba(255,255,255,0.50)';
+          const label  = unread > 0
+            ? `Messages, ${unread} unread`
+            : 'Messages';
           return (
-            <button
-              type="button"
+            <a
+              href="/messages"
               className="gnb-item"
-              aria-label="More opportunities"
-              aria-haspopup="dialog"
-              aria-expanded={hubOpen}
-              onClick={() => setHubOpen(v => !v)}
+              aria-label={label}
+              aria-current={active ? 'page' : undefined}
             >
-              <span className="gnb-icon" style={{ color, background: hubOpen ? 'rgba(129,140,248,0.18)' : 'transparent' }}>
-                <LayoutGrid width={19} height={19} />
+              <span className="gnb-icon" style={{ color, background: active ? 'rgba(129,140,248,0.18)' : 'transparent' }}>
+                <MessageSquare width={19} height={19} />
+                {unread > 0 && (
+                  <span className="gnb-badge" aria-hidden="true">
+                    {unread > 99 ? '99+' : unread}
+                  </span>
+                )}
               </span>
-              <span className="gnb-label" style={{ color }}>More</span>
-              <span className="gnb-dot" style={{ opacity: hubOpen ? 1 : 0, background: '#818cf8' }} />
-            </button>
+              <span className="gnb-label" style={{ color }}>Messages</span>
+              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#818cf8' }} />
+            </a>
           );
         })()}
 
       </nav>
-
-      <OpportunityHub open={hubOpen} onClose={() => setHubOpen(false)} />
     </>
   );
 

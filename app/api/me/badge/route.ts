@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/server/auth';
 import { resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { calculateProfileScore } from '@/lib/profile-score';
+import { getFreePremiumSpots } from '@/lib/server/free-premium';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,7 @@ export async function GET() {
   const session = await getAuthSession();
   const userId = await resolveSessionUserId(session);
   if (!userId) {
-    return NextResponse.json({ docrudGo: false, avatarUrl: null, profileScore: null });
+    return NextResponse.json({ docrudGo: false, premium: false, avatarUrl: null, profileScore: null, freePremium: null });
   }
   // Projected: the full profile document carries resume files and portfolio
   // entries this endpoint never looks at.
@@ -38,8 +39,20 @@ export async function GET() {
   // Derived, never stored — the score cannot go stale against the profile.
   const { score } = calculateProfileScore(profile);
 
+  /* Aggregate only — a count and the allocation, never who holds a grant.
+     Premium members are told nothing about the offer, since it cannot apply
+     to them and the banner is hidden for them anyway. */
+  const freePremium = docrudGo ? null : await getFreePremiumSpots();
+
   return NextResponse.json(
-    { docrudGo, avatarUrl: profile?.avatarUrl ?? null, profileScore: score },
+    {
+      docrudGo,
+      /* Same signal, named for what it means at the call site. */
+      premium: docrudGo,
+      avatarUrl: profile?.avatarUrl ?? null,
+      profileScore: score,
+      freePremium,
+    },
     { headers: { 'Cache-Control': 'no-store' } }
   );
 }

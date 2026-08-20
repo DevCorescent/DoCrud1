@@ -27,6 +27,7 @@ export const dropdownOptionsPath = path.join(dataDir, 'dropdown-options.json');
 export const themeSettingsPath = path.join(dataDir, 'theme-settings.json');
 export const platformConfigPath = path.join(dataDir, 'platform-config.json');
 export const landingSettingsPath = path.join(dataDir, 'landing-settings.json');
+export const navAnnouncementSettingsPath = path.join(dataDir, 'nav-announcement-settings.json');
 export const contactRequestsPath = path.join(dataDir, 'contact-requests.json');
 export const saasPlansPath = path.join(dataDir, 'saas-plans.json');
 export const businessSettingsPath = path.join(dataDir, 'business-settings.json');
@@ -56,6 +57,11 @@ export const certificatesPath = path.join(dataDir, 'certificates.json');
 export const docwordDocumentsPath = path.join(dataDir, 'docword-documents.json');
 export const blogPostsPath = path.join(dataDir, 'blog-posts.json');
 export const adBannersPath = path.join(dataDir, 'ad-banners.json');
+/* Sponsored advertising: campaigns, their impression/click counters, and the
+   persistent feed/recommendation configuration Superadmin edits. */
+export const sponsoredAdsPath = path.join(dataDir, 'sponsored-ads.json');
+export const adEventsPath = path.join(dataDir, 'ad-events.json');
+export const feedConfigPath = path.join(dataDir, 'feed-config.json');
 export const homepageConfigPath = path.join(dataDir, 'homepage-config.json');
 export const webTelemetryPath = path.join(dataDir, 'web-telemetry.json');
 export const securityBlocklistPath = path.join(dataDir, 'security-blocklist.json');

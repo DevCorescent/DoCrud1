@@ -1,12 +1,15 @@
 'use client';
 
+import SponsoredAdsTab from '@/components/superadmin/SponsoredAdsTab';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { profileStatusStyle } from '@/lib/profile-score';
 import dynamic from 'next/dynamic';
 const HomepageCommandCenter = dynamic(() => import('@/components/HomepageCommandCenter'), { ssr: false });
 const AdBannerManager = dynamic(() => import('@/components/AdBannerManagerPanel'), { ssr: false });
 
 // ── Types ──────────────────────────────────────────────────────────────
-type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners';
+type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners' | 'sponsored-ads' | 'announcements';
 
 interface DashboardData {
   users: { total: number; active: number; suspended: number; disabled: number; business: number; individual: number; newLast30Days: number; newLast7Days: number; planDistribution: Record<string, number>; subscriptionStatusDistribution: Record<string, number>; roleDistribution: Record<string, number>; recentSignups: UserRow[]; dailySignups: { date: string; count: number }[] };
@@ -175,6 +178,8 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
     { group: 'Homepage', items: [
       { id: 'homepage' as Tab, label: 'Command Centre', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="3" width="18" height="18" rx="2"/><path strokeLinecap="round" strokeLinejoin="round" d="M3 9h18M9 21V9" /></svg> },
       { id: 'ad-banners' as Tab, label: 'Ad Banners', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="2" y="7" width="20" height="10" rx="2"/><path strokeLinecap="round" strokeLinejoin="round" d="M6 11h4m-4 3h2" /></svg> },
+      { id: 'sponsored-ads' as Tab, label: 'Sponsored Ads', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="5" width="18" height="14" rx="2"/><path strokeLinecap="round" d="M7 10h6"/></svg> },
+      { id: 'announcements' as Tab, label: 'Announcements', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg> },
     ]},
     { group: 'Manage', items: [
       { id: 'mail', label: 'Mail', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> },
@@ -260,6 +265,7 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
           {tab === 'documents' && <DocumentsTab />}
           {tab === 'mail' && <MailTab />}
           {tab === 'content' && <ContentTab />}
+          {tab === 'announcements' && <AnnouncementsTab />}
           {tab === 'settings' && <SettingsTab />}
           {tab === 'audit' && <AuditTab />}
           {tab === 'revenue' && <RevenueTab />}
@@ -283,6 +289,7 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
           {tab === 'infinity' && <InfinityTab />}
           {tab === 'homepage' && <HomepageCommandCenterTab />}
           {tab === 'ad-banners' && <AdBannersTab />}
+          {tab === 'sponsored-ads' && <SponsoredAdsTab />}
         </div>
       </main>
     </div>
@@ -2517,6 +2524,162 @@ function ContentTab() {
 // ══════════════════════════════════════════════════════════════════════
 // SETTINGS TAB
 // ══════════════════════════════════════════════════════════════════════
+
+/**
+ * Announcement bar configuration.
+ *
+ * Reads and writes through the existing /api/super-admin/settings endpoint
+ * (guarded by the sa_session cookie) rather than adding a parallel admin API.
+ * The preview renders with profileStatusStyle() -- the same function the real
+ * navigation bar uses -- so what is shown here is what users get.
+ */
+function AnnouncementsTab() {
+  const [form, setForm] = useState<{ enabled: boolean; text: string; href: string } | null>(null);
+  const [meta, setMeta] = useState<{ updatedAt: string; updatedBy: string }>({ updatedAt: '', updatedBy: '' });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [previewPct, setPreviewPct] = useState(65);
+
+  const load = () => {
+    setLoading(true);
+    fetch('/api/super-admin/settings')
+      .then((r) => r.json())
+      .then((d) => {
+        const a = d?.announcement;
+        setForm({ enabled: a?.enabled !== false, text: a?.text ?? '', href: a?.href ?? '' });
+        setMeta({ updatedAt: a?.updatedAt ?? '', updatedBy: a?.updatedBy ?? '' });
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  async function save() {
+    if (!form) return;
+    setSaving(true);
+    const res = await fetch('/api/super-admin/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_announcement', data: form }),
+    });
+    setSaving(false);
+    if (res.ok) { setMsg('Saved'); load(); setTimeout(() => setMsg(''), 2000); }
+    else { const d = await res.json().catch(() => ({})); setMsg(d.error || 'Failed'); }
+  }
+
+  if (loading) return <Loader />;
+  if (!form) return <ErrorState msg="Failed to load announcement settings" />;
+
+  const style = profileStatusStyle(previewPct);
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Announcements" sub="The profile-completion bar shown beside Explore on desktop and under the top nav on mobile" />
+      {msg && <div className="text-xs text-emerald-400">{msg}</div>}
+
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-white">Announcement Bar</div>
+            <div className="text-xs text-zinc-500 mt-0.5">
+              Shown only to users whose profile is below 100% complete.
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.enabled}
+            onClick={() => setForm({ ...form, enabled: !form.enabled })}
+            className={`shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              form.enabled
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${form.enabled ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+            {form.enabled ? 'Active' : 'Inactive'}
+          </button>
+        </div>
+
+        <div>
+          <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1" htmlFor="ann-text">Message</label>
+          <input
+            id="ann-text"
+            value={form.text}
+            maxLength={160}
+            onChange={(e) => setForm({ ...form, text: e.target.value })}
+            placeholder="Complete your profile 100%, Unlock 365 days of Premium for Free."
+            className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+          />
+          <div className="text-[11px] text-zinc-600 mt-1">{form.text.length}/160</div>
+        </div>
+
+        <div>
+          <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1" htmlFor="ann-href">Link (optional)</label>
+          <input
+            id="ann-href"
+            value={form.href}
+            onChange={(e) => setForm({ ...form, href: e.target.value })}
+            placeholder="/profile"
+            className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+          />
+          <div className="text-[11px] text-zinc-600 mt-1">Relative path only, e.g. <span className="font-mono">/profile</span>. Leave empty for a non-clickable bar.</div>
+        </div>
+
+        {/* Preview */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-xs text-zinc-500 uppercase tracking-wide" htmlFor="ann-preview">Preview</label>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-zinc-600">at</span>
+              <input
+                id="ann-preview"
+                type="range" min={0} max={100} step={1}
+                value={previewPct}
+                onChange={(e) => setPreviewPct(Number(e.target.value))}
+                className="w-28 accent-amber-500"
+              />
+              <span className="text-[11px] text-zinc-400 font-mono w-9 text-right">{previewPct}%</span>
+            </div>
+          </div>
+          <div className="rounded-lg border border-zinc-800 bg-black/50 p-4">
+            {!form.enabled ? (
+              <div className="text-[11px] text-zinc-600 italic">Disabled -- no bar is rendered for any user.</div>
+            ) : previewPct >= 100 ? (
+              <div className="text-[11px] text-zinc-600 italic">Profile complete -- the bar is hidden.</div>
+            ) : (
+              <div
+                className="inline-flex h-8 w-full max-w-[280px] items-center gap-2 rounded-[10px] border px-2.5 text-[11.5px] font-medium"
+                style={{ color: style.fg, background: style.bg, borderColor: style.border }}
+              >
+                <span className="min-w-0 flex-1 truncate text-left">{form.text || 'Complete your profile 100%, Unlock 365 days of Premium for Free.'}</span>
+                <span
+                  className="inline-flex shrink-0 items-center justify-center rounded-full border h-[19px] px-1.5 text-[10.5px] font-semibold tabular-nums"
+                  style={{ color: style.fg, background: style.bg, borderColor: style.border }}
+                >{previewPct}%</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-1">
+          <div className="text-[11px] text-zinc-600">
+            {meta.updatedAt
+              ? <>Last updated {new Date(meta.updatedAt).toLocaleString()}{meta.updatedBy ? <> by <span className="font-mono text-zinc-500">{meta.updatedBy}</span></> : null}</>
+              : 'Never updated -- showing defaults.'}
+          </div>
+          <button
+            disabled={saving || !form.text.trim()}
+            onClick={save}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-xs font-semibold rounded-lg transition-all"
+          >{saving ? 'Saving...' : 'Save Changes'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsTab() {
   const [data, setData] = useState<{ superAdminEmail: string; authSettings: Record<string, unknown> | null; mailSettings: Record<string, unknown> | null; adminUsers: Record<string, unknown>[] } | null>(null);
   const [loading, setLoading] = useState(true);

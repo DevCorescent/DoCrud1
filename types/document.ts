@@ -2394,6 +2394,21 @@ export interface ThemeSettings {
   accentLabel: string;
 }
 
+/**
+ * The profile-completion announcement rendered in the top navigation.
+ * Super Admin owns `enabled`/`text`/`href`; the bar additionally hides itself
+ * once the viewer's profile score reaches 100 (see lib/profile-score.ts).
+ */
+export interface NavAnnouncementSettings {
+  enabled: boolean;
+  text: string;
+  /** Optional destination for the bar. Empty string = not a link. */
+  href: string;
+  updatedAt: string;
+  /** Email of the Super Admin who last saved — never sent to normal users. */
+  updatedBy: string;
+}
+
 export interface WorkflowStep {
   id: string;
   label: string;

@@ -13,6 +13,10 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import { PresenceDot } from '@/components/PresenceBadge';
 import { PublishedFeedCard, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
+import { composeFeed, getSessionSeed, planModuleSlots } from '@/lib/feed-composition';
+import PeopleYouMayKnow from '@/components/recommendations/PeopleYouMayKnow';
+import RecommendedJobs from '@/components/recommendations/RecommendedJobs';
+import SponsoredAdCard from '@/components/ads/SponsoredAdCard';
 import { buildCategoryMetaChips, FeedMetaChipRow, omitChipsPresentIn } from '@/components/feed/FeedCardMeta';
 import { feedCategoryTreatment } from '@/components/feed/feedCardTheme';
 import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
@@ -95,6 +99,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import HomepageNav from '@/components/HomepageNav';
+import { NavAnnouncementBar, type NavAnnouncementConfig } from '@/components/nav/ProfileCompletion';
 import { AssistantResultCardView } from '@/components/home-chat/AssistantResultCard';
 import type { DocumentHistory } from '@/types/document';
 import type { AssistantResultCard, DocumentQuickAction, UploadedDocument } from '@/types/doc-assistant';
@@ -2329,6 +2334,66 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
   const visible = filtered.slice(0, page * HP_PAGE_SIZE);
   const hasMore = visible.length < filtered.length;
 
+  /* ── Personalised feed composition ──
+     Recommendation/promotional modules are feed items, not fixed sections.
+     The slot plan is derived once from a per-session seed, so a module keeps
+     its place while this feed is open (no jumping, no duplication) and lands
+     somewhere different for another session. Positions are absolute post
+     indexes, so loading another page never moves what is already rendered. */
+  const feedSeed = React.useMemo(() => getSessionSeed(), []);
+  const [adCount, setAdCount] = React.useState(0);
+  const [hasPeopleRecs, setHasPeopleRecs] = React.useState(false);
+  const [hasJobRecs, setHasJobRecs] = React.useState(false);
+  const availabilityFetched = React.useRef(false);
+
+  const [feedCfg, setFeedCfg] = React.useState<{ minLeadPosts: number; minModuleGap: number; maxModulesPerPage: number } | null>(null);
+
+  React.useEffect(() => {
+    if (availabilityFetched.current) return;
+    availabilityFetched.current = true;
+    /* One probe per page load. Each module fetches its own data; this only
+       decides whether a slot is worth reserving. A kind with no eligible data
+       must report false — reserving a slot for a module that renders nothing
+       would leave a hole and push the others out of the visible window.
+       Every request is allSettled: if any of these fail the feed still renders
+       normally, just without that module. */
+    void Promise.allSettled([
+      fetch('/api/recommendations/people').then(r => r.ok ? r.json() : { people: [] }),
+      fetch('/api/ads/serve').then(r => r.ok ? r.json() : { ads: [] }),
+      fetch('/api/recommendations/jobs').then(r => r.ok ? r.json() : { jobs: [] }),
+      fetch('/api/feed-config').then(r => r.ok ? r.json() : {}),
+    ]).then(([pe, ad, jb, cfg]) => {
+      if (pe.status === 'fulfilled') setHasPeopleRecs((pe.value?.people?.length ?? 0) > 0);
+      if (ad.status === 'fulfilled') setAdCount(ad.value?.ads?.length ?? 0);
+      if (jb.status === 'fulfilled') setHasJobRecs((jb.value?.jobs?.length ?? 0) > 0);
+      if (cfg.status === 'fulfilled') {
+        const comp = (cfg.value as { composition?: typeof feedCfg })?.composition;
+        if (comp) setFeedCfg(comp);
+      }
+    });
+  }, []);
+
+  const moduleSlots = React.useMemo(
+    () => planModuleSlots(
+      { people: hasPeopleRecs, ads: adCount, jobs: hasJobRecs },
+      {
+        seed: feedSeed,
+        minLeadPosts: feedCfg?.minLeadPosts,
+        minGap: feedCfg?.minModuleGap,
+        maxModules: feedCfg?.maxModulesPerPage,
+      },
+    ),
+    [hasPeopleRecs, adCount, hasJobRecs, feedSeed, feedCfg],
+  );
+
+  const composed = React.useMemo(
+    () => composeFeed(visible, (i) => i.id, moduleSlots),
+    // visible is a fresh slice each render; its length and the active filter
+    // are what actually change the composition.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visible.length, activecat, tagSearch, sort, moduleSlots],
+  );
+
   React.useEffect(() => { setPage(1); }, [activecat, tagSearch, sort]);
 
   React.useEffect(() => {
@@ -2588,7 +2653,7 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
               exposed on small screens as a single row: a FIXED Publish button,
               a divider, then every category inside an infinite marquee that also
               follows cursor/touch drag in either direction. */}
-          <div className="lg:hidden shrink-0 flex items-center py-3 min-w-0">
+          <div className="lg:hidden shrink-0 flex items-center py-3 pl-1 sm:pl-7 min-w-0">
             <style>{`
               /* Plain native horizontal scroller: one row, no duplicated list,
                  no drag handler, no marquee. touch-action is pan-x so a
@@ -2704,11 +2769,35 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                     </div>
                   ))
                 : visible.length > 0
-                  ? visible.map((item, idx) => (
-                      <div key={item.id} className="hp-feed-card-enter" style={{ animationDelay: `${Math.min(idx % HP_PAGE_SIZE, 6) * 50}ms` }}>
-                        <HomepageFeedCard item={item} />
-                      </div>
-                    ))
+                  ? composed.map((entry, idx) => {
+                      const delay = `${Math.min(idx % HP_PAGE_SIZE, 6) * 50}ms`;
+                      if (entry.type === 'post') {
+                        return (
+                          <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
+                            <HomepageFeedCard item={entry.data} />
+                          </div>
+                        );
+                      }
+                      if (entry.type === 'people-recommendation') {
+                        return (
+                          <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
+                            <PeopleYouMayKnow />
+                          </div>
+                        );
+                      }
+                      if (entry.type === 'job-recommendation') {
+                        return (
+                          <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
+                            <RecommendedJobs />
+                          </div>
+                        );
+                      }
+                      return (
+                        <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
+                          <SponsoredAdCard adIndex={entry.adIndex} />
+                        </div>
+                      );
+                    })
                   : (
                       <div className="flex flex-col items-center gap-3 py-20 text-center">
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.03]">
@@ -5446,9 +5535,9 @@ type AdBanner = {
 
 /* ─── Explore ─────────────────────────────────────────────────────────
    Six entry points into the opportunity network, using routes that
-   already exist. Deliberately static: no state, no effect, no timer, no
-   scroll handler and no request — the strip is plain markup plus native
-   overflow scrolling, hardened the same way the other DoCrud strips are. */
+   already exist. Tabs stay plain markup + native overflow scrolling.
+   On lg+ the profile-completion announcement sits on the SAME row, to
+   the right of the tabs (desktop only — mobile keeps the bar under nav). */
 const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = [
   { label: 'Businesses', href: '/businesses',        Icon: Building2 },
   { label: 'Services',   href: '/services',          Icon: Wrench    },
@@ -5458,7 +5547,32 @@ const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = 
   { label: 'People',     href: '/people',            Icon: Users     },
 ];
 
-function ExploreSection() {
+function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
+  const { status } = useSession();
+  const isAuthenticated = status === 'authenticated';
+  const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
+  const [profileScore, setProfileScore] = useState<number | null>(null);
+
+  /* Same sources HomepageNav already uses — Super Admin copy + /api/me/badge
+     score. Desktop placement only; mobile announcement stays in HomepageNav. */
+  useEffect(() => {
+    if (!isAuthenticated || guestMode) return;
+    let cancelled = false;
+    fetch('/api/announcement')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: NavAnnouncementConfig | null) => {
+        if (!cancelled && d) setAnnouncement({ enabled: !!d.enabled, text: d.text ?? '', href: d.href ?? '' });
+      })
+      .catch(() => {});
+    fetch('/api/me/badge')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { profileScore?: number | null } | null) => {
+        if (!cancelled && d && typeof d.profileScore === 'number') setProfileScore(d.profileScore);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAuthenticated, guestMode]);
+
   return (
     <div>
       <style>{`
@@ -5467,41 +5581,76 @@ function ExploreSection() {
                      scroll-behavior: auto; scrollbar-width: none; -ms-overflow-style: none; }
         .exp-strip::-webkit-scrollbar { display: none; }
 
-        /* Monochrome square tiles: the icon sits centred inside the bordered
-           box, the label sits underneath it, outside the box. No category
-           colour, no gradient, no shadow, no scale. */
+        /* Dark-glass tiles: icon and label share one translucent surface.
+           Same glass language as the rest of the homepage — blur, a hairline
+           white border and a low-opacity inner highlight. Monochrome only:
+           no category colour, no glow, no scale. */
         .exp-tile {
+          position: relative;
+          /* 82px + a 10px gap gives a 92px pitch. Four of those clear the
+             382px strip at 390px with room to spare, so the fifth tile
+             straddles the right edge and tells the user the row scrolls. At
+             the 14px desktop gap the pitch would be 96px, which fits exactly
+             four times and reads as a complete, static row. */
+          width: 82px; height: 82px;
+          flex-shrink: 0;
           display: flex;
           flex-direction: column;
           align-items: center;
-          flex-shrink: 0;
+          justify-content: center;
+          gap: 7px;
+          overflow: hidden;
           text-decoration: none;
-        }
-        .exp-square {
-          width: 82px; height: 82px;
-          display: flex; align-items: center; justify-content: center;
-          border-radius: 10px;
-          background: rgba(255,255,255,0.025);
+          border-radius: 15px;
           border: 1px solid rgba(255,255,255,0.12);
-          color: rgba(255,255,255,0.75);
-          transition: background 0.15s ease, border-color 0.15s ease;
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.016) 46%, rgba(255,255,255,0.03) 100%);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
+          transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
         }
-        .exp-tile:hover .exp-square {
-          background: rgba(255,255,255,0.045);
+        /* The inner highlight, kept as its own layer so hover can lift it
+           without touching the base gradient. */
+        .exp-sheen {
+          position: absolute;
+          top: -30px; left: 50%;
+          width: 96px; height: 64px;
+          transform: translateX(-50%);
+          pointer-events: none;
+          background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 45%, rgba(255,255,255,0) 74%);
+          transition: opacity 0.15s ease;
+          opacity: 0.9;
+        }
+        .exp-tile:hover .exp-sheen { opacity: 1; }
+        .exp-tile:hover {
+          background-color: rgba(255,255,255,0.03);
           border-color: rgba(255,255,255,0.20);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10);
         }
-        .exp-icon { width: 28px; height: 28px; }
+        .exp-tile:focus-visible {
+          outline: 2px solid rgba(255,255,255,0.55);
+          outline-offset: 2px;
+        }
+        .exp-icon {
+          position: relative;
+          width: 27px; height: 27px;
+          color: rgba(255,255,255,0.82);
+          transition: color 0.15s ease;
+        }
+        .exp-tile:hover .exp-icon { color: rgba(255,255,255,0.95); }
         .exp-label {
-          margin-top: 8px;
+          position: relative;
           font-size: 11.5px;
           font-weight: 600;
-          color: rgba(255,255,255,0.65);
+          line-height: 1;
+          color: rgba(255,255,255,0.70);
           text-align: center;
           transition: color 0.15s ease;
         }
-        .exp-tile:hover .exp-label { color: rgba(255,255,255,0.9); }
+        .exp-tile:hover .exp-label { color: rgba(255,255,255,0.92); }
         @media (min-width: 640px) {
-          .exp-square { width: 92px; height: 92px; }
+          .exp-tile { width: 92px; height: 92px; gap: 8px; }
           .exp-icon { width: 30px; height: 30px; }
         }
       `}</style>
@@ -5518,15 +5667,28 @@ function ExploreSection() {
         </div>
       </div>
 
-      <div className="exp-strip flex items-start gap-3.5 px-1 pb-1">
-        {EXPLORE_ITEMS.map((it) => (
-          <Link key={it.label} href={it.href} className="exp-tile">
-            <span className="exp-square">
-              <it.Icon className="exp-icon" />
-            </span>
-            <span className="exp-label">{it.label}</span>
-          </Link>
-        ))}
+      {/* Tabs + desktop announcement on one flex row. Below lg the announcement
+          slot is hidden so mobile keeps the bar under HomepageNav. */}
+      <div className="flex min-w-0 items-center gap-3.5 px-1 pb-1">
+        <div className="exp-strip flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3.5 lg:flex-none">
+          {EXPLORE_ITEMS.map((it) => (
+            <Link key={it.label} href={it.href} className="exp-tile" aria-label={it.label}>
+              <span className="exp-sheen" aria-hidden="true" />
+              <it.Icon className="exp-icon" aria-hidden="true" />
+              <span className="exp-label">{it.label}</span>
+            </Link>
+          ))}
+        </div>
+        {isAuthenticated && !guestMode && (
+          <div className="hidden min-w-0 flex-1 items-center justify-end lg:flex">
+            <NavAnnouncementBar
+              score={profileScore}
+              announcement={announcement}
+              variant="desktop"
+              className="ml-auto"
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -5830,6 +5992,7 @@ function NewHomepageContent({
   liveFeeds = [],
   hpSections = DEFAULT_HP_SECTIONS,
   hpConfig = null,
+  guestMode = false,
 }: {
   softwareName: string;
   headlines: string[];
@@ -5848,6 +6011,7 @@ function NewHomepageContent({
   liveFeeds?: NHCLiveFeed[];
   hpSections?: HPSectionVisibility;
   hpConfig?: HPConfig | null;
+  guestMode?: boolean;
 }) {
   const { data: nhcSession } = useSession();
   const [activeFeedTab, setActiveFeedTab] = React.useState<string>('All');
@@ -6378,7 +6542,7 @@ function NewHomepageContent({
         {hpSections.adBanners && <AdBannerSlider />} */}
 
         {/* ── Explore — same heading treatment the Promotions section used ── */}
-        <ExploreSection />
+        <ExploreSection guestMode={guestMode} />
 
         {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
         <div className="hidden lg:flex flex-col w-full min-w-0" style={{ gap: 14 }}>
@@ -8166,6 +8330,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                   liveFeeds={liveFeeds}
                   hpSections={hpSections}
                   hpConfig={hpConfig}
+                  guestMode={guestMode}
                 />
               ) : (
                 <div

@@ -754,12 +754,10 @@ function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, 
 
 // ─── Placeholder cycler ───────────────────────────────────────────────────────
 
-const DEFAULT_CYCLE = [
-  'Search gigs, people, docs…',
-  'Find professionals & talent…',
-  'Search documents & files…',
-  'Explore feeds & articles…',
-];
+/* One steady label. The bar used to rotate through four entity-list strings,
+   which read as noise before the user has typed anything. Kept as an array so
+   the `placeholderCycle` prop still works for any caller that wants rotation. */
+const DEFAULT_CYCLE = ['Search'];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -794,9 +792,9 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
 
     const cycle = placeholderCycle ?? DEFAULT_CYCLE;
 
-    // Cycle placeholder every 2.6s
+    // Cycle placeholder every 2.6s — no timer when there is nothing to cycle.
     useEffect(() => {
-      if (placeholder) return;
+      if (placeholder || cycle.length <= 1) return;
       const id = setInterval(() => setCycleIdx((i) => (i + 1) % cycle.length), 2600);
       return () => clearInterval(id);
     }, [placeholder, cycle.length]);

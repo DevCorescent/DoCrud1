@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
 import GlobalSearchBar, { type GlobalSearchBarHandle, type LocalSearchResult } from '@/components/GlobalSearchBar';
+import { NavAnnouncementBar, ProfileCompletionRing, shouldShowAnnouncement, type NavAnnouncementConfig } from '@/components/nav/ProfileCompletion';
 import OpportunityHub from '@/components/OpportunityHub';
 import { useSession ,signOut } from 'next-auth/react';
 
@@ -233,7 +234,8 @@ const notificationsInitializedRef = useRef(false);
 
 const notifRef = useRef<HTMLDivElement>(null);
 const notifPanelRef = useRef<HTMLDivElement>(null);
-  const [badge, setBadge] = useState<{ docrudGo: boolean; avatarUrl: string | null } | null>(null);
+  const [badge, setBadge] = useState<{ docrudGo: boolean; avatarUrl: string | null; profileScore: number | null } | null>(null);
+  const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [hubOpen, setHubOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
@@ -426,13 +428,32 @@ useEffect(() => {
     const id = setTimeout(() => {
       fetch('/api/me/badge')
         .then((r) => r.ok ? r.json() : null)
-        .then((d: { docrudGo?: boolean; avatarUrl?: string | null } | null) => {
-          if (d) setBadge({ docrudGo: d.docrudGo ?? false, avatarUrl: d.avatarUrl ?? null });
+        .then((d: { docrudGo?: boolean; avatarUrl?: string | null; profileScore?: number | null } | null) => {
+          if (d) setBadge({
+            docrudGo: d.docrudGo ?? false,
+            avatarUrl: d.avatarUrl ?? null,
+            profileScore: typeof d.profileScore === 'number' ? d.profileScore : null,
+          });
         })
         .catch(() => {});
     }, 800);
     return () => clearTimeout(id);
   }, [isAuthenticated, guestMode]);
+
+  /* Super Admin owns the announcement copy and its on/off switch, so the bar
+     reads it from the server rather than embedding a string in the bundle. */
+  useEffect(() => {
+    if (!isAuthenticated || guestMode) return;
+    let cancelled = false;
+    fetch('/api/announcement')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: NavAnnouncementConfig | null) => {
+        if (!cancelled && d) setAnnouncement({ enabled: !!d.enabled, text: d.text ?? '', href: d.href ?? '' });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAuthenticated, guestMode]);
+
 
   /* Notification + unread polling.
      
@@ -536,6 +557,7 @@ useEffect(() => {
   }
 
   return (
+    <>
     <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-6 lg:px-10 xl:px-12 sticky top-0 z-40" style={{
       /* Match GlobalBottomNav glassmorphism tokens */
       background: 'rgba(0, 0, 0, 0.82)',
@@ -598,6 +620,9 @@ useEffect(() => {
         className="mx-3"
       />
 
+      {/* Desktop announcement lives beside Explore tabs on the homepage
+          (PublicHomepage ExploreSection) — not next to Search. */}
+
       {/* Mobile publish + button — left of search pill, visible below md only */}
       {onPublishClick && (
         <button
@@ -630,7 +655,7 @@ useEffect(() => {
         }}
       >
         <Search className="h-[13px] w-[13px] shrink-0 text-white/40" />
-        <span className="text-[13px] font-medium text-white/32 truncate flex-1 text-left">Search people, gigs & docs…</span>
+        <span className="text-[13px] font-medium text-white/32 truncate flex-1 text-left">Search</span>
       </button>
 
       {/* ── RIGHT group: nav links + bell + avatar ── */}
@@ -911,8 +936,14 @@ useEffect(() => {
                 />
               </>
             )}
+            <ProfileCompletionRing
+              score={badge?.profileScore ?? null}
+              showValue={!badge?.docrudGo}
+              className="hidden md:inline-flex"
+            >
             <Link
               href="/profile"
+              title={typeof badge?.profileScore === 'number' ? `Profile ${badge.profileScore}% complete` : undefined}
             className="hidden md:flex relative z-10 h-8 w-8 items-center justify-center rounded-full border border-white/[0.14] bg-gradient-to-br from-white/[0.14] to-white/[0.06] text-white/70 transition hover:from-white/[0.20] hover:to-white/[0.10] hover:text-white shadow-[0_2px_8px_rgba(0,0,0,0.3)] active:scale-95 overflow-hidden"
               style={badge?.docrudGo ? { boxShadow: '0 0 0 2px #08090a, 0 2px 12px rgba(99,102,241,0.4)' } : undefined}
             >
@@ -927,8 +958,14 @@ useEffect(() => {
                 <User className="h-3.5 w-3.5" />
               )}
                         </Link>
+            </ProfileCompletionRing>
 
             {/* Mobile profile trigger */}
+            <ProfileCompletionRing
+              score={badge?.profileScore ?? null}
+              showValue={!badge?.docrudGo}
+              className="md:hidden"
+            >
             <button
              ref={profileTriggerRef}
               type="button"
@@ -966,6 +1003,7 @@ useEffect(() => {
                 <User className="h-3.5 w-3.5" />
               )}
             </button>
+            </ProfileCompletionRing>
 
             {badge?.docrudGo && (
               <span
@@ -1113,5 +1151,19 @@ useEffect(() => {
           the bottom-nav trigger is hidden at sm+. */}
       <OpportunityHub open={hubOpen} onClose={() => setHubOpen(false)} />
     </header>
+
+    {/* Profile-completion announcement — mobile/tablet. Must sit directly under
+        the sticky header and ABOVE the scrollable homepage (recents). Kept out
+        of overflow-hidden content so it cannot be clipped. Absent at 100%. */}
+    {isAuthenticated && !guestMode && shouldShowAnnouncement(announcement, badge?.profileScore ?? null) && (
+      <div className="relative z-30 lg:hidden shrink-0 border-b border-white/[0.04] bg-[#060608]/92 px-4 pb-2 pt-2 backdrop-blur-md sm:px-6">
+        <NavAnnouncementBar
+          score={badge?.profileScore ?? null}
+          announcement={announcement}
+          variant="mobile"
+        />
+      </div>
+    )}
+    </>
   );
 }

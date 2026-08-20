@@ -1,5 +1,5 @@
-import { AuthSettings, CollaborationSettings, LandingSettings, MailSettings, SignatureSettings, ThemeSettings, WorkflowAutomationSettings } from '@/types/document';
-import { authSettingsPath, automationSettingsPath, collaborationSettingsPath, landingSettingsPath, mailSettingsPath, readJsonFile, signatureSettingsPath, themeSettingsPath, writeJsonFile } from '@/lib/server/storage';
+import { AuthSettings, CollaborationSettings, LandingSettings, MailSettings, NavAnnouncementSettings, SignatureSettings, ThemeSettings, WorkflowAutomationSettings } from '@/types/document';
+import { authSettingsPath, automationSettingsPath, collaborationSettingsPath, landingSettingsPath, mailSettingsPath, navAnnouncementSettingsPath, readJsonFile, signatureSettingsPath, themeSettingsPath, writeJsonFile } from '@/lib/server/storage';
 import { getDbPool } from '@/lib/server/database';
 import { getSettingsValueFromRepository, saveSettingsValueToRepository } from '@/lib/server/repositories';
 
@@ -484,4 +484,50 @@ export async function saveLandingSettings(settings: LandingSettings) {
     return;
   }
   await writeJsonFile(landingSettingsPath, settings);
+}
+
+/* ── Top-navigation announcement ─────────────────────────────────────────────
+   Stored through the same settings_store repository as every other admin
+   setting (scope `announcement`, key `nav`) rather than introducing a second
+   configuration system. */
+
+export const defaultNavAnnouncementSettings: NavAnnouncementSettings = {
+  enabled: true,
+  text: 'Complete your profile 100%, Unlock 365 days of Premium for Free.',
+  href: '/profile',
+  updatedAt: '',
+  updatedBy: '',
+};
+
+export async function getNavAnnouncementSettings(): Promise<NavAnnouncementSettings> {
+  const settings = getDbPool()
+    ? await getSettingsValueFromRepository<Partial<NavAnnouncementSettings>>('announcement', 'nav', defaultNavAnnouncementSettings)
+    : await readJsonFile<Partial<NavAnnouncementSettings>>(navAnnouncementSettingsPath, defaultNavAnnouncementSettings);
+
+  const merged = { ...defaultNavAnnouncementSettings, ...settings };
+  return {
+    // A stored `false` must survive the merge, so coerce rather than `||`.
+    enabled: merged.enabled !== false,
+    text: typeof merged.text === 'string' && merged.text.trim()
+      ? merged.text.trim()
+      : defaultNavAnnouncementSettings.text,
+    href: typeof merged.href === 'string' ? merged.href.trim() : '',
+    updatedAt: merged.updatedAt || '',
+    updatedBy: merged.updatedBy || '',
+  };
+}
+
+export async function saveNavAnnouncementSettings(settings: NavAnnouncementSettings) {
+  const payload: NavAnnouncementSettings = {
+    enabled: Boolean(settings.enabled),
+    text: settings.text.trim(),
+    href: settings.href.trim(),
+    updatedAt: settings.updatedAt,
+    updatedBy: settings.updatedBy,
+  };
+  if (getDbPool()) {
+    await saveSettingsValueToRepository('announcement', 'nav', payload);
+    return;
+  }
+  await writeJsonFile(navAnnouncementSettingsPath, payload);
 }

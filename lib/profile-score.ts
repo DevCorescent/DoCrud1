@@ -135,3 +135,64 @@ export const PROFILE_COMPLETION_CTA =
   'Complete your profile to build your presence on Docrud and match with relevant opportunities.';
 export const PROFILE_COMPLETE_SUBTITLE =
   "You're ready to build your presence and match with opportunities.";
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Completion status bands.
+
+   Separate from `tier` on purpose: `tier` drives the encouraging copy on the
+   profile page (its 40/60/80 thresholds are tuned to that message ladder),
+   while a band drives the *colour* of the completion indicators. Both read the
+   same `score`, so they can never disagree about how complete a profile is.
+
+   One definition, three consumers: the nav announcement pill, the ring around
+   the avatar, and the Super Admin preview.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+export type ProfileStatusBand = 'low' | 'medium-low' | 'medium-high' | 'high' | 'complete';
+
+export interface ProfileStatusStyle {
+  band: ProfileStatusBand;
+  label: string;
+  /** Muted pastel tokens — soft fill, low-contrast border, readable text. */
+  fg: string;
+  bg: string;
+  border: string;
+  /** Stroke for the ring around the avatar. */
+  ring: string;
+}
+
+export function profileStatusBand(score: number): ProfileStatusBand {
+  const s = Math.max(0, Math.min(100, Math.round(score)));
+  if (s >= 100) return 'complete';
+  if (s >= 80) return 'high';
+  if (s >= 60) return 'medium-high';
+  if (s >= 30) return 'medium-low';
+  return 'low';
+}
+
+const STATUS_STYLES: Record<ProfileStatusBand, ProfileStatusStyle> = {
+  'low': {
+    band: 'low', label: 'Low',
+    fg: '#e9a7ac', bg: 'rgba(214,109,118,0.10)', border: 'rgba(214,109,118,0.24)', ring: '#d66d76',
+  },
+  'medium-low': {
+    band: 'medium-low', label: 'Medium low',
+    fg: '#e3bb92', bg: 'rgba(206,151,96,0.10)', border: 'rgba(206,151,96,0.24)', ring: '#ce9760',
+  },
+  'medium-high': {
+    band: 'medium-high', label: 'Medium high',
+    fg: '#ddcd94', bg: 'rgba(197,175,98,0.10)', border: 'rgba(197,175,98,0.24)', ring: '#c5af62',
+  },
+  'high': {
+    band: 'high', label: 'High',
+    fg: '#a9d3b6', bg: 'rgba(108,178,133,0.10)', border: 'rgba(108,178,133,0.24)', ring: '#6cb285',
+  },
+  'complete': {
+    band: 'complete', label: 'Complete',
+    fg: '#a9d3b6', bg: 'rgba(108,178,133,0.10)', border: 'rgba(108,178,133,0.24)', ring: '#6cb285',
+  },
+};
+
+export function profileStatusStyle(score: number): ProfileStatusStyle {
+  return STATUS_STYLES[profileStatusBand(score)];
+}

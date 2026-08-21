@@ -288,7 +288,7 @@ function Avatar({ user, size = 9, ring = true }: { user: OtherUser | null; size?
   const fallback = (
     <div
       className={`${cls} flex items-center justify-center font-bold text-white/75`}
-      style={{ width: px, height: px, fontSize: fs, background: 'linear-gradient(135deg,rgba(59,130,246,0.38),rgba(139,92,246,0.38))' }}
+      style={{ width: px, height: px, fontSize: fs, background: 'rgba(255,255,255,0.10)' }}
     >
       {initials(user.name)}
     </div>
@@ -478,10 +478,15 @@ function MessageBubble({
     <span style={{ fontSize: 9.5, color: isMine ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.26)' }}>edited ·</span>
   ) : null;
 
-  const sentR = isLast ? 'rounded-[17px] rounded-br-[4px]' : 'rounded-[17px]';
-  const recvR = isLast ? 'rounded-[17px] rounded-bl-[4px]' : 'rounded-[17px]';
+  const sentR = isLast ? 'rounded-[14px] rounded-br-[4px]' : 'rounded-[14px]';
+  const recvR = isLast ? 'rounded-[14px] rounded-bl-[4px]' : 'rounded-[14px]';
   const br = isMine ? sentR : recvR;
-  const recvBg = 'rgba(28,30,46,0.82)';
+  /* Flat surfaces, not translucent glass. A message list is the densest thing
+     on the screen — every blurred layer here is a per-frame cost during scroll
+     and buys nothing legible. */
+  const recvBg = '#1b1d29';
+  /* One solid accent instead of a gradient + coloured drop shadow. */
+  const sentBg = '#2563eb';
 
   const replyPreview = msg.replyTo ? (
     <button
@@ -661,7 +666,7 @@ function MessageBubble({
               </div>
             </div>
           ) : msg.type === 'file' ? (
-            <div className={`msg-file-bubble ${br} overflow-hidden`} style={{ padding: '10px 12px', maxWidth: '100%', background: isMine ? 'linear-gradient(135deg,#3b82f6,#1d4ed8)' : recvBg, border: isMine ? 'none' : '1px solid rgba(255,255,255,0.09)', boxShadow: isMine ? '0 4px 20px rgba(59,130,246,0.28)' : 'none', color: '#fff' }}>
+            <div className={`msg-file-bubble ${br} overflow-hidden`} style={{ padding: '10px 12px', maxWidth: '100%', background: isMine ? sentBg : recvBg, border: isMine ? 'none' : '1px solid rgba(255,255,255,0.07)', boxShadow: 'none', color: '#fff' }}>
               {replyPreview}
               <a href={msg.attachmentUrl} download={msg.attachmentName} target="_blank" rel="noreferrer" className="flex items-center gap-2.5">
                 <div className="flex-shrink-0 rounded-[10px] flex items-center justify-center" style={{ width: 34, height: 34, background: isMine ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)' }}>
@@ -683,11 +688,9 @@ function MessageBubble({
               style={{
                 padding: '9px 13px',
                 maxWidth: '100%',
-                background: isMine ? 'linear-gradient(135deg,#3b82f6,#1d4ed8)' : recvBg,
-                backdropFilter: isMine ? undefined : 'blur(14px)',
-                WebkitBackdropFilter: isMine ? undefined : 'blur(14px)',
-                border: isMine ? 'none' : '1px solid rgba(255,255,255,0.09)',
-                boxShadow: isMine ? '0 4px 20px rgba(59,130,246,0.28)' : 'none',
+                background: isMine ? sentBg : recvBg,
+                border: isMine ? 'none' : '1px solid rgba(255,255,255,0.07)',
+                boxShadow: 'none',
                 color: '#fff',
               }}
             >
@@ -1640,7 +1643,6 @@ function NewChatModal({ onClose, onStart }: { onClose: () => void; onStart: (u: 
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(20px)' }} onClick={onClose} />
       <div className="relative w-full max-w-sm my-auto overflow-hidden animate-in fade-in zoom-in-95 duration-200" style={{ maxHeight: 'calc(100dvh - 32px)', overflowY: 'auto', borderRadius: 26, border: '1px solid rgba(255,255,255,0.09)', background: '#0e0f16', boxShadow: '0 32px 96px rgba(0,0,0,0.95)' }}>
-        <div className="absolute inset-x-0 top-0 h-24 pointer-events-none" style={{ background: 'linear-gradient(to bottom,rgba(59,130,246,0.07),transparent)' }} />
         <div className="flex items-center gap-2 px-5 pt-5 pb-4">
           <button onClick={() => setSelected(null)} className="h-7 w-7 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.06)' }}><ArrowLeft style={{ width: 13, height: 13, color: 'rgba(255,255,255,0.55)' }} /></button>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.50)' }}>Start conversation</span>
@@ -1662,7 +1664,7 @@ function NewChatModal({ onClose, onStart }: { onClose: () => void; onStart: (u: 
           ) : (
             <div className="w-full flex flex-col gap-2">
               {!selected.iFollow && (
-                <button onClick={followAndOpen} disabled={following} className="w-full flex items-center justify-center gap-2 h-11 font-bold text-white transition-all active:scale-[0.97] disabled:opacity-60" style={{ borderRadius: 13, background: 'linear-gradient(135deg,#3b82f6,#7c3aed)', fontSize: 13, boxShadow: '0 4px 20px rgba(99,102,241,0.35)' }}>
+                <button onClick={followAndOpen} disabled={following} className="w-full flex items-center justify-center gap-2 h-11 font-bold text-white transition-all active:scale-[0.97] disabled:opacity-60" style={{ borderRadius: 10, background: '#2563eb', fontSize: 13 }}>
                   {following ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" /> : <UserPlus style={{ width: 15, height: 15 }} />}Follow & Send Request
                 </button>
               )}
@@ -2557,6 +2559,20 @@ function MessagesPageInner() {
         @media (min-width:640px) { .sidebar-panel { transform:none !important; } .chat-main { transform:none !important; } }
         .chat-bg { background-color:transparent; background-image:radial-gradient(rgba(255,255,255,0.018) 1px,transparent 1px); background-size:24px 24px; }
         .info-slide { transition:width .25s cubic-bezier(0.32,0.72,0,1); overflow:hidden; }
+
+        /* Composer focus: the border brightens, nothing glows or grows. */
+        .msg-composer { transition:border-color .18s ease, background-color .18s ease; }
+        .msg-composer:focus-within { border-color:rgba(255,255,255,0.20) !important; background:rgba(255,255,255,0.07) !important; }
+        /* Icon buttons: a background shift on hover, no scale, no glow. */
+        .msg-icon-btn:hover:not(:disabled) { background:rgba(255,255,255,0.09) !important; }
+
+        /* One place to honour the motion preference for this screen: the panel
+           slide, the drawer and every transition above stop. Loading spinners
+           are left alone — they report state rather than decorate. */
+        @media (prefers-reduced-motion: reduce) {
+          .pslide, .info-slide, .msg-composer, .msg-icon-btn { transition:none !important; }
+          .drawer-enter { animation:none !important; }
+        }
         /* Mobile drawer */
         .drawer-enter { animation: drawerUp .28s cubic-bezier(0.32,0.72,0,1) both; }
         @keyframes drawerUp { from{transform:translateY(100%);} to{transform:translateY(0);} }
@@ -2832,12 +2848,12 @@ function MessagesPageInner() {
           >
             {!activeConvId ? (
               <div className="hidden sm:flex flex-1 flex-col items-center justify-center gap-4 text-center px-6">
-                <div className="rounded-[24px] flex items-center justify-center" style={{ width: 72, height: 72, background: 'linear-gradient(135deg,rgba(59,130,246,0.12),rgba(139,92,246,0.12))', border: '1px solid rgba(255,255,255,0.07)' }}>
-                  <MessageSquare style={{ width: 32, height: 32, color: 'rgba(96,165,250,0.55)' }} />
+                <div className="rounded-[14px] flex items-center justify-center" style={{ width: 56, height: 56, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                  <MessageSquare style={{ width: 24, height: 24, color: 'rgba(255,255,255,0.35)' }} />
                 </div>
                 <div>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: 'rgba(255,255,255,0.50)' }}>Select a conversation</p>
-                  <p style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.22)', marginTop: 4 }}>Choose from your messages, or start a new one.</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, color: 'rgba(255,255,255,0.72)' }}>Select a conversation</p>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.34)', marginTop: 4 }}>Choose from your messages, or start a new one.</p>
                 </div>
                 <button onClick={() => setShowNewChat(true)} className="flex items-center gap-2 transition-colors" style={{ height: 34, padding: '0 16px', borderRadius: 10, background: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.24)', fontSize: 12.5, fontWeight: 600, color: '#60a5fa' }}>
                   <Plus style={{ width: 14, height: 14 }} />New Message
@@ -3278,8 +3294,8 @@ function MessagesPageInner() {
                       <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploadingFile}
-                        className="rounded-full flex items-center justify-center disabled:opacity-40 active:scale-90 transition-all flex-shrink-0 self-end"
-                        style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.07)', marginBottom: 1 }}
+                        className="rounded-[10px] flex items-center justify-center disabled:opacity-40 transition-colors flex-shrink-0 self-end msg-icon-btn"
+                        style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', marginBottom: 1 }}
                         title="Attach file"
                       >
                         {uploadingFile
@@ -3291,7 +3307,7 @@ function MessagesPageInner() {
 
                       {/* Textarea pill */}
                       <div
-                        className="flex-1 min-w-0 flex items-end rounded-[20px] overflow-hidden transition-all"
+                        className="msg-composer flex-1 min-w-0 flex items-end rounded-[14px] overflow-hidden"
                         style={{
                           background: 'rgba(255,255,255,0.05)',
                           border: '1px solid rgba(255,255,255,0.09)',
@@ -3317,12 +3333,14 @@ function MessagesPageInner() {
                       <button
                         onClick={() => { if (editingMsg) void saveEditMessage(); else handleSend(); }}
                         disabled={!input.trim() || sending || savingEdit}
-                        className="flex-shrink-0 rounded-full flex items-center justify-center self-end transition-all active:scale-90"
+                        /* Prominent only when there is something to send —
+                           colour carries that, not a glow. */
+                        className="flex-shrink-0 rounded-[10px] flex items-center justify-center self-end transition-colors"
                         style={{
                           width: 38, height: 38,
-                          background: (input.trim() && !sending) ? 'linear-gradient(135deg,#3b82f6,#1d4ed8)' : 'rgba(255,255,255,0.05)',
+                          background: (input.trim() && !sending) ? '#2563eb' : 'rgba(255,255,255,0.05)',
                           border: (input.trim() && !sending) ? 'none' : '1px solid rgba(255,255,255,0.08)',
-                          boxShadow: (input.trim() && !sending) ? '0 4px 16px rgba(59,130,246,0.45)' : 'none',
+                          boxShadow: 'none',
                           cursor: (!input.trim() || sending) ? 'not-allowed' : 'pointer',
                           flexShrink: 0,
                           marginBottom: 1,

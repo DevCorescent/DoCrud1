@@ -583,9 +583,15 @@ interface DiscoveryProps {
  * types, the caller swaps this out for the existing results panel — there is
  * only ever one search implementation behind both.
  */
-function DiscoveryPanel({ trending, recent, activeIdx, onRun, onHover, onClearRecent }: DiscoveryProps) {
+function DiscoveryPanel({ trending, recent, activeIdx, onRun, onHover, onClearRecent, embedded = false }: DiscoveryProps & { embedded?: boolean }) {
   return (
-    <div style={{ overflowY: 'auto', maxHeight: 420, scrollbarWidth: 'none', padding: '0 6px 10px' }}>
+    <div
+      style={
+        embedded
+          ? { padding: '0 6px 10px' }
+          : { overflowY: 'auto', maxHeight: 420, scrollbarWidth: 'none', padding: '0 6px 10px' }
+      }
+    >
       <SectionHeading label="Most searched" />
       {trending.length > 0
         ? trending.map((q, i) => (
@@ -628,6 +634,19 @@ function DiscoveryPanel({ trending, recent, activeIdx, onRun, onHover, onClearRe
 // ─── Main dropdown panel ──────────────────────────────────────────────────────
 
 interface DropdownProps {
+  /**
+   * True when this panel is rendered INSIDE a taller scrolling container (the
+   * mobile overlay) rather than as a floating dropdown.
+   *
+   * The floating dropdown caps itself at 420px and scrolls internally, which is
+   * right when it hangs under the desktop search bar. Reused as-is on mobile it
+   * created a SECOND scroller nested inside the overlay's own: the outer box
+   * had nothing to scroll (scrollHeight === clientHeight) while the inner one
+   * clipped the list at 420px, so the tail of the results was unreachable.
+   * When embedded, this panel stops scrolling and simply grows — the overlay
+   * scroller owns the scrolling.
+   */
+  embedded?: boolean;
   query: string;
   localResults: LocalSearchResult[];
   dbResults: DbSearchResult[];
@@ -640,7 +659,7 @@ interface DropdownProps {
   searchError?: boolean;
 }
 
-function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, onFilterChange, onClose, intentHint, relaxed, searchError }: DropdownProps) {
+function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, onFilterChange, onClose, intentHint, relaxed, searchError, embedded = false }: DropdownProps) {
   /* Entity filters are derived from what actually came back, so a category with
      zero results is never offered. Filtering is client-side over the results
      already fetched — no extra request, no extra latency. */
@@ -729,7 +748,14 @@ function DropdownPanel({ query, localResults, dbResults, loading, activeFilter, 
       )}
 
       {/* Results */}
-      <div style={{ overflowY: 'auto', maxHeight: 420, scrollbarWidth: 'none', padding: '0 6px 8px' }}>
+      <div
+        style={
+          embedded
+            /* Grow instead of scrolling — the overlay above is the scroller. */
+            ? { padding: '0 6px 8px' }
+            : { overflowY: 'auto', maxHeight: 420, scrollbarWidth: 'none', padding: '0 6px 8px' }
+        }
+      >
 
         {hasLocal && (
           <div style={{ marginBottom: hasDb ? 6 : 0 }}>
@@ -1397,14 +1423,14 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                     discovery view as desktop, same one-click execution) */}
                 {!hasQuery && (
                   <div style={{ padding: '10px 8px 4px' }}>
-                    <DiscoveryPanel {...discoveryProps} />
+                    <DiscoveryPanel {...discoveryProps} embedded />
                   </div>
                 )}
 
                 {/* Results from GlobalSearchBar engine */}
                 {query.trim() && (
                   <div style={{ paddingTop: 8, paddingBottom: 24 }}>
-                    <DropdownPanel {...dropProps} />
+                    <DropdownPanel {...dropProps} embedded />
                   </div>
                 )}
               </div>

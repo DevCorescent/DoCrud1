@@ -13,12 +13,8 @@
  * and the scroll offset is silently rewound by one copy width whenever the
  * viewer crosses a copy boundary.
  *
- * On top of that the row drifts on its own, marquee style. The drift advances
- * the real scrollLeft rather than animating a transform, so the strip stays a
- * genuine scroller — touch, wheel and drag all still work, and the rewind above
- * is what makes the drift endless rather than a second looping mechanism. It
- * yields to the viewer: pointer over the row, focus inside it, a hidden tab or
- * prefers-reduced-motion all stop it.
+ * There is no autoplay: the row moves only when the viewer moves it. What the
+ * rewind buys is that scrolling left or right never reaches an end.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -201,64 +197,6 @@ export default function PeopleYouMayKnow() {
     return () => ro.disconnect();
   }, [loop, rendered.length]);
 
-  /* Continuous drift.
-     Deliberately not a CSS transform: a transform would take the row out of
-     the scroller and cost the native touch/wheel behaviour. Advancing
-     scrollLeft keeps one source of truth, and the rewind below turns it into
-     an endless marquee for free.
-
-     It never fights the viewer — any hand on the row, keyboard focus inside
-     it, a backgrounded tab or a reduced-motion preference stops it, and if
-     something else moved the offset (a drag, or the rewind) the accumulator
-     resyncs instead of yanking the row back. */
-  useEffect(() => {
-    if (!loop) return;
-    const el = stripRef.current;
-    if (!el) return;
-
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const SPEED = 22;            // px per second — a drift, not a carousel
-    let raf = 0;
-    let last = 0;
-    let pos = el.scrollLeft;
-    let held = 0;                // pointers down / hovering / focused
-
-    const step = (t: number) => {
-      raf = requestAnimationFrame(step);
-      if (!last) { last = t; return; }
-      const dt = t - last;
-      last = t;
-      if (held > 0 || reduce.matches || document.hidden) { pos = el.scrollLeft; return; }
-      /* Someone else moved it (drag momentum, the rewind, a link focus scroll)
-         — follow that rather than snapping back to a stale position. */
-      if (Math.abs(el.scrollLeft - pos) > 1) pos = el.scrollLeft;
-      pos += (SPEED * dt) / 1000;
-      el.scrollLeft = pos;
-    };
-    raf = requestAnimationFrame(step);
-
-    const hold = () => { held += 1; };
-    const release = () => { held = Math.max(0, held - 1); };
-    el.addEventListener('pointerenter', hold);
-    el.addEventListener('pointerleave', release);
-    el.addEventListener('pointerdown', hold);
-    el.addEventListener('pointerup', release);
-    el.addEventListener('pointercancel', release);
-    el.addEventListener('focusin', hold);
-    el.addEventListener('focusout', release);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      el.removeEventListener('pointerenter', hold);
-      el.removeEventListener('pointerleave', release);
-      el.removeEventListener('pointerdown', hold);
-      el.removeEventListener('pointerup', release);
-      el.removeEventListener('pointercancel', release);
-      el.removeEventListener('focusin', hold);
-      el.removeEventListener('focusout', release);
-    };
-  }, [loop, rendered.length]);
-
   /* The one scroll listener in the module, and the only way to make a native
      scroller endless: when the viewer leaves the middle copy, shift the offset
      by exactly one copy. The pixels either side are identical, so nothing
@@ -384,8 +322,15 @@ export default function PeopleYouMayKnow() {
         }
         .pymk-strip {
           display: flex;
-          align-items: flex-start;
+          /* stretch is belt-and-braces behind the fixed card height below: the
+             row stays uniform even if a card ever loses its height. */
+          align-items: stretch;
           gap: 10px;
+          /* Cards are inset from the viewport edge; the band behind them still
+             runs full width. Percentage card widths resolve against this
+             padded content box, so the peek maths below stays correct. */
+          padding-left: 16px;
+          padding-right: 16px;
           padding-bottom: 2px;
           overflow-x: auto;
           overflow-y: hidden;
@@ -404,10 +349,23 @@ export default function PeopleYouMayKnow() {
            against the square module band around them. */
         .pymk-person {
           flex: 0 0 auto;
-          width: calc(62% - 5px);
-          /* A fixed floor keeps the Follow controls on one line across the row
-             even when a person has no headline. */
-          min-height: 178px;
+          /* One whole card plus ~45% of the next, at any viewport.
+
+             The visible run at rest is the strip minus its 16px left inset
+             (the 16px right inset is scroll runway the next card shows
+             through), so:
+               W + gap + 0.45W = clientWidth - 16
+               1.45W           = (content + 32) - 16 - gap
+               W               = (content + 6px) / 1.45     [gap = 10px]
+             Derived rather than hardcoded, so 390 / 414 / 430 all land on the
+             same ratio instead of one width happening to look right. */
+          width: calc((100% + 6px) / 1.45);
+          /* A FIXED height, not a floor. Every card is identical regardless of
+             name length, a missing headline, bio length or mutual count — the
+             content inside is already clamped (name and headline to one line,
+             bio to two, the mutual row to a min-height), so nothing can
+             overflow this box. */
+          height: 196px;
           display: flex;
           flex-direction: column;
           align-items: center;

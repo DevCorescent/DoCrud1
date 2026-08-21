@@ -5738,7 +5738,7 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
                 className="hp-sec text-[11px] font-semibold tracking-[0.10em]"
                 style={{ color: 'rgba(255,255,255,0.28)' }}
               >
-                explore
+                Explore
               </span>
               {/* Desktop-only sparkle + reflection; hidden below lg so the
                   mobile heading stays exactly as it was. */}

@@ -5644,26 +5644,18 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
           text-decoration: none;
           border-radius: 15px;
           border: 1px solid rgba(255,255,255,0.12);
-          background:
-            linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.016) 46%, rgba(255,255,255,0.03) 100%);
+          /* Flat translucent surface — no gradient at any breakpoint. Desktop
+             already used this value; the base now matches it. */
+          background: rgba(255,255,255,0.045);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
           box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
           transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
         }
-        /* The inner highlight, kept as its own layer so hover can lift it
-           without touching the base gradient. */
-        .exp-sheen {
-          position: absolute;
-          top: -30px; left: 50%;
-          width: 96px; height: 64px;
-          transform: translateX(-50%);
-          pointer-events: none;
-          background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 45%, rgba(255,255,255,0) 74%);
-          transition: opacity 0.15s ease;
-          opacity: 0.9;
-        }
-        .exp-tile:hover .exp-sheen { opacity: 1; }
+        /* Legacy highlight layer, now unused — see .exp-sheen below. */
+        /* The decorative radial glow is off. Kept as a rule rather than
+           removed from the markup so the change stays CSS-only. */
+        .exp-sheen { display: none; }
         .exp-tile:hover {
           background-color: rgba(255,255,255,0.03);
           border-color: rgba(255,255,255,0.20);
@@ -5702,9 +5694,7 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
         @media (min-width: 1024px) {
           /* One flat translucent surface — no gradient of any kind. The depth
              comes from the blur, the hairline border and the inset highlight,
-             not from a colour ramp. The background shorthand (not just
-             background-color) so the base gradient above is fully replaced
-             rather than layered over. */
+             not from a colour ramp. Matches the flat base surface above. */
           .exp-tile {
             width: 110px; height: 110px; gap: 9px;
             border-radius: 18px;
@@ -5725,24 +5715,11 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
               0 4px 18px rgba(0,0,0,0.18),
               inset 0 1px 0 rgba(255,255,255,0.055);
           }
-          /* The radial sheen and the gold bottom hairline are both gradients,
-             so on desktop they are switched off rather than restyled. Mobile
-             still gets them from the base rules above. */
-          .exp-sheen { display: none; }
+          /* The gold bottom hairline is a gradient, so it is off here too.
+             The sheen is already off in the base rules. */
           .exp-tile::after { content: none; }
           .exp-icon { width: 30px; height: 30px; color: rgba(255,255,255,0.82); }
           .exp-label { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.70); }
-          /* The gold sparkle beside the heading, plus the thin reflection
-             under it. Both are desktop-only decoration. */
-          .exp-head-glow {
-            height: 1px;
-            width: 148px;
-            margin-top: 7px;
-            background: linear-gradient(90deg,
-              rgba(206,151,96,0.28) 0%,
-              rgba(255,255,255,0.06) 45%,
-              rgba(255,255,255,0) 100%);
-          }
         }
         @media (min-width: 1280px) {
           .exp-tile { width: 120px; height: 120px; gap: 10px; }
@@ -5771,7 +5748,7 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
                 aria-hidden="true"
               />
             </span>
-            <span className="exp-head-glow hidden lg:block" aria-hidden="true" />
+            <span className="exp-head-glow hidden" aria-hidden="true" />
           </span>
         </div>
       </div>

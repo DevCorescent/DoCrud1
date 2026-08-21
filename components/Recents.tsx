@@ -1984,7 +1984,7 @@ export default function RecentsBar() {
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10 }}>
           <div style={{ display:'flex',alignItems:'center',gap:7 }}>
             <div style={{ width:1.5,height:12,borderRadius:99,background:'rgba(255,255,255,0.30)' }} />
-            <span className="hp-sec" style={{ fontSize:11,fontWeight:500,color:'rgba(255,255,255,0.32)',letterSpacing:'0.01em' }}>recents</span>
+            <span className="hp-sec" style={{ fontSize:11,fontWeight:500,color:'rgba(255,255,255,0.32)',letterSpacing:'0.01em' }}>Recents</span>
           </div>
           <a href="/recents" className="hp-sec" style={{ display:'flex',alignItems:'center',gap:4,fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.32)',textDecoration:'none',padding:'3px 8px',borderRadius:7,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.02)',transition:'all 140ms ease' }}
             onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.color='rgba(255,255,255,0.60)';(e.currentTarget as HTMLElement).style.borderColor='rgba(255,255,255,0.14)';}}

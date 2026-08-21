@@ -78,9 +78,20 @@ export async function GET(request: Request) {
       // `results` is kept at the top level so a client can consume this response
       // with the same reader it uses for the classic mode.
       return NextResponse.json(payload, { status: 200, headers: { 'Cache-Control': 'no-store' } });
-    } catch {
-      // Any failure in the intelligent layer falls through to the proven
-      // lexical engine below rather than surfacing an error to the user.
+    } catch (err) {
+      /* The user still gets the lexical engine below — a search must never
+         fail in their face. But this used to swallow the reason entirely,
+         which meant the intelligent layer could be throwing on every request
+         and degrading every result with nothing to show for it.
+
+         Logged server-side only: the query is included because a parse failure
+         is almost always query-specific, and nothing here reaches the client. */
+      console.error('[search] intelligent mode failed, falling back to lexical', {
+        query,
+        types: requestedTypes,
+        useAi: searchParams.get('ai') === '1',
+        error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+      });
     }
   }
 

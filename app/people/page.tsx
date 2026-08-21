@@ -20,6 +20,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { rankBySearch } from '@/lib/search-relevance';
 
 /* ─── constants ──────────────────────────────────────────────────────── */
 const PAGE_SIZE = 24;
@@ -854,12 +855,28 @@ export default function PeoplePage() {
   const filtered = useMemo(() => {
     let r = people;
     if (filters.search) {
-      const q = filters.search.toLowerCase();
-      r = r.filter((p) =>
-        p.name.toLowerCase().includes(q) ||
-        (p.profile.headline?.toLowerCase().includes(q) ?? false) ||
-        (p.profile.location?.toLowerCase().includes(q) ?? false) ||
-        (p.profile.skills?.some((s) => s.toLowerCase().includes(q)) ?? false),
+      /* Ranked, field-weighted matching instead of a whole-query substring
+         test. The old filter required the entire query to appear verbatim
+         inside ONE field, so "react developer" could never match a person with
+         React in skills and Developer in their headline — and nothing was
+         ranked, so an incidental bio mention sorted level with an exact skill.
+
+         Weights encode the requirement that structured signals beat prose:
+         a skill or location the query names is worth far more than the same
+         word buried in a bio. Ordering within a score band is left alone, so
+         the active sort still decides ties. */
+      r = rankBySearch(
+        r,
+        filters.search,
+        (p) => [
+          { value: p.name,             exact: 100, word: 55, weak: 12 },
+          { value: p.profile.skills,   exact: 80,  word: 45, weak: 10 },
+          { value: p.profile.headline, exact: 70,  word: 50, weak: 12 },
+          { value: p.profile.location, exact: 50,  word: 40, weak: 8  },
+          /* Prose: a real signal, but never enough on its own to outrank a
+             structured match. */
+          { value: p.profile.bio,      exact: 20,  word: 8,  weak: 3  },
+        ],
       );
     }
     if (filters.publicFaceOnly) r = r.filter((p) => !!p.publicFace);

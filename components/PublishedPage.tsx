@@ -73,6 +73,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import { parseQuery, scoreWithThreshold } from '@/lib/search-relevance';
 
 /* ─── active-filter chip ─────────────────────────────────────────── */
 function ActiveChip({ label, onRemove }: { label: string; onRemove: () => void }) {
@@ -806,21 +807,33 @@ function timeAgo(iso: string) {
   return new Date(iso).toLocaleDateString('en-IN', { day:'numeric', month:'short' });
 }
 
+/**
+ * Publication relevance.
+ *
+ * Was a flat substring tally: every field used `includes(term)`, so "eng"
+ * matched "engine", a document matching one of three terms still scored above
+ * zero and appeared, and there was no phrase, typo or all-terms handling. The
+ * shared ranker replaces the matching; the field weights below express what a
+ * publication actually is — its title and tags identify it, its body only
+ * mentions things.
+ *
+ * The signature is unchanged, so both call sites keep their existing
+ * `.filter(score > 0).sort()` shape.
+ */
 function scoreItem(item: PublishedItem, q: string): number {
-  const ql = q.toLowerCase();
-  const terms = ql.split(/\s+/).filter(Boolean);
-  let score = 0;
-  for (const t of terms) {
-    if (item.title.toLowerCase().includes(t))  score += 10;
-    if (item.badge.toLowerCase().includes(t))  score += 5;
-    if (item.byline.toLowerCase().includes(t)) score += 3;
-    if (item.body.toLowerCase().includes(t))   score += 2;
-    if ((item.chips ?? []).some(c => c.toLowerCase().includes(t))) score += 4;
-    if (item.category.toLowerCase().includes(t)) score += 3;
-  }
-  if (item.title.toLowerCase().includes(ql)) score += 8;
-  if (item.isReal) score += 2;
-  return score;
+  const query = parseQuery(q);
+  if (!query.terms.length) return 0;
+  const score = scoreWithThreshold(query, [
+    { value: item.title,    exact: 100, word: 55, weak: 12 },
+    { value: item.chips,    exact: 70,  word: 42, weak: 9  },   // tags
+    { value: item.category, exact: 70,  word: 45, weak: 8  },
+    { value: item.badge,    exact: 50,  word: 32, weak: 6  },
+    { value: item.byline,   exact: 45,  word: 30, weak: 6  },   // author
+    { value: item.body,     exact: 20,  word: 8,  weak: 3  },
+  ]);
+  /* Real publications edge out mock/demo rows at equal relevance — a tiebreak,
+     never enough to lift an irrelevant item over a relevant one. */
+  return score > 0 && item.isReal ? score + 2 : score;
 }
 
 function highlight(text: string, q: string): React.ReactNode {

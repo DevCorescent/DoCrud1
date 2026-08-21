@@ -89,9 +89,10 @@ export default function SponsoredAdCard({ adIndex = 0 }: { adIndex?: number }) {
 
   const inner = (
     <>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/25">Sponsored</span>
-        {ad.advertiser && <span className="truncate text-[10.5px] text-white/25">{ad.advertiser}</span>}
+      <div className="mb-3 flex items-center justify-between">
+        {/* Lowercase and quiet — a label, not a shout. */}
+        <span className="text-[11.5px] font-medium" style={{ color: 'rgba(255,255,255,0.52)' }}>sponsored</span>
+        {ad.advertiser && <span className="truncate text-[11px] text-white/30">{ad.advertiser}</span>}
       </div>
       {ad.imageUrl && !broken && (
         /* eslint-disable-next-line @next/next/no-img-element */
@@ -115,7 +116,32 @@ export default function SponsoredAdCard({ adIndex = 0 }: { adIndex?: number }) {
   );
 
   return (
-    <section ref={rootRef} className="flex flex-col rounded-[14px] border border-white/[0.07] bg-white/[0.02] p-3" aria-label="Sponsored">
+    <section
+      ref={rootRef}
+      className="flex flex-col"
+      /* Same module language as People you may know: a square band of the
+         feed, black first, glass second, a trace of purple. Two hairlines
+         instead of an outline, and no drop shadow — both are what would make
+         it read as a floating card again. Authored dark-only: the homepage
+         shell is inverted for light mode in globals.css, so a second light
+         palette here would invert into dark-on-dark. */
+      style={{
+        margin: '18px 0',
+        padding: 16,
+        borderRadius: 0,
+        borderTop: '1px solid rgba(170,140,240,0.07)',
+        borderBottom: '1px solid rgba(170,140,240,0.07)',
+        background: [
+          'radial-gradient(circle at 18% 0%, rgba(150,110,255,0.065), transparent 42%)',
+          'radial-gradient(circle at 88% 100%, rgba(120,90,220,0.035), transparent 48%)',
+          'linear-gradient(135deg, rgba(8,8,11,0.98) 0%, rgba(20,15,30,0.96) 50%, rgba(8,8,11,0.99) 100%)',
+        ].join(', '),
+        backdropFilter: 'blur(18px)',
+        WebkitBackdropFilter: 'blur(18px)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+      }}
+      aria-label="Sponsored"
+    >
       {ad.ctaHref
         ? (
           <a

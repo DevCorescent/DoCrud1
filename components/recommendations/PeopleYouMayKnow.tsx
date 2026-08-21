@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Users } from 'lucide-react';
+import { ArrowUp, Users } from 'lucide-react';
 
 export type PersonRecommendation = {
   userId: string;
@@ -99,16 +99,19 @@ function Person({
           {following ? 'Following' : 'Follow'}
         </button>
 
-        {/* Secondary action. Toggles through the existing upraise endpoint. */}
+        {/* Secondary action — icon only. Same handler and endpoint as before;
+            aria-pressed is what carries the on/off state now that the label
+            no longer changes. */}
         <button
           type="button"
           disabled={upraisePending}
           onClick={() => onUpraise(person.userId)}
           aria-pressed={upraised}
-          aria-label={upraised ? `Remove upraise from ${person.name}` : `Upraise ${person.name}`}
+          aria-label="Upraise"
+          title="Upraise"
           className={upraised ? 'pymk-up pymk-up-on' : 'pymk-up'}
         >
-          {upraised ? 'Upraised' : 'Upraise'}
+          <ArrowUp className="pymk-up-icon" aria-hidden="true" />
         </button>
       </div>
     </article>
@@ -272,11 +275,38 @@ export default function PeopleYouMayKnow() {
   return (
     <section className="pymk-shell" aria-label="People you may know">
       <style>{`
-        /* No container box: the module is a header plus a row of people sitting
-           directly on the feed background, with breathing room either side. */
+        /* A module, not another feed item: black first, glass second, and a
+           trace of the purple already used for messaging. Colours are authored
+           dark-only on purpose — light mode inverts this whole shell
+           (globals.css inverts it with filter: invert(1) hue-rotate(180deg)), so a second
+           light-mode palette here would be inverted too and come out dark on
+           dark. The hue-rotate is what keeps the purple reading as purple in
+           both themes. */
         .pymk-shell {
-          margin-top: 18px;
-          margin-bottom: 22px;
+          position: relative;
+          margin: 18px 0;
+          padding: 14px 14px 16px;
+          /* Square on purpose: this is a band of the feed, not a card floating
+             on it. Only the people inside are cards. */
+          border-radius: 0;
+          /* Two hairlines instead of an outline — an outline would redraw the
+             rounded-card silhouette the radius just removed. */
+          border: none;
+          border-top: 1px solid rgba(180,150,255,0.07);
+          border-bottom: 1px solid rgba(180,150,255,0.07);
+          background:
+            radial-gradient(circle at 18% 0%, rgba(150,110,255,0.065), transparent 42%),
+            radial-gradient(circle at 88% 100%, rgba(120,90,220,0.035), transparent 48%),
+            linear-gradient(135deg, rgba(8,8,11,0.98) 0%, rgba(20,15,30,0.96) 50%, rgba(8,8,11,0.99) 100%);
+          backdrop-filter: blur(18px) saturate(120%);
+          -webkit-backdrop-filter: blur(18px) saturate(120%);
+          /* No drop shadow: a shadow is what makes a panel read as lifted off
+             the page. The band sits in the page, so only the inner highlight
+             stays. */
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+        }
+        @media (min-width: 640px) {
+          .pymk-shell { padding: 16px 18px 18px; }
         }
         .pymk-strip {
           display: flex;
@@ -296,7 +326,8 @@ export default function PeopleYouMayKnow() {
         .pymk-strip::-webkit-scrollbar { display: none; }
 
         /* One full person plus roughly half of the next, which is what tells
-           the viewer the row scrolls. No card, no border, no background. */
+           the viewer the row scrolls. Each person is a rounded glass card
+           against the square module band around them. */
         .pymk-person {
           flex: 0 0 auto;
           width: calc(62% - 5px);
@@ -307,14 +338,24 @@ export default function PeopleYouMayKnow() {
           flex-direction: column;
           align-items: center;
           text-align: center;
-          padding: 2px 4px 0;
-          background: none;
-          border: none;
-          box-shadow: none;
+          /* Width, flex and min-height above are untouched — only the surface
+             below changed, so the peek ratio and scrolling behave as before. */
+          padding: 12px 8px 10px;
+          /* The people stay rounded — that contrast against the square band
+             is what creates the feed → module → card hierarchy. */
+          border-radius: 14px;
+          border: 1px solid rgba(255,255,255,0.07);
+          background: rgba(255,255,255,0.035);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          box-shadow:
+            0 6px 20px rgba(0,0,0,0.14),
+            inset 0 1px 0 rgba(255,255,255,0.035);
         }
 
-        /* Glass is kept to the small interactive parts — the avatar ring and
-           the Follow control. Nothing draws a rectangle around a person. */
+        /* Inside the card, glass is reserved for the small interactive parts —
+           the avatar ring and the Follow control — so they read as controls
+           rather than blending into the card surface behind them. */
         .pymk-id { display: flex; flex-direction: column; align-items: center; width: 100%; text-decoration: none; }
         .pymk-avatar {
           display: flex; align-items: center; justify-content: center;
@@ -388,14 +429,15 @@ export default function PeopleYouMayKnow() {
           border-radius: 8px;
           font-size: 11.5px;
           font-weight: 600;
-          border: 1px solid rgba(255,255,255,0.14);
-          background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+          /* Colour only — height, radius, flex and type are as they were. */
+          border: 1px solid rgba(180,150,255,0.14);
+          background: rgba(150,110,255,0.08);
           backdrop-filter: blur(18px);
           -webkit-backdrop-filter: blur(18px);
-          color: rgba(255,255,255,0.88);
+          color: rgba(255,255,255,0.82);
           transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
         }
-        .pymk-btn:hover { background-color: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.22); }
+        .pymk-btn:hover { background-color: rgba(150,110,255,0.13); border-color: rgba(180,150,255,0.22); }
         .pymk-btn:disabled { opacity: 0.5; }
         .pymk-btn-on {
           border-color: rgba(255,255,255,0.09);
@@ -406,17 +448,22 @@ export default function PeopleYouMayKnow() {
         /* Secondary: quieter than Follow, same glass family, no colour. */
         .pymk-up {
           flex: 0 0 auto;
+          /* Square at the same 26px row height, so the card does not grow. */
           height: 26px;
-          padding: 0 8px;
-          border-radius: 8px;
-          font-size: 11px;
-          font-weight: 600;
-          white-space: nowrap;
+          width: 26px;
+          padding: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 999px;
           border: 1px solid rgba(255,255,255,0.10);
           background: rgba(255,255,255,0.02);
+          backdrop-filter: blur(18px);
+          -webkit-backdrop-filter: blur(18px);
           color: rgba(255,255,255,0.50);
           transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
         }
+        .pymk-up-icon { width: 15px; height: 15px; }
         .pymk-up:hover { background-color: rgba(255,255,255,0.06); color: rgba(255,255,255,0.80); }
         .pymk-up:disabled { opacity: 0.5; cursor: not-allowed; }
         .pymk-up-on {
@@ -425,10 +472,20 @@ export default function PeopleYouMayKnow() {
           color: rgba(255,255,255,0.82);
         }
 
-        .pymk-id:focus-visible, .pymk-btn:focus-visible, .pymk-up:focus-visible, .pymk-seeall:focus-visible {
+        /* Inline style sets the resting colour, so the hover needs the same
+           weight to win. Brighter, never neon. */
+        .pymk-seeall:hover { color: rgba(214,200,255,0.95) !important; }
+
+        .pymk-id:focus-visible, .pymk-btn:focus-visible, .pymk-seeall:focus-visible {
           outline: 2px solid rgba(255,255,255,0.55);
           outline-offset: 2px;
           border-radius: 8px;
+        }
+        /* The upraise button is round, so its focus ring must be too. */
+        .pymk-up:focus-visible {
+          outline: 2px solid rgba(255,255,255,0.55);
+          outline-offset: 2px;
+          border-radius: 999px;
         }
 
         /* Three people across from tablet up, with the fourth peeking so the
@@ -438,13 +495,19 @@ export default function PeopleYouMayKnow() {
         }
       `}</style>
 
-      <div className="mb-2.5 flex items-center justify-between px-0.5">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-white/28">
-          <Users className="h-3 w-3" /> People you may know
+      <div className="mb-3 flex items-center justify-between">
+        {/* Lowercase and unshouted — the section reads as a label, not a
+            heading competing with the posts around it. */}
+        <span
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium tracking-[0.02em]"
+          style={{ color: 'rgba(255,255,255,0.78)' }}
+        >
+          <Users className="h-3.5 w-3.5" /> people you may know
         </span>
         <Link
           href="/people"
-          className="pymk-seeall text-[11px] font-semibold text-white/35 transition-colors hover:text-white/70"
+          className="pymk-seeall text-[12px] font-medium transition-colors"
+          style={{ color: 'rgba(190,170,255,0.72)' }}
         >
           See all
         </Link>

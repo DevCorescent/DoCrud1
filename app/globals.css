@@ -2111,6 +2111,29 @@ html[data-ui-mode='light'] .gnb-bar a:not([aria-current='page']) .gnb-label {
 /* @mention link inside comment text. Rendered by lib/mentions.tsx, which is
    shared by the inline composer, the post page, category pages and the
    profile feed — so the style lives here rather than in one component. */
+/* Attention pulse for the Premium profile-completion message.
+   Only the text animates — the bar, the ring and the CTA stay still, so the
+   surface reads as calm with one thing quietly asking to be noticed. Opacity
+   and a single pixel of lift: no scale, no glow, no flashing. */
+@keyframes dcProfileVisibilityPulse {
+  0%, 100% { opacity: 0.78; transform: translateY(0); }
+  50%      { opacity: 1;    transform: translateY(-1px); }
+}
+.dc-announce-pulse {
+  animation: dcProfileVisibilityPulse 2.8s ease-in-out infinite;
+  /* The lift is a transform on an inline element, which needs a block-ish
+     display to take effect. */
+  display: inline-block;
+  will-change: opacity, transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dc-announce-pulse {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* A mention has to be identifiable as a person at a glance without colour —
    the same glass chip language the rest of the app uses, no platform blue. */
 .dc-mention {

@@ -84,10 +84,15 @@ export function shouldShowAnnouncement(
 /**
  * Desktop gate — deliberately NOT the mobile one.
  *
- * Hidden for a Premium viewer, for an admin switch-off, for a closed schedule
- * window (which arrives as `enabled: false` from /api/announcement), and for a
- * profile that is already complete — offering Premium for finishing a finished
- * profile reads as broken.
+ * Hidden for an admin switch-off, for a closed schedule window (which arrives
+ * as `enabled: false` from /api/announcement), and for a profile that is
+ * already complete — nudging someone to finish a finished profile reads as
+ * broken.
+ *
+ * Premium members DO see it. They used to be excluded, back when the only
+ * message on offer was "get Premium free", which is meaningless once you have
+ * it. The copy below now says something that still applies to them — a
+ * complete profile is more discoverable — so the reason to hide it is gone.
  *
  * The one case this treats differently from the mobile gate is a null score.
  * Null means /api/me/badge has not answered yet, NOT 100: the card renders
@@ -96,10 +101,8 @@ export function shouldShowAnnouncement(
  */
 export function shouldShowDesktopAnnouncement(
   announcement: NavAnnouncementConfig | null,
-  premium: boolean,
   score: number | null,
 ): boolean {
-  if (premium) return false;
   if (!announcement?.enabled) return false;
   if (!announcement.text) return false;
   /* Unresolved stays visible; only a real number can be complete. */
@@ -146,7 +149,18 @@ function AnnouncementScoreRing({ score, size = 34 }: { score: number; size?: num
 }
 
 /** Soft highlight for the marketing word "Premium" only. */
-function AnnouncementCopy({ text, fg, oneLine = false }: { text: string; fg: string; oneLine?: boolean }) {
+function AnnouncementCopy({
+  text,
+  fg,
+  oneLine = false,
+  pulse = false,
+}: {
+  text: string;
+  fg: string;
+  oneLine?: boolean;
+  /** Attention animation on the copy alone — never on the bar around it. */
+  pulse?: boolean;
+}) {
   const parts = text.split(/(Premium)/g);
   return (
     <span
@@ -154,7 +168,7 @@ function AnnouncementCopy({ text, fg, oneLine = false }: { text: string; fg: str
         /* With the badge sharing the row the copy would wrap to a second line
            and grow the bar, so it stays on one line and truncates instead. */
         oneLine ? ' overflow-hidden text-ellipsis whitespace-nowrap' : ''
-      }`}
+      }${pulse ? ' dc-announce-pulse' : ''}`}
     >
       {parts.map((part, i) =>
         part === 'Premium' ? (
@@ -194,7 +208,7 @@ export function NavAnnouncementBar({
      Either way rendering nothing (rather than an empty shell) is what stops
      the row from reserving space. */
   if (desktop) {
-    if (!shouldShowDesktopAnnouncement(announcement, premium, score)) return null;
+    if (!shouldShowDesktopAnnouncement(announcement, score)) return null;
   } else if (!shouldShowAnnouncement(announcement, score)) {
     return null;
   }
@@ -206,15 +220,17 @@ export function NavAnnouncementBar({
   const s = profileStatusStyle(pct);
 
   /* Copy depends on who is reading it:
-       - Premium member with an incomplete profile: the nudge still applies,
-         but the reward does not, so the promise is dropped from the wording.
+       - Premium member: the reward on offer is already theirs, so the message
+         is about what completing the profile still does for them — being
+         found. Nothing about Premium, free allocation or spots is said to
+         someone who already has it.
        - Everyone else: the Super Admin copy, unless the free allocation is
          gone, in which case promising free Premium would be false.
      The spots counter is for people who could still claim one, so Premium
      members never see it. */
   const soldOut = !premium && freePremium?.spotsLeft === 0;
   const text = premium
-    ? 'Complete your profile'
+    ? 'Complete your profile to enhance visibility'
     : soldOut
       ? 'Free Premium spots are full'
       : announcement!.text;
@@ -245,7 +261,7 @@ export function NavAnnouncementBar({
       <>
         {showRing && <AnnouncementScoreRing score={pct} size={30} />}
         <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          <AnnouncementCopy text={text} fg={s.fg} oneLine />
+          <AnnouncementCopy text={text} fg={s.fg} oneLine pulse={premium} />
           {(secondLine || spotsVisible) && (
             <span className="flex min-w-0 items-center gap-1.5">
               {secondLine && (
@@ -318,7 +334,7 @@ export function NavAnnouncementBar({
     <>
       <AnnouncementScoreRing score={pct} size={22} />
       {/* Always one line: a wrap is what used to make this a two-row card. */}
-      <AnnouncementCopy text={text} fg={s.fg} oneLine />
+      <AnnouncementCopy text={text} fg={s.fg} oneLine pulse={premium} />
       {showSpots && (
         <span
           className="shrink-0 whitespace-nowrap rounded-full border border-white/[0.12] bg-white/[0.05] px-1.5 py-0 text-[9px] leading-[13px] font-semibold tabular-nums text-white/55"

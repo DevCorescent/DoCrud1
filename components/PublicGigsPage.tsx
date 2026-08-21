@@ -26,6 +26,7 @@ import type { GigListing, LandingSettings } from '@/types/document';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { rankBySearch } from '@/lib/search-relevance';
 
 interface PublicGigsPageProps {
   settings: LandingSettings;
@@ -329,18 +330,30 @@ export default function PublicGigsPage({
   const savedGigIdSet = useMemo(() => new Set(savedGigIds), [savedGigIds]);
 
   const filteredGigs = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return gigs.filter((gig) => {
+    /* Structural filters first — they are exact predicates, unchanged. */
+    const base = gigs.filter((gig) => {
       const matchesNavMode = navMode !== 'saved' || savedGigIdSet.has(gig.id);
       const matchesVisibility = visibility === 'all' || gig.visibility === visibility;
       const matchesCategory = categoryFilters.length === 0 || categoryFilters.includes(gig.category);
       const matchesInterest = activeInterest === 'All' || gig.interests.includes(activeInterest);
       const matchesLocation = locationFilters.length === 0 || locationFilters.includes(gig.locationPreference);
       const matchesEngagement = engagementFilters.length === 0 || engagementFilters.includes(gig.engagementType);
-      const haystack = `${gig.title} ${gig.summary} ${gig.category} ${gig.interests.join(' ')} ${gig.skills.join(' ')}`.toLowerCase();
-      const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
-      return matchesNavMode && matchesVisibility && matchesCategory && matchesInterest && matchesLocation && matchesEngagement && matchesQuery;
+      return matchesNavMode && matchesVisibility && matchesCategory && matchesInterest && matchesLocation && matchesEngagement;
     });
+    if (!query.trim()) return base;
+
+    /* The text query used to be one concatenated haystack tested with
+       `includes(wholeQuery)`, so "web development services" only matched if
+       those three words appeared consecutively in that exact order — and
+       nothing was ranked. Per-field scoring instead: what a gig IS (title,
+       skills, category) outweighs what its summary happens to mention. */
+    return rankBySearch(base, query, (gig) => [
+      { value: gig.title,     exact: 100, word: 55, weak: 12 },
+      { value: gig.skills,    exact: 80,  word: 45, weak: 10 },
+      { value: gig.category,  exact: 70,  word: 45, weak: 8  },
+      { value: gig.interests, exact: 60,  word: 38, weak: 8  },
+      { value: gig.summary,   exact: 25,  word: 10, weak: 3  },
+    ]);
   }, [activeInterest, categoryFilters, engagementFilters, gigs, locationFilters, navMode, query, savedGigIdSet, visibility]);
 
   const categoryFiltersKey = useMemo(() => categoryFilters.join(','), [categoryFilters]);
@@ -359,9 +372,13 @@ export default function PublicGigsPage({
       list.sort((a, b) => (b.connectCount || 0) - (a.connectCount || 0) || +new Date(b.updatedAt) - +new Date(a.updatedAt));
       return list;
     }
+    /* With a search active, relevance order IS the answer to "which gig best
+       matches?" — re-sorting by date would bury the best match. An explicitly
+       chosen sort (replies, above) still wins; only the default gives way. */
+    if (query.trim()) return list;
     list.sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt));
     return list;
-  }, [filteredGigs, sortBy]);
+  }, [filteredGigs, sortBy, query]);
 
   const [urgentGigs, standardGigs] = useMemo(() => {
     const urgent: GigListing[] = [];

@@ -14,13 +14,60 @@
 
 import type { CSSProperties, ReactNode } from 'react';
 import Link from 'next/link';
-import { Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { profileStatusStyle } from '@/lib/profile-score';
 
 export interface NavAnnouncementConfig {
   enabled: boolean;
   text: string;
   href: string;
+  /* Everything below is Super Admin copy/behaviour that only the desktop card
+     reads. Optional so the mobile bar — and any older caller — is untouched. */
+  subtitle?: string;
+  ctaLabel?: string;
+  ctaHref?: string;
+  showProfileProgress?: boolean;
+  showSpotsLeft?: boolean;
+}
+
+/**
+ * Client-side fallback copy.
+ *
+ * /api/announcement already falls back to the stored defaults, so this is the
+ * last resort for a failed or timed-out request: the desktop card must never
+ * vanish just because one fetch did not land. Nothing here is a substitute for
+ * the Super Admin config — it is only used when the server said nothing at all.
+ */
+export const DEFAULT_ANNOUNCEMENT: NavAnnouncementConfig = {
+  enabled: true,
+  text: 'Complete your profile to get premium',
+  href: '/profile',
+  subtitle: '',
+  ctaLabel: '',
+  ctaHref: '/profile',
+  showProfileProgress: true,
+  showSpotsLeft: true,
+};
+
+/**
+ * Fills in anything the server left out. `enabled` is deliberately normalised
+ * with `!== false` rather than `!!`: a settings record written before these
+ * fields existed has no `enabled` key, and an absent switch means "on", not
+ * "off". Only an explicit `false` from Super Admin hides the bar.
+ */
+export function normalizeAnnouncement(raw: Partial<NavAnnouncementConfig> | null | undefined): NavAnnouncementConfig {
+  if (!raw) return { ...DEFAULT_ANNOUNCEMENT };
+  const text = typeof raw.text === 'string' && raw.text.trim() ? raw.text.trim() : DEFAULT_ANNOUNCEMENT.text;
+  return {
+    enabled: raw.enabled !== false,
+    text,
+    href: typeof raw.href === 'string' && raw.href ? raw.href : DEFAULT_ANNOUNCEMENT.href,
+    subtitle: raw.subtitle ?? '',
+    ctaLabel: raw.ctaLabel ?? '',
+    ctaHref: typeof raw.ctaHref === 'string' && raw.ctaHref ? raw.ctaHref : '',
+    showProfileProgress: raw.showProfileProgress !== false,
+    showSpotsLeft: raw.showSpotsLeft !== false,
+  };
 }
 
 /** Shared gate — Super Admin's switch, then the viewer's own completion. */
@@ -32,6 +79,32 @@ export function shouldShowAnnouncement(
   if (!announcement.text) return false;
   if (score === null || !Number.isFinite(score)) return false;
   return score < 100;
+}
+
+/**
+ * Desktop gate — deliberately NOT the mobile one.
+ *
+ * Hidden for a Premium viewer, for an admin switch-off, for a closed schedule
+ * window (which arrives as `enabled: false` from /api/announcement), and for a
+ * profile that is already complete — offering Premium for finishing a finished
+ * profile reads as broken.
+ *
+ * The one case this treats differently from the mobile gate is a null score.
+ * Null means /api/me/badge has not answered yet, NOT 100: the card renders
+ * without its ring rather than vanishing and popping back a moment later. Only
+ * a resolved 100 hides it.
+ */
+export function shouldShowDesktopAnnouncement(
+  announcement: NavAnnouncementConfig | null,
+  premium: boolean,
+  score: number | null,
+): boolean {
+  if (premium) return false;
+  if (!announcement?.enabled) return false;
+  if (!announcement.text) return false;
+  /* Unresolved stays visible; only a real number can be complete. */
+  if (score !== null && Number.isFinite(score) && score >= 100) return false;
+  return true;
 }
 
 /* ── Compact completion ring (announcement only — not the avatar ring) ───── */
@@ -113,14 +186,24 @@ export function NavAnnouncementBar({
   /** Aggregate launch-allocation counter. Null while it is still loading. */
   freePremium?: { spotsLeft: number; totalSpots: number } | null;
 }) {
-  // Rendering nothing at all (rather than an empty shell) is what keeps the
-  // navigation from reserving space once the profile is complete. A complete
-  // profile hides the bar for everyone, Premium or not.
-  if (!shouldShowAnnouncement(announcement, score)) return null;
-
-  const pct = score as number;
-  const s = profileStatusStyle(pct);
   const desktop = variant === 'desktop';
+
+  /* Two different gates on purpose — see shouldShowDesktopAnnouncement().
+     Mobile keeps the completion-driven behaviour it has always had; desktop
+     hides only for Premium, an admin switch-off, or a closed schedule window.
+     Either way rendering nothing (rather than an empty shell) is what stops
+     the row from reserving space. */
+  if (desktop) {
+    if (!shouldShowDesktopAnnouncement(announcement, premium, score)) return null;
+  } else if (!shouldShowAnnouncement(announcement, score)) {
+    return null;
+  }
+
+  /* Null until /api/me/badge answers. Desktop renders without the ring in that
+     window; mobile never gets here with a null score. */
+  const hasScore = score !== null && Number.isFinite(score);
+  const pct = hasScore ? (score as number) : 0;
+  const s = profileStatusStyle(pct);
 
   /* Copy depends on who is reading it:
        - Premium member with an incomplete profile: the nudge still applies,
@@ -137,9 +220,103 @@ export function NavAnnouncementBar({
       : announcement!.text;
   const showSpots = !premium && !!freePremium && freePremium.spotsLeft > 0;
 
+  /* ── Desktop card ─────────────────────────────────────────────────────
+     Same glass language as the Explore tiles beside it: blurred translucent
+     surface, hairline gold border, one inner highlight. Every string and
+     toggle below comes from the Super Admin config. */
+  if (desktop) {
+    const showRing = hasScore && announcement!.showProfileProgress !== false;
+    const spotsVisible = showSpots && announcement!.showSpotsLeft !== false;
+    const subtitle = (announcement!.subtitle ?? '').trim();
+    const ctaLabel = (announcement!.ctaLabel ?? '').trim();
+    const target = (announcement!.ctaHref ?? '').trim() || announcement!.href;
+    const secondLine = subtitle;
+
+    const cardStyle: CSSProperties = {
+      color: 'rgba(255,255,255,0.80)',
+      background: 'linear-gradient(135deg, rgba(255,255,255,0.055) 0%, rgba(8,9,12,0.72) 100%)',
+      backdropFilter: 'blur(24px) saturate(150%)',
+      WebkitBackdropFilter: 'blur(24px) saturate(150%)',
+      border: '1px solid rgba(206,151,96,0.20)',
+      boxShadow: '0 8px 30px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)',
+    };
+
+    const inner = (
+      <>
+        {showRing && <AnnouncementScoreRing score={pct} size={30} />}
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <AnnouncementCopy text={text} fg={s.fg} oneLine />
+          {(secondLine || spotsVisible) && (
+            <span className="flex min-w-0 items-center gap-1.5">
+              {secondLine && (
+                <span className="min-w-0 truncate text-[10px] leading-[13px] text-white/45">{secondLine}</span>
+              )}
+              {spotsVisible && (
+                <span
+                  className="shrink-0 whitespace-nowrap rounded-full border px-1.5 py-0 text-[9px] leading-[14px] font-semibold tabular-nums"
+                  style={{
+                    color: 'rgba(226,178,124,0.88)',
+                    borderColor: 'rgba(206,151,96,0.30)',
+                    background: 'rgba(206,151,96,0.07)',
+                  }}
+                  title={`${freePremium!.spotsLeft.toLocaleString()} of ${freePremium!.totalSpots.toLocaleString()} free Premium spots remaining`}
+                >
+                  {freePremium!.spotsLeft.toLocaleString()} spots left
+                </span>
+              )}
+            </span>
+          )}
+        </span>
+        {ctaLabel ? (
+          <span
+            className="shrink-0 whitespace-nowrap rounded-full border px-2.5 py-[4px] text-[10px] font-semibold"
+            style={{ color: s.fg, borderColor: 'rgba(206,151,96,0.30)', background: 'rgba(255,255,255,0.045)' }}
+          >
+            {ctaLabel}
+          </span>
+        ) : (
+          /* No label configured: the circular arrow from the reference, which
+             also doubles as the affordance that the whole pill is a link. */
+          <span
+            className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border"
+            style={{ borderColor: 'rgba(206,151,96,0.32)', background: 'rgba(206,151,96,0.06)' }}
+            aria-hidden="true"
+          >
+            {target
+              ? <ArrowRight className="h-[13px] w-[13px]" style={{ color: 'rgba(226,178,124,0.90)' }} />
+              : <Sparkles className="h-[12px] w-[12px]" style={{ color: s.ring, opacity: 0.85 }} />}
+          </span>
+        )}
+      </>
+    );
+
+    /* Pill, not a rounded rectangle — matches the reference composition. */
+    const cardBase = 'flex w-full max-w-[380px] min-w-0 items-center gap-2.5 rounded-full py-[7px] pl-[7px] pr-[7px] transition';
+    const cardLabel = hasScore ? `${text} — profile ${pct}% complete` : text;
+
+    if (target) {
+      return (
+        <Link
+          href={target}
+          aria-label={cardLabel}
+          className={`${cardBase} hover:brightness-110 active:scale-[0.99] ${className ?? ''}`}
+          style={cardStyle}
+        >
+          {inner}
+        </Link>
+      );
+    }
+    return (
+      <div role="status" aria-label={cardLabel} className={`${cardBase} ${className ?? ''}`} style={cardStyle}>
+        {inner}
+      </div>
+    );
+  }
+
+  /* ── Mobile bar — unchanged ───────────────────────────────────────────── */
   const inner = (
     <>
-      <AnnouncementScoreRing score={pct} size={desktop ? 26 : 22} />
+      <AnnouncementScoreRing score={pct} size={22} />
       {/* Always one line: a wrap is what used to make this a two-row card. */}
       <AnnouncementCopy text={text} fg={s.fg} oneLine />
       {showSpots && (
@@ -151,18 +328,14 @@ export function NavAnnouncementBar({
         </span>
       )}
       <Sparkles
-        className={`shrink-0 ${desktop ? 'h-[11px] w-[11px]' : 'h-[10px] w-[10px]'}`}
+        className="h-[10px] w-[10px] shrink-0"
         style={{ color: s.ring, opacity: 0.85 }}
         aria-hidden="true"
       />
     </>
   );
 
-  /* Desktop: compact pill that sits beside Explore (parent caps width).
-     Mobile: full-width strip under the top nav; text may wrap to 2 lines. */
-  const base = desktop
-    ? 'flex w-full max-w-[340px] min-w-0 items-center gap-2 rounded-2xl border px-2.5 py-1 text-white/80 transition'
-    : 'flex w-full min-w-0 items-center gap-2 rounded-2xl border px-2.5 py-1 text-white/80';
+  const base = 'flex w-full min-w-0 items-center gap-2 rounded-2xl border px-2.5 py-1 text-white/80';
 
   const style: CSSProperties = {
     color: 'rgba(255,255,255,0.78)',

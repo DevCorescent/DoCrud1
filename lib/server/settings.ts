@@ -495,9 +495,41 @@ export const defaultNavAnnouncementSettings: NavAnnouncementSettings = {
   enabled: true,
   text: 'Complete your profile 100%, Unlock 365 days of Premium for Free.',
   href: '/profile',
+  subtitle: '',
+  ctaLabel: '',
+  ctaHref: '/profile',
+  showProfileProgress: true,
+  showSpotsLeft: true,
+  startAt: '',
+  endAt: '',
   updatedAt: '',
   updatedBy: '',
 };
+
+/** Empty string for anything that is not a parseable ISO timestamp. */
+function normalizeIso(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? '' : new Date(t).toISOString();
+}
+
+/** Same-origin paths only — an absolute URL here would redirect every user. */
+function normalizeRelativePath(value: unknown): string {
+  const v = typeof value === 'string' ? value.trim() : '';
+  return v.startsWith('/') ? v : '';
+}
+
+/**
+ * Whether the configured schedule window is open right now. Both bounds are
+ * optional; an empty bound is treated as open-ended, so the default config
+ * (no dates) always passes.
+ */
+export function isNavAnnouncementLive(a: NavAnnouncementSettings, now: Date = new Date()): boolean {
+  if (!a.enabled) return false;
+  if (a.startAt && now.getTime() < Date.parse(a.startAt)) return false;
+  if (a.endAt && now.getTime() > Date.parse(a.endAt)) return false;
+  return true;
+}
 
 export async function getNavAnnouncementSettings(): Promise<NavAnnouncementSettings> {
   const settings = getDbPool()
@@ -512,6 +544,13 @@ export async function getNavAnnouncementSettings(): Promise<NavAnnouncementSetti
       ? merged.text.trim()
       : defaultNavAnnouncementSettings.text,
     href: typeof merged.href === 'string' ? merged.href.trim() : '',
+    subtitle: typeof merged.subtitle === 'string' ? merged.subtitle.trim() : '',
+    ctaLabel: typeof merged.ctaLabel === 'string' ? merged.ctaLabel.trim() : '',
+    ctaHref: normalizeRelativePath(merged.ctaHref),
+    showProfileProgress: merged.showProfileProgress !== false,
+    showSpotsLeft: merged.showSpotsLeft !== false,
+    startAt: normalizeIso(merged.startAt),
+    endAt: normalizeIso(merged.endAt),
     updatedAt: merged.updatedAt || '',
     updatedBy: merged.updatedBy || '',
   };
@@ -522,6 +561,13 @@ export async function saveNavAnnouncementSettings(settings: NavAnnouncementSetti
     enabled: Boolean(settings.enabled),
     text: settings.text.trim(),
     href: settings.href.trim(),
+    subtitle: (settings.subtitle ?? '').trim(),
+    ctaLabel: (settings.ctaLabel ?? '').trim(),
+    ctaHref: normalizeRelativePath(settings.ctaHref),
+    showProfileProgress: settings.showProfileProgress !== false,
+    showSpotsLeft: settings.showSpotsLeft !== false,
+    startAt: normalizeIso(settings.startAt),
+    endAt: normalizeIso(settings.endAt),
     updatedAt: settings.updatedAt,
     updatedBy: settings.updatedBy,
   };

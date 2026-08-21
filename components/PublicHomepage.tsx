@@ -100,7 +100,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import HomepageNav from '@/components/HomepageNav';
-import { NavAnnouncementBar, type NavAnnouncementConfig } from '@/components/nav/ProfileCompletion';
+import { DEFAULT_ANNOUNCEMENT, NavAnnouncementBar, normalizeAnnouncement, type NavAnnouncementConfig } from '@/components/nav/ProfileCompletion';
 import { AssistantResultCardView } from '@/components/home-chat/AssistantResultCard';
 import type { DocumentHistory } from '@/types/document';
 import type { AssistantResultCard, DocumentQuickAction, UploadedDocument } from '@/types/doc-assistant';
@@ -5605,12 +5605,19 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
   useEffect(() => {
     if (!isAuthenticated || guestMode) return;
     let cancelled = false;
+    /* Copy, CTA and the two display toggles are all Super Admin values — the
+       client only renders what the server sends. normalizeAnnouncement() fills
+       in fields an older settings record predates, and treats a missing
+       `enabled` as ON so the card does not need a fresh save to appear. */
     fetch('/api/announcement')
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: NavAnnouncementConfig | null) => {
-        if (!cancelled && d) setAnnouncement({ enabled: !!d.enabled, text: d.text ?? '', href: d.href ?? '' });
+      .then((d: Partial<NavAnnouncementConfig> | null) => {
+        if (cancelled) return;
+        /* A failed or empty response falls back to the shipped defaults rather
+           than removing the card — an outage should not silently kill it. */
+        setAnnouncement(d ? normalizeAnnouncement(d) : { ...DEFAULT_ANNOUNCEMENT });
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setAnnouncement({ ...DEFAULT_ANNOUNCEMENT }); });
     fetch('/api/me/badge')
       .then((r) => (r.ok ? r.json() : null))
       .then((d: {
@@ -5707,16 +5714,99 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
           .exp-tile { width: 92px; height: 92px; gap: 8px; }
           .exp-icon { width: 30px; height: 30px; }
         }
+
+        /* ── Desktop only (lg and up) ──────────────────────────────────────
+           Larger, more premium glass tiles that sit beside the announcement
+           card. Nothing here can reach mobile or tablet: every rule is inside
+           the 1024px query, and the base rules above are untouched. */
+        @media (min-width: 1024px) {
+          .exp-tile {
+            width: 110px; height: 110px; gap: 9px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.13);
+            background:
+              linear-gradient(145deg,
+                rgba(255,255,255,0.075) 0%,
+                rgba(255,255,255,0.025) 55%,
+                rgba(206,151,96,0.035) 100%);
+            backdrop-filter: blur(20px) saturate(140%);
+            -webkit-backdrop-filter: blur(20px) saturate(140%);
+            box-shadow:
+              0 8px 30px rgba(0,0,0,0.22),
+              inset 0 1px 0 rgba(255,255,255,0.08);
+          }
+          /* Hover only lifts the existing surface — no glow, no scale. */
+          .exp-tile:hover {
+            background-color: rgba(255,255,255,0.035);
+            border-color: rgba(255,255,255,0.20);
+            box-shadow:
+              0 10px 34px rgba(0,0,0,0.26),
+              inset 0 1px 0 rgba(255,255,255,0.11);
+          }
+          .exp-sheen {
+            top: -38px;
+            width: 128px; height: 84px;
+            background:
+              radial-gradient(circle at 50% 50%,
+                rgba(255,255,255,0.11) 0%,
+                rgba(255,255,255,0.035) 45%,
+                rgba(255,255,255,0) 74%);
+          }
+          /* Warm hairline along the bottom edge — the only gold on the tile. */
+          .exp-tile::after {
+            content: '';
+            position: absolute;
+            left: 12%; right: 12%; bottom: 0;
+            height: 1px;
+            pointer-events: none;
+            background: linear-gradient(90deg,
+              rgba(206,151,96,0) 0%,
+              rgba(206,151,96,0.38) 50%,
+              rgba(206,151,96,0) 100%);
+            opacity: 0.75;
+            transition: opacity 0.15s ease;
+          }
+          .exp-tile:hover::after { opacity: 1; }
+          .exp-icon { width: 30px; height: 30px; }
+          .exp-label { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.74); }
+          /* The gold sparkle beside the heading, plus the thin reflection
+             under it. Both are desktop-only decoration. */
+          .exp-head-glow {
+            height: 1px;
+            width: 148px;
+            margin-top: 7px;
+            background: linear-gradient(90deg,
+              rgba(206,151,96,0.28) 0%,
+              rgba(255,255,255,0.06) 45%,
+              rgba(255,255,255,0) 100%);
+          }
+        }
+        @media (min-width: 1280px) {
+          .exp-tile { width: 120px; height: 120px; gap: 10px; }
+          .exp-icon { width: 31px; height: 31px; }
+        }
       `}</style>
 
       {/* Section heading — identical treatment to the removed Promotions heading */}
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex items-center gap-2">
-          <span
-            className="hp-sec text-[11px] font-semibold tracking-[0.10em] uppercase"
-            style={{ color: 'rgba(255,255,255,0.28)' }}
-          >
-            Explore
+          <span className="flex flex-col">
+            <span className="flex items-center gap-1.5">
+              <span
+                className="hp-sec text-[11px] font-semibold tracking-[0.10em] uppercase"
+                style={{ color: 'rgba(255,255,255,0.28)' }}
+              >
+                Explore
+              </span>
+              {/* Desktop-only sparkle + reflection; hidden below lg so the
+                  mobile heading stays exactly as it was. */}
+              <Sparkles
+                className="hidden h-[10px] w-[10px] lg:block"
+                style={{ color: 'rgba(206,151,96,0.55)' }}
+                aria-hidden="true"
+              />
+            </span>
+            <span className="exp-head-glow hidden lg:block" aria-hidden="true" />
           </span>
         </div>
       </div>

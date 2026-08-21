@@ -2533,8 +2533,38 @@ function ContentTab() {
  * The preview renders with profileStatusStyle() -- the same function the real
  * navigation bar uses -- so what is shown here is what users get.
  */
+type AnnouncementForm = {
+  enabled: boolean;
+  text: string;
+  href: string;
+  subtitle: string;
+  ctaLabel: string;
+  ctaHref: string;
+  showProfileProgress: boolean;
+  showSpotsLeft: boolean;
+  /** Held as `datetime-local` strings; converted to ISO on save. */
+  startAt: string;
+  endAt: string;
+};
+
+/** ISO -> value a <input type="datetime-local"> accepts (local time). */
+function isoToLocalInput(iso: string): string {
+  if (!iso) return '';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return '';
+  const d = new Date(t);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function localInputToIso(value: string): string {
+  if (!value) return '';
+  const t = Date.parse(value);
+  return Number.isNaN(t) ? '' : new Date(t).toISOString();
+}
+
 function AnnouncementsTab() {
-  const [form, setForm] = useState<{ enabled: boolean; text: string; href: string } | null>(null);
+  const [form, setForm] = useState<AnnouncementForm | null>(null);
   const [meta, setMeta] = useState<{ updatedAt: string; updatedBy: string }>({ updatedAt: '', updatedBy: '' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2547,7 +2577,18 @@ function AnnouncementsTab() {
       .then((r) => r.json())
       .then((d) => {
         const a = d?.announcement;
-        setForm({ enabled: a?.enabled !== false, text: a?.text ?? '', href: a?.href ?? '' });
+        setForm({
+          enabled: a?.enabled !== false,
+          text: a?.text ?? '',
+          href: a?.href ?? '',
+          subtitle: a?.subtitle ?? '',
+          ctaLabel: a?.ctaLabel ?? '',
+          ctaHref: a?.ctaHref ?? '',
+          showProfileProgress: a?.showProfileProgress !== false,
+          showSpotsLeft: a?.showSpotsLeft !== false,
+          startAt: isoToLocalInput(a?.startAt ?? ''),
+          endAt: isoToLocalInput(a?.endAt ?? ''),
+        });
         setMeta({ updatedAt: a?.updatedAt ?? '', updatedBy: a?.updatedBy ?? '' });
       })
       .catch(console.error)
@@ -2561,7 +2602,14 @@ function AnnouncementsTab() {
     const res = await fetch('/api/super-admin/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_announcement', data: form }),
+      body: JSON.stringify({
+        action: 'update_announcement',
+        data: {
+          ...form,
+          startAt: localInputToIso(form.startAt),
+          endAt: localInputToIso(form.endAt),
+        },
+      }),
     });
     setSaving(false);
     if (res.ok) { setMsg('Saved'); load(); setTimeout(() => setMsg(''), 2000); }
@@ -2625,6 +2673,99 @@ function AnnouncementsTab() {
             className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
           />
           <div className="text-[11px] text-zinc-600 mt-1">Relative path only, e.g. <span className="font-mono">/profile</span>. Leave empty for a non-clickable bar.</div>
+        </div>
+
+        {/* ── Desktop card fields ──────────────────────────────────────────
+            Subtitle and CTA render on the desktop card beside Explore only;
+            the mobile bar keeps showing the message on its own. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1" htmlFor="ann-subtitle">Subtitle (desktop)</label>
+            <input
+              id="ann-subtitle"
+              value={form.subtitle}
+              maxLength={120}
+              onChange={(e) => setForm({ ...form, subtitle: e.target.value })}
+              placeholder="Optional second line"
+              className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+            />
+            <div className="text-[11px] text-zinc-600 mt-1">{form.subtitle.length}/120 — leave empty to hide.</div>
+          </div>
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1" htmlFor="ann-cta-label">CTA label (desktop)</label>
+            <input
+              id="ann-cta-label"
+              value={form.ctaLabel}
+              maxLength={24}
+              onChange={(e) => setForm({ ...form, ctaLabel: e.target.value })}
+              placeholder="Complete now"
+              className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+            />
+            <div className="text-[11px] text-zinc-600 mt-1">Empty shows the sparkle instead of a chip.</div>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1" htmlFor="ann-cta-href">CTA link (desktop)</label>
+          <input
+            id="ann-cta-href"
+            value={form.ctaHref}
+            onChange={(e) => setForm({ ...form, ctaHref: e.target.value })}
+            placeholder="/profile"
+            className="w-full bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+          />
+          <div className="text-[11px] text-zinc-600 mt-1">Relative path only. Falls back to the link above when empty.</div>
+        </div>
+
+        {/* ── Display toggles ─────────────────────────────────────────────── */}
+        <div className="grid gap-3 sm:grid-cols-2">
+          {([
+            ['showProfileProgress', 'Profile completion %', 'Shows the completion ring on the desktop card.'],
+            ['showSpotsLeft', 'Free Premium spots left', 'Shows the remaining-spots badge (server counted).'],
+          ] as const).map(([key, label, hint]) => (
+            <button
+              key={key}
+              type="button"
+              role="switch"
+              aria-checked={form[key]}
+              onClick={() => setForm({ ...form, [key]: !form[key] })}
+              className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-left transition-all ${
+                form[key] ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-zinc-800 border-zinc-700'
+              }`}
+            >
+              <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${form[key] ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+              <span className="min-w-0">
+                <span className={`block text-xs font-semibold ${form[key] ? 'text-emerald-400' : 'text-zinc-500'}`}>{label}</span>
+                <span className="block text-[11px] text-zinc-600">{hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* ── Schedule ────────────────────────────────────────────────────── */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1" htmlFor="ann-start">Start date</label>
+            <input
+              id="ann-start"
+              type="datetime-local"
+              value={form.startAt}
+              onChange={(e) => setForm({ ...form, startAt: e.target.value })}
+              className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+            />
+            <div className="text-[11px] text-zinc-600 mt-1">Empty = live immediately.</div>
+          </div>
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1" htmlFor="ann-end">End date</label>
+            <input
+              id="ann-end"
+              type="datetime-local"
+              value={form.endAt}
+              onChange={(e) => setForm({ ...form, endAt: e.target.value })}
+              className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+            />
+            <div className="text-[11px] text-zinc-600 mt-1">Empty = never expires. The window is enforced server-side.</div>
+          </div>
         </div>
 
         {/* Preview */}

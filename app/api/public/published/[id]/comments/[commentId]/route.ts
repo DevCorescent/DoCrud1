@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { deliverMentions } from '@/lib/server/mention-delivery';
+import { normalizeMentions, mentionsToPlainText } from '@/lib/server/mention-text';
 import { getAuthSession } from '@/lib/server/auth';
 import { deleteComment, updateComment } from '@/lib/server/file-transfers';
 import { mapPublishedComments } from '@/lib/server/published-comments';
@@ -20,7 +22,28 @@ export async function PATCH(
     if (!body.text?.trim()) {
       return NextResponse.json({ error: 'Comment text required' }, { status: 400 });
     }
-    const updated = await updateComment(id, commentId, userId, body.text.trim());
+    /* An edit goes through the same mention validation as a new comment, so a
+       PATCH cannot smuggle in a mention whose label disagrees with its id. */
+    const { text: normalizedText, mentionedIds } = await normalizeMentions(body.text.trim());
+    const updated = await updateComment(id, commentId, userId, normalizedText);
+
+    /* People newly named by the edit are told once; anyone already notified
+       for this comment is skipped by the delivery ledger, so re-saving or
+       re-adding an existing mention sends nothing further. */
+    if (mentionedIds.length > 0) {
+      const actorName = session?.user?.name || 'Someone';
+      void deliverMentions({
+        commentId,
+        publicationId: updated.id,
+        publicationTitle: updated.title || updated.fileName || 'a publication',
+        href: `/published/${updated.shareId || id}#comments`,
+        actorId: userId,
+        actorName,
+        mentionedIds,
+        preview: mentionsToPlainText(normalizedText),
+      }).catch(() => {});
+    }
+
     return NextResponse.json({ comments: await mapPublishedComments(updated.comments, userId) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed';

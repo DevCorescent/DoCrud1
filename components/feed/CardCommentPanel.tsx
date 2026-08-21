@@ -101,6 +101,7 @@ export function CardCommentPanel({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionResults, setMentionResults] = useState<MentionCandidate[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionLoading, setMentionLoading] = useState(false);
 
   const [replyTo, setReplyTo] = useState<{
     id: string;
@@ -176,18 +177,25 @@ const buildCommentTree = useCallback(
   /* Suggestions for the current token. Debounced, and the previous request is
      aborted so out-of-order responses cannot overwrite newer ones. */
   useEffect(() => {
-    if (mentionQuery === null) { setMentionResults([]); return; }
-    const controller = new AbortController();
+    if (mentionQuery === null) { setMentionResults([]); setMentionLoading(false); return; }
+    /* A stale-result flag rather than an AbortController: aborting mid-flight
+       leaves the request with no response to settle on, which previously left
+       the list stuck on its loading state. The request is allowed to finish
+       and its result is simply ignored if a newer query has replaced it. */
+    let stale = false;
+    setMentionLoading(true);
     const t = setTimeout(() => {
-      fetch(`/api/mentions/search?q=${encodeURIComponent(mentionQuery)}`, { signal: controller.signal })
+      fetch(`/api/mentions/search?q=${encodeURIComponent(mentionQuery)}`)
         .then((r) => (r.ok ? r.json() : { people: [] }))
         .then((d: { people?: MentionCandidate[] }) => {
+          if (stale) return;
           setMentionResults(Array.isArray(d.people) ? d.people : []);
           setMentionIndex(0);
         })
-        .catch(() => {});
-    }, 140);
-    return () => { clearTimeout(t); controller.abort(); };
+        .catch(() => { if (!stale) setMentionResults([]); })
+        .finally(() => { if (!stale) setMentionLoading(false); });
+    }, 180);
+    return () => { stale = true; clearTimeout(t); };
   }, [mentionQuery]);
 
   /* Replaces the token under the caret with the stored mention markup. */
@@ -919,6 +927,7 @@ const buildCommentTree = useCallback(
         .pcp-field {
           flex: 1 1 auto;
           min-width: 0;
+          min-height: 38px;
           display: flex;
           align-items: flex-end;
           gap: 6px;
@@ -932,7 +941,9 @@ const buildCommentTree = useCallback(
         .pcp-input {
           flex: 1 1 auto;
           min-width: 0;
-          max-height: 96px;
+          /* Comfortable single-line target that grows with the comment. */
+          min-height: 24px;
+          max-height: 108px;
           resize: none;
           border: none;
           outline: none;
@@ -993,6 +1004,13 @@ const buildCommentTree = useCallback(
           -webkit-backdrop-filter: blur(18px);
           padding: 4px;
         }
+        .pcp-mnote {
+          padding: 6px 8px;
+          margin: 6px 0 0 40px;
+          font-size: 11px;
+          color: rgba(255,255,255,0.38);
+        }
+        .pcp-mentions .pcp-mnote { margin: 0; }
         .pcp-mrow {
           display: flex;
           align-items: center;
@@ -1158,8 +1176,11 @@ const buildCommentTree = useCallback(
         </div>
       </div>
 
-      {mentionQuery !== null && mentionResults.length > 0 && (
+      {mentionQuery !== null && (mentionResults.length > 0 || mentionLoading) && (
         <ul className="pcp-mentions" role="listbox" aria-label="People to mention">
+          {mentionResults.length === 0 && mentionLoading && (
+            <li className="pcp-mnote">Searching…</li>
+          )}
           {mentionResults.map((person, i) => (
             <li key={person.userId}>
               <button
@@ -1185,6 +1206,10 @@ const buildCommentTree = useCallback(
             </li>
           ))}
         </ul>
+      )}
+
+      {mentionQuery !== null && !mentionLoading && mentionResults.length === 0 && (
+        <p className="pcp-mentions pcp-mnote" role="status">No people found</p>
       )}
 
       {emojiOpen && (

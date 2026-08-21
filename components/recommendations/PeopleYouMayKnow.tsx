@@ -41,11 +41,15 @@ function initials(name: string) {
 
 function Person({
   person, following, pending, onToggle,
+  upraised, upraisePending, onUpraise,
 }: {
   person: PersonRecommendation;
   following: boolean;
   pending: boolean;
   onToggle: (id: string) => void;
+  upraised: boolean;
+  upraisePending: boolean;
+  onUpraise: (id: string) => void;
 }) {
   const [broken, setBroken] = useState(false);
   const secondary = person.headline || person.location || person.skills.slice(0, 2).join(' · ');
@@ -84,15 +88,29 @@ function Person({
         )}
       </div>
 
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => onToggle(person.userId)}
-        aria-label={following ? `Unfollow ${person.name}` : `Follow ${person.name}`}
-        className={following ? 'pymk-btn pymk-btn-on' : 'pymk-btn'}
-      >
-        {following ? 'Following' : 'Follow'}
-      </button>
+      <div className="pymk-actions">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => onToggle(person.userId)}
+          aria-label={following ? `Unfollow ${person.name}` : `Follow ${person.name}`}
+          className={following ? 'pymk-btn pymk-btn-on' : 'pymk-btn'}
+        >
+          {following ? 'Following' : 'Follow'}
+        </button>
+
+        {/* Secondary action. Toggles through the existing upraise endpoint. */}
+        <button
+          type="button"
+          disabled={upraisePending}
+          onClick={() => onUpraise(person.userId)}
+          aria-pressed={upraised}
+          aria-label={upraised ? `Remove upraise from ${person.name}` : `Upraise ${person.name}`}
+          className={upraised ? 'pymk-up pymk-up-on' : 'pymk-up'}
+        >
+          {upraised ? 'Upraised' : 'Upraise'}
+        </button>
+      </div>
     </article>
   );
 }
@@ -104,6 +122,11 @@ export default function PeopleYouMayKnow() {
   /* State alone cannot gate a double submit: several clicks in one tick all
      read the same stale Set. A ref is updated synchronously. */
   const inFlight = useRef<Set<string>>(new Set());
+  /* Upraise is a separate toggle with its own in-flight guard, so a pending
+     follow never blocks it and vice versa. */
+  const [upraised, setUpraised] = useState<Set<string>>(new Set());
+  const [upraisePending, setUpraisePending] = useState<Set<string>>(new Set());
+  const upraiseInFlight = useRef<Set<string>>(new Set());
   const fetched = useRef(false);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const copyWidth = useRef(0);
@@ -116,6 +139,21 @@ export default function PeopleYouMayKnow() {
       .then((r) => (r.ok ? r.json() : { people: [] }))
       .then((d: { people?: PersonRecommendation[] }) => setPeople(Array.isArray(d.people) ? d.people : []))
       .catch(() => setPeople([]));
+  }, []);
+
+  /* Which of these people the viewer has already upraised. One request for the
+     whole strip, from the endpoint that already exists — not one call per card,
+     and no separate upraise store of our own. */
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/upraise/my-list')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { upraisedIds?: string[] } | null) => {
+        if (cancelled || !Array.isArray(d?.upraisedIds)) return;
+        setUpraised(new Set(d!.upraisedIds));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   const list = useMemo(() => people ?? [], [people]);
@@ -199,6 +237,34 @@ export default function PeopleYouMayKnow() {
       setPending((p) => { const n = new Set(p); n.delete(targetUserId); return n; });
     }
   }, [following]);
+
+  /* Optimistic, with rollback, through the existing toggle endpoint. The
+     response is authoritative: an upraise that was already recorded settles to
+     whatever the server reports rather than to what the click assumed. */
+  const toggleUpraise = useCallback(async (targetUserId: string) => {
+    if (upraiseInFlight.current.has(targetUserId)) return;
+    upraiseInFlight.current.add(targetUserId);
+    const had = upraised.has(targetUserId);
+    setUpraisePending((p) => new Set(p).add(targetUserId));
+    setUpraised((prev) => { const n = new Set(prev); if (had) n.delete(targetUserId); else n.add(targetUserId); return n; });
+    try {
+      const res = await fetch(`/api/upraise/${encodeURIComponent(targetUserId)}`, { method: 'POST' });
+      if (!res.ok) throw new Error('failed');
+      const d = await res.json() as { hasUpraised?: boolean };
+      if (typeof d.hasUpraised === 'boolean') {
+        setUpraised((prev) => {
+          const n = new Set(prev);
+          if (d.hasUpraised) n.add(targetUserId); else n.delete(targetUserId);
+          return n;
+        });
+      }
+    } catch {
+      setUpraised((prev) => { const n = new Set(prev); if (had) n.add(targetUserId); else n.delete(targetUserId); return n; });
+    } finally {
+      upraiseInFlight.current.delete(targetUserId);
+      setUpraisePending((p) => { const n = new Set(p); n.delete(targetUserId); return n; });
+    }
+  }, [upraised]);
 
   // Nothing ranked, or still loading: render nothing rather than an empty shell.
   if (!people || people.length === 0) return null;
@@ -307,9 +373,17 @@ export default function PeopleYouMayKnow() {
           font-weight: 500;
           color: rgba(255,255,255,0.34);
         }
-        .pymk-btn {
+        /* One row, so the card height is unchanged by the second action. */
+        .pymk-actions {
           margin-top: auto;
+          display: flex;
+          align-items: stretch;
+          gap: 5px;
           width: 100%;
+        }
+        .pymk-btn {
+          flex: 1 1 auto;
+          min-width: 0;
           height: 26px;
           border-radius: 8px;
           font-size: 11.5px;
@@ -329,7 +403,29 @@ export default function PeopleYouMayKnow() {
         }
         .pymk-btn-on:hover { color: rgba(255,255,255,0.72); }
 
-        .pymk-id:focus-visible, .pymk-btn:focus-visible, .pymk-seeall:focus-visible {
+        /* Secondary: quieter than Follow, same glass family, no colour. */
+        .pymk-up {
+          flex: 0 0 auto;
+          height: 26px;
+          padding: 0 8px;
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 600;
+          white-space: nowrap;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(255,255,255,0.02);
+          color: rgba(255,255,255,0.50);
+          transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+        }
+        .pymk-up:hover { background-color: rgba(255,255,255,0.06); color: rgba(255,255,255,0.80); }
+        .pymk-up:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pymk-up-on {
+          border-color: rgba(255,255,255,0.18);
+          background: rgba(255,255,255,0.08);
+          color: rgba(255,255,255,0.82);
+        }
+
+        .pymk-id:focus-visible, .pymk-btn:focus-visible, .pymk-up:focus-visible, .pymk-seeall:focus-visible {
           outline: 2px solid rgba(255,255,255,0.55);
           outline-offset: 2px;
           border-radius: 8px;
@@ -362,6 +458,9 @@ export default function PeopleYouMayKnow() {
             following={following.has(p.userId)}
             pending={pending.has(p.userId)}
             onToggle={toggle}
+            upraised={upraised.has(p.userId)}
+            upraisePending={upraisePending.has(p.userId)}
+            onUpraise={toggleUpraise}
           />
         ))}
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * People you may know — a feed item, not a homepage section.
+ * Your Potential Connections — a feed item, not a homepage section.
  *
  * Ranked candidates come from /api/recommendations/people (real follow graph
  * plus stored profile signals). Following uses the existing
@@ -275,7 +275,7 @@ export default function PeopleYouMayKnow() {
   if (!people || people.length === 0) return null;
 
   return (
-    <section className="pymk-shell" aria-label="People you may know">
+    <section className="pymk-shell" aria-label="Your Potential Connections">
       <style>{`
         /* A module, not another feed item: black first, glass second, and a
            trace of the purple already used for messaging. Colours are authored
@@ -534,7 +534,7 @@ export default function PeopleYouMayKnow() {
           className="inline-flex items-center gap-1.5 text-[13px] font-medium tracking-[0.02em]"
           style={{ color: 'rgba(255,255,255,0.78)' }}
         >
-          <Users className="h-3.5 w-3.5" /> people you may know
+          <Users className="h-3.5 w-3.5" /> Your Potential Connections
         </span>
         <Link
           href="/people"

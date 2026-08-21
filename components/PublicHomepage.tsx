@@ -5720,55 +5720,38 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
            card. Nothing here can reach mobile or tablet: every rule is inside
            the 1024px query, and the base rules above are untouched. */
         @media (min-width: 1024px) {
+          /* One flat translucent surface — no gradient of any kind. The depth
+             comes from the blur, the hairline border and the inset highlight,
+             not from a colour ramp. The background shorthand (not just
+             background-color) so the base gradient above is fully replaced
+             rather than layered over. */
           .exp-tile {
             width: 110px; height: 110px; gap: 9px;
             border-radius: 18px;
-            border: 1px solid rgba(255,255,255,0.13);
-            background:
-              linear-gradient(145deg,
-                rgba(255,255,255,0.075) 0%,
-                rgba(255,255,255,0.025) 55%,
-                rgba(206,151,96,0.035) 100%);
-            backdrop-filter: blur(20px) saturate(140%);
-            -webkit-backdrop-filter: blur(20px) saturate(140%);
+            border: 1px solid rgba(255,255,255,0.10);
+            background: rgba(255,255,255,0.045);
+            backdrop-filter: blur(18px) saturate(130%);
+            -webkit-backdrop-filter: blur(18px) saturate(130%);
             box-shadow:
-              0 8px 30px rgba(0,0,0,0.22),
-              inset 0 1px 0 rgba(255,255,255,0.08);
+              0 4px 18px rgba(0,0,0,0.18),
+              inset 0 1px 0 rgba(255,255,255,0.055);
           }
-          /* Hover only lifts the existing surface — no glow, no scale. */
+          /* Hover lifts the same flat surface a little. No scale, no glow, no
+             gradient, no movement. */
           .exp-tile:hover {
-            background-color: rgba(255,255,255,0.035);
-            border-color: rgba(255,255,255,0.20);
+            background: rgba(255,255,255,0.065);
+            border-color: rgba(255,255,255,0.16);
             box-shadow:
-              0 10px 34px rgba(0,0,0,0.26),
-              inset 0 1px 0 rgba(255,255,255,0.11);
+              0 4px 18px rgba(0,0,0,0.18),
+              inset 0 1px 0 rgba(255,255,255,0.055);
           }
-          .exp-sheen {
-            top: -38px;
-            width: 128px; height: 84px;
-            background:
-              radial-gradient(circle at 50% 50%,
-                rgba(255,255,255,0.11) 0%,
-                rgba(255,255,255,0.035) 45%,
-                rgba(255,255,255,0) 74%);
-          }
-          /* Warm hairline along the bottom edge — the only gold on the tile. */
-          .exp-tile::after {
-            content: '';
-            position: absolute;
-            left: 12%; right: 12%; bottom: 0;
-            height: 1px;
-            pointer-events: none;
-            background: linear-gradient(90deg,
-              rgba(206,151,96,0) 0%,
-              rgba(206,151,96,0.38) 50%,
-              rgba(206,151,96,0) 100%);
-            opacity: 0.75;
-            transition: opacity 0.15s ease;
-          }
-          .exp-tile:hover::after { opacity: 1; }
-          .exp-icon { width: 30px; height: 30px; }
-          .exp-label { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.74); }
+          /* The radial sheen and the gold bottom hairline are both gradients,
+             so on desktop they are switched off rather than restyled. Mobile
+             still gets them from the base rules above. */
+          .exp-sheen { display: none; }
+          .exp-tile::after { content: none; }
+          .exp-icon { width: 30px; height: 30px; color: rgba(255,255,255,0.82); }
+          .exp-label { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.70); }
           /* The gold sparkle beside the heading, plus the thin reflection
              under it. Both are desktop-only decoration. */
           .exp-head-glow {

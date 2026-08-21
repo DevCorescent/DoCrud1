@@ -54,6 +54,44 @@ function mentionTokenAt(value: string, caret: number): { query: string; start: n
   return { query, start: at };
 }
 
+/** A person the viewer picked from the suggestion list in the current draft. */
+export type SelectedMention = { userId: string; displayName: string };
+
+/**
+ * Display text -> stored text.
+ *
+ * The composer holds what the viewer reads ("Hey @Gauransh Agarwal") while the
+ * wire format is @[Name](userId). Rebuilding the markup here — from the people
+ * actually chosen from the list — means the visible value never contains
+ * machine markup and the id is never guessed from free text.
+ *
+ * Longest name first, so "@Gauransh Agarwal" is not matched as "@Gauransh".
+ * A name the viewer has since edited or deleted simply fails to match and
+ * stays plain text, which is the safe outcome: no id, no mention.
+ */
+export function toStorageText(display: string, mentions: SelectedMention[]): string {
+  if (mentions.length === 0) return display;
+  const byLength = [...mentions].sort((a, b) => b.displayName.length - a.displayName.length);
+  let out = '';
+  let i = 0;
+  while (i < display.length) {
+    /* Only at a token boundary — the same rule mentionTokenAt() applies, so an
+       email address or a mid-word @ can never become a mention. */
+    if (display[i] === '@' && (i === 0 || /\s/.test(display[i - 1]))) {
+      const rest = display.slice(i + 1);
+      const hit = byLength.find((m) => m.displayName && rest.startsWith(m.displayName));
+      if (hit) {
+        out += `@[${hit.displayName}](${hit.userId})`;
+        i += 1 + hit.displayName.length;
+        continue;
+      }
+    }
+    out += display[i];
+    i += 1;
+  }
+  return out;
+}
+
 export type CardComment = {
   id: string;
   author: string;
@@ -102,6 +140,15 @@ export function CardCommentPanel({
   const [mentionResults, setMentionResults] = useState<MentionCandidate[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionLoading, setMentionLoading] = useState(false);
+  /* Everyone the viewer has picked from the list in this draft. The composer
+     shows "@Display Name"; this is what turns that back into the stored
+     @[Name](id) markup at submit time, so the id never has to be typed or
+     parsed out of the visible text. Kept per draft, not per keystroke. */
+  const [mentions, setMentions] = useState<SelectedMention[]>([]);
+  /* The Escape listener is registered once on document and would otherwise
+     close over a stale `mentionQuery`. */
+  const mentionOpenRef = useRef(false);
+  mentionOpenRef.current = mentionQuery !== null;
 
   const [replyTo, setReplyTo] = useState<{
     id: string;
@@ -198,24 +245,52 @@ const buildCommentTree = useCallback(
     return () => { stale = true; clearTimeout(t); };
   }, [mentionQuery]);
 
-  /* Replaces the token under the caret with the stored mention markup. */
+  /**
+   * Swaps the half-typed token under the caret for the person's display name.
+   *
+   * Only the token is replaced: everything before the @ and everything after
+   * the caret is carried across untouched, so "Hello @gau nice" becomes
+   * "Hello @Gauransh Agarwal nice" with " nice" still there. A trailing space
+   * is added and the caret parked after it, which is what lets the viewer keep
+   * typing — or pick a second person — without touching the mouse.
+   *
+   * This closes nothing: the panel, the composer and the draft all survive.
+   */
   const applyMention = useCallback((person: MentionCandidate) => {
     const el = inputRef.current;
     const caret = el ? el.selectionStart ?? text.length : text.length;
     const token = mentionTokenAt(text, caret);
     if (!token) return;
-    const next = `${text.slice(0, token.start)}@[${person.name}](${person.userId}) ${text.slice(caret)}`;
+
+    const inserted = `@${person.name} `;
+    const before = text.slice(0, token.start);
+    const after = text.slice(caret);
+    const next = `${before}${inserted}${after}`;
+    const pos = token.start + inserted.length;
+
     setText(next);
+    /* Same person picked twice is one entry — the markup rebuild is keyed on
+       the name, and the server de-duplicates ids again anyway. */
+    setMentions((prev) => (
+      prev.some((m) => m.userId === person.userId)
+        ? prev
+        : [...prev, { userId: person.userId, displayName: person.name }]
+    ));
     setMentionQuery(null);
     setMentionResults([]);
+    if (error) setError(null);
+
+    /* After the value re-render, not before: setSelectionRange on the old
+       value would be clobbered by React writing the new one. */
     requestAnimationFrame(() => {
       const node = inputRef.current;
       if (!node) return;
-      const pos = token.start + `@[${person.name}](${person.userId}) `.length;
       node.focus();
       node.setSelectionRange(pos, pos);
+      node.style.height = 'auto';
+      node.style.height = `${Math.min(node.scrollHeight, 96)}px`;
     });
-  }, [text]);
+  }, [text, error]);
 
   /*
    * Load comments.
@@ -287,15 +362,32 @@ const buildCommentTree = useCallback(
       }
     };
 
+    /* CAPTURE, not bubble. This listener asks "was the click inside the
+       panel?", and the only reliable moment to ask is before React has had a
+       chance to react to the same click.
+
+       In the bubble phase the answer is wrong for any control that removes
+       itself when pressed. Pressing a mention suggestion runs React's
+       onMouseDown at the root container, which clears the suggestion state and
+       — mousedown being a discrete event in React 18 — flushes synchronously,
+       unmounting the <li> before the event reaches document. `target` is then
+       a detached node, contains() says false, and the panel closed itself on a
+       click that was inside it. The emoji picker had the same failure mode.
+
+       Capturing runs this before any React handler, while the target is still
+       in the tree, so the question is answered against the DOM the user
+       actually clicked. Genuine outside clicks are unaffected. */
     document.addEventListener(
       'mousedown',
       handleOutsideClick,
+      true,
     );
 
     return () => {
       document.removeEventListener(
         'mousedown',
         handleOutsideClick,
+        true,
       );
     };
   }, [onClose]);
@@ -305,15 +397,29 @@ const buildCommentTree = useCallback(
    */
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
+      if (event.key !== 'Escape') return;
+      /* Escape dismisses the suggestion list first and stops there — the
+         composer stays open with its text intact. A second Escape, with no
+         list open, closes the panel as before. Read through a ref because this
+         listener is registered once and must not go stale. */
+      if (mentionOpenRef.current) {
+        setMentionQuery(null);
+        return;
       }
+      onClose();
     };
 
-    document.addEventListener('keydown', handleEscape);
+    /* CAPTURE, for the same reason the outside-click listener captures.
+       Next's App Router hydrates the whole document, so React's delegated
+       listeners live on `document` too — and stopPropagation from a component
+       cannot stop a sibling listener on that same node. In the bubble phase
+       React therefore runs first, clears the mention state, and this handler
+       then reads a ref that has already flipped to false and closes the whole
+       panel. Capturing asks the question before React has answered it. */
+    document.addEventListener('keydown', handleEscape, true);
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleEscape, true);
     };
   }, [onClose]);
 
@@ -322,9 +428,11 @@ const buildCommentTree = useCallback(
    */
   const submitComment = useCallback(
     async (parentId?: string) => {
+      /* Replies have no suggestion list of their own, so only the root
+         composer needs the display -> markup rebuild. */
       const body = parentId
         ? replyText.trim()
-        : text.trim();
+        : toStorageText(text.trim(), mentions);
 
       if (!body || submitting) {
         return;
@@ -380,6 +488,7 @@ const buildCommentTree = useCallback(
           setReplyTo(null);
         } else {
           setText('');
+          setMentions([]);
           inputRef.current?.focus();
         }
       } catch {
@@ -394,6 +503,7 @@ const buildCommentTree = useCallback(
       item.id,
       item.isReal,
       onCommentCountChange,
+      mentions,
       replyText,
       submitting,
       text,
@@ -1127,6 +1237,13 @@ const buildCommentTree = useCallback(
                   setMentionQuery(null);
                   return;
                 }
+              }
+              /* The list is open but its results have not landed yet. Enter
+                 here means "pick the person I am typing", not "post" — so it
+                 does nothing rather than posting a half-typed @token. */
+              if (mentionQuery !== null && mentionLoading) {
+                if (event.key === 'Enter' && !event.shiftKey) event.preventDefault();
+                return;
               }
               if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();

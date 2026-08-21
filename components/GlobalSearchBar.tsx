@@ -124,6 +124,27 @@ function setCache(key: string, results: DbSearchResult[]) {
   if (resultCache.size > 80) { const k = resultCache.keys().next().value; if (k) resultCache.delete(k); }
 }
 
+/**
+ * Cache key.
+ *
+ * The viewer id is part of the key because results are permission-scoped on the
+ * server — the route passes the session through, so two viewers can get
+ * different results for the same words. This Map is module-scoped and survives
+ * client-side navigation, so keying on the query alone could show one account's
+ * results to the next account signed in on the same tab.
+ *
+ * The query is normalised so "React " and "react" share an entry instead of
+ * each paying for its own request.
+ */
+function cacheKey(viewerId: string | null, query: string, filter: SearchFilter) {
+  return `${viewerId ?? 'anon'}::${query.trim().toLowerCase().replace(/\s+/g, ' ')}::${filter}`;
+}
+
+/** Drop everything — used when the signed-in identity changes. */
+function clearResultCache() {
+  resultCache.clear();
+}
+
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
 const FILTERS: Array<{ id: SearchFilter; label: string; badges: string[] }> = [
@@ -779,6 +800,16 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
     const { data: session } = useSession();
     const userId = session?.user?.id || null;
 
+    /* Sign-in, sign-out or an account switch invalidates every cached result:
+       the entries were scoped to the previous viewer's permissions. */
+    const lastViewerRef = useRef<string | null | undefined>(undefined);
+    useEffect(() => {
+      if (lastViewerRef.current !== undefined && lastViewerRef.current !== userId) {
+        clearResultCache();
+      }
+      lastViewerRef.current = userId;
+    }, [userId]);
+
     const inputDesktopRef = useRef<HTMLInputElement>(null);
     const inputMobileRef  = useRef<HTMLInputElement>(null);
     const rootRef         = useRef<HTMLDivElement>(null);
@@ -821,7 +852,7 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
       const trimmed = q.trim();
       if (!trimmed) { setDbResults([]); setRelaxed(false); setLoading(false); return; }
 
-      const key = `${trimmed}::${filter}`;
+      const key = cacheKey(userId, trimmed, filter);
       const hit = getCached(key);
       if (hit) { setDbResults(hit); setLoading(false); return; }
 
@@ -1319,7 +1350,31 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               </div>
 
               {/* Scrollable results */}
-              <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+              {/* The scrollable region.
+
+                  `minHeight: 0` is load-bearing, not decoration. A flex child
+                  defaults to `min-height: auto`, which refuses to shrink below
+                  its content — so this box grew taller than the fixed-height
+                  panel above it, and because that panel is `overflow: hidden`
+                  the tail of the result list was clipped and unreachable. That
+                  is the black dead-zone under the last visible row. With
+                  `minHeight: 0` the box is allowed to shrink to the panel and
+                  scroll its own content instead.
+
+                  The bottom padding keeps the final result clear of the home
+                  indicator / browser chrome rather than ending flush against
+                  it. */}
+              <div
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  overscrollBehaviorY: 'contain',
+                  scrollbarWidth: 'none',
+                  WebkitOverflowScrolling: 'touch',
+                  paddingBottom: 'max(24px, env(safe-area-inset-bottom, 0px))',
+                } as React.CSSProperties}
+              >
                 {/* Loading skeleton */}
                 {loading && !dbResults.length && query.trim().length > 0 && (
                   <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>

@@ -1849,6 +1849,26 @@ function hpFeedLabel(item: { title: string; body?: string; category?: string }):
   if (!hpIsJunkTitle(item)) return item.title;
   return hpHasRealCaption(item.body) ? hpGetBodySnippet(item.body!, 80) : '';
 }
+/**
+ * The homepage twin of getFeedBodyFull(): the publication as written.
+ *
+ * hpGetBodySnippet() joins lines with a space, which is right for a title
+ * fallback but flattens the author's paragraphs in the card body. Line breaks
+ * are kept here, blank runs collapse to one, metadata lines drop out, and the
+ * author's links survive.
+ */
+function hpGetBodyFull(raw: string): string {
+  if (!raw?.trim()) return '';
+  return raw
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter((l) => !HP_META_LINE_RE.test(l.trim()))
+    .map((l) => l.replace(/[ \t]{2,}/g, ' ').trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function hpGetBodySnippet(raw: string, maxLen = 200): string {
   const cleaned = raw.replace(/https?:\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').trim();
   const prose = cleaned.split(/\n+/)
@@ -2100,11 +2120,11 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({
       }
       renderMainBody={
         hpHasRealCaption(item.body) ? (
-          /* Full cleaned text: the clamp is CSS, so "Read more" can reveal the
-             rest in place instead of sending the reader to the post page. */
+          /* Full text with its paragraphs intact: the clamp is CSS, so "Read
+             more" reveals the rest in place instead of sending the reader to
+             the post page — which is what clicking the card already does. */
           <ExpandableBody
-            text={hpGetBodySnippet(item.body, Number.MAX_SAFE_INTEGER)}
-            detailHref={postHref}
+            text={hpGetBodyFull(item.body)}
             className={showTitle ? 'mt-1.5' : ''}
           />
         ) : null

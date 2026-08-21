@@ -14,6 +14,7 @@ import {
   buildCategoryHighlight,
   FeedCardCategoryLine,
   FeedCardMetaChips,
+  getFeedBodyFull,
   getFeedBodySnippet,
 } from '@/components/feed/FeedCardMeta';
 
@@ -45,9 +46,10 @@ export function nonTypeBadge(item: { badge?: string; category?: string }): strin
  * Publication text that opens in place.
  *
  * The feed shows a few lines; "Read more" removes the clamp and keeps the
- * reader exactly where they are. It is a separate action from "View post",
- * which is the only control here that navigates. Both stop the click from
- * reaching the card, which is itself a link on some surfaces.
+ * reader exactly where they are. It never navigates — the card itself is the
+ * link to the full publication, so a separate "View post" action would be a
+ * second way to do what clicking anywhere else already does. This control
+ * stops the click from reaching the card for exactly that reason.
  *
  * "Read more" appears only when the text is actually clipped — measured from
  * the rendered element rather than guessed from a character count, so it is
@@ -55,12 +57,9 @@ export function nonTypeBadge(item: { badge?: string; category?: string }): strin
  */
 export function ExpandableBody({
   text,
-  detailHref,
   className = '',
 }: {
   text: string;
-  /** Omitted hides the "View post" action. */
-  detailHref?: string;
   className?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -96,30 +95,23 @@ export function ExpandableBody({
       </p>
 
       {(clipped || expanded) && (
-        <div className="mt-1 flex flex-wrap items-center gap-3">
+        <div className="mt-1.5">
+          {/* Near-white and semibold so it reads as a control rather than the
+              tail of the paragraph it sits under (the body is white/50). No
+              ellipsis prefix for the same reason — that ran it into the text.
+              Inline and compact: no button chrome, no background. */}
           <button
             type="button"
             aria-expanded={expanded}
-            className="pfc-more text-[12px] font-semibold text-white/45 transition-colors hover:text-white/80"
+            className="pfc-more cursor-pointer text-[12.5px] font-semibold text-white/[0.95] transition-colors hover:text-white"
             onClick={(e) => { stop(e); setExpanded((v) => !v); }}
             /* The card treats Enter/Space as "open the post", and a keydown on
                this button would otherwise reach it and navigate. The button's
                own activation still fires, so the toggle keeps working. */
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
           >
-            {expanded ? 'Show less' : '… Read more'}
+            {expanded ? 'Show less' : 'Read more'}
           </button>
-
-          {detailHref && (
-            <Link
-              href={detailHref}
-              className="pfc-view text-[12px] font-semibold text-white/30 transition-colors hover:text-white/70"
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
-            >
-              View post
-            </Link>
-          )}
         </div>
       )}
     </div>
@@ -214,9 +206,9 @@ export function PublishedFeedCard({
   const canLinkAuthor = linkAuthor && Boolean(profileHref);
   const showTitle = shouldShowFeedTitle(cat, item.title);
   const snippet = showBodySnippet ? getFeedBodySnippet(item.body) : '';
-  /* The same cleaning the snippet does, without the character cut, so the
-     expanded view shows the whole publication. */
-  const fullBody = showBodySnippet ? getFeedBodySnippet(item.body, Number.MAX_SAFE_INTEGER) : '';
+  /* The whole publication with its paragraphs intact — the clamp is CSS, so
+     this same string is what the preview shows and what "Read more" reveals. */
+  const fullBody = showBodySnippet ? getFeedBodyFull(item.body) : '';
   const secondaryBadge = nonTypeBadge(item);
   /* Task 12 — category line under the title. Skipped when it would only repeat
      the author already shown in the header (company pages publish as the company). */
@@ -244,7 +236,6 @@ export function PublishedFeedCard({
     snippet ? (
       <ExpandableBody
         text={fullBody || snippet}
-        detailHref={detailHref}
         className={showTitle ? 'mt-1.5' : ''}
       />
     ) : null;

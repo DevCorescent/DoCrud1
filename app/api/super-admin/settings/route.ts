@@ -100,10 +100,46 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Link must be a relative path starting with /' }, { status: 400 });
       }
 
+      const ctaHref = typeof data?.ctaHref === 'string' ? data.ctaHref.trim() : '';
+      if (ctaHref && !ctaHref.startsWith('/')) {
+        return NextResponse.json({ error: 'CTA link must be a relative path starting with /' }, { status: 400 });
+      }
+
+      const subtitle = typeof data?.subtitle === 'string' ? data.subtitle.trim() : '';
+      if (subtitle.length > 120) {
+        return NextResponse.json({ error: 'Subtitle must be 120 characters or fewer' }, { status: 400 });
+      }
+      const ctaLabel = typeof data?.ctaLabel === 'string' ? data.ctaLabel.trim() : '';
+      if (ctaLabel.length > 24) {
+        return NextResponse.json({ error: 'CTA label must be 24 characters or fewer' }, { status: 400 });
+      }
+
+      /* Dates arrive as ISO strings (or '' for open-ended). Reject anything
+         unparseable here so the stored config can be trusted downstream. */
+      const parseWindow = (v: unknown, field: string): string | { error: string } => {
+        if (typeof v !== 'string' || !v.trim()) return '';
+        const t = Date.parse(v);
+        return Number.isNaN(t) ? { error: `${field} is not a valid date` } : new Date(t).toISOString();
+      };
+      const startAt = parseWindow(data?.startAt, 'Start date');
+      if (typeof startAt !== 'string') return NextResponse.json({ error: startAt.error }, { status: 400 });
+      const endAt = parseWindow(data?.endAt, 'End date');
+      if (typeof endAt !== 'string') return NextResponse.json({ error: endAt.error }, { status: 400 });
+      if (startAt && endAt && Date.parse(endAt) <= Date.parse(startAt)) {
+        return NextResponse.json({ error: 'End date must be after the start date' }, { status: 400 });
+      }
+
       await saveNavAnnouncementSettings({
         enabled: data?.enabled !== false,
         text,
         href,
+        subtitle,
+        ctaLabel,
+        ctaHref,
+        showProfileProgress: data?.showProfileProgress !== false,
+        showSpotsLeft: data?.showSpotsLeft !== false,
+        startAt,
+        endAt,
         updatedAt: new Date().toISOString(),
         updatedBy: session.email || 'super-admin',
       });

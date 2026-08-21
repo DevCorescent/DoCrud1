@@ -2401,9 +2401,24 @@ export interface ThemeSettings {
  */
 export interface NavAnnouncementSettings {
   enabled: boolean;
+  /** Headline copy. Historically the whole bar; still the title on every surface. */
   text: string;
   /** Optional destination for the bar. Empty string = not a link. */
   href: string;
+  /** Desktop-only second line under the title. Empty string = not rendered. */
+  subtitle: string;
+  /** Desktop-only call-to-action chip. Empty label = no chip. */
+  ctaLabel: string;
+  /** Where the CTA chip points. Relative path only; falls back to `href`. */
+  ctaHref: string;
+  /** Show the profile-completion ring on the desktop card. */
+  showProfileProgress: boolean;
+  /** Show the "N spots left" free-Premium badge on the desktop card. */
+  showSpotsLeft: boolean;
+  /** ISO timestamp the bar starts showing. Empty string = immediately. */
+  startAt: string;
+  /** ISO timestamp the bar stops showing. Empty string = never expires. */
+  endAt: string;
   updatedAt: string;
   /** Email of the Super Admin who last saved — never sent to normal users. */
   updatedBy: string;

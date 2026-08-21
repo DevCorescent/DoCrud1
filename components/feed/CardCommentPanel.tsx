@@ -149,6 +149,32 @@ export function CardCommentPanel({
      close over a stale `mentionQuery`. */
   const mentionOpenRef = useRef(false);
   mentionOpenRef.current = mentionQuery !== null;
+  /* The one token the viewer has dismissed with Escape, as "start:query".
+     Without this the keyup that ends the very same Escape re-reads the caret,
+     finds it still sitting inside "@ga" and reopens the list the keydown just
+     closed. Any edit that changes the token clears the dismissal. */
+  const dismissedTokenRef = useRef<string | null>(null);
+
+  const tokenKey = (t: { query: string; start: number } | null) => (t ? `${t.start}:${t.query}` : null);
+
+  /** Single place that decides whether the suggestion list should be open. */
+  const syncMentionToken = useCallback((el: HTMLTextAreaElement) => {
+    const token = mentionTokenAt(el.value, el.selectionStart ?? el.value.length);
+    if (token && dismissedTokenRef.current === tokenKey(token)) return;
+    dismissedTokenRef.current = null;
+    setMentionQuery(token ? token.query : null);
+  }, []);
+
+  /** Escape: remember what was dismissed, then close only the list. */
+  const dismissMentionList = useCallback(() => {
+    const el = inputRef.current;
+    if (el) {
+      dismissedTokenRef.current = tokenKey(
+        mentionTokenAt(el.value, el.selectionStart ?? el.value.length),
+      );
+    }
+    setMentionQuery(null);
+  }, []);
 
   const [replyTo, setReplyTo] = useState<{
     id: string;
@@ -262,9 +288,13 @@ const buildCommentTree = useCallback(
     const token = mentionTokenAt(text, caret);
     if (!token) return;
 
-    const inserted = `@${person.name} `;
     const before = text.slice(0, token.start);
     const after = text.slice(caret);
+    /* The trailing space is there so the viewer can keep typing straight away.
+       When the text after the caret already opens with a space or punctuation
+       it would produce "Agarwal  nice work" or "Agarwal , welcome!", so it is
+       skipped and the caret still lands directly after the name. */
+    const inserted = `@${person.name}${/^[\s,.!?;:)\]}]/.test(after) ? '' : ' '}`;
     const next = `${before}${inserted}${after}`;
     const pos = token.start + inserted.length;
 
@@ -276,6 +306,7 @@ const buildCommentTree = useCallback(
         ? prev
         : [...prev, { userId: person.userId, displayName: person.name }]
     ));
+    dismissedTokenRef.current = null;
     setMentionQuery(null);
     setMentionResults([]);
     if (error) setError(null);
@@ -403,7 +434,7 @@ const buildCommentTree = useCallback(
          list open, closes the panel as before. Read through a ref because this
          listener is registered once and must not go stale. */
       if (mentionOpenRef.current) {
-        setMentionQuery(null);
+        dismissMentionList();
         return;
       }
       onClose();
@@ -421,7 +452,7 @@ const buildCommentTree = useCallback(
     return () => {
       document.removeEventListener('keydown', handleEscape, true);
     };
-  }, [onClose]);
+  }, [onClose, dismissMentionList]);
 
   /*
    * Submit comment or reply.
@@ -1201,17 +1232,14 @@ const buildCommentTree = useCallback(
               const el = event.target;
               setText(el.value);
               if (error) setError(null);
-              const token = mentionTokenAt(el.value, el.selectionStart ?? el.value.length);
-              setMentionQuery(token ? token.query : null);
+              syncMentionToken(el);
               el.style.height = 'auto';
               el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
             }}
             onKeyUp={(event) => {
               /* Arrow keys and clicks move the caret without changing the
                  value, so the token has to be re-read here too. */
-              const el = event.currentTarget;
-              const token = mentionTokenAt(el.value, el.selectionStart ?? el.value.length);
-              setMentionQuery(token ? token.query : null);
+              syncMentionToken(event.currentTarget);
             }}
             onBlur={() => { setTimeout(() => setMentionQuery(null), 120); }}
             onKeyDown={(event) => {
@@ -1234,7 +1262,7 @@ const buildCommentTree = useCallback(
                 }
                 if (event.key === 'Escape') {
                   event.preventDefault();
-                  setMentionQuery(null);
+                  dismissMentionList();
                   return;
                 }
               }

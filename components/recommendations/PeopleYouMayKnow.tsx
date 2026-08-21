@@ -11,8 +11,14 @@
  *
  * The strip is natively scrolled and endless: the list is rendered three times
  * and the scroll offset is silently rewound by one copy width whenever the
- * viewer crosses a copy boundary. There is no autoplay, no interval and no
- * animation — the row moves only when the viewer moves it.
+ * viewer crosses a copy boundary.
+ *
+ * On top of that the row drifts on its own, marquee style. The drift advances
+ * the real scrollLeft rather than animating a transform, so the strip stays a
+ * genuine scroller — touch, wheel and drag all still work, and the rewind above
+ * is what makes the drift endless rather than a second looping mechanism. It
+ * yields to the viewer: pointer over the row, focus inside it, a hidden tab or
+ * prefers-reduced-motion all stop it.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -195,6 +201,64 @@ export default function PeopleYouMayKnow() {
     return () => ro.disconnect();
   }, [loop, rendered.length]);
 
+  /* Continuous drift.
+     Deliberately not a CSS transform: a transform would take the row out of
+     the scroller and cost the native touch/wheel behaviour. Advancing
+     scrollLeft keeps one source of truth, and the rewind below turns it into
+     an endless marquee for free.
+
+     It never fights the viewer — any hand on the row, keyboard focus inside
+     it, a backgrounded tab or a reduced-motion preference stops it, and if
+     something else moved the offset (a drag, or the rewind) the accumulator
+     resyncs instead of yanking the row back. */
+  useEffect(() => {
+    if (!loop) return;
+    const el = stripRef.current;
+    if (!el) return;
+
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const SPEED = 22;            // px per second — a drift, not a carousel
+    let raf = 0;
+    let last = 0;
+    let pos = el.scrollLeft;
+    let held = 0;                // pointers down / hovering / focused
+
+    const step = (t: number) => {
+      raf = requestAnimationFrame(step);
+      if (!last) { last = t; return; }
+      const dt = t - last;
+      last = t;
+      if (held > 0 || reduce.matches || document.hidden) { pos = el.scrollLeft; return; }
+      /* Someone else moved it (drag momentum, the rewind, a link focus scroll)
+         — follow that rather than snapping back to a stale position. */
+      if (Math.abs(el.scrollLeft - pos) > 1) pos = el.scrollLeft;
+      pos += (SPEED * dt) / 1000;
+      el.scrollLeft = pos;
+    };
+    raf = requestAnimationFrame(step);
+
+    const hold = () => { held += 1; };
+    const release = () => { held = Math.max(0, held - 1); };
+    el.addEventListener('pointerenter', hold);
+    el.addEventListener('pointerleave', release);
+    el.addEventListener('pointerdown', hold);
+    el.addEventListener('pointerup', release);
+    el.addEventListener('pointercancel', release);
+    el.addEventListener('focusin', hold);
+    el.addEventListener('focusout', release);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      el.removeEventListener('pointerenter', hold);
+      el.removeEventListener('pointerleave', release);
+      el.removeEventListener('pointerdown', hold);
+      el.removeEventListener('pointerup', release);
+      el.removeEventListener('pointercancel', release);
+      el.removeEventListener('focusin', hold);
+      el.removeEventListener('focusout', release);
+    };
+  }, [loop, rendered.length]);
+
   /* The one scroll listener in the module, and the only way to make a native
      scroller endless: when the viewer leaves the middle copy, shift the offset
      by exactly one copy. The pixels either side are identical, so nothing
@@ -285,7 +349,10 @@ export default function PeopleYouMayKnow() {
         .pymk-shell {
           position: relative;
           margin: 18px 0;
-          padding: 14px 14px 16px;
+          /* No horizontal inset: the drifting row runs to both edges of the
+             band, so cards enter and leave the frame instead of stopping
+             short of it. The header keeps its own inset below. */
+          padding: 14px 0 16px;
           /* Square on purpose: this is a band of the feed, not a card floating
              on it. Only the people inside are cards. */
           border-radius: 0;
@@ -306,7 +373,14 @@ export default function PeopleYouMayKnow() {
           box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
         }
         @media (min-width: 640px) {
-          .pymk-shell { padding: 16px 18px 18px; }
+          .pymk-shell { padding: 16px 0 18px; }
+        }
+        /* Only the header is inset — the row itself is full-bleed. The wider
+           inset lives here, after the base rule, so it actually wins: both
+           selectors have the same specificity and source order decides. */
+        .pymk-head { padding-left: 14px; padding-right: 14px; }
+        @media (min-width: 640px) {
+          .pymk-head { padding-left: 18px; padding-right: 18px; }
         }
         .pymk-strip {
           display: flex;
@@ -495,7 +569,7 @@ export default function PeopleYouMayKnow() {
         }
       `}</style>
 
-      <div className="mb-3 flex items-center justify-between">
+      <div className="pymk-head mb-3 flex items-center justify-between">
         {/* Lowercase and unshouted — the section reads as a label, not a
             heading competing with the posts around it. */}
         <span

@@ -207,6 +207,9 @@ export async function appendFileTransfer(
     organizationId: input.organizationId,
     organizationName: input.organizationName,
     thumbnailUrl: input.thumbnailUrl || undefined,
+    /* Server-validated @mention references, stored beside the body they
+       belong to. Omitted when empty so rows without mentions are unchanged. */
+    mentionedUserIds: input.mentionedUserIds?.length ? input.mentionedUserIds : undefined,
     openCount: 0,
     downloadCount: 0,
     accessEvents: [],
@@ -524,6 +527,7 @@ export async function addComment(
   userName: string,
   text: string,
   parentId?: string,
+  mentionedUserIds?: string[],
 ): Promise<SecureFileTransfer> {
   const usingDb = Boolean(getDbPool());
   const transfers = usingDb ? [] : await getFileTransfers();
@@ -532,7 +536,7 @@ export async function addComment(
     : transfers.find((t) => t.id === transferId || t.shareId === transferId) || null;
   if (!current) throw new Error('Post not found.');
   const comments = current.comments ?? [];
-  const entry: { id: string; userId: string; userName: string; text: string; createdAt: string; parentId?: string } = {
+  const entry: { id: string; userId: string; userName: string; text: string; createdAt: string; parentId?: string; mentionedUserIds?: string[] } = {
     id: randomUUID(),
     userId,
     userName,
@@ -540,6 +544,9 @@ export async function addComment(
     createdAt: new Date().toISOString(),
   };
   if (parentId) entry.parentId = parentId;
+  /* Already validated by the caller against the real user table. Omitted
+     entirely when empty so comment rows without mentions stay as they were. */
+  if (mentionedUserIds?.length) entry.mentionedUserIds = mentionedUserIds;
   comments.push(entry);
   const next = { ...current, comments, commentsCount: comments.length, updatedAt: new Date().toISOString() };
   if (usingDb) {
@@ -587,6 +594,7 @@ export async function updateComment(
   commentId: string,
   userId: string,
   text: string,
+  mentionedUserIds?: string[],
 ): Promise<SecureFileTransfer> {
   const usingDb = Boolean(getDbPool());
   const transfers = usingDb ? [] : await getFileTransfers();
@@ -600,7 +608,16 @@ export async function updateComment(
   if (comments[idx].userId !== userId) throw new Error('Not allowed to edit this comment.');
   const trimmed = text.trim().slice(0, 1000);
   if (!trimmed) throw new Error('Comment text required.');
-  const nextComments = comments.map((c, i) => (i === idx ? { ...c, text: trimmed } : c));
+  /* An edit replaces the mention set outright — mentions the author removed
+     leave no stale reference behind, and re-saving never duplicates one. */
+  const nextComments = comments.map((c, i) => {
+    if (i !== idx) return c;
+    const edited = { ...c, text: trimmed } as typeof c;
+    if (mentionedUserIds === undefined) return edited;
+    if (mentionedUserIds.length) edited.mentionedUserIds = mentionedUserIds;
+    else delete edited.mentionedUserIds;
+    return edited;
+  });
   const next = { ...current, comments: nextComments, updatedAt: new Date().toISOString() };
   if (usingDb) {
     await upsertFileTransferRow(next);

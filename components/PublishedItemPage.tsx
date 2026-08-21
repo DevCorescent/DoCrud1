@@ -5,6 +5,10 @@ import { isInternalCtaUrl } from '@/lib/cta';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { CommentAvatar } from '@/components/social/CommentAvatar';
+import MentionTextarea from '@/components/mentions/MentionTextarea';
+import MentionText from '@/components/mentions/MentionText';
+import { reconcileMentions, type MentionUser } from '@/lib/mentions';
+import type { ResolvedMention } from '@/lib/mentions';
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -119,6 +123,8 @@ type PublishedItem = {
   uploadedByUserId?: string;
   /** Publisher's profile picture; null when they genuinely have none. */
   avatarUrl?: string | null;
+  /** People @mentioned in the body, resolved by the API from stored ids. */
+  mentions?: ResolvedMention[];
 };
 
 const TABS_MAP: Record<string, React.ElementType> = {
@@ -158,6 +164,7 @@ type RawComment = {
   id: string; author: string; initials: string; color: string;
   text: string; timestamp: string; likes: number; parentId?: string; userId?: string;
   avatarUrl?: string | null;
+  mentions?: ResolvedMention[];
 };
 type Comment = RawComment & { likedByMe: boolean; replies: Comment[]; isOwner?: boolean };
 
@@ -241,7 +248,7 @@ function MetaValueNode({ value }: { value: string }) {
   return <span className="text-white/80">{value}</span>;
 }
 
-function BodyRenderer({ body, category }: { body: string; category: string }) {
+function BodyRenderer({ body, category, mentions }: { body: string; category: string; mentions?: ResolvedMention[] }) {
   const { meta, prose } = parseBody(body);
   const CAT_ACCENT: Record<string, string> = {
     news: 'text-red-400', article: 'text-violet-400', document: 'text-slate-300',
@@ -272,7 +279,9 @@ function BodyRenderer({ body, category }: { body: string; category: string }) {
       )}
       {/* prose paragraphs */}
       {prose.map((para, i) => (
-        <p key={i} className="text-[15px] leading-[1.85] text-white/72 whitespace-pre-line">{para}</p>
+        <p key={i} className="text-[15px] leading-[1.85] text-white/72 whitespace-pre-line">
+          <MentionText text={para} mentions={mentions} />
+        </p>
       ))}
     </div>
   );
@@ -377,10 +386,10 @@ function stableColor(seed: string): string {
   let h = 0; for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
-type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean; isOwner?: boolean; userId?: string; avatarUrl?: string | null };
+type ApiComment = { id: string; author: string; text: string; createdAt: string; parentId?: string | null; likesCount?: number; likedByViewer?: boolean; isOwner?: boolean; userId?: string; avatarUrl?: string | null; mentions?: ResolvedMention[] };
 
 function apiCommentToComment(c: ApiComment): Comment {
-  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, replies:[], isOwner:c.isOwner ?? false, userId:c.userId, avatarUrl:c.avatarUrl ?? null };
+  return { id:c.id, author:c.author, initials:initials(c.author), color:stableColor(c.author), text:c.text, timestamp:c.createdAt, likes:c.likesCount ?? 0, likedByMe:c.likedByViewer ?? false, replies:[], isOwner:c.isOwner ?? false, userId:c.userId, avatarUrl:c.avatarUrl ?? null, mentions:c.mentions ?? [] };
 }
 
 function buildCommentTree(flat: ApiComment[]): Comment[] {
@@ -1209,6 +1218,9 @@ export default function PublishedItemPage({ id }: { id: string }) {
      nav and the composer use. Null until it answers, which is the initials
      fallback the comment box already showed. */
   const [viewerAvatarUrl, setViewerAvatarUrl] = useState<string | null>(null);
+  /* People picked in the comment box. Sent as ids on submit; the server
+     re-validates them and drops anything the text no longer names. */
+  const [commentMentions, setCommentMentions] = useState<MentionUser[]>([]);
   const [item,          setItem]          = useState<PublishedItem | null>(null);
   const [related,       setRelated]       = useState<PublishedItem[]>([]);
   const [loading,       setLoading]       = useState(true);
@@ -1439,14 +1451,16 @@ export default function PublishedItemPage({ id }: { id: string }) {
   const submitComment = async () => {
     if (!item || !commentText.trim()) return;
     const optimistic: Comment = { id:`c_${Date.now()}`, author:displayName, initials:initials(displayName), color:stableColor(displayName), text:commentText.trim(), timestamp:new Date().toISOString(), likes:0, likedByMe:false, userId: currentUserId || undefined, replies:[] };
+    const mentionedUserIds = reconcileMentions(optimistic.text, commentMentions).map(m => m.id);
     setComments(prev => [optimistic, ...prev]);
     setCommentText('');
+    setCommentMentions([]);
     if (isRealItem) {
       try {
         const res = await fetch(`/api/public/published/${item.id}/comments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: optimistic.text }),
+          body: JSON.stringify({ text: optimistic.text, mentionedUserIds }),
         });
         if (res.ok) {
           const d = await res.json() as { comments: ApiComment[] };
@@ -1458,7 +1472,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
     }
   };
 
-  const submitReply = async (parentId: string, text?: string) => {
+  const submitReply = async (parentId: string, text?: string, mentionedUserIds?: string[]) => {
     const replyContent = (text ?? replyText).trim();
     if (!item || !replyContent) return;
     const r: Comment = { id:`r_${Date.now()}`, author:displayName, initials:initials(displayName), color:randomColor(), text:replyContent, timestamp:new Date().toISOString(), likes:0, likedByMe:false, userId: currentUserId || undefined, replies:[] };
@@ -1469,7 +1483,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
         const res = await fetch(`/api/public/published/${item.id}/comments`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: replyContent, parentId }),
+          body: JSON.stringify({ text: replyContent, parentId, mentionedUserIds: mentionedUserIds ?? [] }),
         });
         if (res.ok) {
           const d = await res.json() as { comments: ApiComment[] };
@@ -1537,7 +1551,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
     }
   }, [item, deletingCommentId, isRealItem, removeCommentFromTree, showToast]);
 
-  const editComment = async (commentId: string, text: string) => {
+  const editComment = async (commentId: string, text: string, mentionedUserIds?: string[]) => {
     const trimmed = text.trim();
     if (!item || !trimmed) return;
     // Optimistic local update
@@ -1550,7 +1564,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
         const res = await fetch(`/api/public/published/${item.id}/comments/${commentId}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: trimmed }),
+          body: JSON.stringify({ text: trimmed, mentionedUserIds: mentionedUserIds ?? [] }),
         });
         if (res.ok) {
           const d = await res.json() as { comments: ApiComment[] };
@@ -1629,6 +1643,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
     editComment: (id: string, text: string) => void editComment(id, text),
     deleteComment: (id: string) => void deleteComment(id),
     currentUserId, viewerAvatarUrl,
+    commentMentions, setCommentMentions,
     totalComments, commentRef,
   };
 
@@ -1992,7 +2007,7 @@ export default function PublishedItemPage({ id }: { id: string }) {
 
             {/* body */}
             <div className="mt-7">
-              <BodyRenderer body={item.body} category={item.category} />
+              <BodyRenderer body={item.body} category={item.category} mentions={item.mentions} />
             </div>
 
             {/* Publisher-defined call to action */}
@@ -2210,10 +2225,12 @@ export default function PublishedItemPage({ id }: { id: string }) {
                   />
                   <span className="text-[13px] font-semibold text-white/70">{displayName}</span>
                 </div>
-                <textarea
-                  ref={commentRef}
+                <MentionTextarea
+                  textareaRef={commentRef}
                   value={commentText}
-                  onChange={e => setCommentText(e.target.value)}
+                  onValueChange={setCommentText}
+                  mentions={commentMentions}
+                  onMentionsChange={setCommentMentions}
                   onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void submitComment(); }}
                   placeholder="Add a comment… (⌘↵ to post)"
                   rows={2}
@@ -2802,7 +2819,7 @@ function CommentItem({
             </div>
           </div>
         ) : (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60"><MentionText text={c.text} mentions={c.mentions} /></p>
         )}
         <div className="mt-2 flex items-center gap-3">
           <button type="button" onClick={onLike} className={`inline-flex items-center gap-1 text-[11px] font-semibold transition ${c.likedByMe ? 'text-rose-400' : 'text-white/25 hover:text-white/65'}`}>
@@ -2917,7 +2934,7 @@ function CommentItem({
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-white/55"><MentionText text={r.text} mentions={r.mentions} /></p>
                     )}
                     <button
                       type="button"

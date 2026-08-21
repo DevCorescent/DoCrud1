@@ -2114,7 +2114,7 @@ export interface SecureFileTransfer {
   interestedUsers?: Array<{ id: string; name: string; markedAt: string }>;
   commentsCount?: number;
   videoUrl?: string;
-  comments?: Array<{ id: string; userId: string; userName: string; text: string; createdAt: string; parentId?: string; likedBy?: string[] }>;
+  comments?: Array<{ id: string; userId: string; userName: string; text: string; createdAt: string; parentId?: string; likedBy?: string[]; mentionedUserIds?: string[] }>;
   viewCount?: number;
   /* featuring */
   featured?: boolean;
@@ -2124,6 +2124,10 @@ export interface SecureFileTransfer {
   featuredOrderId?: string;
   /* directory publishing extras */
   thumbnailUrl?: string;
+  /** Stable ids of the people @mentioned in the body. Structured metadata
+      beside the text, never embedded in it, so a rename or a re-render can
+      never break the reference. Server-validated on every write. */
+  mentionedUserIds?: string[];
   /** Optional call-to-action button. Structured, never embedded in the body,
       so click/CTR analytics can read it later without parsing text. */
   cta?: { label: string; url: string };

@@ -10,6 +10,7 @@ import { summarizeReactions } from '@/lib/reactions';
 import { summarizePollVotes } from '@/lib/polls';
 import { feedChips, isNoisyFeedTag } from '@/lib/feed-tags';
 import { createSocialProofBuilder } from '@/lib/server/social-proof';
+import { resolveMentions } from '@/lib/server/mentions';
 
 /* The payload is personalised — it carries the viewer's own reactions, poll
    choice and social proof. The no-store header on the response below keeps a
@@ -192,6 +193,13 @@ export async function GET(request: NextRequest) {
     ));
     const nameMap = await getUserNames(publisherIds).catch(() => new Map<string, string>());
 
+    /* One resolve for every @mention on the page, so feed cards can render
+       their mentions as links without a request per card. */
+    const mentionList = await resolveMentions(
+      slice.flatMap((t) => t.mentionedUserIds ?? []),
+    ).catch(() => [] as Awaited<ReturnType<typeof resolveMentions>>);
+    const mentionById = new Map(mentionList.map((m) => [m.userId, m]));
+
     const items = slice.map((t, i) => {
       const isFeaturedActive = t.featured && t.featuredUntil && new Date(t.featuredUntil) > now;
       const cat = t.directoryCategory?.toLowerCase() || 'document';
@@ -210,6 +218,9 @@ export async function GET(request: NextRequest) {
         uploadedByName: authorName,
         cta: t.cta,
         body: t.notes || '',
+        mentions: (t.mentionedUserIds ?? [])
+          .map((mid) => mentionById.get(mid))
+          .filter(Boolean),
         chips: cleanChips(t.directoryTags),
         postedAt: t.createdAt,
         featured: !!isFeaturedActive,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/server/auth';
 import { deleteComment, updateComment } from '@/lib/server/file-transfers';
 import { mapPublishedComments } from '@/lib/server/published-comments';
+import { validateMentionIds } from '@/lib/server/mentions';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,11 +17,15 @@ export async function PATCH(
     if (!userId) {
       return NextResponse.json({ error: 'Sign in to edit comments.' }, { status: 401 });
     }
-    const body = await request.json() as { text?: string };
+    const body = await request.json() as { text?: string; mentionedUserIds?: unknown };
     if (!body.text?.trim()) {
       return NextResponse.json({ error: 'Comment text required' }, { status: 400 });
     }
-    const updated = await updateComment(id, commentId, userId, body.text.trim());
+    const text = body.text.trim();
+    /* Re-validated against the edited text, so a mention the author deleted is
+       dropped from the stored metadata rather than lingering. */
+    const mentionedUserIds = await validateMentionIds(body.mentionedUserIds, text);
+    const updated = await updateComment(id, commentId, userId, text, mentionedUserIds);
     return NextResponse.json({ comments: await mapPublishedComments(updated.comments, userId) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed';

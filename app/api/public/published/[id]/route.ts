@@ -5,6 +5,7 @@ import { getAuthSession } from '@/lib/server/auth';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
 import { mapPublishedComments } from '@/lib/server/published-comments';
 import { createSocialProofBuilder } from '@/lib/server/social-proof';
+import { resolveMentions } from '@/lib/server/mentions';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,6 +103,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       avatarUrl: authorAvatarUrl,
       cta: t.cta,
       body: t.notes || '',
+      /* Names and photos for the @mentions in the body, resolved from the
+         stored ids so the client links profiles without a second request. */
+      mentions: await resolveMentions(t.mentionedUserIds).catch(() => []),
       chips: cleanChips(t.directoryTags),
       postedAt: t.createdAt,
       featured: !!t.featured,

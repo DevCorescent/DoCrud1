@@ -10,6 +10,7 @@ import fs from 'fs';
 import type { SecureFileTransfer } from '@/types/document';
 import { sanitizeCta } from '@/lib/cta';
 import { PUBLICATION_BODY_ERROR, isPublicationBodyOverLimit } from '@/lib/publication-body';
+import { notifyMentions, validateMentionIds } from '@/lib/server/mentions';
 
 export const dynamic = 'force-dynamic';
 
@@ -221,6 +222,14 @@ export async function POST(request: NextRequest) {
       resolvedThumb = (await saveThumbnail(transferId, dataUrl)) || undefined;
     }
 
+    /* Mention references are re-derived from the real user table against the
+       body that is actually being stored — a hand-rolled request cannot
+       persist an id that does not exist or that the text never names. */
+    const mentionedUserIds = await validateMentionIds(
+      (payload as { mentionedUserIds?: unknown }).mentionedUserIds,
+      payload.notes?.trim() || '',
+    );
+
     const created = await appendFileTransfer({
       preferredId: transferId,
       title: payload.title?.trim() || undefined,
@@ -244,9 +253,24 @@ export async function POST(request: NextRequest) {
       // (javascript:/data:/vbscript:…) and malformed URLs are dropped here
       // regardless of what the client sent.
       cta: sanitizeCta((payload as { cta?: unknown }).cta) ?? undefined,
+      mentionedUserIds: mentionedUserIds.length ? mentionedUserIds : undefined,
     });
 
     created.thumbnailUrl = resolvedThumb || created.thumbnailUrl;
+
+    /* Tell the people who were named, on the existing social-event stream. */
+    if (userId && mentionedUserIds.length) {
+      void notifyMentions({
+        mentionedUserIds,
+        actorId: userId,
+        actorName: uploadedByName || session?.user?.name || sessionName,
+        actorAvatar: resolvedAvatarUrl,
+        resourceId: created.id,
+        resourceTitle: created.title || created.fileName,
+        excerpt: payload.notes?.trim() || undefined,
+        href: `/published/${created.shareId || created.id}`,
+      }).catch(() => {});
+    }
 
     // Fire analytics + milestones for authenticated users (non-blocking)
     if (userId) {

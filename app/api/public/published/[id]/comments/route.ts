@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/server/auth';
 import { addComment, getFileTransferById } from '@/lib/server/file-transfers';
 import { mapPublishedComments } from '@/lib/server/published-comments';
 import { addSocialEvent } from '@/lib/server/social-events';
+import { notifyMentions, validateMentionIds } from '@/lib/server/mentions';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,14 +27,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const body = await request.json() as { text?: string; parentId?: string };
+    const body = await request.json() as { text?: string; parentId?: string; mentionedUserIds?: unknown };
     if (!body.text?.trim()) return NextResponse.json({ error: 'Comment text required' }, { status: 400 });
 
     const session = await getAuthSession();
     const userId = session?.user?.id || session?.user?.email || `anon-${Date.now()}`;
     const userName = session?.user?.name || 'Anonymous';
 
-    const updated = await addComment(id, userId, userName, body.text.trim(), body.parentId ?? undefined);
+    const text = body.text.trim();
+    /* Never trust the ids the composer sent: only references to real, active
+       accounts that the text actually names survive. */
+    const mentionedUserIds = await validateMentionIds(body.mentionedUserIds, text);
+
+    const updated = await addComment(id, userId, userName, text, body.parentId ?? undefined, mentionedUserIds);
     const comments = await mapPublishedComments(updated.comments, userId);
 
     // Fire social event if the commenter is not the post author
@@ -49,6 +55,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         href: `/published/${updated.shareId || id}`,
       }).catch(() => {});
     }
+
+    /* Mentions ride the same social-event stream as follows, likes and
+       comments — the notification surface already understands the type. */
+    void notifyMentions({
+      mentionedUserIds,
+      actorId: userId,
+      actorName: userName,
+      resourceId: updated.id,
+      resourceTitle: updated.title || updated.fileName,
+      excerpt: text,
+      href: `/published/${updated.shareId || id}`,
+    }).catch(() => {});
 
     return NextResponse.json({ comments });
   } catch (error) {

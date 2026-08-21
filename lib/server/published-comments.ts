@@ -15,6 +15,8 @@
 import { normalizeEmail } from '@/lib/server/security';
 import { getStoredUsers, type StoredUser } from '@/lib/server/users';
 import { getProfileAvatars } from '@/lib/server/user-profiles';
+import { resolveMentions } from '@/lib/server/mentions';
+import type { ResolvedMention } from '@/lib/mentions';
 
 /** A comment exactly as persisted on the file-transfer row. */
 export type StoredComment = {
@@ -25,6 +27,7 @@ export type StoredComment = {
   createdAt: string;
   parentId?: string;
   likedBy?: string[];
+  mentionedUserIds?: string[];
 };
 
 /** The wire shape consumed by the comment UI. */
@@ -39,6 +42,9 @@ export type PublishedComment = {
   parentId: string | null;
   likesCount: number;
   likedByViewer: boolean;
+  /** The people @mentioned, resolved to what the renderer links. Empty when
+      the comment mentions nobody. */
+  mentions: ResolvedMention[];
 };
 
 /**
@@ -94,8 +100,13 @@ export async function mapPublishedComments(
   const list = comments ?? [];
   if (list.length === 0) return [];
 
-  const avatars = await getAvatarsForIdentifiers(list.map((c) => c.userId))
-    .catch(() => new Map<string, string | null>());
+  /* One avatar batch for the commenters, one for everyone they mentioned —
+     two bulk lookups per request regardless of how many comments there are. */
+  const [avatars, mentioned] = await Promise.all([
+    getAvatarsForIdentifiers(list.map((c) => c.userId)).catch(() => new Map<string, string | null>()),
+    resolveMentions(list.flatMap((c) => c.mentionedUserIds ?? [])).catch(() => [] as ResolvedMention[]),
+  ]);
+  const mentionById = new Map(mentioned.map((m) => [m.userId, m]));
 
   return list.map((c) => ({
     id: c.id,
@@ -107,5 +118,8 @@ export async function mapPublishedComments(
     parentId: c.parentId ?? null,
     likesCount: (c.likedBy ?? []).length,
     likedByViewer: viewerIdentifier ? (c.likedBy ?? []).includes(viewerIdentifier) : false,
+    mentions: (c.mentionedUserIds ?? [])
+      .map((id) => mentionById.get(id))
+      .filter((m): m is ResolvedMention => Boolean(m)),
   }));
 }

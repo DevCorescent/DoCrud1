@@ -28,6 +28,9 @@ import {
   X as XIcon,
 } from 'lucide-react';
 import { CommentAvatar } from '@/components/social/CommentAvatar';
+import MentionTextarea from '@/components/mentions/MentionTextarea';
+import MentionText from '@/components/mentions/MentionText';
+import { reconcileMentions, type MentionUser, type ResolvedMention } from '@/lib/mentions';
 
 /* ─── Shared Types ────────────────────────────────────────────────── */
 type PublishedItem = {
@@ -49,6 +52,8 @@ type PublishedItem = {
   thumbnailUrl?: string;
   /** Publisher's profile picture; null when they genuinely have none. */
   avatarUrl?: string | null;
+  /** People @mentioned in the body, resolved by the API from stored ids. */
+  mentions?: ResolvedMention[];
 };
 
 type Comment = {
@@ -62,6 +67,7 @@ type Comment = {
   parentId?: string;
   userId?: string;
   avatarUrl?: string | null;
+  mentions?: ResolvedMention[];
   likedByMe: boolean;
   replies: Comment[];
 };
@@ -79,13 +85,16 @@ interface CategoryPageProps {
   displayName: string;
   setCommentText: (v: string) => void;
   submitComment: () => void;
-  submitReply: (parentId: string, text: string) => void;
+  submitReply: (parentId: string, text: string, mentionedUserIds?: string[]) => void;
   likeComment: (commentId: string) => void;
-  editComment?: (commentId: string, text: string) => void;
+  editComment?: (commentId: string, text: string, mentionedUserIds?: string[]) => void;
   deleteComment?: (commentId: string) => void;
   currentUserId?: string;
   /** Viewer's own profile picture, for the comment box identity row. */
   viewerAvatarUrl?: string | null;
+  /** People picked in the comment box, owned by the page alongside its text. */
+  commentMentions?: MentionUser[];
+  setCommentMentions?: (next: MentionUser[]) => void;
   totalComments: number;
   commentRef: React.RefObject<HTMLTextAreaElement>;
   /** "Liked by …" row, injected by the page so it can sit directly under the
@@ -254,7 +263,7 @@ export function PostDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef, socialProofSlot,
 }: CategoryPageProps) {
   const [heartBurst, setHeartBurst] = useState(false);
@@ -321,7 +330,9 @@ export function PostDetailContent({
       {hasRealCaption && (
         <div className="space-y-4">
           {item.body.split('\n\n').filter(Boolean).map((para, i) => (
-            <p key={i} className="text-[15px] leading-[1.85] text-white/70">{para}</p>
+            <p key={i} className="text-[15px] leading-[1.85] text-white/70">
+              <MentionText text={para} mentions={item.mentions} />
+            </p>
           ))}
         </div>
       )}
@@ -398,6 +409,8 @@ export function PostDetailContent({
         deleteComment={deleteComment}
         currentUserId={currentUserId}
         viewerAvatarUrl={viewerAvatarUrl}
+        commentMentions={commentMentions}
+        setCommentMentions={setCommentMentions}
         totalComments={totalComments}
         commentRef={commentRef}
       />
@@ -413,7 +426,7 @@ export function PollDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const storageKey = `poll_voted_${item.id}`;
@@ -576,7 +589,9 @@ export function PollDetailContent({
       {item.body && (
         <div className="space-y-4 border-t border-white/[0.06] pt-6">
           {item.body.split('\n\n').filter(Boolean).map((para, i) => (
-            <p key={i} className="text-[15px] leading-[1.85] text-white/65">{para}</p>
+            <p key={i} className="text-[15px] leading-[1.85] text-white/65">
+              <MentionText text={para} mentions={item.mentions} />
+            </p>
           ))}
         </div>
       )}
@@ -584,7 +599,7 @@ export function PollDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -623,7 +638,7 @@ function parseSurveyQuestions(body: string, title: string): SurveyQuestion[] {
 export function SurveyDetailContent({
   item, comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const questions: SurveyQuestion[] = parseSurveyQuestions(item.body, item.title);
@@ -680,7 +695,7 @@ export function SurveyDetailContent({
         <CommentSection
           comments={comments} commentText={commentText} displayName={displayName}
           setCommentText={setCommentText}
-          submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+          submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
         />
       </div>
     );
@@ -804,7 +819,7 @@ export function SurveyDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -845,7 +860,7 @@ export function ChartDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [animated, setAnimated] = useState(false);
@@ -1128,7 +1143,7 @@ export function ChartDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1141,7 +1156,7 @@ export function ThreadDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const parts = item.body.split('\n\n').filter(Boolean);
@@ -1220,7 +1235,9 @@ export function ThreadDetailContent({
 
               {/* Content */}
               <div className="flex-1 min-w-0 pt-1.5">
-                <p className="text-[15px] leading-[1.85] text-white/72">{para}</p>
+                <p className="text-[15px] leading-[1.85] text-white/72">
+              <MentionText text={para} mentions={item.mentions} />
+            </p>
 
                 {/* Part actions */}
                 <div className="mt-3 flex items-center gap-3">
@@ -1270,7 +1287,7 @@ export function ThreadDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1331,7 +1348,7 @@ export function VideoDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [playing, setPlaying] = useState(false);
@@ -1566,7 +1583,9 @@ export function VideoDetailContent({
       {/* Description */}
       <div className="space-y-4">
         {item.body.split('\n\n').filter(Boolean).map((para, i) => (
-          <p key={i} className="text-[15px] leading-[1.85] text-white/65">{para}</p>
+          <p key={i} className="text-[15px] leading-[1.85] text-white/65">
+            <MentionText text={para} mentions={item.mentions} />
+          </p>
         ))}
       </div>
 
@@ -1599,7 +1618,7 @@ export function VideoDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1647,7 +1666,7 @@ export function MilestoneDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const [confetti, setConfetti] = useState(false);
@@ -1736,7 +1755,9 @@ export function MilestoneDetailContent({
       {/* Body story */}
       <div className="space-y-4">
         {item.body.split('\n\n').filter(Boolean).map((para, i) => (
-          <p key={i} className="text-[15px] leading-[1.85] text-white/70">{para}</p>
+          <p key={i} className="text-[15px] leading-[1.85] text-white/70">
+            <MentionText text={para} mentions={item.mentions} />
+          </p>
         ))}
       </div>
 
@@ -1757,7 +1778,7 @@ export function MilestoneDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -1770,7 +1791,7 @@ export function TutorialDetailContent({
   item, likeCount, liked, toggleLike, trendCount, trended, toggleTrend,
   comments, commentText, displayName,
   setCommentText, submitComment, submitReply, likeComment,
-  editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  editComment, deleteComment, currentUserId, viewerAvatarUrl, commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CategoryPageProps) {
   const progressKey = `tutorial_progress_${item.id}`;
@@ -1998,7 +2019,7 @@ export function TutorialDetailContent({
       <CommentSection
         comments={comments} commentText={commentText} displayName={displayName}
         setCommentText={setCommentText}
-        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} totalComments={totalComments} commentRef={commentRef}
+        submitComment={submitComment} submitReply={submitReply} likeComment={likeComment} editComment={editComment} deleteComment={deleteComment} currentUserId={currentUserId} viewerAvatarUrl={viewerAvatarUrl} commentMentions={commentMentions} setCommentMentions={setCommentMentions} totalComments={totalComments} commentRef={commentRef}
       />
     </div>
   );
@@ -2013,13 +2034,15 @@ interface CommentSectionProps {
   displayName: string;
   setCommentText: (v: string) => void;
   submitComment: () => void;
-  submitReply: (parentId: string, text: string) => void;
+  submitReply: (parentId: string, text: string, mentionedUserIds?: string[]) => void;
   likeComment: (commentId: string) => void;
-  editComment?: (commentId: string, text: string) => void;
+  editComment?: (commentId: string, text: string, mentionedUserIds?: string[]) => void;
   deleteComment?: (commentId: string) => void;
   currentUserId?: string;
   /** Viewer's own profile picture, for the comment box identity row. */
   viewerAvatarUrl?: string | null;
+  commentMentions?: MentionUser[];
+  setCommentMentions?: (next: MentionUser[]) => void;
   totalComments: number;
   commentRef: React.RefObject<HTMLTextAreaElement>;
 }
@@ -2029,6 +2052,7 @@ export function CommentSection({
   setCommentText,
   submitComment, submitReply, likeComment,
   editComment, deleteComment, currentUserId, viewerAvatarUrl,
+  commentMentions, setCommentMentions,
   totalComments, commentRef,
 }: CommentSectionProps) {
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -2053,10 +2077,12 @@ export function CommentSection({
           />
           <span className="text-[13px] font-semibold text-white/70">{displayName}</span>
         </div>
-        <textarea
-          ref={commentRef}
+        <MentionTextarea
+          textareaRef={commentRef}
           value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
+          onValueChange={setCommentText}
+          mentions={commentMentions ?? []}
+          onMentionsChange={setCommentMentions ?? (() => {})}
           onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitComment(); }}
           placeholder="Add a comment… (⌘↵ to post)"
           rows={2}
@@ -2133,9 +2159,9 @@ function CommentRow({
   onReplyToggle: () => void;
   onReplyTextChange: (v: string) => void;
   onLikeReply: (id: string) => void;
-  onSubmitReply: () => void;
-  onEdit?: (text: string) => void;
-  onEditReply?: (id: string, text: string) => void;
+  onSubmitReply: (mentionedUserIds: string[]) => void;
+  onEdit?: (text: string, mentionedUserIds: string[]) => void;
+  onEditReply?: (id: string, text: string, mentionedUserIds: string[]) => void;
   onDelete?: () => void;
   onDeleteReply?: (id: string) => void;
 }) {
@@ -2149,19 +2175,39 @@ function CommentRow({
   const [replyEditSaving, setReplyEditSaving] = useState(false);
   const isOwner = Boolean(currentUserId && c.userId && c.userId === currentUserId);
 
-  useEffect(() => { setEditText(c.text); }, [c.text]);
+  /* Draft mentions for the three composers this row can open. The edit boxes
+     start from what the comment already mentions, so an edit that leaves a
+     mention alone keeps it, and one that deletes the text drops it. */
+  const asDraft = (m: ResolvedMention[] | undefined): MentionUser[] =>
+    (m ?? []).map((x) => ({ id: x.userId, name: x.name, avatarUrl: x.avatarUrl }));
+  const [replyMentions, setReplyMentions] = useState<MentionUser[]>([]);
+  const [editMentions, setEditMentions] = useState<MentionUser[]>(asDraft(c.mentions));
+  const [replyEditMentions, setReplyEditMentions] = useState<MentionUser[]>([]);
+
+  useEffect(() => { setEditText(c.text); setEditMentions(asDraft(c.mentions)); }, [c.text, c.mentions]);
 
   const saveEdit = async () => {
     if (!editText.trim() || editSaving || !onEdit) return;
     setEditSaving(true);
-    try { await onEdit(editText); setEditing(false); }
+    try {
+      await onEdit(editText, reconcileMentions(editText, editMentions).map((m) => m.id));
+      setEditing(false);
+    }
     finally { setEditSaving(false); }
+  };
+
+  const submitReplyWithMentions = () => {
+    onSubmitReply(reconcileMentions(replyText, replyMentions).map((m) => m.id));
+    setReplyMentions([]);
   };
 
   const saveReplyEdit = async (rid: string) => {
     if (!replyEditText.trim() || replyEditSaving || !onEditReply) return;
     setReplyEditSaving(true);
-    try { await onEditReply(rid, replyEditText); setEditingReplyId(null); }
+    try {
+      await onEditReply(rid, replyEditText, reconcileMentions(replyEditText, replyEditMentions).map((m) => m.id));
+      setEditingReplyId(null);
+    }
     finally { setReplyEditSaving(false); }
   };
 
@@ -2214,9 +2260,11 @@ function CommentRow({
 
         {editing ? (
           <div className="mt-2 space-y-2">
-            <textarea
+            <MentionTextarea
               value={editText}
-              onChange={(e) => setEditText(e.target.value)}
+              onValueChange={setEditText}
+              mentions={editMentions}
+              onMentionsChange={setEditMentions}
               rows={3}
               className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[13px] text-white outline-none focus:border-white/[0.18]"
             />
@@ -2240,7 +2288,7 @@ function CommentRow({
             </div>
           </div>
         ) : (
-          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60">{c.text}</p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-white/60"><MentionText text={c.text} mentions={c.mentions} /></p>
         )}
 
         {/* Actions */}
@@ -2267,17 +2315,21 @@ function CommentRow({
         {/* Reply input */}
         {replyOpen && (
           <div className="mt-3 flex gap-2">
-            <textarea
-              value={replyText}
-              onChange={(e) => onReplyTextChange(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSubmitReply(); }}
-              placeholder="Write a reply… (⌘↵ to post)"
-              rows={2}
-              className="flex-1 resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs text-white placeholder:text-white/20 outline-none focus:border-white/[0.18]"
-            />
+            <div className="flex-1">
+              <MentionTextarea
+                value={replyText}
+                onValueChange={onReplyTextChange}
+                mentions={replyMentions}
+                onMentionsChange={setReplyMentions}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitReplyWithMentions(); }}
+                placeholder="Write a reply… (⌘↵ to post)"
+                rows={2}
+                className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs text-white placeholder:text-white/20 outline-none focus:border-white/[0.18]"
+              />
+            </div>
             <button
               type="button"
-              onClick={onSubmitReply}
+              onClick={submitReplyWithMentions}
               disabled={!replyText.trim()}
               className="self-end inline-flex h-8 items-center rounded-xl bg-white px-3 text-xs font-bold text-slate-950 transition disabled:opacity-25"
             >
@@ -2320,7 +2372,7 @@ function CommentRow({
                               <div className="absolute right-0 top-6 z-20 min-w-[120px] overflow-hidden rounded-xl border border-white/[0.10] bg-[#141418] py-1 shadow-xl">
                                 <button
                                   type="button"
-                                  onClick={() => { setReplyMenuOpen(null); setEditingReplyId(r.id); setReplyEditText(r.text); }}
+                                  onClick={() => { setReplyMenuOpen(null); setEditingReplyId(r.id); setReplyEditText(r.text); setReplyEditMentions(asDraft(r.mentions)); }}
                                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] font-medium text-white/70 transition hover:bg-white/[0.06] hover:text-white"
                                 >
                                   <Pencil className="h-3 w-3" /> Edit
@@ -2340,9 +2392,11 @@ function CommentRow({
                     </div>
                     {isEditingReply ? (
                       <div className="mt-1.5 space-y-2">
-                        <textarea
+                        <MentionTextarea
                           value={replyEditText}
-                          onChange={(e) => setReplyEditText(e.target.value)}
+                          onValueChange={setReplyEditText}
+                          mentions={replyEditMentions}
+                          onMentionsChange={setReplyEditMentions}
                           rows={2}
                           className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-[12px] text-white outline-none focus:border-white/[0.18]"
                         />
@@ -2366,7 +2420,7 @@ function CommentRow({
                         </div>
                       </div>
                     ) : (
-                      <p className="mt-1 text-[12px] leading-relaxed text-white/55">{r.text}</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-white/55"><MentionText text={r.text} mentions={r.mentions} /></p>
                     )}
                     <button
                       type="button"

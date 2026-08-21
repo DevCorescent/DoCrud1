@@ -62,6 +62,8 @@ export const adBannersPath = path.join(dataDir, 'ad-banners.json');
 export const sponsoredAdsPath = path.join(dataDir, 'sponsored-ads.json');
 export const adEventsPath = path.join(dataDir, 'ad-events.json');
 export const feedConfigPath = path.join(dataDir, 'feed-config.json');
+/** Idempotency ledger for mention side effects (comment id + mentioned user). */
+export const mentionDeliveriesPath = path.join(dataDir, 'mention-deliveries.json');
 export const homepageConfigPath = path.join(dataDir, 'homepage-config.json');
 export const webTelemetryPath = path.join(dataDir, 'web-telemetry.json');
 export const securityBlocklistPath = path.join(dataDir, 'security-blocklist.json');

@@ -35,6 +35,18 @@ export interface Message {
   reactions?: Record<string, string>; // userId → emoji (one reaction per user)
   pinnedAt?: string;
   pinnedBy?: string;
+  /**
+   * Set when this message was generated because the recipient was mentioned in
+   * a comment. Structured rather than parsed out of `content`, so the chat UI
+   * can render a proper "View comment" affordance.
+   */
+  mention?: {
+    publicationId: string;
+    commentId: string;
+    mentionedUserId: string;
+    preview: string;
+    href: string;
+  };
 }
 
 /** Edit / delete-for-everyone window, in milliseconds. Enforced server-side. */
@@ -223,6 +235,8 @@ export async function sendMessage(
   type: Message['type'] = 'text',
   attachment?: Pick<Message, 'attachmentUrl' | 'attachmentName' | 'attachmentSize' | 'attachmentMimeType'>,
   replyTo?: ReplyTo,
+  /** Optional structured payload (currently mention context). */
+  extra?: Pick<Message, 'mention'>,
 ): Promise<Message> {
   const id = `msg_${crypto.randomBytes(8).toString('hex')}`;
   const now = new Date().toISOString();
@@ -237,6 +251,7 @@ export async function sendMessage(
       const message: Message = {
         id, conversationId, senderId, content, type, ...attachment,
         sentAt: now, seenBy: [senderId], ...(replyTo ? { replyTo } : {}),
+        ...(extra?.mention ? { mention: extra.mention } : {}),
       };
       await db.collection<MsgDoc>('messages').insertOne({ ...message, _id: id });
 
@@ -259,7 +274,7 @@ export async function sendMessage(
 
   const message: Message = {
     id, conversationId, senderId, content, type, ...attachment,
-    sentAt: now, seenBy: [senderId], ...(replyTo ? { replyTo } : {}),
+    sentAt: now, seenBy: [senderId], ...(replyTo ? { replyTo } : {}), ...(extra?.mention ? { mention: extra.mention } : {}),
   };
   if (!data.messages[conversationId]) data.messages[conversationId] = [];
   data.messages[conversationId].push(message);

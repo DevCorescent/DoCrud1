@@ -141,6 +141,31 @@ export function buildFeedMetaChips(body: string, byline: string, category: strin
   return bylineChips(byline || '', category).slice(0, 5);
 }
 
+/**
+ * The publication body as written, for the card that shows all of it.
+ *
+ * getFeedBodySnippet() below joins every line with a space, which is right for
+ * a one-line chip but destroys the author's paragraphs once "Read more" opens
+ * the full text. This keeps the line structure: blank lines stay blank, runs
+ * of three or more collapse to one, and only the structured metadata lines
+ * (Website:, Contact:, …) are dropped, the same ones the snippet drops.
+ *
+ * URLs are deliberately kept — a link the author posted is part of what they
+ * published, and stripping it leaves the sentence pointing at nothing.
+ */
+export function getFeedBodyFull(raw: string): string {
+  if (!raw?.trim()) return '';
+  return raw
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter((l) => !META_URL_LINE_RE.test(l.trim()))
+    /* Runs of spaces inside a line collapse; newlines are left alone. */
+    .map((l) => l.replace(/[ \t]{2,}/g, ' ').trimEnd())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function getFeedBodySnippet(raw: string, maxLen = 180): string {
   if (!raw?.trim()) return '';
   const cleaned = raw.replace(/https?:\/\/\S+/gi, '').replace(/\s{2,}/g, ' ').trim();

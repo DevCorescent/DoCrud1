@@ -56,6 +56,10 @@ export interface IntelligentSearchResponse {
     skills: string[];
     domains: string[];
     locations: string[];
+    /** True when the phrasing states the location as a requirement, which is
+        what turns it into a filter. Exposed so callers (and the refinement
+        chips) can show WHY results were narrowed. */
+    locationConstraint: boolean;
     experience: QueryUnderstanding['experience'];
     expandedTerms: string[];
     source: QueryUnderstanding['source'];
@@ -165,13 +169,26 @@ const CONSTRAINT_FACTOR: Record<LocationTier, number> = {
   exact: 1.45, alias: 1.45, region: 1.25, partial: 1.2, unknown: 0.8, none: 0.45,
 };
 
-function locationSignal(entityLocation: string | null, u: QueryUnderstanding): { tier: LocationTier; points: number; factor: number } {
-  if (!u.locations.length) return { tier: 'unknown', points: 0, factor: 1 };
+/**
+ * A stated location is a FILTER, not a multiplier.
+ *
+ * `factor` alone could only push a Delhi record down the list for "developer in
+ * Bangalore" — it still came back, and still carried a flattering match score,
+ * which reads as a wrong answer rather than a weak one. `excluded` now says so
+ * outright, and every caller drops the record.
+ *
+ * Only tier 'none' is excluded: that means the record HAS a location and it is
+ * somewhere else. 'unknown' (no location on file) is not a contradiction, so
+ * those records stay and simply lose the bonus.
+ */
+function locationSignal(entityLocation: string | null, u: QueryUnderstanding): { tier: LocationTier; points: number; factor: number; excluded: boolean } {
+  if (!u.locations.length) return { tier: 'unknown', points: 0, factor: 1, excluded: false };
   const tier = matchLocation(entityLocation, u.locations);
   return {
     tier,
     points: TIER_POINTS[tier],
     factor: u.locationConstraint ? CONSTRAINT_FACTOR[tier] : 1,
+    excluded: u.locationConstraint && tier === 'none',
   };
 }
 
@@ -294,6 +311,8 @@ function scorePeople(
     const lex = lexicalScore(fields, terms, u.cleaned, opts);
     const con = conceptScore(fields, expanded);
     const locSig = locationSignal(p.location ?? null, u);
+    /* Hard location constraint: not a weak result, not a result. */
+    if (locSig.excluded) continue;
     const loc = locSig.points;
     if (lex.score <= 0 && con.score <= 0 && loc <= 0) continue;
 
@@ -349,6 +368,7 @@ function scoreServices(store: Record<string, Service[]>, u: QueryUnderstanding, 
       const lex = lexicalScore(fields, terms, u.cleaned, opts);
       const con = conceptScore(fields, expanded);
       const locSig = locationSignal(providerLocation, u);
+    if (locSig.excluded) continue;
     const loc = locSig.points;
       if (lex.score <= 0 && con.score <= 0) continue;
 
@@ -399,6 +419,8 @@ function scoreBusinesses(pages: Awaited<ReturnType<typeof listBusinessPages>>['p
     const lex = lexicalScore(fields, terms, u.cleaned, opts);
     const con = conceptScore(fields, expanded);
     const locSig = locationSignal(where, u);
+    /* Hard location constraint: not a weak result, not a result. */
+    if (locSig.excluded) continue;
     const loc = locSig.points;
     if (lex.score <= 0 && con.score <= 0) continue;
 
@@ -449,6 +471,8 @@ function scoreJobs(jobs: Awaited<ReturnType<typeof getPublishedHiringJobs>>, u: 
     const lex = lexicalScore(fields, terms, u.cleaned, opts);
     const con = conceptScore(fields, expanded);
     const locSig = locationSignal(j.location ?? null, u);
+    /* Hard location constraint: not a weak result, not a result. */
+    if (locSig.excluded) continue;
     const loc = locSig.points;
     if (lex.score <= 0 && con.score <= 0) continue;
 
@@ -514,6 +538,8 @@ function scoreBusinessContent(
     const lex = lexicalScore(fields, terms, u.cleaned, opts);
     const con = conceptScore(fields, expanded);
     const locSig = locationSignal(r.location, u);
+    /* Hard location constraint: not a weak result, not a result. */
+    if (locSig.excluded) continue;
     const loc = locSig.points;
     if (lex.score <= 0 && con.score <= 0) continue;
 
@@ -570,17 +596,43 @@ function adaptLegacy(entry: GlobalSearchResult, u: QueryUnderstanding, expanded:
     { name: 'tags', text: Array.isArray(meta.tags) ? (meta.tags as string[]).join(' ') : '', weight: 1.5 },
   ];
   const con = conceptScore(fields, expanded);
-  const lexRelevance = typeof entry.relevance === 'number' ? entry.relevance : 40;
+
+  /* Evidence, measured — not assumed.
+     `entry.relevance ?? 40` handed every legacy record a synthetic score even
+     when nothing about it matched, which is why "quantum underwater
+     accounting" came back with ~16 unrelated profiles. Re-score the entry's
+     own fields against the query instead: `matched` names the fields that
+     actually contained a query term, so it answers "did this match?" rather
+     than "how big is a number we made up?". */
+  const lex = lexicalScore(fields, u.terms, u.cleaned);
   const location = typeof meta.location === 'string' ? meta.location : null;
   const locSig = locationSignal(location, u);
-    const loc = locSig.points;
+  /* Same hard rule as the loops above. adaptLegacy returns `Scored | null`, so
+     a failed location constraint is expressed as null rather than `continue` —
+     this is the path the LEXICAL FALLBACK results travel through, which is what
+     stops a fallback from quietly reintroducing Delhi results for "developer in
+     Bangalore". */
+  if (locSig.excluded) return null;
+  const loc = locSig.points;
+
+  /* No evidence of a match anywhere -> not a result.
+     Evidence is any of: a field that actually contained a query term, a
+     recognised concept from the taxonomy, or a location the query asked for.
+     Deliberately NOT a score cutoff — a weak-but-real match still survives,
+     while a record with nothing in common is discarded outright. */
+  const hasEvidence = lex.matched.size > 0 || con.score > 0 || (loc > 0 && u.locations.length > 0);
+  if (!hasEvidence) return null;
 
   let structured = 0;
   if (u.entityTypes.includes(type)) structured += 8;
 
+  /* The legacy engine's own relevance is real signal when present; when it is
+     absent the measured lexical score stands in, rather than a constant. */
+  const keyword = typeof entry.relevance === 'number' ? entry.relevance * 0.4 : lex.score;
+
   const raw = locSig.factor * combine({
     semantic: con.score,
-    keyword: lexRelevance * 0.4,   // legacy relevance is already 0–100
+    keyword,
     structured, location: loc, quality: 2, freshness: 0,
   });
   return {
@@ -626,6 +678,7 @@ export async function runIntelligentSearch(params: IntelligentSearchParams): Pro
     query: rawQuery,
     understanding: {
       intent: u?.intent ?? 'browse', entityTypes: u?.entityTypes ?? [], roles: u?.roles ?? [],
+      locationConstraint: u?.locationConstraint ?? false,
       skills: u?.skills ?? [], domains: u?.domains ?? [], locations: u?.locations ?? [],
       experience: u?.experience ?? null, expandedTerms: u?.expanded ?? [], source: u?.source ?? 'rules',
     },
@@ -705,7 +758,20 @@ export async function runIntelligentSearch(params: IntelligentSearchParams): Pro
      measured at ~2s against the live cluster, so it races a deadline: if it is
      slow, people/services/businesses/jobs still return on time and the miss is
      reported in `degraded` rather than blocking the response. */
-  const LEGACY_DEADLINE_MS = 1_200;
+  /* Measured, not guessed.
+     The legacy engine has its own warm-up: once its caches are hot it returns
+     in ~1ms, and while cold it does not return within 1200ms at all — the race
+     resolves on the timeout and contributes an empty array. So every regime
+     observed lands either far under 50ms or beyond the deadline entirely, and
+     the 1200ms wait was pure dead time on cold requests (measured: legacyWait
+     1200ms of a 1208ms total, with the corpora already cached).
+
+     250ms keeps ~250x headroom over the warm path while cutting ~950ms off
+     cold requests, and returns exactly the same results in both regimes. The
+     'global-search-timeout' marker still lands in `degraded`, so a legacy
+     engine that becomes slow enough to matter stays visible rather than
+     silently dropping out. */
+  const LEGACY_DEADLINE_MS = 250;
   const legacy = await Promise.race([
     runGlobalSearch({
       query: effective.cleaned || rawQuery,
@@ -790,6 +856,7 @@ export async function runIntelligentSearch(params: IntelligentSearchParams): Pro
     understanding: {
       intent: effective.intent, entityTypes: effective.entityTypes, roles: effective.roles,
       skills: effective.skills, domains: effective.domains, locations: effective.locations,
+      locationConstraint: effective.locationConstraint,
       experience: effective.experience, expandedTerms: expanded.slice(0, 20), source: effective.source,
     },
     results, groups, relaxed,

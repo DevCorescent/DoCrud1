@@ -9,7 +9,12 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { PresenceDot } from '@/components/PresenceBadge';
-import { PublishedFeedCard, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
+import { ExpandableBody, PublishedFeedCard, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
+import { getFeedBodyFull } from '@/components/feed/FeedCardMeta';
+import PeopleYouMayKnow from '@/components/recommendations/PeopleYouMayKnow';
+import SponsoredAdCard from '@/components/ads/SponsoredAdCard';
+import { composeFeed } from '@/lib/feed-composition';
+import { useFeedModuleSlots } from '@/lib/use-feed-modules';
 import { CardCommentPanel } from '@/components/feed/CardCommentPanel';
 import { feedCategoryTreatment, shouldShowFeedTitle } from '@/components/feed/feedCardTheme';
 import {
@@ -768,14 +773,27 @@ function BodyDisplay({ body, searchQuery = '', proseOnly = false }: { body: stri
     }
   }
 
-  /* Plain prose */
-  const snippet = proseOnly ? getFeedDescription(body) : getBodySnippet(body);
-  if (!snippet) return null;
-  return (
-    <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-3">
-      {searchQuery ? highlight(snippet, searchQuery) : snippet}
-    </p>
-  );
+  /* Plain prose.
+
+     Search results keep the old flattened, highlighted snippet: highlight()
+     needs a plain string and matching across preserved newlines is a different
+     problem. Everywhere else — which is the feed itself — the body goes through
+     the same getFeedBodyFull() + ExpandableBody pipeline the homepage uses, so
+     paragraphs survive and "Read more" opens in place instead of the text being
+     silently cut at three lines. */
+  if (searchQuery) {
+    const snippet = proseOnly ? getFeedDescription(body) : getBodySnippet(body);
+    if (!snippet) return null;
+    return (
+      <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-3">
+        {highlight(snippet, searchQuery)}
+      </p>
+    );
+  }
+
+  const full = getFeedBodyFull(body);
+  if (!full) return null;
+  return <ExpandableBody text={full} className="mt-1.5" />;
 }
 
 /* ─── helpers ───────────────────────────────────────────────────── */
@@ -1792,18 +1810,34 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
       )}
 
       {/* caption = body/notes only — never auto title/filename for photo posts */}
-      <Link href={`/published/${item.id}`} className="block">
-        {item.category !== 'post' && !isJunkTitle(item) && (
+      {item.category !== 'post' && !isJunkTitle(item) && (
+        <Link href={`/published/${item.id}`} className="block">
           <p className="text-[13.5px] font-semibold text-white leading-snug line-clamp-2 group-hover:text-white/85 transition-colors">
             {searchQuery ? highlight(item.title, searchQuery) : item.title}
           </p>
-        )}
-        {hasRealCaption(item.body) && (
+        </Link>
+      )}
+      {hasRealCaption(item.body) && (
+        /* Deliberately NOT inside the Link: the caption now carries its own
+           "Read more" button, and a button inside an anchor is both invalid
+           markup and a trap for the expand click. The card is still reachable
+           through the title and the rest of its surface.
+
+           Search keeps the old flattened, highlighted snippet — highlight()
+           needs a plain string. Everywhere else the body goes through the same
+           getFeedBodyFull() + ExpandableBody pipeline as the homepage, so
+           paragraphs survive instead of collapsing into one line. */
+        searchQuery ? (
           <p className={`text-[13px] leading-relaxed text-white/50 line-clamp-2 ${item.category !== 'post' && !isJunkTitle(item) ? 'mt-1.5' : ''}`}>
-            {searchQuery ? highlight(getBodySnippet(item.body), searchQuery) : getBodySnippet(item.body)}
+            {highlight(getBodySnippet(item.body), searchQuery)}
           </p>
-        )}
-      </Link>
+        ) : (
+          <ExpandableBody
+            text={getFeedBodyFull(item.body)}
+            className={item.category !== 'post' && !isJunkTitle(item) ? 'mt-1.5' : ''}
+          />
+        )
+      )}
 
       {/* Social proof — existing who-reacted modal, existing comment panel. */}
       <PostSocialProofRow
@@ -2538,6 +2572,9 @@ export default function PublishedPage() {
   const [serverLoadingMore, setServerLoadingMore] = useState(false);
   const [gigItems, setGigItems]         = useState<PublishedItem[]>([]);
   const [visibleCount, setVisibleCount] = useState(10);
+
+  /* Same planner as the homepage — one shared hook, one cadence. */
+  const moduleSlots = useFeedModuleSlots();
   const loadMoreSentinelRef             = useRef<HTMLDivElement>(null);
   const feedScrollRef                   = useRef<HTMLDivElement>(null);
   const [tabBarVisible, setTabBarVisible] = useState(true);
@@ -2970,6 +3007,14 @@ export default function PublishedPage() {
     }
     return sorted;
   }, [allItems, itemsByCategory, activeTab, sortBy, trendCounts]);
+
+  /* The visible slice with the modules interleaved. Composed over the slice
+     rather than the whole pool so a module's absolute post index lines up with
+     what is actually on screen — the same thing the homepage does. */
+  const feedEntries = useMemo(
+    () => composeFeed(mixedFeed.slice(0, visibleCount), (i) => i.id, moduleSlots),
+    [mixedFeed, visibleCount, moduleSlots],
+  );
 
   /* keep these for backward-compat with category-filtered sidebar counts */
   const featuredItems = useMemo(() => [], []);
@@ -3760,8 +3805,24 @@ export default function PublishedPage() {
             ) : (
               <>
                 <div className="divide-y divide-white/[0.05]">
-                  {mixedFeed.slice(0, visibleCount).map(item =>
-                    item.category === 'gig' && item.gigData
+                  {/* Posts are interleaved with the recommendation and
+                      sponsored modules by the same shared planner the homepage
+                      uses, so both surfaces place them on one cadence. Post
+                      order is never touched — modules only go between posts. */}
+                  {feedEntries.map((entry) => {
+                    if (entry.type === 'people-recommendation') {
+                      return <PeopleYouMayKnow key={entry.key} />;
+                    }
+                    if (entry.type === 'sponsored-ad') {
+                      return <SponsoredAdCard key={entry.key} adIndex={entry.adIndex} />;
+                    }
+                    if (entry.type === 'job-recommendation') {
+                      /* The Feed tab has no jobs module of its own; the slot is
+                         simply not filled rather than inventing one here. */
+                      return null;
+                    }
+                    const item = entry.data;
+                    return item.category === 'gig' && item.gigData
                       ? <GigCard key={item.id} item={item} />
                       : item.category === 'post'
                         ? <PostCard key={item.id} item={item} searchQuery="" />
@@ -3773,8 +3834,8 @@ export default function PublishedPage() {
                               ? <SurveyCard key={item.id} item={item} />
                               : item.category === 'chart'
                                 ? <ChartCard key={item.id} item={item} />
-                                : <PublishedCard key={item.id} item={item} searchQuery="" />
-                  )}
+                                : <PublishedCard key={item.id} item={item} searchQuery="" />;
+                  })}
                 </div>
 
                 {/* ── Client-side show more (within loaded pages) ── */}

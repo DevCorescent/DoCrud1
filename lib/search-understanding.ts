@@ -137,7 +137,15 @@ const EXPERIENCE_PATTERNS: Array<[RegExp, QueryUnderstanding['experience']]> = [
 
 const NEAR_ME = /\b(near me|around me|nearby|close to me|in my area|my city)\b/i;
 /* "in Delhi", "based in Mumbai", "near Pune", "from Bangalore", "at Noida" */
-const LOCATION_PREP = /\b(?:in|near|around|based in|located in|from|at|available in)\s+([a-z][a-z\s.'-]{1,28}?)(?=\s+(?:who|that|which|for|with|and|to|can|able)\b|[,.]|$)/gi;
+/* The capture stops at the first word that cannot be part of a place name.
+   The previous lookahead listed only a handful of terminators, so a location
+   followed by anything else ("in Bangalore under 50k", "in banglore at 5000 k
+   budget") matched nothing at all and no constraint was produced. */
+const LOCATION_STOP = 'who|that|which|for|with|and|or|to|can|able|under|below|above|over|at|budget|salary|package|urgent|urgently|immediately|asap|remote|having|with|within|around';
+const LOCATION_PREP = new RegExp(
+  String.raw`\b(?:in|near|around|based in|located in|from|at|available in)\s+([a-z][a-z\s.'-]{1,28}?)(?=\s+(?:${LOCATION_STOP})\b|\s+\d|[,.]|$)`,
+  'gi',
+);
 
 export function normalize(v: string) { return v.trim().toLowerCase(); }
 
@@ -194,7 +202,7 @@ function tokenize(v: string): string[] {
 const LOCATION_ALIASES: string[][] = [
   ['delhi', 'new delhi', 'delhi ncr', 'ncr'],
   ['gurgaon', 'gurugram'],
-  ['bangalore', 'bengaluru', 'bengaluru karnataka'],
+  ['bangalore', 'bengaluru', 'bengaluru karnataka', 'banglore', 'bangaluru', 'benglore'],
   ['mumbai', 'bombay', 'navi mumbai'],
   ['kolkata', 'calcutta'],
   ['chennai', 'madras'],
@@ -398,4 +406,157 @@ export function searchVocabulary(u: QueryUnderstanding): string[] {
   return Array.from(new Set([...u.terms, ...u.skills, ...u.roles, ...u.domains, ...u.expanded]))
     .filter((t) => t.length >= 2)
     .slice(0, 60);
+}
+
+/* ── Requirements: hard constraints vs soft preferences ────────────────────
+ *
+ * Ranking alone cannot answer "developer in Bangalore": a Delhi developer
+ * scores well on `developer` and is then shown at "92% match", which is a lie.
+ * A stated location is a FILTER, not a tiebreak.
+ *
+ * So a query is split in two:
+ *   hard  — must be satisfied, or the record is not a result at all
+ *   soft  — influences ranking only
+ *
+ * A requirement is only ever marked hard when a structured field can actually
+ * prove it. Extracting "urgent" or "₹5k" from the sentence is easy; excluding
+ * people by it when no schema field records urgency or rate would be inventing
+ * precision. Those are carried as soft signals and reported as unenforceable,
+ * which is the honest behaviour.
+ */
+
+export type RequirementKind =
+  | 'role' | 'skill' | 'location' | 'seniority' | 'experience'
+  | 'workMode' | 'employmentType' | 'budget' | 'salary' | 'urgency' | 'industry';
+
+export interface Requirement {
+  kind: RequirementKind;
+  /** Canonical value: 'bengaluru', 'react', 'remote', 'senior'. */
+  value: string;
+  /** What the user typed, for the refinement chips. */
+  label: string;
+}
+
+export interface QueryRequirements {
+  understanding: QueryUnderstanding;
+  /** Must be satisfied by a structured field or the record is excluded. */
+  hard: Requirement[];
+  /** Ranking signals only. */
+  soft: Requirement[];
+  /** Explicit exclusions — "not Chennai", "without PHP". */
+  excluded: Requirement[];
+  /** Numeric money value, already normalised to rupees. Null when absent. */
+  budget: { value: number; label: string; ambiguous: boolean } | null;
+  /** Minimum years of experience the phrasing asks for. */
+  minYears: number | null;
+  /** Explicitly asked for remote work. */
+  remote: boolean;
+  /** Explicitly asked for full-time / part-time / internship / contract. */
+  employmentType: string | null;
+  /** Hiring urgency was stated. Carried as a soft signal. */
+  urgent: boolean;
+}
+
+/* "not Chennai", "without PHP", "no internship", "excluding Delhi" */
+const EXCLUSION_RE = /\b(?:not|without|no|excluding|except)\s+([a-z][a-z0-9+#.\s-]{1,24}?)(?=\s+(?:and|or|in|at|with|for)\b|[,.]|$)/gi;
+
+const REMOTE_RE = /\b(remote|work from home|wfh|remotely)\b/i;
+const EMPLOYMENT_RE = /\b(full[\s-]?time|part[\s-]?time|internship|intern|contract|freelance)\b/i;
+const URGENT_RE = /\b(urgent|urgently|immediate|immediately|asap|right away|quick joining|fast joining)\b/i;
+
+/** "5 years", "2-4 years", "at least 5 years", "5+ years" */
+const YEARS_RE = /\b(?:at\s+least\s+)?(\d{1,2})\s*(?:-\s*\d{1,2}\s*)?\+?\s*(?:years?|yrs?)\b/i;
+
+/**
+ * Money in the formats this product's users actually type.
+ *
+ * "5000k" is deliberately flagged ambiguous rather than guessed: it could mean
+ * ₹5,000 typed with a stray k, or ₹50,00,000. Guessing silently changes which
+ * results appear, so the flag is surfaced instead.
+ */
+const MONEY_RE = /(?:₹|rs\.?|inr)?\s*(\d[\d,]*(?:\.\d+)?)\s*(k|lpa|lakhs?|l|cr|crore)?\b/i;
+
+export function parseBudget(raw: string): QueryRequirements['budget'] {
+  const q = raw.toLowerCase();
+  /* Only treat a number as money when the sentence frames it as money. */
+  if (!/(₹|rs\.?|inr|budget|salary|package|pay|paying|under|below|above|over|lpa|per month|per year|\d\s*k\b)/i.test(q)) return null;
+  const m = MONEY_RE.exec(q);
+  if (!m) return null;
+
+  const digits = Number(m[1].replace(/,/g, ''));
+  if (!Number.isFinite(digits) || digits <= 0) return null;
+  const unit = (m[2] || '').toLowerCase();
+
+  let value = digits;
+  let ambiguous = false;
+  if (unit === 'k') {
+    /* "5000k" — 5,000 thousand. Almost certainly not what was meant. */
+    if (digits >= 1000) ambiguous = true;
+    value = digits * 1_000;
+  } else if (unit === 'lpa' || unit === 'lakh' || unit === 'lakhs' || unit === 'l') {
+    value = digits * 100_000;
+  } else if (unit === 'cr' || unit === 'crore') {
+    value = digits * 10_000_000;
+  }
+  return { value, label: m[0].trim(), ambiguous };
+}
+
+export function extractRequirements(raw: string, locationVocab?: Set<string>): QueryRequirements {
+  const u = understandQuerySync(raw, locationVocab);
+  const hard: Requirement[] = [];
+  const soft: Requirement[] = [];
+  const excluded: Requirement[] = [];
+
+  /* Exclusions first, so an excluded token is never also read as a demand. */
+  const excludedValues = new Set<string>();
+  EXCLUSION_RE.lastIndex = 0;
+  let ex: RegExpExecArray | null;
+  while ((ex = EXCLUSION_RE.exec(raw))) {
+    const value = normalize(ex[1]).trim();
+    if (!value || STOPWORDS.has(value)) continue;
+    excludedValues.add(value);
+    const isPlace = (locationVocab?.has(value) ?? false) || canonicalOf.has(value) || regionOf.has(value);
+    excluded.push({ kind: isPlace ? 'location' : 'skill', value, label: ex[1].trim() });
+  }
+
+  /* Location is the one requirement the profile schema can genuinely prove, so
+     it is the one that becomes hard — and only when the phrasing states it as
+     a constraint ("in Bangalore"), not when a place is merely mentioned. */
+  for (const loc of u.locations) {
+    const value = normalize(loc);
+    if (excludedValues.has(value)) continue;
+    (u.locationConstraint ? hard : soft).push({ kind: 'location', value, label: loc });
+  }
+
+  for (const skill of u.skills) {
+    const value = normalize(skill);
+    if (excludedValues.has(value)) continue;
+    soft.push({ kind: 'skill', value, label: skill });
+  }
+  for (const role of u.roles) {
+    soft.push({ kind: 'role', value: normalize(role), label: role });
+  }
+  for (const domain of u.domains) {
+    soft.push({ kind: 'industry', value: normalize(domain), label: domain });
+  }
+  if (u.experience) soft.push({ kind: 'seniority', value: u.experience, label: u.experience });
+
+  const years = YEARS_RE.exec(raw);
+  const minYears = years ? Number(years[1]) : null;
+  if (minYears) soft.push({ kind: 'experience', value: String(minYears), label: `${minYears}+ years` });
+
+  const remote = REMOTE_RE.test(raw);
+  if (remote) soft.push({ kind: 'workMode', value: 'remote', label: 'Remote' });
+
+  const empMatch = EMPLOYMENT_RE.exec(raw);
+  const employmentType = empMatch ? normalize(empMatch[1]).replace(/\s|-/g, '') : null;
+  if (employmentType) soft.push({ kind: 'employmentType', value: employmentType, label: empMatch![1] });
+
+  const urgent = URGENT_RE.test(raw);
+  if (urgent) soft.push({ kind: 'urgency', value: 'urgent', label: 'Urgent' });
+
+  const budget = parseBudget(raw);
+  if (budget) soft.push({ kind: 'budget', value: String(budget.value), label: budget.label });
+
+  return { understanding: u, hard, soft, excluded, budget, minYears, remote, employmentType, urgent };
 }

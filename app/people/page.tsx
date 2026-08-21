@@ -877,6 +877,13 @@ export default function PeoplePage() {
              structured match. */
           { value: p.profile.bio,      exact: 20,  word: 8,  weak: 3  },
         ],
+        {
+          /* Structured location only — deliberately NOT the bio. A profile
+             whose bio says "previously worked in Bangalore" is not a Bangalore
+             candidate, and a stated location now EXCLUDES rather than merely
+             down-ranks, so this field has to be the one that can prove it. */
+          factsOf: (p) => ({ location: p.profile.location, skills: p.profile.skills }),
+        },
       );
     }
     if (filters.publicFaceOnly) r = r.filter((p) => !!p.publicFace);

@@ -353,7 +353,11 @@ export default function PublicGigsPage({
       { value: gig.category,  exact: 70,  word: 45, weak: 8  },
       { value: gig.interests, exact: 60,  word: 38, weak: 8  },
       { value: gig.summary,   exact: 25,  word: 10, weak: 3  },
-    ]);
+    ], {
+      /* Gigs carry a structured locationPreference, so a stated location is a
+         real constraint here too. */
+      factsOf: (g) => ({ location: g.locationPreference, skills: g.skills }),
+    });
   }, [activeInterest, categoryFilters, engagementFilters, gigs, locationFilters, navMode, query, savedGigIdSet, visibility]);
 
   const categoryFiltersKey = useMemo(() => categoryFilters.join(','), [categoryFilters]);

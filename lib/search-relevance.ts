@@ -23,7 +23,14 @@
  * call per keystroke over an already-loaded list.
  */
 
-import { understandQuerySync } from '@/lib/search-understanding';
+import {
+  buildLocationVocabulary,
+  extractRequirements,
+  matchLocation,
+  normalize as normalizeTerm,
+  understandQuerySync,
+  type QueryRequirements,
+} from '@/lib/search-understanding';
 
 /* ── Normalisation ────────────────────────────────────────────────────────── */
 
@@ -312,6 +319,66 @@ export function scoreWithThreshold(
 }
 
 /**
+ * Structured fields a record can offer up so HARD requirements can be checked
+ * against something provable rather than against prose.
+ *
+ * `location` must be the record's own structured location field. A bio saying
+ * "previously worked in Bangalore" is not a Bangalore candidate, and passing
+ * free text here would reintroduce exactly the false positive this exists to
+ * prevent.
+ */
+export interface RecordFacts {
+  location?: string | null;
+  /** Structured skill list, for exclusion checks ("without PHP"). */
+  skills?: string[] | null;
+}
+
+/**
+ * Does this record satisfy every HARD requirement?
+ *
+ * Only location is enforced today, because `profile.location` is the one field
+ * that can actually prove a stated requirement. Budget, urgency, availability
+ * and employment type are extracted and reported, but nothing here pretends to
+ * filter on a field the schema does not have.
+ *
+ * A record whose location is unknown is NOT excluded — absent data is not a
+ * contradiction, and dropping every profile with a blank location would hide
+ * real people. It simply cannot earn the location bonus.
+ */
+export function satisfiesHardConstraints(req: QueryRequirements, facts: RecordFacts): boolean {
+  const wanted = req.hard.filter((r) => r.kind === 'location').map((r) => r.value);
+  if (wanted.length) {
+    const tier = matchLocation(facts.location, wanted);
+    /* 'unknown' = the record has no location on file; 'none' = it has one and
+       it is somewhere else. Only the latter is a contradiction. */
+    if (tier === 'none') return false;
+  }
+
+  /* Explicit exclusions: "without PHP", "not Chennai". */
+  for (const ex of req.excluded) {
+    if (ex.kind === 'location') {
+      if (matchLocation(facts.location, [ex.value]) !== 'none' && matchLocation(facts.location, [ex.value]) !== 'unknown') return false;
+    } else if (facts.skills?.some((sk) => normalizeTerm(sk) === ex.value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Bonus for satisfying a stated location, strongest for an exact/alias hit. */
+export function locationBonus(req: QueryRequirements, facts: RecordFacts): number {
+  const wanted = [...req.hard, ...req.soft].filter((r) => r.kind === 'location').map((r) => r.value);
+  if (!wanted.length) return 0;
+  switch (matchLocation(facts.location, wanted)) {
+    case 'exact':
+    case 'alias':   return 120;
+    case 'region':  return 70;
+    case 'partial': return 40;
+    default:        return 0;
+  }
+}
+
+/**
  * Rank a list, dropping records that do not clear the relevance bar.
  *
  * The threshold is what stops "quantum underwater accounting" from returning
@@ -323,15 +390,39 @@ export function rankBySearch<T>(
   items: T[],
   rawQuery: string,
   fieldsOf: (item: T) => SearchField[],
-  opts: { minScore?: number } = {},
+  opts: {
+    minScore?: number;
+    /**
+     * Structured fields for HARD constraint checking. Supply this and a stated
+     * location becomes a filter: "developer in Bangalore" stops returning Delhi
+     * developers at a flattering match score.
+     */
+    factsOf?: (item: T) => RecordFacts;
+  } = {},
 ): T[] {
   const query = parseQuery(rawQuery);
   if (!query.terms.length) return items;
   const minScore = opts.minScore ?? 20;
+  /* Locations are only trusted when they exist in the data being searched —
+     that is what stops an ordinary word being read as a place. The vocabulary
+     therefore comes from the records themselves; without it understandQuery
+     cannot confirm "bangalore" is a location and no hard constraint is ever
+     produced. */
+  const req = opts.factsOf
+    ? extractRequirements(
+        rawQuery,
+        buildLocationVocabulary(items.map((i) => opts.factsOf!(i).location ?? undefined)),
+      )
+    : null;
 
   const scored: Array<{ item: T; score: number; index: number }> = [];
   items.forEach((item, index) => {
-    const score = scoreWithThreshold(query, fieldsOf(item), { minScore });
+    const facts = opts.factsOf ? opts.factsOf(item) : null;
+    /* Eligibility BEFORE relevance: a record that fails a hard requirement is
+       not a weak result, it is not a result. */
+    if (req && facts && !satisfiesHardConstraints(req, facts)) return;
+    let score = scoreWithThreshold(query, fieldsOf(item), { minScore });
+    if (score > 0 && req && facts) score += locationBonus(req, facts);
     if (score > 0) scored.push({ item, score, index });
   });
 

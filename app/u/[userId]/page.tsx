@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Script from 'next/script';
 import { useParams, useRouter } from 'next/navigation';
@@ -811,6 +811,67 @@ function SecondsAgo({ since }: { since: Date | null }) {
   if (secs < 60) return <>{secs}s ago</>;
   return <>{Math.floor(secs / 60)}m ago</>;
 }
+
+
+/**
+ * One follower/following row.
+ *
+ * Hoisted to module scope on purpose. It used to be declared inside the
+ * connections tab's render body, which meant React saw a brand-new component
+ * type on every render — so toggling a single Follow unmounted and remounted
+ * every row in both lists, avatars included. That remount is what made the
+ * list feel like it was buffering.
+ *
+ * Navigation is a plain <Link> to the canonical /u/[userId] route with
+ * prefetch: the destination is fetched while the viewer is still reading the
+ * list, and the click is a client-side transition — no intermediate route, no
+ * blocking fetch, no full reload. Follow state arrives with the list response,
+ * so nothing here waits on a second request.
+ */
+const ConnectionRow = memo(function ConnectionRow({
+  u, isMe, canFollow, following, onToggleFollow,
+}: {
+  u: ConnectionCard;
+  isMe: boolean;
+  canFollow: boolean;
+  following: boolean;
+  onToggleFollow: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-3 border-b border-white/[0.04] last:border-0">
+      <Link href={`/u/${u.id}`} prefetch className="flex-1 min-w-0 flex items-center gap-3">
+        <div className="h-9 w-9 shrink-0 rounded-full ring-1 ring-white/[0.10] overflow-hidden bg-white/[0.06] flex items-center justify-center">
+          {u.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={u.avatarUrl} alt={u.name} className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-[13px] font-bold text-white/60 select-none">
+              {(u.name || '?').charAt(0).toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-white/85 truncate">{u.name}</p>
+          {u.headline && <p className="text-[11px] text-white/35 truncate mt-0.5">{u.headline}</p>}
+          {u.location && <p className="text-[10px] text-white/25 truncate">{u.location}</p>}
+        </div>
+      </Link>
+      {!isMe && canFollow && (
+        <button
+          type="button"
+          onClick={() => onToggleFollow(u.id)}
+          className={`shrink-0 h-7 px-3 rounded-[9px] text-[11px] font-semibold transition-all border ${
+            following
+              ? 'bg-white/[0.06] border-white/[0.10] text-white/50 hover:bg-rose-500/[0.10] hover:border-rose-500/20 hover:text-rose-400'
+              : 'bg-white/[0.08] border-white/[0.12] text-white/70 hover:bg-white/[0.14] hover:text-white'
+          }`}
+        >
+          {following ? 'Unfollow' : 'Follow'}
+        </button>
+      )}
+    </div>
+  );
+});
 
 function ProfileSkeleton() {
   return (
@@ -6608,52 +6669,45 @@ export default function UserProfilePage() {
 
         {/* Connections tab */}
         {tab === 'connections' && (() => {
+          /* Transparent glass for the two list panels: a translucent fill that
+             lets the page show through, a blur that separates the list from
+             what is behind it, a hairline edge and one inner highlight. No
+             gradient and no drop shadow — the panels sit in the page rather
+             than floating above it. */
+          const panelCss = `
+            .conn-panel {
+              background: rgba(255,255,255,0.035);
+              backdrop-filter: blur(18px) saturate(140%);
+              -webkit-backdrop-filter: blur(18px) saturate(140%);
+              border: 1px solid rgba(255,255,255,0.08);
+              box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+            }
+          `;
           const sessionId = (session?.user as { id?: string } | undefined)?.id;
 
-          function ConnectionRow({ u, listType }: { u: ConnectionCard; listType: 'followers' | 'following' }) {
-            const isMe = sessionId === u.id;
-            const following = connectionsFollowingIds.has(u.id);
-            return (
-              <div className="flex items-center gap-3 py-3 border-b border-white/[0.04] last:border-0">
-                <Link href={`/u/${u.id}`} className="flex-1 min-w-0 flex items-center gap-3">
-                  <div className="h-9 w-9 shrink-0 rounded-full ring-1 ring-white/[0.10] overflow-hidden bg-white/[0.06] flex items-center justify-center">
-                    {u.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={u.avatarUrl} alt={u.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-[13px] font-bold text-white/60 select-none">
-                        {(u.name || '?').charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-white/85 truncate">{u.name}</p>
-                    {u.headline && <p className="text-[11px] text-white/35 truncate mt-0.5">{u.headline}</p>}
-                    {u.location && <p className="text-[10px] text-white/25 truncate">{u.location}</p>}
-                  </div>
-                </Link>
-                {!isMe && session && (
-                  <button
-                    type="button"
-                    onClick={() => handleConnectionFollow(u.id)}
-                    className={`shrink-0 h-7 px-3 rounded-[9px] text-[11px] font-semibold transition-all border ${
-                      following
-                        ? 'bg-white/[0.06] border-white/[0.10] text-white/50 hover:bg-rose-500/[0.10] hover:border-rose-500/20 hover:text-rose-400'
-                        : 'bg-white/[0.08] border-white/[0.12] text-white/70 hover:bg-white/[0.14] hover:text-white'
-                    }`}
-                  >
-                    {following ? 'Unfollow' : 'Follow'}
-                  </button>
-                )}
-              </div>
-            );
-          }
+          const panelStyle = <style>{panelCss}</style>;
 
           if (connectionsLoading) {
+            /* Skeleton rows in the real layout rather than a centred spinner —
+               the list settles into place instead of jumping. Only the list
+               waits; nothing here blocks navigating to a profile. */
             return (
-              <div className="py-16 flex flex-col items-center gap-3">
-                <div className="h-8 w-8 rounded-full border-2 border-white/10 border-t-white/40 animate-spin" />
-                <p className="text-[12px] text-white/25">Loading connections…</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {panelStyle}
+                {['followers', 'following'].map((side) => (
+                  <div key={side} className="conn-panel rounded-[20px] p-5">
+                    <div className="h-3 w-24 rounded bg-white/[0.06] mb-4" />
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center gap-3 py-3">
+                        <div className="h-9 w-9 shrink-0 rounded-full bg-white/[0.06]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="h-3 w-32 rounded bg-white/[0.06]" />
+                          <div className="mt-1.5 h-2.5 w-20 rounded bg-white/[0.04]" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
             );
           }
@@ -6678,8 +6732,9 @@ export default function UserProfilePage() {
 
           return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {panelStyle}
               {/* Followers */}
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-5">
+              <div className="conn-panel rounded-[20px] p-5">
                 <h3 className="text-[11px] font-semibold uppercase tracking-widest text-white/30 mb-4">
                   Followers · {followers.length}
                 </h3>
@@ -6690,24 +6745,42 @@ export default function UserProfilePage() {
                   </div>
                 ) : (
                   <div className="divide-y-0">
-                    {followers.map((u) => <ConnectionRow key={u.id} u={u} listType="followers" />)}
+                    {followers.map((u) => (
+                      <ConnectionRow
+                        key={u.id}
+                        u={u}
+                        isMe={sessionId === u.id}
+                        canFollow={!!session}
+                        following={connectionsFollowingIds.has(u.id)}
+                        onToggleFollow={handleConnectionFollow}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
 
               {/* Following */}
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-5">
+              <div className="conn-panel rounded-[20px] p-5">
                 <h3 className="text-[11px] font-semibold uppercase tracking-widest text-white/30 mb-4">
                   Following · {following.length}
                 </h3>
                 {following.length === 0 ? (
                   <div className="py-8 text-center">
                     <UserPlus className="h-6 w-6 text-white/10 mx-auto mb-2" />
-                    <p className="text-[12px] text-white/25">Not following anyone yet</p>
+                    <p className="text-[12px] text-white/25">You&apos;re not following anyone yet</p>
                   </div>
                 ) : (
                   <div className="divide-y-0">
-                    {following.map((u) => <ConnectionRow key={u.id} u={u} listType="following" />)}
+                    {following.map((u) => (
+                      <ConnectionRow
+                        key={u.id}
+                        u={u}
+                        isMe={sessionId === u.id}
+                        canFollow={!!session}
+                        following={connectionsFollowingIds.has(u.id)}
+                        onToggleFollow={handleConnectionFollow}
+                      />
+                    ))}
                   </div>
                 )}
               </div>

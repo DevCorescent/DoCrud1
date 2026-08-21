@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStoredUsers, getAuthSession } from '@/lib/server/auth';
-import { getFollowers, getFollowing, getAllProfiles, isFollowing as checkIsFollowing } from '@/lib/server/user-profiles';
+import { getFollowers, getFollowing, getAllProfiles } from '@/lib/server/user-profiles';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,17 +24,28 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       ? users.find((u) => u.email.toLowerCase() === session.user!.email!.toLowerCase())
       : null;
 
-    const [followerIds, followingIds, profiles] = await Promise.all([
+    /* The viewer's own following set is fetched ONCE, not once per card.
+       buildCard used to `await isFollowing(viewer, uid)` for every person in
+       both lists — an N+1 against the follow store that scaled with the size
+       of the profile being viewed. One lookup, then an O(1) Set membership
+       test per card. */
+    const [followerIds, followingIds, profiles, viewerFollowingIds] = await Promise.all([
       getFollowers(userId),
       getFollowing(userId),
       getAllProfiles(),
+      sessionUser ? getFollowing(sessionUser.id) : Promise.resolve([] as string[]),
     ]);
+    const viewerFollows = new Set(viewerFollowingIds);
 
-    const buildCard = async (uid: string): Promise<UserCard | null> => {
-      const u = users.find((x) => x.id === uid);
+    /* Also O(1) per card: `users.find()` inside the map was a linear scan of
+       every user for every follower. */
+    const usersById = new Map(users.map((u) => [u.id, u]));
+
+    const buildCard = (uid: string): UserCard | null => {
+      const u = usersById.get(uid);
       if (!u) return null;
       const p = profiles[uid] ?? {};
-      const following = sessionUser ? await checkIsFollowing(sessionUser.id, uid) : false;
+      const following = sessionUser ? viewerFollows.has(uid) : false;
       return {
         id: u.id,
         name: u.name,
@@ -46,10 +57,9 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
       };
     };
 
-    const [followers, following] = await Promise.all([
-      Promise.all(followerIds.map(buildCard)),
-      Promise.all(followingIds.map(buildCard)),
-    ]);
+    /* buildCard is now synchronous, so no per-card promises at all. */
+    const followers = followerIds.map(buildCard);
+    const following = followingIds.map(buildCard);
 
     return NextResponse.json({
       followers: followers.filter(Boolean) as UserCard[],

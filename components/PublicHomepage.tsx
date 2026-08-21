@@ -14,7 +14,8 @@ import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeContro
 import { PresenceDot } from '@/components/PresenceBadge';
 import { PublishedFeedCard, ExpandableBody, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
 import { CardCommentPanel } from '@/components/feed/CardCommentPanel';
-import { composeFeed, getSessionSeed, planModuleSlots } from '@/lib/feed-composition';
+import { composeFeed } from '@/lib/feed-composition';
+import { useFeedModuleSlots } from '@/lib/use-feed-modules';
 import PeopleYouMayKnow from '@/components/recommendations/PeopleYouMayKnow';
 import RecommendedJobs from '@/components/recommendations/RecommendedJobs';
 import SponsoredAdCard from '@/components/ads/SponsoredAdCard';
@@ -2399,51 +2400,10 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
      its place while this feed is open (no jumping, no duplication) and lands
      somewhere different for another session. Positions are absolute post
      indexes, so loading another page never moves what is already rendered. */
-  const feedSeed = React.useMemo(() => getSessionSeed(), []);
-  const [adCount, setAdCount] = React.useState(0);
-  const [hasPeopleRecs, setHasPeopleRecs] = React.useState(false);
-  const [hasJobRecs, setHasJobRecs] = React.useState(false);
-  const availabilityFetched = React.useRef(false);
-
-  const [feedCfg, setFeedCfg] = React.useState<{ minLeadPosts: number; minModuleGap: number; maxModulesPerPage: number } | null>(null);
-
-  React.useEffect(() => {
-    if (availabilityFetched.current) return;
-    availabilityFetched.current = true;
-    /* One probe per page load. Each module fetches its own data; this only
-       decides whether a slot is worth reserving. A kind with no eligible data
-       must report false — reserving a slot for a module that renders nothing
-       would leave a hole and push the others out of the visible window.
-       Every request is allSettled: if any of these fail the feed still renders
-       normally, just without that module. */
-    void Promise.allSettled([
-      fetch('/api/recommendations/people').then(r => r.ok ? r.json() : { people: [] }),
-      fetch('/api/ads/serve').then(r => r.ok ? r.json() : { ads: [] }),
-      fetch('/api/recommendations/jobs').then(r => r.ok ? r.json() : { jobs: [] }),
-      fetch('/api/feed-config').then(r => r.ok ? r.json() : {}),
-    ]).then(([pe, ad, jb, cfg]) => {
-      if (pe.status === 'fulfilled') setHasPeopleRecs((pe.value?.people?.length ?? 0) > 0);
-      if (ad.status === 'fulfilled') setAdCount(ad.value?.ads?.length ?? 0);
-      if (jb.status === 'fulfilled') setHasJobRecs((jb.value?.jobs?.length ?? 0) > 0);
-      if (cfg.status === 'fulfilled') {
-        const comp = (cfg.value as { composition?: typeof feedCfg })?.composition;
-        if (comp) setFeedCfg(comp);
-      }
-    });
-  }, []);
-
-  const moduleSlots = React.useMemo(
-    () => planModuleSlots(
-      { people: hasPeopleRecs, ads: adCount, jobs: hasJobRecs },
-      {
-        seed: feedSeed,
-        minLeadPosts: feedCfg?.minLeadPosts,
-        minGap: feedCfg?.minModuleGap,
-        maxModules: feedCfg?.maxModulesPerPage,
-      },
-    ),
-    [hasPeopleRecs, adCount, hasJobRecs, feedSeed, feedCfg],
-  );
+  /* Seed, availability probe and Super Admin config now live in one shared
+     hook, so this surface and the Feed tab cannot drift into different
+     cadences. Behaviour here is unchanged. */
+  const moduleSlots = useFeedModuleSlots();
 
   const composed = React.useMemo(
     () => composeFeed(visible, (i) => i.id, moduleSlots),
@@ -5795,11 +5755,13 @@ function ExploreSection({ guestMode = false }: { guestMode?: boolean }) {
         <div className="flex items-center gap-2">
           <span className="flex flex-col">
             <span className="flex items-center gap-1.5">
+              {/* Lowercase, and the `uppercase` utility removed — otherwise CSS
+                  would shout it back into EXPLORE regardless of the string. */}
               <span
-                className="hp-sec text-[11px] font-semibold tracking-[0.10em] uppercase"
+                className="hp-sec text-[11px] font-semibold tracking-[0.10em]"
                 style={{ color: 'rgba(255,255,255,0.28)' }}
               >
-                Explore
+                explore
               </span>
               {/* Desktop-only sparkle + reflection; hidden below lg so the
                   mobile heading stays exactly as it was. */}

@@ -843,11 +843,11 @@ export default function LoginPage() {
                   Guest
                 </button>
                 <Link
-                  href="/onboarding?start=signup"
+                  href="/signup"
                   className="group flex items-center gap-1.5 rounded-[9px] border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/38 transition hover:border-white/[0.14] hover:bg-white/[0.06] hover:text-white/65"
                 >
                   <UserRound className="h-3 w-3 shrink-0" />
-                  Create profile
+                  Create account
                   <ArrowRight className="h-2.5 w-2.5 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </Link>
               </div>

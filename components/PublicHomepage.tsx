@@ -9646,7 +9646,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                   { label: 'Support',  Icon: HelpCircle, href: '/support' },
                   ...(isAuthenticated && !guestMode
                     ? [{ label: 'Profile', Icon: User,    href: '/profile' }]
-                    : [{ label: 'Join',    Icon: UserPlus, href: '/onboarding' }]),
+                    : [{ label: 'Join',    Icon: UserPlus, href: '/signup' }]),
                 ] as Array<{ label: string; Icon: React.ElementType; href: string }>).map(item => (
                   <a
                     key={item.label}

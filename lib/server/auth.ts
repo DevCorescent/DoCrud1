@@ -262,10 +262,16 @@ export function buildAuthOptions(): NextAuthOptions {
               ? { ...storedUser.subscription, status: expired ? 'upgrade_required' : storedUser.subscription.status }
               : storedUser.subscription;
             token.planFeatures = suspended || disabled ? [] : (expired ? ['dashboard', 'tutorials'] : (plan?.includedFeatures || []));
-            token.accountType = storedUser.accountType;
+            /* Normalised here, not at the edges. A record written before
+               account types existed has no `accountType`, and every consumer
+               below (email-verification gate, middleware, session) reads this
+               field — so an undefined value has to resolve to 'individual'
+               exactly once, at the source. Anything that is not explicitly
+               'business' is an individual. */
+            token.accountType = storedUser.accountType === 'business' ? 'business' : 'individual';
             token.workspaceAccessMode = storedUser.workspaceAccessMode;
             token.boardRoomIds = storedUser.boardRoomIds || [];
-            token.emailVerified = storedUser.accountType !== 'individual'
+            token.emailVerified = token.accountType !== 'individual'
               ? true
               : profile?.emailVerified === true;
           }
@@ -282,10 +288,10 @@ export function buildAuthOptions(): NextAuthOptions {
             ? { ...user.subscription, status: expired ? 'upgrade_required' : user.subscription.status }
             : user.subscription;
           token.planFeatures = suspended || disabled ? [] : (expired ? ['dashboard', 'tutorials'] : (plan?.includedFeatures || []));
-          token.accountType = user.accountType;
+          token.accountType = user.accountType === 'business' ? 'business' : 'individual';
           token.workspaceAccessMode = user.workspaceAccessMode;
           token.boardRoomIds = user.boardRoomIds || [];
-          token.emailVerified = user.accountType !== 'individual' ? true : false;
+          token.emailVerified = token.accountType !== 'individual' ? true : false;
         }
       } catch (err) {
         // DB unavailable during token refresh — return the existing token as-is so the
@@ -303,7 +309,11 @@ export function buildAuthOptions(): NextAuthOptions {
         session.user.organizationName = token.organizationName ? String(token.organizationName) : undefined;
         session.user.subscription = token.subscription;
         session.user.planFeatures = Array.isArray(token.planFeatures) ? token.planFeatures.map(String) : [];
-        session.user.accountType = token.accountType === 'individual' ? 'individual' : 'business';
+        /* Legacy accounts (no stored accountType) are individuals. This used to
+           read `=== 'individual' ? 'individual' : 'business'`, which reported
+           every pre-feature user as a BUSINESS account and skipped their
+           email-verification gate. */
+        session.user.accountType = token.accountType === 'business' ? 'business' : 'individual';
         session.user.workspaceAccessMode = token.workspaceAccessMode === 'board_room_only' ? 'board_room_only' : 'standard';
         session.user.boardRoomIds = Array.isArray(token.boardRoomIds) ? token.boardRoomIds.map(String) : [];
         session.user.emailVerified = token.emailVerified === true;

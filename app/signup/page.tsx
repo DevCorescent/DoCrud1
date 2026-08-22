@@ -1,5 +1,7 @@
 import HomepageNav from '@/components/HomepageNav';
 import BusinessSignupForm from '@/components/BusinessSignupForm';
+import IndividualSignupForm from '@/components/IndividualSignupForm';
+import SignupAccountSwitch from '@/components/SignupAccountSwitch';
 import DarkModeActivator from '@/components/DarkModeActivator';
 import { buildPageMetadata } from '@/lib/seo';
 import { getThemeSettings } from '@/lib/server/settings';
@@ -17,9 +19,24 @@ export const metadata = buildPageMetadata({
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams?: { plan?: string; config?: string; ref?: string };
+  searchParams?: { plan?: string; config?: string; ref?: string; type?: string };
 }) {
   const themeSettings = await getThemeSettings();
+
+  /* Account type is chosen here, never inferred.
+     Both signup flows already existed — /api/individual/signup writes
+     accountType 'individual', /api/saas/signup writes 'business', and auth.ts
+     carries that through to the session. What was missing was the choice: this
+     page went straight to the business form, and the individual form lived at
+     a separate URL a new user had no way to discover.
+
+     `type` only picks which existing form to render. It is never trusted as
+     the account type — that is set server-side by whichever signup route the
+     form posts to. A bogus ?type= simply falls back to the chooser. */
+  const chosen = searchParams?.type === 'business' || searchParams?.type === 'individual'
+    ? searchParams.type
+    : null;
+
 
   return (
     <div className="relative min-h-screen bg-[#08090a] text-white">
@@ -47,11 +64,28 @@ export default async function SignupPage({
       {/* Form */}
       <main className="relative z-10 px-3 py-8 sm:px-5 sm:py-10 lg:px-8">
         <div className="mx-auto w-full max-w-5xl">
-          <BusinessSignupForm
-            initialPlanId={searchParams?.plan}
-            initialConfig={searchParams?.config}
-            initialReferralCode={searchParams?.ref}
-            softwareName={themeSettings.softwareName}
+          {/* One frontend, one toggle. The account context selects which of
+              the two existing forms renders inside the SAME page shell — same
+              background, nav, container and spacing either way. `type` never
+              becomes the account type: that is written server-side by whichever
+              signup route the form posts to. */}
+          <SignupAccountSwitch
+            initial={chosen ?? 'individual'}
+            business={
+              <BusinessSignupForm
+                initialPlanId={searchParams?.plan}
+                initialConfig={searchParams?.config}
+                initialReferralCode={searchParams?.ref}
+                softwareName={themeSettings.softwareName}
+              />
+            }
+            individual={
+              <IndividualSignupForm
+                initialPlanId={searchParams?.plan}
+                initialConfig={searchParams?.config}
+                initialReferralCode={searchParams?.ref}
+              />
+            }
           />
         </div>
       </main>

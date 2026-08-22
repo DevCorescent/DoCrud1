@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useEffect, useRef, useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { requiredPolicyIds, policyDefinitions } from '@/lib/policies';
 import AnimatedLoginBackground from '@/components/AnimatedLoginBackground';
+import AccountTypeToggle, { normalizeAccountKind, type AccountKind } from '@/components/AccountTypeToggle';
 
 /* ─────────────────────────────────────────────────────────────
    Feature showcase data
@@ -540,6 +541,34 @@ export default function LoginPage() {
   const [mounted, setMounted]                 = useState(false);
   const [activeFeature, setActiveFeature]     = useState(0);
   const router                                = useRouter();
+  /* Account context. Seeded from ?type= so a refresh or a shared link reopens
+     in the same mode; anything unrecognised falls back to individual. This
+     selects CONTEXT only — the real account type is whatever the server has,
+     and the mismatch guard below enforces that.
+
+     Read from window.location rather than useSearchParams(): this page is a
+     client component that Next prerenders, and useSearchParams() there forces
+     the whole route under a Suspense boundary or the build fails outright. The
+     lazy initialiser runs only on the client, where the URL is available. */
+  const [accountKind, setAccountKind] = useState<AccountKind>(() => {
+    if (typeof window === 'undefined') return 'individual';
+    return normalizeAccountKind(new URLSearchParams(window.location.search).get('type'));
+  });
+
+  /* Keep the URL in step without touching any other query parameter, so
+     plan/ref/redirect links survive a toggle. history.replaceState rather than
+     router.replace: this is the same route, so there is nothing to navigate —
+     only the address needs to reflect the current mode for refresh/sharing. */
+  const selectAccountKind = (next: AccountKind) => {
+    setAccountKind(next);
+    setError('');
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (next === 'business') params.set('type', 'business');
+    else params.delete('type');
+    const qs = params.toString();
+    window.history.replaceState(null, '', qs ? `/login?${qs}` : '/login');
+  };
   const identifierRef                         = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -582,6 +611,25 @@ export default function LoginPage() {
           : `Login failed: ${result.error}`);
         return;
       }
+      /* Account-type guard.
+         The credentials provider is shared, so a correct password signs the
+         person in regardless of which side of the toggle they picked. Checking
+         AFTER authentication is deliberate: the account type is only revealed
+         to someone who already proved the password, so this cannot be used to
+         probe which emails are businesses. On a mismatch the session is dropped
+         again immediately and the toggle is named in the message. */
+      const session = await getSession();
+      const actual = session?.user?.accountType === 'business' ? 'business' : 'individual';
+      if (actual !== accountKind) {
+        await signOut({ redirect: false });
+        setError(
+          actual === 'individual'
+            ? 'This email is registered as an Individual account. Switch to Individual to continue.'
+            : 'This email is registered as a Business account. Switch to Business to continue.',
+        );
+        return;
+      }
+
       router.replace('/');
       router.refresh();
     } catch (err) {
@@ -648,6 +696,19 @@ export default function LoginPage() {
             >
               <div className="p-4 sm:p-6">
                 <form onSubmit={e => void handleSubmit(e)} className="space-y-3">
+
+                  {/* Account context — same card, same form, same styling.
+                      Only the copy below it changes. */}
+                  <AccountTypeToggle
+                    value={accountKind}
+                    onChange={selectAccountKind}
+                    disabled={isSubmitting}
+                  />
+                  <p className="pt-0.5 text-center text-[11.5px] text-white/35">
+                    {accountKind === 'business'
+                      ? 'Login to your business account'
+                      : 'Login to your account'}
+                  </p>
 
                   {/* Email input */}
                   <div className="space-y-1">

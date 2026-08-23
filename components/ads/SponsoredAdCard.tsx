@@ -23,6 +23,8 @@ export type ServedAd = {
   imageUrl: string;
   ctaLabel: string;
   ctaHref: string;
+  /** Card background colour (hex) or '' for the default dark-glass card. */
+  backgroundColor: string;
   advertiser: string;
   legacy: boolean;
 };
@@ -87,28 +89,60 @@ export default function SponsoredAdCard({ adIndex = 0 }: { adIndex?: number }) {
 
   if (!ad) return null;   // no eligible ad → no empty slot
 
+  /* When a custom background is set, the card is no longer dark, so the white
+     copy would vanish on a light colour. Pick ink or paper from the background's
+     luminance (sRGB, the usual >0.6 split) and derive the muted variants from
+     that. Without a custom background the original white palette is kept. */
+  const ink = (() => {
+    const hex = ad.backgroundColor;
+    if (!hex) return null;
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    const r = parseInt(full.slice(0, 2), 16) / 255;
+    const g = parseInt(full.slice(2, 4), 16) / 255;
+    const b = parseInt(full.slice(4, 6), 16) / 255;
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const dark = lum > 0.6;   // light background → dark ink
+    return dark
+      ? { strong: 'rgba(17,17,17,0.92)', mid: 'rgba(17,17,17,0.62)', faint: 'rgba(17,17,17,0.45)', border: 'rgba(0,0,0,0.14)', chip: 'rgba(0,0,0,0.05)', cardBorder: 'rgba(0,0,0,0.10)' }
+      : { strong: 'rgba(255,255,255,0.92)', mid: 'rgba(255,255,255,0.55)', faint: 'rgba(255,255,255,0.35)', border: 'rgba(255,255,255,0.14)', chip: 'rgba(255,255,255,0.06)', cardBorder: 'rgba(255,255,255,0.14)' };
+  })();
+
   const inner = (
     <>
       <div className="mb-3 flex items-center justify-between">
         {/* Lowercase and quiet — a label, not a shout. */}
-        <span className="text-[11.5px] font-medium" style={{ color: 'rgba(255,255,255,0.52)' }}>sponsored</span>
-        {ad.advertiser && <span className="truncate text-[11px] text-white/30">{ad.advertiser}</span>}
+        <span className="text-[11.5px] font-medium" style={{ color: ink ? ink.mid : 'rgba(255,255,255,0.52)' }}>sponsored</span>
+        {ad.advertiser && <span className="truncate text-[11px]" style={{ color: ink ? ink.faint : 'rgba(255,255,255,0.30)' }}>{ad.advertiser}</span>}
       </div>
       {ad.imageUrl && !broken && (
+        /* Original aspect ratio, preserved: width fills the card and height
+           follows intrinsically (width:100% / height:auto). No fixed height and
+           no max-height — a height cap would force the <img> box to a different
+           ratio and letterbox the creative, which is exactly what must not
+           happen. object-contain is kept as a harmless guarantee against
+           distortion should any future container constrain both axes. */
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={ad.imageUrl}
           alt=""
           loading="lazy"
           onError={() => setBroken(true)}
-          className="mb-2.5 h-32 w-full rounded-[10px] object-cover"
+          className="mb-2.5 block h-auto w-full rounded-[10px] object-contain"
           data-no-invert
         />
       )}
-      <p className="line-clamp-2 text-[13.5px] font-bold leading-snug text-white/90">{ad.title}</p>
-      {ad.subtitle && <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-white/45">{ad.subtitle}</p>}
+      <p className="line-clamp-2 text-[13.5px] font-bold leading-snug" style={{ color: ink ? ink.strong : 'rgba(255,255,255,0.90)' }}>{ad.title}</p>
+      {ad.subtitle && <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed" style={{ color: ink ? ink.mid : 'rgba(255,255,255,0.45)' }}>{ad.subtitle}</p>}
       {ad.ctaHref && (
-        <span className="mt-3 inline-flex h-8 items-center gap-1.5 self-start rounded-[9px] border border-white/[0.12] bg-white/[0.05] px-3 text-[11.5px] font-semibold text-white/70">
+        <span
+          className="mt-3 inline-flex h-8 items-center gap-1.5 self-start rounded-[9px] border px-3 text-[11.5px] font-semibold"
+          style={{
+            color: ink ? ink.strong : 'rgba(255,255,255,0.70)',
+            borderColor: ink ? ink.border : 'rgba(255,255,255,0.12)',
+            background: ink ? ink.chip : 'rgba(255,255,255,0.05)',
+          }}
+        >
           {ad.ctaLabel || 'View'} <ArrowRight className="h-3 w-3" />
         </span>
       )}
@@ -125,21 +159,40 @@ export default function SponsoredAdCard({ adIndex = 0 }: { adIndex?: number }) {
          it read as a floating card again. Authored dark-only: the homepage
          shell is inverted for light mode in globals.css, so a second light
          palette here would invert into dark-on-dark. */
-      style={{
-        margin: '18px 0',
-        padding: 16,
-        borderRadius: 0,
-        borderTop: '1px solid rgba(170,140,240,0.07)',
-        borderBottom: '1px solid rgba(170,140,240,0.07)',
-        background: [
-          'radial-gradient(circle at 18% 0%, rgba(150,110,255,0.065), transparent 42%)',
-          'radial-gradient(circle at 88% 100%, rgba(120,90,220,0.035), transparent 48%)',
-          'linear-gradient(135deg, rgba(8,8,11,0.98) 0%, rgba(20,15,30,0.96) 50%, rgba(8,8,11,0.99) 100%)',
-        ].join(', '),
-        backdropFilter: 'blur(18px)',
-        WebkitBackdropFilter: 'blur(18px)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
-      }}
+      style={
+        ad.backgroundColor && ink
+          ? {
+              /* Premium card (reference look): the chosen colour fills a
+                 rounded, softly-bordered, subtly-shadowed box with padding
+                 around the creative. Horizontal margin insets it so the
+                 rounded corners read as a card floating in the feed rather
+                 than a full-bleed band. The colour surrounds the image; the
+                 image itself is never touched. */
+              margin: '16px 12px',
+              padding: 16,
+              borderRadius: 16,
+              background: ad.backgroundColor,
+              border: `1px solid ${ink.cardBorder}`,
+              boxShadow: '0 6px 22px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.06)',
+            }
+          : {
+              /* Fallback — existing ads with no colour keep the exact original
+                 full-bleed dark-glass band. Unchanged. */
+              margin: '18px 0',
+              padding: 16,
+              borderRadius: 0,
+              borderTop: '1px solid rgba(170,140,240,0.07)',
+              borderBottom: '1px solid rgba(170,140,240,0.07)',
+              background: [
+                'radial-gradient(circle at 18% 0%, rgba(150,110,255,0.065), transparent 42%)',
+                'radial-gradient(circle at 88% 100%, rgba(120,90,220,0.035), transparent 48%)',
+                'linear-gradient(135deg, rgba(8,8,11,0.98) 0%, rgba(20,15,30,0.96) 50%, rgba(8,8,11,0.99) 100%)',
+              ].join(', '),
+              backdropFilter: 'blur(18px)',
+              WebkitBackdropFilter: 'blur(18px)',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.035)',
+            }
+      }
       aria-label="Sponsored"
     >
       {ad.ctaHref

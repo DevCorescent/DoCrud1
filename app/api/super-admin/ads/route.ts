@@ -40,6 +40,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Title and image are required.' }, { status: 400 });
     }
     const durationDays = Math.min(AD_MAX_DAYS, Math.max(AD_MIN_DAYS, Math.round(Number(body.durationDays) || 30)));
+
+    /* Only a hex colour is accepted — never arbitrary CSS, which is why this is
+       a strict regex rather than passing the string through. An absent or
+       malformed value simply means "no custom background". */
+    const rawBg = typeof body.backgroundColor === 'string' ? body.backgroundColor.trim() : '';
+    const backgroundColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(rawBg) ? rawBg : undefined;
     const now = Date.now();
     const ad = await createAd({
       ownerId: '',
@@ -51,6 +57,7 @@ export async function POST(req: NextRequest) {
       description: body.description?.trim(),
       ctaLabel: body.ctaLabel?.trim(),
       ctaHref: body.ctaHref?.trim(),
+      backgroundColor,
       targetSection: Array.isArray(body.targetSection) ? body.targetSection.map(String) : [],
       targetDomain: Array.isArray(body.targetDomain) ? body.targetDomain.map(String) : [],
       targetProfession: Array.isArray(body.targetProfession) ? body.targetProfession.map(String) : [],

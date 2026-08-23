@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
         imageUrl: ad.imageUrl,
         ctaLabel: ad.ctaLabel ?? '',
         ctaHref: ad.ctaHref ?? '',
+        backgroundColor: ad.backgroundColor ?? '',
         advertiser: ad.ownerName ?? 'Docrud',
         legacy: !!ad.legacy,
       }));

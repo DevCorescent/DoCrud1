@@ -236,6 +236,19 @@ export default function SponsoredAdsTab() {
    server owns id, owner, advertiserType, status, fee and timestamps — this
    only collects the editorial content and targeting. Image goes through the
    existing /api/ads/upload (multipart, field `file`, returns { url }). */
+/** Readable ink for a background colour — the same >0.6 luminance split the
+    feed card uses, so the modal preview matches what will render. */
+function previewInk(hex: string): { strong: string; border: string } {
+  const m = /^#(?:([0-9a-fA-F]{3})|([0-9a-fA-F]{6}))$/.exec(hex.trim());
+  if (!m) return { strong: 'rgba(255,255,255,0.92)', border: 'rgba(255,255,255,0.16)' };
+  const h = (m[1] ? m[1].split('').map((c) => c + c).join('') : m[2]);
+  const r = parseInt(h.slice(0, 2), 16) / 255, g = parseInt(h.slice(2, 4), 16) / 255, b = parseInt(h.slice(4, 6), 16) / 255;
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum > 0.6
+    ? { strong: 'rgba(17,17,17,0.92)', border: 'rgba(0,0,0,0.16)' }
+    : { strong: 'rgba(255,255,255,0.92)', border: 'rgba(255,255,255,0.16)' };
+}
+
 function CreateAdModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
@@ -245,6 +258,9 @@ function CreateAdModal({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [durationDays, setDurationDays] = useState(30);
   const [imageUrl, setImageUrl] = useState('');
   const [imageName, setImageName] = useState('');
+  /* Card background. Default is a neutral light so the Super Admin sees the
+     effect immediately; they can change it or clear it before creating. */
+  const [backgroundColor, setBackgroundColor] = useState('#F5F5F5');
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -292,6 +308,7 @@ function CreateAdModal({ onClose, onCreated }: { onClose: () => void; onCreated:
           description: description.trim() || undefined,
           ctaLabel: ctaLabel.trim() || undefined,
           ctaHref: ctaHref.trim() || undefined,
+          backgroundColor: /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(backgroundColor) ? backgroundColor : undefined,
           durationDays,
           targetSection: toList(section),
           targetDomain: toList(domain),
@@ -391,6 +408,53 @@ function CreateAdModal({ onClose, onCreated }: { onClose: () => void; onCreated:
             <span className={LABEL}>Duration (days)</span>
             <input type="number" min={1} className={FIELD} value={durationDays}
               onChange={(e) => setDurationDays(Number(e.target.value) || 30)} />
+          </div>
+
+          {/* Advertisement box background — the colour behind the creative, not
+              on it. Swatch + hex, kept in sync. */}
+          <div>
+            <span className={LABEL}>Advertisement Box Background</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                aria-label="Advertisement box background colour"
+                value={/^#[0-9a-fA-F]{6}$/.test(backgroundColor) ? backgroundColor : '#F5F5F5'}
+                onChange={(e) => setBackgroundColor(e.target.value)}
+                className="h-9 w-12 shrink-0 cursor-pointer rounded-lg border border-white/10 bg-transparent p-0.5"
+              />
+              <input
+                className={FIELD}
+                value={backgroundColor}
+                onChange={(e) => setBackgroundColor(e.target.value)}
+                placeholder="#F5F5F5"
+                maxLength={7}
+                spellCheck={false}
+              />
+              <button type="button" onClick={() => setBackgroundColor('')}
+                className="shrink-0 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-[11px] font-semibold text-white/50 hover:text-white/80">
+                Clear
+              </button>
+            </div>
+
+            {/* Live preview — background updates instantly; the image keeps its
+                original aspect ratio via object-contain. */}
+            <div className="mt-2 rounded-lg border border-white/10 p-3"
+              style={{ background: /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(backgroundColor) ? backgroundColor : '#0e0f13' }}>
+              {imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={imageUrl} alt="" className="block h-auto max-h-40 w-full rounded object-contain" />
+              ) : (
+                <div className="flex h-16 items-center justify-center text-[11px] text-black/30">Image preview</div>
+              )}
+              <p className="mt-2 truncate text-[12px] font-bold"
+                style={{ color: previewInk(backgroundColor).strong }}>{title || 'Advertisement title'}</p>
+              {ctaLabel && (
+                <span className="mt-1.5 inline-flex rounded-[7px] border px-2 py-0.5 text-[10.5px] font-semibold"
+                  style={{ color: previewInk(backgroundColor).strong, borderColor: previewInk(backgroundColor).border }}>
+                  {ctaLabel}
+                </span>
+              )}
+            </div>
           </div>
 
           <details className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2">

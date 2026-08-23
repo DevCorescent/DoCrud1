@@ -76,7 +76,7 @@ export default function PublicUpcomingFeaturesPage({ softwareName, accentLabel, 
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button asChild className="h-11 rounded-xl bg-slate-950 px-6 text-white hover:bg-slate-800">
-                <Link href="/signup">
+                <Link href="/onboarding?start=signup">
                   Start With docrud
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>

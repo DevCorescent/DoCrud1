@@ -85,7 +85,7 @@ export default function PublicDoxpertPage({ softwareName, accentLabel, settings 
                 </Link>
               </Button>
               <Button asChild variant="outline" className="h-11 rounded-xl border-slate-300 bg-white px-6 text-slate-950 hover:bg-slate-950 hover:text-white">
-                <Link href="/signup">Create Business Workspace</Link>
+                <Link href="/onboarding?start=signup">Create Business Workspace</Link>
               </Button>
               <Button asChild variant="outline" className="h-11 rounded-xl border-slate-300 bg-white px-6 text-slate-950 hover:bg-slate-950 hover:text-white">
                 <Link href="/login">Login</Link>

@@ -1578,7 +1578,7 @@ export default function PublicResumeAtsPage({ softwareName, accentLabel, setting
                   Review ATS Analysis Again
                 </Button>
                 <Button asChild variant="outline" className="h-11 w-full rounded-xl border-slate-300 bg-white text-slate-950 hover:bg-slate-950 hover:text-white">
-                  <Link href="/signup">Open Full Workspace</Link>
+                  <Link href="/onboarding?start=signup">Open Full Workspace</Link>
                 </Button>
               </div>
             </article>

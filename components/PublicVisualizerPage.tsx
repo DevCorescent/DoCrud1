@@ -107,7 +107,7 @@ export default function PublicVisualizerPage({ softwareName, accentLabel, settin
                 <Link href="/individual-signup">Create Individual Profile</Link>
               </Button>
               <Button asChild variant="outline" className="h-11 rounded-xl border-slate-300 bg-white px-6 text-slate-950 hover:bg-slate-950 hover:text-white">
-                <Link href="/signup">Create Business Workspace</Link>
+                <Link href="/onboarding?start=signup">Create Business Workspace</Link>
               </Button>
             </div>
             <div className="mt-6 rounded-[1.2rem] border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">

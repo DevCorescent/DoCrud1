@@ -538,6 +538,7 @@ export default function LoginPage() {
   const [notice, setNotice]                   = useState('');
   const [isSubmitting, setIsSubmitting]       = useState(false);
   const [googleEnabled, setGoogleEnabled]     = useState(false);
+  const [googleBusy, setGoogleBusy]           = useState(false);
   const [mounted, setMounted]                 = useState(false);
   const [activeFeature, setActiveFeature]     = useState(0);
   const router                                = useRouter();
@@ -640,14 +641,68 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    if (googleBusy) return;
     setError('');
     setNotice('');
     if (!policyAccepted) {
       setError('Accept the required policies before continuing with Google.');
       return;
     }
-    await signIn('google', { callbackUrl: '/' });
+    setGoogleBusy(true);
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = params.get('ref') || undefined;
+      const plan = params.get('plan') || undefined;
+      /* Record the chosen account type server-side before the OAuth hop; the
+         server (not the returned query) decides account type. */
+      await fetch('/api/auth/oauth-intent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ accountType: accountKind, ref, plan }),
+      });
+      const cb = new URLSearchParams();
+      if (accountKind === 'business') cb.set('type', 'business');
+      if (ref) cb.set('ref', ref);
+      if (plan) cb.set('plan', plan);
+      cb.set('oauth', 'return');
+      await signIn('google', { callbackUrl: `/login?${cb.toString()}` });
+    } catch {
+      setError('Could not connect to Google. Please try again.');
+      setGoogleBusy(false);
+    }
   };
+
+  /* Resolve a Google OAuth return on the login page. Same account-type guard as
+     the credentials login: verify AFTER authentication (so the type is only
+     revealed to the account owner), and on a mismatch drop the session and name
+     the toggle to switch to. Only fires on a successful Google return
+     (?oauth=return); a cancelled OAuth lands on the error page instead. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('oauth') !== 'return') return;
+    let cancelled = false;
+    void (async () => {
+      const session = await getSession();
+      if (cancelled || !session?.user) return;
+      const intended = normalizeAccountKind(params.get('type'));
+      const actual = session.user.accountType === 'business' ? 'business' : 'individual';
+      const clean = new URLSearchParams(window.location.search);
+      clean.delete('oauth');
+      if (actual !== intended) {
+        await signOut({ redirect: false });
+        setAccountKind(intended);
+        setError(actual === 'individual'
+          ? 'This Google account is registered as an Individual account. Switch to Individual to continue.'
+          : 'This Google account is registered as a Business account. Switch to Business to continue.');
+        window.history.replaceState(null, '', clean.toString() ? `/login?${clean.toString()}` : '/login');
+        return;
+      }
+      router.replace('/');
+      router.refresh();
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="relative h-[100dvh] overflow-hidden bg-[#060608] text-white">
@@ -821,10 +876,13 @@ export default function LoginPage() {
                         <span className="text-[10px] text-white/20">or</span>
                         <div className="flex-1 border-t border-white/[0.05]" />
                       </div>
-                      <button type="button" onClick={() => void handleGoogleLogin()}
-                        className="flex h-9 w-full items-center justify-center gap-2.5 rounded-[11px] border border-white/[0.07] bg-white/[0.03] text-[12px] font-semibold text-white/60 transition hover:bg-white/[0.07] hover:text-white sm:h-10 sm:rounded-[13px] sm:text-[13px]">
-                        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[conic-gradient(from_180deg,#34a853_0deg,#4285f4_120deg,#fbbc05_220deg,#ea4335_320deg,#34a853_360deg)] text-[8px] font-black text-white">G</span>
-                        Google
+                      <button type="button" onClick={() => void handleGoogleLogin()} disabled={googleBusy}
+                        className="flex h-9 w-full items-center justify-center gap-2.5 rounded-[11px] border border-white/[0.07] bg-white/[0.03] text-[12px] font-semibold text-white/60 transition hover:bg-white/[0.07] hover:text-white sm:h-10 sm:rounded-[13px] sm:text-[13px] disabled:opacity-50 disabled:cursor-not-allowed">
+                        {googleBusy ? (
+                          <><span className="h-3.5 w-3.5 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />Connecting to Google…</>
+                        ) : (
+                          <><span className="flex h-4 w-4 items-center justify-center rounded-full bg-[conic-gradient(from_180deg,#34a853_0deg,#4285f4_120deg,#fbbc05_220deg,#ea4335_320deg,#34a853_360deg)] text-[8px] font-black text-white">G</span>Google</>
+                        )}
                       </button>
                     </>
                   )}
@@ -843,7 +901,7 @@ export default function LoginPage() {
                   Guest
                 </button>
                 <Link
-                  href="/signup"
+                  href="/onboarding?start=signup"
                   className="group flex items-center gap-1.5 rounded-[9px] border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-[11px] font-semibold text-white/38 transition hover:border-white/[0.14] hover:bg-white/[0.06] hover:text-white/65"
                 >
                   <UserRound className="h-3 w-3 shrink-0" />

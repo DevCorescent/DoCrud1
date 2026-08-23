@@ -257,88 +257,118 @@ function BusinessInsightsPanel({
   );
 }
 
-/* ─── business card — feed style (matches PublishedPage card) ──────── */
+/* Logo image that falls back to the initials circle if it fails to load,
+   so a stale/broken logoUrl never shows a broken-image glyph. */
+function BizLogo({ src, name, fallback }: { src?: string; name: string; fallback: React.ReactNode }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [src]);
+  if (src && !failed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={src}
+        alt={name}
+        className="h-full w-full object-cover"
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return <>{fallback}</>;
+}
+
+/* ─── business card — restrained glass card ───────────────────────────
+   Logo → Name → Category → Tagline → Location → Stats + View action.
+   Only fields the page actually has are shown; nothing is invented. */
 function BusinessCard({ page }: { page: BizPage }) {
   const indCls = indColor(page.industry);
   const initials = page.name.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
+  const location = [page.city, page.country].filter(Boolean).join(', ');
 
   return (
     <Link href={`/businesses/${page.slug}`} className="group block">
-      <article className="py-5">
-        {/* header */}
-        <div className="flex items-center gap-3 mb-3.5">
-          {/* logo */}
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.06] text-[11px] font-bold text-white/60 overflow-hidden">
-            {page.logoUrl
-              ? <img src={page.logoUrl} alt={page.name} className="h-full w-full object-cover" />
-              : initials || <Building2 className="h-4 w-4 opacity-50" />
-            }
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[13.5px] font-semibold text-white leading-tight truncate">{page.name}</span>
-              {page.verified && <BadgeCheck className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
-            </div>
-            <p className="text-[11px] text-white/35 mt-0.5 truncate">
-              {indLabel(page.industry)}
-              {page.city ? ` · ${page.city}` : ''}
-              {page.companySize ? ` · ${page.companySize} employees` : ''}
-            </p>
-          </div>
-          {/* industry badge */}
-          <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${indCls}`}>
-            {indLabel(page.industry)}
-          </span>
-        </div>
-
-        {/* cover — only if available */}
+      <article className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] transition-all duration-200 hover:border-white/[0.14] hover:bg-white/[0.035]">
+        {/* cover — slim banner across the top, only when available */}
         {page.coverUrl && (
-          <div className="mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden h-32">
-            <img src={page.coverUrl} alt={page.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.01]" />
+          <div className="h-20 sm:h-24 overflow-hidden border-b border-white/[0.05] bg-white/[0.02]">
+            <div className="h-full w-full transition-transform duration-500 group-hover:scale-[1.02]">
+              <BizLogo src={page.coverUrl} name="" fallback={null} />
+            </div>
           </div>
         )}
 
-        {/* tagline */}
-        {page.tagline && (
-          <p className="text-[13.5px] font-semibold leading-snug tracking-tight text-white line-clamp-2 mb-2 group-hover:text-white/85 transition-colors">
-            {page.tagline}
-          </p>
-        )}
-
-        {/* location */}
-        {(page.city || page.country) && (
-          <div className="flex items-center gap-1.5 text-[12px] text-white/35 mb-3">
-            <MapPin className="h-3 w-3 shrink-0" />
-            {[page.city, page.country].filter(Boolean).join(', ')}
+        <div className="p-4 sm:p-5">
+          {/* header: logo + name + category */}
+          <div className="flex items-start gap-3">
+            {/* logo */}
+            <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] text-[13px] font-bold text-white/60 ${page.coverUrl ? '-mt-9 sm:-mt-10 ring-4 ring-[#0A0A0C]' : ''}`}>
+              <BizLogo src={page.logoUrl} name={page.name} fallback={initials || <Building2 className="h-5 w-5 opacity-50" />} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h3 className="truncate text-[15px] font-bold leading-tight tracking-tight text-white transition-colors group-hover:text-white/90">
+                  {page.name}
+                </h3>
+                {page.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-indigo-400" />}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${indCls}`}>
+                  {indLabel(page.industry)}
+                </span>
+                {page.companySize && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-white/35">
+                    <Users className="h-3 w-3 shrink-0" />
+                    {page.companySize}
+                  </span>
+                )}
+                {page.jobCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
+                    <Briefcase className="h-3 w-3" /> Hiring
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-        )}
 
-        {/* stats row */}
-        <div className="flex items-center gap-5 mt-3 pt-3.5 border-t border-white/[0.05]">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[13.5px] font-bold text-white/80 tabular-nums">{page.followerCount.toLocaleString()}</span>
-            <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">followers</span>
-          </div>
-          {page.postCount > 0 && (
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[13.5px] font-bold text-white/80 tabular-nums">{page.postCount}</span>
-              <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">posts</span>
+          {/* tagline / short description */}
+          {page.tagline && (
+            <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-white/55">
+              {page.tagline}
+            </p>
+          )}
+
+          {/* location */}
+          {location && (
+            <div className="mt-2.5 flex items-center gap-1.5 text-[12px] text-white/35">
+              <MapPin className="h-3 w-3 shrink-0" />
+              <span className="truncate">{location}</span>
             </div>
           )}
-          {page.jobCount > 0 && (
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[13.5px] font-bold text-blue-400 tabular-nums">{page.jobCount}</span>
-              <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">open jobs</span>
-            </div>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            {page.jobCount > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 border border-blue-500/20 px-2.5 py-0.5 text-[10.5px] font-semibold text-blue-400">
-                <Briefcase className="h-3 w-3" /> Hiring
+
+          {/* footer: metadata + view action */}
+          <div className="mt-4 flex items-center gap-x-4 gap-y-2 border-t border-white/[0.05] pt-3.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="flex items-baseline gap-1.5">
+                <span className="text-[13px] font-bold tabular-nums text-white/80">{page.followerCount.toLocaleString()}</span>
+                <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">followers</span>
               </span>
-            )}
-            <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-white/30 opacity-0 group-hover:opacity-100 transition">
-              View <ArrowRight className="h-3.5 w-3.5" />
+              {page.postCount > 0 && (
+                <span className="flex items-baseline gap-1.5">
+                  <span className="text-[13px] font-bold tabular-nums text-white/80">{page.postCount}</span>
+                  <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">posts</span>
+                </span>
+              )}
+              {page.jobCount > 0 && (
+                <span className="flex items-baseline gap-1.5">
+                  <span className="text-[13px] font-bold tabular-nums text-blue-400">{page.jobCount}</span>
+                  <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">open jobs</span>
+                </span>
+              )}
+            </div>
+            {/* Always-visible action so the CTA stays reachable on touch too. */}
+            <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold text-white/55 transition group-hover:border-white/[0.18] group-hover:bg-white/[0.08] group-hover:text-white/90">
+              View <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </span>
           </div>
         </div>
@@ -350,20 +380,20 @@ function BusinessCard({ page }: { page: BizPage }) {
 /* ─── skeleton ────────────────────────────────────────────────────── */
 function SkeletonCard() {
   return (
-    <article className="py-5">
-      <div className="flex items-center gap-3 mb-3.5">
-        <div className="h-10 w-10 rounded-full bg-white/[0.05] animate-pulse shrink-0" />
-        <div className="flex-1 space-y-2">
+    <article className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 sm:p-5">
+      <div className="flex items-start gap-3 mb-3.5">
+        <div className="h-12 w-12 rounded-xl bg-white/[0.05] animate-pulse shrink-0" />
+        <div className="flex-1 space-y-2 pt-0.5">
           <div className="h-3.5 w-36 rounded-full bg-white/[0.05] animate-pulse" />
           <div className="h-2.5 w-24 rounded-full bg-white/[0.03] animate-pulse" />
         </div>
-        <div className="h-5 w-20 rounded-full bg-white/[0.04] animate-pulse" />
       </div>
       <div className="h-4 w-3/4 rounded-full bg-white/[0.04] animate-pulse mb-2" />
       <div className="h-3 w-1/2 rounded-full bg-white/[0.03] animate-pulse" />
-      <div className="flex gap-5 mt-3 pt-3.5 border-t border-white/[0.04]">
+      <div className="flex gap-5 mt-4 pt-3.5 border-t border-white/[0.04]">
         <div className="h-3 w-20 rounded-full bg-white/[0.04] animate-pulse" />
         <div className="h-3 w-16 rounded-full bg-white/[0.03] animate-pulse" />
+        <div className="ml-auto h-6 w-16 rounded-full bg-white/[0.04] animate-pulse" />
       </div>
     </article>
   );
@@ -745,7 +775,7 @@ export default function BusinessDirectory() {
             <div className="p-4 lg:py-6 lg:px-8 pb-24 lg:pb-10 max-w-3xl mx-auto w-full">
 
               {loading && pages.length === 0 ? (
-                <div className="divide-y divide-white/[0.05]">
+                <div className="space-y-3">
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
               ) : pages.length === 0 ? (
@@ -766,7 +796,7 @@ export default function BusinessDirectory() {
                 </div>
               ) : (
                 <>
-                  <div className="divide-y divide-white/[0.05]">
+                  <div className="space-y-3">
                     {visiblePages.map(page => <BusinessCard key={page.id} page={page} />)}
                   </div>
 

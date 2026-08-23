@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { getStoredUsers, saveStoredUsers } from '@/lib/server/auth';
-import { createPasswordHash, isValidEmail, normalizeEmail } from '@/lib/server/security';
-import { applyRoadmapPromotionToSubscription, getDefaultPublicPlan, saasFeatureCatalog } from '@/lib/server/saas';
-import { saveBusinessSettings, seedStarterTemplatesForBusiness } from '@/lib/server/business';
-import { BusinessSettings } from '@/types/document';
-import { buildPolicyAcceptance } from '@/lib/policy-consent';
+import { getStoredUsers } from '@/lib/server/auth';
+import { isValidEmail, normalizeEmail } from '@/lib/server/security';
+import { getDefaultPublicPlan, saasFeatureCatalog } from '@/lib/server/saas';
+import { provisionBusinessAccount } from '@/lib/server/business-provisioning';
 import { assertBusinessSignupOtpVerified } from '@/lib/server/otp-sessions';
 import { sendTrackedMail } from '@/lib/server/mailer';
 import { processProfileActivation } from '@/lib/server/referrals';
@@ -51,43 +49,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email already exists' }, { status: 400 });
     }
 
-    const defaultPlan = await getDefaultPublicPlan('business');
-    const now = new Date().toISOString();
-    const userId = `user-${Date.now()}`;
     const organizationName = payload.organizationName.trim();
     const referralCode = typeof payload.referralCode === 'string' ? payload.referralCode.trim() : '';
 
-    const newUser = {
-      id: userId,
+    /* Business account + workspace creation is shared with the Google OAuth
+       business flow so the two cannot drift. */
+    const { userId } = await provisionBusinessAccount({
       name: payload.name.trim(),
       email: normalizedEmail,
-      role: 'client',
-      accountType: 'business' as const,
-      permissions: ['all'],
-      isActive: true,
-      createdAt: now,
-      organizationId: userId,
       organizationName,
-      organizationDomain: payload.organizationDomain?.trim() || undefined,
-      createdFromSignup: true,
-      referredByCode: referralCode || undefined,
-      policyAcceptance: buildPolicyAcceptance('business_signup', request.headers.get('x-forwarded-for') || undefined),
-      subscription: defaultPlan ? applyRoadmapPromotionToSubscription({
-        planId: defaultPlan.id,
-        planName: defaultPlan.name,
-        status: 'trial' as const,
-        startedAt: now,
-        aiTrialLimit: defaultPlan.freeAiRuns || 0,
-        aiTrialUsed: 0,
-        monthlyAiCredits: defaultPlan.monthlyAiCredits || 0,
-        remainingAiCredits: defaultPlan.monthlyAiCredits || 0,
-        aiCreditsResetAt: defaultPlan.billingModel === 'free' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : undefined,
-      }, now) : undefined,
-      ...createPasswordHash(payload.password),
-    };
-
-    users.push(newUser);
-    await saveStoredUsers(users);
+      organizationDomain: payload.organizationDomain,
+      industry: payload.industry,
+      companySize: payload.companySize,
+      primaryUseCase: payload.primaryUseCase,
+      workspacePreset: payload.workspacePreset,
+      referralCode,
+      password: payload.password,
+      policyContext: 'business_signup',
+      policyIp: request.headers.get('x-forwarded-for') || undefined,
+    });
+    const defaultPlan = await getDefaultPublicPlan('business');
 
     // ── Referral activation ──────────────────────────────────────────────────
     // If a valid referral code was supplied, process the activation.
@@ -110,37 +91,6 @@ export async function POST(request: NextRequest) {
       }
     }
     // ────────────────────────────────────────────────────────────────────────
-
-    const businessSettings: BusinessSettings = {
-      organizationId: userId,
-      organizationName,
-      displayName: organizationName,
-      industry: payload.industry?.trim() || 'technology',
-      companySize: payload.companySize?.trim() || '1-25',
-      primaryUseCase: payload.primaryUseCase?.trim() || '',
-      workspacePreset: payload.workspacePreset?.trim() || 'executive_control',
-      onboardingCompleted: true,
-      onboardingCompletedAt: now,
-      starterTemplatesSeededAt: now,
-      supportEmail: normalizedEmail,
-      supportPhone: '',
-      accentColor: '#2719FF',
-      watermarkLabel: 'docrud workspace',
-      letterheadMode: 'default',
-      letterheadImageDataUrl: '',
-      letterheadHtml: '',
-      businessDescription: payload.primaryUseCase?.trim() || '',
-      workspaceSetupChecklist: {
-        profileConfigured: true,
-        brandingConfigured: true,
-        starterTemplatesReady: true,
-        signaturesReady: false,
-        firstDocumentGenerated: false,
-      },
-      updatedAt: now,
-    };
-    await saveBusinessSettings(businessSettings);
-    await seedStarterTemplatesForBusiness(businessSettings);
 
     try {
       const origin = request.nextUrl.origin;

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     const origin = new URL(request.url).origin;
-    const link = code ? `${origin}/signup?ref=${encodeURIComponent(code)}` : null;
+    const link = code ? `${origin}/onboarding?start=signup&ref=${encodeURIComponent(code)}` : null;
 
     return NextResponse.json({
       code,

@@ -75,7 +75,7 @@ const DEFAULT_FOOTER_COLS: FooterColumn[] = [
     { label: 'Blog', href: '/blog', visible: true },
     { label: 'Contact Us', href: '/contact', visible: true },
     { label: 'Careers', href: '/careers', visible: true },
-    { label: 'Sign Up', href: '/signup', visible: true },
+    { label: 'Sign Up', href: '/onboarding?start=signup', visible: true },
   ]},
   { id: 'legal', title: 'Legal', links: [
     { label: 'Terms & Conditions', href: '/terms', visible: true },

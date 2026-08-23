@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
-import { sanitizeCtaUrl } from '@/lib/cta';
+import { sanitizeCtaUrl, isInternalCtaUrl } from '@/lib/cta';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -548,6 +548,10 @@ type PublishedItem = {
   isReal?: boolean;
   /** Real poll results, sent with the feed for poll rows only. */
   poll?: { counts: number[]; total: number; viewerChoice: number | null };
+  /** Publisher-defined call to action. Already returned by the API and present
+      on the runtime object; the type just never declared it, so no feed card
+      rendered it. Same shape the detail page and profile feed use. */
+  cta?: { label: string; url: string };
   // media extras
   videoUrl?: string;
   mimeType?: string | null;
@@ -1250,6 +1254,7 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
           ))}
         </div>
       ) : null}
+      <PostCtaButton item={item} />
     </article>
   );
 }
@@ -1381,11 +1386,14 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         /* Social proof (from origin/main) — existing who-reacted modal and this
            card's existing comment panel. */
         beforeActions={
+          <>
+          <PostCtaButton item={item} />
           <PostSocialProofRow
             postId={item.id}
             socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
             onOpenComments={() => setCommentsOpen(true)}
           />
+          </>
         }
         actions={
           <>
@@ -1852,6 +1860,8 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
         )
       )}
 
+      <PostCtaButton item={item} />
+
       {/* Social proof — existing who-reacted modal, existing comment panel. */}
       <PostSocialProofRow
         postId={item.id}
@@ -2046,18 +2056,93 @@ function SurveyCard({ item }: { item: PublishedItem }) {
 }
 
 /* ─── chart card ─────────────────────────────────────────────────── */
+/**
+ * Publisher CTA, shared by the feed cards.
+ *
+ * Same markup/behaviour the detail page (PublishedItemPage) and profile feed
+ * already use — reused, not redesigned. Renders nothing when the CTA is absent,
+ * and stops the click from bubbling into the card's own navigation so the CTA's
+ * own href wins. External links open in a new tab; internal ones navigate in
+ * place.
+ */
+function PostCtaButton({ item }: { item: PublishedItem }) {
+  if (!item.cta?.url || !item.cta.label) return null;
+  return (
+    <div className="mt-3">
+      <a
+        href={item.cta.url}
+        onClick={(e) => { e.stopPropagation(); trackCTA('post_cta', item.category); }}
+        {...(isInternalCtaUrl(item.cta.url) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+        aria-label={item.cta.label}
+        className="inline-flex max-w-full items-center gap-2 rounded-[12px] border border-white/[0.14] bg-white/[0.08] px-4 py-2.5 text-[13px] font-semibold text-white/90 transition duration-150 hover:border-white/[0.22] hover:bg-white/[0.13] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+      >
+        <span className="min-w-0 break-words">{item.cta.label}</span>
+        <span aria-hidden className="shrink-0">&rarr;</span>
+      </a>
+    </div>
+  );
+}
+
+type ChartKind = 'bar' | 'line' | 'pie';
+interface ParsedChart { type: ChartKind; points: Array<{ label: string; value: number }>; }
+
+/**
+ * Parse the chart the composer serialised into the post body.
+ *
+ * The composer writes plain text lines:
+ *   Chart: <title>
+ *   Type: bar | line | pie
+ *   Labels: A,B,C
+ *   Values: 40,65,30
+ * (a two-chart post separates blocks with a line of "==="; the first is used).
+ *
+ * Everything here is defensive: a missing/empty/mismatched/ non-numeric body
+ * yields null, and the card falls back to its old rendering rather than
+ * throwing. Only as many pairs as BOTH arrays supply are kept.
+ */
+function parseChartBody(body: string): ParsedChart | null {
+  if (!body) return null;
+  const block = body.split(/^\s*===\s*$/m)[0] ?? body;
+  const line = (key: string) => {
+    const m = block.match(new RegExp('^\\s*' + key + '\\s*:\\s*(.+)$', 'im'));
+    return m ? m[1].trim() : '';
+  };
+  const rawType = line('Type').toLowerCase();
+  const type: ChartKind = rawType === 'line' ? 'line' : rawType === 'pie' ? 'pie' : 'bar';
+  const labels = line('Labels').split(',').map((x) => x.trim()).filter(Boolean);
+  const values = line('Values').split(',').map((x) => x.trim());
+  if (!labels.length || !values.length) return null;
+  const n = Math.min(labels.length, values.length);
+  const points: Array<{ label: string; value: number }> = [];
+  for (let i = 0; i < n; i++) {
+    const v = Number(values[i].replace(/[^0-9.\-]/g, ''));
+    if (!Number.isFinite(v)) continue;
+    points.push({ label: labels[i], value: v });
+  }
+  return points.length ? { type, points } : null;
+}
+
+/* A small, theme-aware palette for pie slices / series accents. Emerald-led to
+   match the existing chart card's accent. */
+const CHART_COLORS = ['#34d399', '#60a5fa', '#f59e0b', '#f472b6', '#a78bfa', '#22d3ee', '#fb7185', '#4ade80'];
+
 function ChartCard({ item }: { item: PublishedItem }) {
   const statLine = item.stats?.slice(0,2) ?? [];
-  const bars = (item.chips ?? []).slice(0,4).map(c => {
+  /* Real chart, parsed from the body the composer wrote. Null (missing or
+     malformed data) falls through to the old chip rendering below, so nothing
+     regresses and the feed never crashes on a bad post. */
+  const chart = parseChartBody(item.body);
+  const legacyBars = (item.chips ?? []).slice(0,4).map(c => {
     const m = c.match(/\+?(\d+)%/);
     return { label: c.split(' ')[0], pct: m ? parseInt(m[1]) : 40 };
   });
-  const maxPct = Math.max(...bars.map(b => b.pct), 1);
+  const maxLegacy = Math.max(...legacyBars.map(b => b.pct), 1);
+
   return (
-    <Link
-      href={`/published/${item.id}`}
-      className="group block overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111116] border-white/[0.06] p-4 transition-all hover:border-white/[0.12] hover:bg-[#13131b]"
-    >
+    /* Outer box holds the styling; the Link wraps only the navigable content so
+       the CTA anchor below is a SIBLING, never an <a> nested inside an <a>. */
+    <div className="group overflow-hidden rounded-2xl border border-white/[0.07] bg-[#111116] border-white/[0.06] p-4 transition-all hover:border-white/[0.12] hover:bg-[#13131b]">
+    <Link href={`/published/${item.id}`} className="block">
       <div className="flex items-center gap-2 mb-3">
         {nonTypeBadge(item) && (
           <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
@@ -2068,16 +2153,20 @@ function ChartCard({ item }: { item: PublishedItem }) {
       </div>
       <h3 className="text-[13px] font-bold leading-snug text-white tracking-[-0.02em] line-clamp-2">{item.title}</h3>
       <p className="mt-1 text-[10.5px] text-white/30">{item.byline}</p>
-      {/* Mini bar chart */}
-      {bars.length > 0 && (
+
+      {chart ? (
+        <div className="mt-3"><ChartView chart={chart} /></div>
+      ) : legacyBars.length > 0 && (
+        /* Fallback: existing chip-percentage bars for posts with no parseable
+           chart body. Unchanged. */
         <div className="mt-3 space-y-1.5">
-          {bars.map((bar, i) => (
+          {legacyBars.map((bar, i) => (
             <div key={i} className="flex items-center gap-2">
               <span className="w-20 shrink-0 truncate text-[9.5px] text-white/35">{bar.label}</span>
               <div className="flex-1 h-4 rounded-full bg-white/[0.04] overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-emerald-500/60 to-emerald-400/40"
-                  style={{ width: `${(bar.pct / maxPct) * 100}%` }}
+                  style={{ width: `${(bar.pct / maxLegacy) * 100}%` }}
                 />
               </div>
               <span className="w-10 shrink-0 text-right text-[9.5px] font-bold tabular-nums text-emerald-400/70">+{bar.pct}%</span>
@@ -2085,6 +2174,7 @@ function ChartCard({ item }: { item: PublishedItem }) {
           ))}
         </div>
       )}
+
       {statLine.length > 0 && (
         <div className="mt-3 flex gap-4 border-t border-white/[0.05] pt-3">
           {statLine.map(s => (
@@ -2098,7 +2188,94 @@ function ChartCard({ item }: { item: PublishedItem }) {
           </span>
         </div>
       )}
+
     </Link>
+      <PostCtaButton item={item} />
+    </div>
+  );
+}
+
+/**
+ * Renders a parsed chart with hand-rolled SVG/flex — no chart library (there is
+ * none in the project, and the spec says not to add one). Every element is
+ * width-relative (percent / viewBox), so it fills the card at any width without
+ * a measured container, and colours come from tokens that read in both themes.
+ */
+function ChartView({ chart }: { chart: ParsedChart }) {
+  const { type, points } = chart;
+  const max = Math.max(...points.map((p) => p.value), 1);
+  const min = Math.min(...points.map((p) => p.value), 0);
+
+  if (type === 'pie') {
+    const total = points.reduce((sum, p) => sum + Math.max(0, p.value), 0) || 1;
+    let acc = 0;
+    const R = 16, C = 2 * Math.PI * R;
+    return (
+      <div className="flex items-center gap-4">
+        <svg viewBox="0 0 40 40" className="h-24 w-24 shrink-0 -rotate-90" role="img" aria-label="Pie chart">
+          {points.map((p, i) => {
+            const frac = Math.max(0, p.value) / total;
+            const dash = `${frac * C} ${C}`;
+            const el = (
+              <circle key={i} cx="20" cy="20" r={R} fill="none"
+                stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth="8"
+                strokeDasharray={dash} strokeDashoffset={-acc * C} />
+            );
+            acc += frac;
+            return el;
+          })}
+        </svg>
+        <ul className="min-w-0 flex-1 space-y-1">
+          {points.map((p, i) => (
+            <li key={i} className="flex items-center gap-2 text-[10.5px]">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+              <span className="min-w-0 flex-1 truncate text-white/55">{p.label}</span>
+              <span className="shrink-0 font-bold tabular-nums text-white/80">{p.value}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  if (type === 'line') {
+    const span = max - min || 1;
+    const stepX = points.length > 1 ? 100 / (points.length - 1) : 0;
+    const xy = (i: number, v: number) => [
+      points.length > 1 ? i * stepX : 50,
+      100 - ((v - min) / span) * 100,
+    ] as const;
+    const path = points.map((p, i) => { const [x, y] = xy(i, p.value); return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`; }).join(' ');
+    return (
+      <div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-28 w-full" role="img" aria-label="Line chart">
+          <polyline points="0,100 100,100" stroke="rgba(255,255,255,0.10)" strokeWidth="0.6" fill="none" />
+          <path d={path} fill="none" stroke={CHART_COLORS[0]} strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+          {points.map((p, i) => { const [x, y] = xy(i, p.value); return <circle key={i} cx={x} cy={y} r="1.4" fill={CHART_COLORS[0]} vectorEffect="non-scaling-stroke" />; })}
+        </svg>
+        <div className="mt-1.5 flex justify-between gap-1 text-[9px] text-white/35">
+          {points.map((p, i) => <span key={i} className="min-w-0 flex-1 truncate text-center">{p.label}</span>)}
+        </div>
+      </div>
+    );
+  }
+
+  /* bar */
+  return (
+    <div className="space-y-1.5">
+      {points.map((p, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className="w-20 shrink-0 truncate text-[9.5px] text-white/40">{p.label}</span>
+          <div className="flex-1 h-4 rounded-full bg-white/[0.04] overflow-hidden">
+            <div className="h-full rounded-full" style={{
+              width: `${(Math.max(0, p.value) / max) * 100}%`,
+              background: `linear-gradient(90deg, ${CHART_COLORS[i % CHART_COLORS.length]}cc, ${CHART_COLORS[i % CHART_COLORS.length]}88)`,
+            }} />
+          </div>
+          <span className="w-12 shrink-0 text-right text-[9.5px] font-bold tabular-nums text-white/70">{p.value}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

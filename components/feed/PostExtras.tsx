@@ -16,7 +16,13 @@
 import { isInternalCtaUrl } from '@/lib/cta';
 
 export type ChartKind = 'bar' | 'line' | 'pie';
-export interface ParsedChart { type: ChartKind; points: Array<{ label: string; value: number }>; }
+export interface ParsedChart {
+  type: ChartKind;
+  points: Array<{ label: string; value: number }>;
+  /** The chart's own title from the `Chart:` line, so the card can show it as
+      the post title. Empty/"Untitled Chart" placeholder collapses to ''. */
+  title: string;
+}
 
 /**
  * Parse the chart the composer serialised into the post body.
@@ -51,7 +57,12 @@ export function parseChartBody(body: string): ParsedChart | null {
     if (!Number.isFinite(v)) continue;
     points.push({ label: labels[i], value: v });
   }
-  return points.length ? { type, points } : null;
+  if (!points.length) return null;
+  /* The composer writes "Chart: <title>" (or "Untitled Chart" when the author
+     left it blank). Drop the placeholder so the card can fall back cleanly. */
+  const rawTitle = line('Chart');
+  const title = /^untitled chart\b/i.test(rawTitle) ? '' : rawTitle;
+  return { type, points, title };
 }
 
 /* A small, theme-aware palette for pie slices / series accents. Emerald-led to

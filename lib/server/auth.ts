@@ -8,6 +8,7 @@ import { buildPolicyAcceptance } from '@/lib/policy-consent';
 import { getAuthSettings, getAuthSettingsSync } from '@/lib/server/settings';
 import { endUserPresence, getStoredUsers, getStoredUserByEmail, saveStoredUsers, upsertStoredUser, type StoredUser } from '@/lib/server/users';
 import { getProfileData, getProfileFields, updateProfileData } from '@/lib/server/user-profiles';
+import { readOAuthIntent, type OAuthIntent } from '@/lib/server/oauth-intent';
 
 export type { StoredUser };
 export { getStoredUsers, saveStoredUsers };
@@ -48,12 +49,41 @@ async function warmAuthSettingsCache() {
   }
 }
 
-async function upsertGoogleUser(profile: { email: string; name?: string | null }) {
+/** Best-effort referral association for a brand-new Google account. */
+async function activateGoogleReferral(userId: string, email: string, referralCode?: string) {
+  if (!referralCode) return;
+  try {
+    const origin = (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || '').trim();
+    /* Lazy import: referrals.ts imports this module, so a static import here
+       would form a cycle that breaks module initialization at build time. */
+    const { processProfileActivation } = await import('@/lib/server/referrals');
+    await processProfileActivation({ refereeUserId: userId, refereeEmail: email, referralCode, origin });
+  } catch (err) {
+    console.error('[auth] google referral activation failed (non-fatal):', err);
+  }
+}
+
+/**
+ * Find-or-create the user behind a Google identity.
+ *
+ * `intent` carries the account type the user chose at the button (from the
+ * server-set intent cookie), and is honoured ONLY when creating a brand-new
+ * account. An existing account keeps its stored type untouched — a Google login
+ * never converts an individual into a business or vice-versa; a type mismatch is
+ * surfaced to the user after sign-in and the session is dropped, exactly like
+ * the credentials login guard. This is the single account-type authority; the
+ * value is never taken from a request body.
+ */
+async function upsertGoogleUser(
+  profile: { email: string; name?: string | null },
+  intent: OAuthIntent,
+) {
   const normalizedEmail = normalizeEmail(profile.email);
   const existing = await getStoredUserByEmail(normalizedEmail);
   const now = new Date().toISOString();
 
   if (existing) {
+    // Existing account: log in, refresh metadata, but NEVER change accountType.
     const updated: StoredUser = {
       ...existing,
       name: profile.name?.trim() || existing.name,
@@ -74,6 +104,30 @@ async function upsertGoogleUser(profile: { email: string; name?: string | null }
     return safeUser;
   }
 
+  // ── Brand-new account: create the type the user chose at the toggle ──
+  if (intent.accountType === 'business') {
+    const displayName = profile.name?.trim() || normalizedEmail.split('@')[0];
+    /* Lazy import to avoid a static import cycle back into this module through
+       the business/referral chain (it broke build-time module init). */
+    const { provisionBusinessAccount } = await import('@/lib/server/business-provisioning');
+    const { userId, user } = await provisionBusinessAccount({
+      name: displayName,
+      email: normalizedEmail,
+      // Google gives us no organization; derive a sensible default the owner can
+      // rename in business settings later. No password — the Google identity is
+      // the credential.
+      organizationName: `${displayName}'s Workspace`,
+      referralCode: intent.ref,
+      policyContext: 'business_signup',
+      idPrefix: 'business-google',
+    });
+    // Business accounts are treated as email-verified (Google already verified it).
+    await updateProfileData(userId, { emailVerified: true, emailVerifiedAt: now }).catch(() => {});
+    await activateGoogleReferral(userId, normalizedEmail, intent.ref);
+    const { passwordHash, passwordSalt, ...safeUser } = user;
+    return safeUser;
+  }
+
   const individualPlan = await getDefaultPublicPlan('individual');
   const createdUser: StoredUser = {
     id: `individual-google-${Date.now()}`,
@@ -87,6 +141,7 @@ async function upsertGoogleUser(profile: { email: string; name?: string | null }
     lastLogin: now,
     organizationName: 'Individual Workspace',
     createdFromSignup: true,
+    referredByCode: intent.ref || undefined,
     policyAcceptance: buildPolicyAcceptance('login'),
     subscription: individualPlan
       ? applyRoadmapPromotionToSubscription({
@@ -105,6 +160,8 @@ async function upsertGoogleUser(profile: { email: string; name?: string | null }
     emailVerified: true,
     emailVerifiedAt: now,
   }).catch(() => { /* non-fatal */ });
+
+  await activateGoogleReferral(createdUser.id, normalizedEmail, intent.ref);
 
   const { passwordHash, passwordSalt, ...safeUser } = createdUser;
   return safeUser;
@@ -229,7 +286,11 @@ export function buildAuthOptions(): NextAuthOptions {
         if (!user.email) {
           return false;
         }
-        await upsertGoogleUser({ email: user.email, name: user.name });
+        /* The account-type intent set at the button, read server-side. Defaults
+           to individual when absent. It only decides the type of a NEW account;
+           an existing account's type is never changed. */
+        const intent = readOAuthIntent() ?? { accountType: 'individual' as const };
+        await upsertGoogleUser({ email: user.email, name: user.name }, intent);
       }
       return true;
     },

@@ -16,8 +16,22 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSession } from 'next-auth/react';
 import { Heart, Image as ImageIcon, Reply, Send, Smile, Trash2 } from 'lucide-react';
 import { renderWithMentions } from '@/lib/mentions';
+import { CommentAvatar } from '@/components/social/CommentAvatar';
+
+/* Same initials + stable colour the full published-post page uses for comment
+   avatars, so a commenter looks identical inline and on the post page. */
+const COMMENT_AVATAR_COLORS = ['bg-emerald-600', 'bg-blue-600', 'bg-violet-600', 'bg-orange-600', 'bg-pink-600', 'bg-teal-600', 'bg-rose-600', 'bg-indigo-600', 'bg-amber-600', 'bg-cyan-600'];
+function commentInitials(name: string) {
+  return (name || 'AN').split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
+}
+function commentAvatarColor(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return COMMENT_AVATAR_COLORS[h % COMMENT_AVATAR_COLORS.length];
+}
 
 /** Only what the panel actually needs from a feed item. */
 export type CommentPanelItem = {
@@ -98,6 +112,8 @@ export type CardComment = {
   text: string;
   createdAt: string;
   userId?: string;
+  /** The commenter's real profile photo, resolved server-side. null → initials. */
+  avatarUrl?: string | null;
   parentId?: string | null;
   likesCount: number;
   likedByViewer: boolean;
@@ -122,6 +138,13 @@ export function CardCommentPanel({
 }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /* The viewer's own id, matched against each comment's userId so an older
+     server payload without isOwner still shows the owner their delete control —
+     the same fallback the full published-post page uses. Real authorization is
+     enforced server-side by the DELETE route regardless of what this shows. */
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id || session?.user?.email || '';
 
   const [comments, setComments] = useState<CardComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -846,12 +869,14 @@ const buildCommentTree = useCallback(
         }
       >
         <div className="flex gap-2">
-          {/* Avatar */}
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/60">
-            {(comment.author || 'AN')
-              .slice(0, 2)
-              .toUpperCase()}
-          </div>
+          {/* Avatar — the commenter's real profile photo when they have one,
+              falling back to the same initials circle used elsewhere. */}
+          <CommentAvatar
+            src={comment.avatarUrl}
+            initials={commentInitials(comment.author)}
+            colorClass={commentAvatarColor(comment.author || 'AN')}
+            className="h-6 w-6 text-[9px]"
+          />
 
           <div className="min-w-0 flex-1">
             {/* Header */}
@@ -926,8 +951,10 @@ const buildCommentTree = useCallback(
                 </button>
               )}
 
-              {/* Delete — ONLY OWNER */}
-              {comment.isOwner && (
+              {/* Delete — ONLY OWNER. Trust the server's isOwner, and fall back
+                  to matching the viewer's id so the owner's control still shows
+                  if an older payload omitted the flag. */}
+              {(comment.isOwner || (Boolean(currentUserId) && comment.userId === currentUserId)) && (
                 <button
                   type="button"
                   disabled={

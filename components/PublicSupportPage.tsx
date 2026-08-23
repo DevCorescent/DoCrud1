@@ -183,7 +183,7 @@ export default function PublicSupportPage({ softwareName, accentLabel, settings 
               <Link href="/login">Login for workspace support</Link>
             </Button>
             <Button asChild className="rounded-xl bg-slate-950 text-white hover:bg-slate-800">
-              <Link href="/signup">Start with docrud</Link>
+              <Link href="/onboarding?start=signup">Start with docrud</Link>
             </Button>
           </div>
         </div>

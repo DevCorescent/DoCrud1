@@ -51,6 +51,11 @@ type BusinessSignupFormProps = {
   initialConfig?: string;
   initialReferralCode?: string;
   softwareName?: string;
+  /* When rendered inside the narrow onboarding column (not the wide /signup
+     shell), the form's own left brand/progress panel is hidden and it collapses
+     to a single column so it fits without horizontal overflow. Behaviour, OTP,
+     validation and the signup API are all unchanged. */
+  embedded?: boolean;
 };
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -277,6 +282,7 @@ export default function BusinessSignupForm({
   initialConfig,
   initialReferralCode = '',
   softwareName = 'docrud',
+  embedded = false,
 }: BusinessSignupFormProps) {
   const router = useRouter();
 
@@ -457,12 +463,12 @@ export default function BusinessSignupForm({
       className="overflow-hidden rounded-[2rem] border border-white/[0.08] shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_40px_120px_rgba(0,0,0,0.7)] backdrop-blur-3xl"
       style={{ background: 'rgba(10,11,13,0.90)' }}
     >
-      <div className="flex min-h-[620px] flex-col xl:flex-row">
+      <div className={`flex flex-col ${embedded ? 'min-h-0' : 'min-h-[620px] xl:flex-row'}`}>
 
         {/* ════════════════════════════════════════
             LEFT: Brand / progress panel
         ════════════════════════════════════════ */}
-        <div className="relative hidden xl:flex xl:w-[320px] shrink-0 flex-col border-r border-white/[0.06] bg-[rgba(255,255,255,0.015)] px-8 py-10">
+        <div className={`relative ${embedded ? 'hidden' : 'hidden xl:flex'} xl:w-[320px] shrink-0 flex-col border-r border-white/[0.06] bg-[rgba(255,255,255,0.015)] px-8 py-10`}>
           <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-l-[2rem]" aria-hidden>
             <div className="absolute -left-16 -top-16 h-64 w-64 rounded-full bg-indigo-600/[0.08] blur-[80px]"
               style={{ animation: 'obDrift1 20s ease-in-out infinite' }} />

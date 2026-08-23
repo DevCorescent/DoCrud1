@@ -1327,7 +1327,13 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
   const ghostCls = 'inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.10] px-3.5 text-[12px] font-semibold text-white/55 transition hover:border-white/[0.20] hover:text-white/90';
   const iconCls  = 'flex h-8 w-8 items-center justify-center rounded-full text-white/35 transition hover:bg-white/[0.06] hover:text-white/70';
 
-  const showTitle = shouldShowFeedTitle(cat, item.title);
+  /* A chart post's real title lives in its body ("Chart: <title>"), not always
+     in item.title (a titleless chart is stored as a filename or the word
+     "chart"). Parse once and let the chart's own title drive the normal title
+     slot, so the chart reads as content inside a normal post. */
+  const chart = parseChartBody(item.body);
+  const chartTitle = chart?.title.trim() || '';
+  const showTitle = chart ? Boolean(chartTitle) : shouldShowFeedTitle(cat, item.title);
 
   /* Task 10 — category-relevant metadata built from fields the item already has. */
   const catMeta = buildCategoryMetaChips({
@@ -1375,21 +1381,19 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         renderTitle={
           showTitle ? (
             <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 transition-colors group-hover:text-white/85">
-              {searchQuery ? highlight(item.title, searchQuery) : item.title}
+              {chart ? (searchQuery ? highlight(chartTitle, searchQuery) : chartTitle) : (searchQuery ? highlight(item.title, searchQuery) : item.title)}
             </h3>
           ) : null
         }
         /* Preserve BodyDisplay (structured chips OR highlighted prose). When
            category metadata is available it moves to the metadata section, so
-           the body slot shows the description/summary instead. */
-        renderMainBody={(() => {
-          /* Chart is CONTENT inside the normal post: when the body parses as a
-             chart, render the visualization here; otherwise the usual body. */
-          const chart = parseChartBody(item.body);
-          return chart
+           the body slot shows the description/summary instead. The chart's own
+           title is shown via renderTitle above, so it is not repeated here. */
+        renderMainBody={
+          chart
             ? <ChartView chart={chart} />
-            : <BodyDisplay body={item.body} searchQuery={searchQuery} proseOnly={useCategoryMeta} />;
-        })()}
+            : <BodyDisplay body={item.body} searchQuery={searchQuery} proseOnly={useCategoryMeta} />
+        }
         renderMetadata={useCategoryMeta ? <FeedMetaChipRow chips={catMeta} /> : null}
         /* Social proof (from origin/main) — existing who-reacted modal and this
            card's existing comment panel. */

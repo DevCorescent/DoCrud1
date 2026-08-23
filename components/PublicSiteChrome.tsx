@@ -117,7 +117,7 @@ export default function PublicSiteChrome({ softwareName, accentLabel, settings, 
                 {darkMode ? (
                   <>
                     <Link href="/login" className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10">Login</Link>
-                    <Link href="/signup" className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10">Start Free</Link>
+                    <Link href="/onboarding?start=signup" className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10">Start Free</Link>
                     <a href={settings.primaryCtaHref || '/schedule-demo'} className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(251,146,60,0.30)] transition hover:from-orange-400 hover:to-amber-400">
                       {settings.primaryCtaLabel}
                       <ArrowRight className="h-4 w-4" />
@@ -129,7 +129,7 @@ export default function PublicSiteChrome({ softwareName, accentLabel, settings, 
                       <Link href="/login">Login</Link>
                     </Button>
                     <Button asChild variant="outline" className="rounded-xl border-slate-300 bg-white text-slate-950 hover:bg-slate-950 hover:text-white">
-                      <Link href="/signup">Start Free</Link>
+                      <Link href="/onboarding?start=signup">Start Free</Link>
                     </Button>
                     <Button asChild className="rounded-xl bg-slate-950 text-white shadow-[0_16px_38px_rgba(15,23,42,0.18)] hover:bg-slate-800">
                       <a href={settings.primaryCtaHref || '/schedule-demo'}>
@@ -234,7 +234,7 @@ export default function PublicSiteChrome({ softwareName, accentLabel, settings, 
               style={{ position: 'absolute', top: 0, left: 0, width: 60, height: 60, borderRadius: 18, border: '1.5px solid rgba(99,102,241,0.35)', pointerEvents: 'none' }}
             />
             <Link
-              href="/signup"
+              href="/onboarding?start=signup"
               aria-label="Start for free"
               style={{
                 width: 60,

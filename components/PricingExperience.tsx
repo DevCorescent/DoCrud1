@@ -48,17 +48,17 @@ function getPlanHref(
   isAuthenticated: boolean,
   customConfiguration?: CustomPlanConfiguration | null,
   referralCode?: string,
-  signupPath: string = '/signup',
+  signupPath: string = '/onboarding?start=signup',
 ) {
   const config = customConfiguration ? `&config=${encodeCustomPlanConfiguration(customConfiguration)}` : '';
   const ref = referralCode ? `&ref=${encodeURIComponent(referralCode)}` : '';
 
   if (plan.billingModel === 'custom') {
-    return isAuthenticated ? `/checkout?plan=${plan.id}${config}${ref}` : `${signupPath}?plan=${plan.id}${config}${ref}`;
+    return isAuthenticated ? `/checkout?plan=${plan.id}${config}${ref}` : `${signupPath}&plan=${plan.id}${config}${ref}`;
   }
 
   if (plan.billingModel === 'subscription' && (plan.amountInPaise || 0) > 0) {
-    return isAuthenticated ? `/checkout?plan=${plan.id}${ref}` : `${signupPath}?plan=${plan.id}${ref}`;
+    return isAuthenticated ? `/checkout?plan=${plan.id}${ref}` : `${signupPath}&plan=${plan.id}${ref}`;
   }
 
   return isAuthenticated ? '/welcome' : signupPath;
@@ -73,7 +73,11 @@ export default function PricingExperience({
   const searchParams = useSearchParams();
   const referralCode = (searchParams?.get('ref') || '').trim();
   const signupFlow = (searchParams?.get('flow') || '').trim();
-  const signupPath = signupFlow === 'individual' ? '/individual-signup' : '/signup';
+  /* One account-creation frontend: /onboarding. Business preselects the toggle;
+     individual is the default. plan/config/ref are appended by buildSignupUrl. */
+  const signupPath = signupFlow === 'individual'
+    ? '/onboarding?start=signup'
+    : '/onboarding?start=signup&type=business';
   const [activeSection, setActiveSection] = useState<'workspace' | 'talent' | 'gigs'>('workspace');
 
   useEffect(() => {

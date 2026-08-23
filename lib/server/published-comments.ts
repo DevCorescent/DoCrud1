@@ -39,6 +39,9 @@ export type PublishedComment = {
   parentId: string | null;
   likesCount: number;
   likedByViewer: boolean;
+  /** True when the requesting viewer authored this comment. Server-authoritative
+      so the delete affordance matches what the DELETE route will actually allow. */
+  isOwner: boolean;
 };
 
 /**
@@ -107,5 +110,8 @@ export async function mapPublishedComments(
     parentId: c.parentId ?? null,
     likesCount: (c.likedBy ?? []).length,
     likedByViewer: viewerIdentifier ? (c.likedBy ?? []).includes(viewerIdentifier) : false,
+    /* Ownership is decided the same way the DELETE route decides it: the stored
+       engagement id (user id or email) equals the viewer's identifier. */
+    isOwner: viewerIdentifier ? c.userId === viewerIdentifier : false,
   }));
 }

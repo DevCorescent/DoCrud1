@@ -3,10 +3,12 @@
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn, useSession } from 'next-auth/react';
+import { signIn, signOut, useSession } from 'next-auth/react';
 import AnimatedLoginBackground, {
   SPLASH_PROFILES_TOP, SPLASH_PROFILES_BTM,
 } from '@/components/AnimatedLoginBackground';
+import AccountTypeToggle, { normalizeAccountKind, type AccountKind } from '@/components/AccountTypeToggle';
+import BusinessSignupForm from '@/components/BusinessSignupForm';
 import {
   ArrowRight, Award, Bot, Briefcase, CheckCircle2, Eye, EyeOff,
   FileSignature, FileText, FormInput, Globe,
@@ -1315,6 +1317,40 @@ function OnboardingPageInner() {
   const [screen, setScreen] = useState(skipSplash ? SIGNUP_SCR : 0);
   const [showSplash, setShowSplash] = useState(!skipSplash);
 
+  /* Individual ↔ Business account type. Chosen here, never trusted as the
+     account type itself — that is written server-side by whichever signup route
+     the chosen form posts to (/api/individual/signup vs /api/saas/signup). A
+     bogus ?type= safely falls back to Individual. The choice lives in the URL so
+     a refresh or shared link reopens in the same mode; ref/plan are preserved. */
+  const [accountType, setAccountType] = useState<AccountKind>(
+    normalizeAccountKind(searchParams?.get('type')),
+  );
+  /* A ref so the authenticated-redirect effect (registered once) never reads a
+     stale value: while Business is active, BusinessSignupForm owns navigation
+     after its own signup, so onboarding must not race it to '/'. */
+  const accountTypeRef = useRef<AccountKind>(accountType);
+  accountTypeRef.current = accountType;
+
+  /* Google OAuth state. `googleBusy` blocks double-clicks and drives the button
+     label. The OAuth round-trip returns to this page with ?oauth=return; until
+     that return is resolved (matched → proceed, or mismatched → signed out) the
+     normal authenticated-redirect below is paused so it can't bounce a
+     wrong-type session onward. */
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const oauthReturn = searchParams?.get('oauth') === 'return';
+  const oauthReturnRef = useRef(oauthReturn);
+  oauthReturnRef.current = oauthReturn;
+  const oauthResolvedRef = useRef(false);
+
+  const selectAccountType = useCallback((next: AccountKind) => {
+    setAccountType(next);
+    const params = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+    if (next === 'business') params.set('type', 'business');
+    else params.delete('type');
+    const qs = params.toString();
+    router.replace(qs ? `/onboarding?${qs}` : '/onboarding', { scroll: false });
+  }, [router, searchParams]);
+
   // Referral state
   const [referralCode, setReferralCode] = useState(incomingRef);
   const [referrer, setReferrer] = useState<{ name: string; headline?: string | null; avatarUrl?: string | null } | null>(null);
@@ -1564,10 +1600,46 @@ function OnboardingPageInner() {
 
   const hasSignedUpInSession = useRef(false);
 
+  /* Resolve a Google OAuth return: honour the chosen account type or reject a
+     mismatch. Runs before the generic redirect below (which is paused while an
+     OAuth return is unresolved), so a wrong-type session is never forwarded. */
+  useEffect(() => {
+    if (!oauthReturn || oauthResolvedRef.current) return;
+    if (status !== 'authenticated') return;
+    const intended = normalizeAccountKind(searchParams?.get('type'));
+    const actual = session?.user?.accountType === 'business' ? 'business' : 'individual';
+    if (actual !== intended) {
+      /* Existing account is the other type — never converted server-side. Drop
+         the session and tell the user to switch the toggle. */
+      oauthResolvedRef.current = true;
+      void signOut({ redirect: false }).then(() => {
+        setAccountType(intended);
+        setSError(actual === 'individual'
+          ? 'This Google account is registered as an Individual account. Switch to Individual to continue.'
+          : 'This Google account is registered as a Business account. Switch to Business to continue.');
+        const qs = new URLSearchParams(Array.from(searchParams?.entries() ?? []));
+        qs.delete('oauth');
+        router.replace(`/onboarding?${qs.toString()}`);
+      });
+      return;
+    }
+    /* Match — a real login/new account. Let the normal flow forward them. */
+    oauthResolvedRef.current = true;
+    hasSignedUpInSession.current = false;
+    router.replace('/');
+    router.refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oauthReturn, status]);
+
   useEffect(() => {
     if (status === 'loading') return;
     if (status === 'authenticated') {
       if (hasSignedUpInSession.current) return;
+      /* Pause while a Google OAuth return is still being resolved above. */
+      if (oauthReturnRef.current && !oauthResolvedRef.current) return;
+      /* Business signup manages its own post-auth redirect (to /welcome or
+         /checkout); don't let onboarding race it to '/'. */
+      if (accountTypeRef.current === 'business') return;
       // If the user is an individual with an unverified email, keep them on the
       // onboarding page and jump to the OTP step so they can verify.
       if (session?.user?.accountType === 'individual' && session?.user?.emailVerified === false) {
@@ -1748,8 +1820,34 @@ function OnboardingPageInner() {
   }
 
   async function handleGoogleSignup() {
+    if (googleBusy) return;
     setSError('');
-    await signIn('google', { callbackUrl: '/' });
+    setGoogleBusy(true);
+    try {
+      const plan = searchParams?.get('plan') || undefined;
+      const config = searchParams?.get('config') || undefined;
+      /* Record the chosen account type server-side BEFORE leaving for Google, so
+         the intent survives the redirect and the server (not a query param)
+         decides what a new account becomes. */
+      await fetch('/api/auth/oauth-intent', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ accountType, ref: referralCode || undefined, plan, config }),
+      });
+      /* Return to onboarding so we can confirm the resulting account type
+         matches the toggle (mismatch → rejected). Legit params are preserved. */
+      const cb = new URLSearchParams();
+      cb.set('start', 'signup');
+      if (accountType === 'business') cb.set('type', 'business');
+      if (referralCode) cb.set('ref', referralCode);
+      if (plan) cb.set('plan', plan);
+      if (config) cb.set('config', config);
+      cb.set('oauth', 'return');
+      await signIn('google', { callbackUrl: `/onboarding?${cb.toString()}` });
+    } catch {
+      setSError('Could not connect to Google. Please try again.');
+      setGoogleBusy(false);
+    }
   }
 
   async function blobToDataUrl(blobUrl: string): Promise<string> {
@@ -2047,11 +2145,20 @@ function OnboardingPageInner() {
           {/* Heading */}
           <div style={{ animation: 'obSlideUp 0.45s 0.05s both', opacity: 0 }}>
             <h2 className="text-[1.75rem] sm:text-[2rem] font-black tracking-[-0.045em] text-white leading-[1.05]">
-              Create your profile.
+              {accountType === 'business' ? 'Create your workspace.' : 'Create your profile.'}
             </h2>
             <p className="mt-2 text-[12px] sm:text-[12.5px] text-white/32 leading-[1.65]">
-              Join 3,400+ professionals. Takes 30 seconds.
+              {accountType === 'business'
+                ? 'Set up your business account. Takes a minute.'
+                : 'Join 3,400+ professionals. Takes 30 seconds.'}
             </p>
+          </div>
+
+          {/* Account type — Individual (default) or Business. Selecting Business
+              swaps in the existing BusinessSignupForm below; the onboarding shell
+              and left preview stay the same. */}
+          <div style={{ animation: 'obSlideUp 0.45s 0.07s both', opacity: 0 }}>
+            <AccountTypeToggle value={accountType} onChange={selectAccountType} />
           </div>
 
           {/* ── Referrer banner — shown when visiting via referral link ── */}
@@ -2119,7 +2226,11 @@ function OnboardingPageInner() {
             </div>
           )}
 
-          {/* Form card */}
+          {/* Form card — Individual: the existing onboarding signup fields.
+              Business: the existing BusinessSignupForm, embedded in the same
+              shell. Only the form body swaps; heading, toggle, referral banner
+              and left preview stay. */}
+          {accountType === 'individual' ? (
           <div className="overflow-hidden rounded-[22px] border border-white/[0.08] backdrop-blur-sm"
             style={{ animation: 'obSlideUp 0.45s 0.12s both', opacity: 0, background: 'linear-gradient(160deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.012) 100%)', boxShadow: '0 1px 0 rgba(255,255,255,0.05) inset, 0 0 0 1px rgba(255,255,255,0.025), 0 32px 80px rgba(0,0,0,0.55)' }}>
 
@@ -2208,10 +2319,13 @@ function OnboardingPageInner() {
                     <span className="text-[10px] text-white/20">or</span>
                     <div className="flex-1 border-t border-white/[0.06]" />
                   </div>
-                  <button type="button" onClick={() => void handleGoogleSignup()}
-                    className="flex h-10 w-full items-center justify-center gap-2.5 rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-[12.5px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/80 active:scale-[0.98]">
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[conic-gradient(from_180deg,#34a853_0deg,#4285f4_120deg,#fbbc05_220deg,#ea4335_320deg,#34a853_360deg)] text-[8px] font-black text-white">G</span>
-                    Continue with Google
+                  <button type="button" onClick={() => void handleGoogleSignup()} disabled={googleBusy}
+                    className="flex h-10 w-full items-center justify-center gap-2.5 rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-[12.5px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/80 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
+                    {googleBusy ? (
+                      <><span className="h-3.5 w-3.5 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />Connecting to Google…</>
+                    ) : (
+                      <><span className="flex h-4 w-4 items-center justify-center rounded-full bg-[conic-gradient(from_180deg,#34a853_0deg,#4285f4_120deg,#fbbc05_220deg,#ea4335_320deg,#34a853_360deg)] text-[8px] font-black text-white">G</span>Continue with Google</>
+                    )}
                   </button>
                 </>
               )}
@@ -2224,6 +2338,44 @@ function OnboardingPageInner() {
               </p>
             </div>
           </div>
+          ) : (
+            <div style={{ animation: 'obSlideUp 0.45s 0.12s both', opacity: 0 }}>
+              <BusinessSignupForm
+                embedded
+                initialReferralCode={referralCode}
+                initialPlanId={searchParams?.get('plan') ?? undefined}
+                initialConfig={searchParams?.get('config') ?? undefined}
+                softwareName="Docrud"
+              />
+
+              {/* Same "Continue with Google" as Individual — identical style; the
+                  selected toggle (Business) decides the account type created. */}
+              {googleEnabled && (
+                <div className="mt-3 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 border-t border-white/[0.06]" />
+                    <span className="text-[10px] text-white/20">or</span>
+                    <div className="flex-1 border-t border-white/[0.06]" />
+                  </div>
+                  <button type="button" onClick={() => void handleGoogleSignup()} disabled={googleBusy}
+                    className="flex h-10 w-full items-center justify-center gap-2.5 rounded-[11px] border border-white/[0.08] bg-white/[0.03] text-[12.5px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/80 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed">
+                    {googleBusy ? (
+                      <><span className="h-3.5 w-3.5 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />Connecting to Google…</>
+                    ) : (
+                      <><span className="flex h-4 w-4 items-center justify-center rounded-full bg-[conic-gradient(from_180deg,#34a853_0deg,#4285f4_120deg,#fbbc05_220deg,#ea4335_320deg,#34a853_360deg)] text-[8px] font-black text-white">G</span>Continue with Google</>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Mismatch / OAuth errors surface here in Business mode. */}
+              {sError && (
+                <div className="mt-3 flex items-start gap-2 rounded-[10px] border border-rose-500/20 bg-rose-500/[0.06] px-3 py-2.5 text-[12px] text-rose-300/75">
+                  <span className="mt-0.5 shrink-0">✕</span>{sError}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Recently joined slider — mobile only */}
           <div className="lg:hidden" style={{ animation: 'obFadeIn 0.4s 0.5s both', opacity: 0 }}>

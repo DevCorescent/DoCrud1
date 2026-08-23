@@ -2049,7 +2049,15 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({
   const postHref = `/published/${item.shareId || item.id}`;
   const bylineParts = item.byline.split(' · ').map((s: string) => s.trim());
   const authorMeta = bylineParts.slice(1).join(' · ');
-  const showTitle = item.category !== 'post' && !hpIsJunkTitle(item);
+  /* A chart post's real title lives in its body ("Chart: <title>"), not always
+     in item.title (a titleless chart is stored as a filename or the word
+     "chart"). Parse once and let the chart's own title drive the normal title
+     slot, so the chart reads as content inside a normal post. */
+  const chart = parseChartBody(item.body);
+  const chartTitle = chart?.title.trim() || '';
+  const showTitle = chart
+    ? Boolean(chartTitle)
+    : item.category !== 'post' && !hpIsJunkTitle(item);
 
   /* Task 10 — category-relevant metadata built from fields the item already has.
      The homepage body snippet is left untouched, so any value it already shows
@@ -2116,16 +2124,16 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({
       renderTitle={
         showTitle ? (
           <h3 className="text-[15px] font-bold leading-snug tracking-tight text-white line-clamp-2 transition-colors group-hover:text-white/85">
-            {item.title}
+            {chart ? chartTitle : item.title}
           </h3>
         ) : null
       }
       renderMainBody={(() => {
         /* Chart is CONTENT inside the normal post card — render the
            visualization in the body slot instead of the raw "Type/Labels/
-           Values" text. Any non-chart body keeps the existing ExpandableBody
-           behaviour, so normal posts are unchanged. */
-        const chart = parseChartBody(item.body);
+           Values" text. The chart's own title is shown via renderTitle above
+           (the normal title slot), so it is not repeated here. Any non-chart
+           body keeps the existing ExpandableBody behaviour. */
         if (chart) return <div className={showTitle ? 'mt-1.5' : ''}><ChartView chart={chart} /></div>;
         return hpHasRealCaption(item.body) ? (
           <ExpandableBody
@@ -3781,7 +3789,7 @@ const FOOTER_COLS: { heading: string; links: FooterLinkDef[] }[] = [
       { label: 'Contact Us',    href: '/contact' },
       { label: 'Careers',       modal: 'careers' },
       { label: 'Press & Media', modal: 'press' },
-      { label: 'Sign Up',       href: '/signup' },
+      { label: 'Sign Up',       href: '/onboarding?start=signup' },
       { label: 'Sign In',       href: '/login' },
     ],
   },
@@ -8611,7 +8619,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                 { id: 'people',   label: 'People',   Icon: Users,          href: '/people' },
                 ...(isAuthenticated && !guestMode
                   ? [{ id: 'messages', label: 'Messages', Icon: MessageSquare, href: '/messages' }]
-                  : [{ id: 'signup',   label: 'Sign Up',  Icon: UserPlus,     href: '/signup' }]),
+                  : [{ id: 'signup',   label: 'Sign Up',  Icon: UserPlus,     href: '/onboarding?start=signup' }]),
               ];
               const ordered = dockItems;
 
@@ -9657,7 +9665,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                   { label: 'Support',  Icon: HelpCircle, href: '/support' },
                   ...(isAuthenticated && !guestMode
                     ? [{ label: 'Profile', Icon: User,    href: '/profile' }]
-                    : [{ label: 'Join',    Icon: UserPlus, href: '/signup' }]),
+                    : [{ label: 'Join',    Icon: UserPlus, href: '/onboarding?start=signup' }]),
                 ] as Array<{ label: string; Icon: React.ElementType; href: string }>).map(item => (
                   <a
                     key={item.label}

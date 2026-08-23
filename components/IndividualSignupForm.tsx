@@ -230,7 +230,7 @@ export default function IndividualSignupForm({ initialPlanId, initialConfig, ini
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-slate-500">
-              Need a team workspace instead? <Link href="/signup" className="font-medium text-slate-950 underline underline-offset-4">Create a business account</Link>
+              Need a team workspace instead? <Link href="/onboarding?start=signup&type=business" className="font-medium text-slate-950 underline underline-offset-4">Create a business account</Link>
             </p>
             <div className="flex items-center gap-2">
               {!buildYourOwnReady ? (

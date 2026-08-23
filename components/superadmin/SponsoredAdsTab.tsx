@@ -36,6 +36,8 @@ export default function SponsoredAdsTab() {
   const [config, setConfig] = useState<Config | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  /* Create-modal state. The list/config flow above is unchanged. */
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [a, c] = await Promise.all([
@@ -137,6 +139,23 @@ export default function SponsoredAdsTab() {
     <div className="space-y-4">
       {msg && <p className="rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-[12.5px] text-white/70">{msg}</p>}
 
+      {/* Create — wired to the existing POST /api/super-admin/ads. The old tab
+          only moderated, so a superadmin had no way to reach the house-ad
+          endpoint that already existed. */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-white">Sponsored Ads</h2>
+          <p className="text-[11.5px] text-white/40">Create house ads and moderate advertiser campaigns.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setMsg(null); setCreateOpen(true); }}
+          className={`${BTN} shrink-0 bg-white/[0.10] text-white hover:bg-white/[0.16] border border-white/15`}
+        >
+          + Add Advertisement
+        </button>
+      </div>
+
       <div className={CARD}>
         <h3 className="mb-1 text-[14px] font-semibold text-white">Awaiting approval ({pending.length})</h3>
         <p className="mb-3 text-[11.5px] text-white/40">A paid campaign stays here until approved. Payment alone never publishes an ad.</p>
@@ -201,6 +220,203 @@ export default function SponsoredAdsTab() {
           </button>
         </div>
       )}
+
+      {createOpen && (
+        <CreateAdModal
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => { setCreateOpen(false); setMsg('Advertisement created successfully.'); void load(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Create Advertisement ──────────────────────────────────────────────────
+   Every field maps 1:1 to what POST /api/super-admin/ads already accepts. The
+   server owns id, owner, advertiserType, status, fee and timestamps — this
+   only collects the editorial content and targeting. Image goes through the
+   existing /api/ads/upload (multipart, field `file`, returns { url }). */
+function CreateAdModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [title, setTitle] = useState('');
+  const [subtitle, setSubtitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [ctaLabel, setCtaLabel] = useState('');
+  const [ctaHref, setCtaHref] = useState('');
+  const [durationDays, setDurationDays] = useState(30);
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageName, setImageName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  /* Comma-separated in the UI, arrays on the wire — the API expects arrays. */
+  const [section, setSection] = useState('');
+  const [domain, setDomain] = useState('');
+  const [profession, setProfession] = useState('');
+  const [skills, setSkills] = useState('');
+  const [location, setLocation] = useState('');
+
+  const toList = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
+
+  const upload = async (file: File) => {
+    setErr(null);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/ads/upload', { method: 'POST', body: fd });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.url) { setErr(d.error || 'Image upload failed.'); return; }
+      setImageUrl(String(d.url));
+      setImageName(file.name);
+    } catch {
+      setErr('Image upload failed — check your connection and try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const submit = async () => {
+    setErr(null);
+    if (!title.trim()) { setErr('Title is required.'); return; }
+    if (!imageUrl) { setErr('An advertisement image is required.'); return; }
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/super-admin/ads', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        /* Only editorial + targeting fields. The endpoint fills in the rest. */
+        body: JSON.stringify({
+          title: title.trim(),
+          imageUrl,
+          subtitle: subtitle.trim() || undefined,
+          description: description.trim() || undefined,
+          ctaLabel: ctaLabel.trim() || undefined,
+          ctaHref: ctaHref.trim() || undefined,
+          durationDays,
+          targetSection: toList(section),
+          targetDomain: toList(domain),
+          targetProfession: toList(profession),
+          targetSkills: toList(skills),
+          targetLocation: toList(location),
+        }),
+      });
+      if (res.status === 401 || res.status === 403) { setErr('Your Super Admin session has expired. Sign in again.'); return; }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(d.error || 'Could not create the advertisement.'); return; }
+      onCreated();
+    } catch {
+      setErr('Network error — the advertisement was not created.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const FIELD = 'w-full rounded-lg border border-white/10 bg-white/[0.05] px-3 py-2 text-[13px] text-white placeholder-white/25 outline-none focus:border-white/25';
+  const LABEL = 'mb-1 block text-[11px] text-white/45';
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Create Advertisement"
+      onClick={onClose}
+    >
+      <div
+        className="my-8 w-full max-w-lg rounded-2xl border border-white/10 bg-[#0e0f13] p-5 shadow-[0_24px_80px_rgba(0,0,0,0.6)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4">
+          <h3 className="text-[15px] font-semibold text-white">Create Advertisement</h3>
+          <p className="mt-0.5 text-[11.5px] text-white/40">
+            Create a sponsored advertisement that can appear in the DoCrud feed.
+          </p>
+        </div>
+
+        {err && (
+          <p className="mb-3 rounded-lg border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-200/90">
+            {err}
+          </p>
+        )}
+
+        <div className="space-y-3">
+          {/* Image */}
+          <div>
+            <span className={LABEL}>Advertisement image *</span>
+            {imageUrl ? (
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imageUrl} alt="" className="h-14 w-24 shrink-0 rounded-md object-cover" />
+                <span className="min-w-0 flex-1 truncate text-[11.5px] text-white/50">{imageName}</span>
+                <label className="shrink-0 cursor-pointer rounded-lg border border-white/12 bg-white/[0.05] px-3 py-1.5 text-[12px] font-semibold text-white/70 hover:bg-white/[0.10]">
+                  Replace
+                  <input type="file" accept="image/*" className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} />
+                </label>
+              </div>
+            ) : (
+              <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.02] px-3 py-6 text-[12.5px] text-white/45 hover:border-white/25 hover:text-white/65">
+                {uploading ? 'Uploading…' : 'Click to upload an image (JPEG, PNG, WebP, GIF · max 4 MB)'}
+                <input type="file" accept="image/*" className="hidden" disabled={uploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ''; }} />
+              </label>
+            )}
+          </div>
+
+          <div>
+            <span className={LABEL}>Title *</span>
+            <input className={FIELD} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Try DoCrud Infinity" maxLength={120} />
+          </div>
+          <div>
+            <span className={LABEL}>Subtitle</span>
+            <input className={FIELD} value={subtitle} onChange={(e) => setSubtitle(e.target.value)} maxLength={160} />
+          </div>
+          <div>
+            <span className={LABEL}>Description</span>
+            <textarea className={`${FIELD} min-h-[64px] resize-y`} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={400} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <span className={LABEL}>CTA label</span>
+              <input className={FIELD} value={ctaLabel} onChange={(e) => setCtaLabel(e.target.value)} placeholder="Learn more" maxLength={40} />
+            </div>
+            <div>
+              <span className={LABEL}>CTA link</span>
+              <input className={FIELD} value={ctaHref} onChange={(e) => setCtaHref(e.target.value)} placeholder="/pricing" />
+            </div>
+          </div>
+
+          <div>
+            <span className={LABEL}>Duration (days)</span>
+            <input type="number" min={1} className={FIELD} value={durationDays}
+              onChange={(e) => setDurationDays(Number(e.target.value) || 30)} />
+          </div>
+
+          <details className="rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2">
+            <summary className="cursor-pointer text-[12px] font-semibold text-white/55">Targeting (optional)</summary>
+            <p className="mt-1 mb-2 text-[11px] text-white/35">Comma-separated. Leave blank to show to everyone.</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div><span className={LABEL}>Section</span><input className={FIELD} value={section} onChange={(e) => setSection(e.target.value)} /></div>
+              <div><span className={LABEL}>Domain</span><input className={FIELD} value={domain} onChange={(e) => setDomain(e.target.value)} /></div>
+              <div><span className={LABEL}>Profession</span><input className={FIELD} value={profession} onChange={(e) => setProfession(e.target.value)} /></div>
+              <div><span className={LABEL}>Skills</span><input className={FIELD} value={skills} onChange={(e) => setSkills(e.target.value)} /></div>
+              <div className="sm:col-span-2"><span className={LABEL}>Location</span><input className={FIELD} value={location} onChange={(e) => setLocation(e.target.value)} /></div>
+            </div>
+          </details>
+        </div>
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={submitting}
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-[12.5px] font-semibold text-white/60 hover:text-white/85 disabled:opacity-50">
+            Cancel
+          </button>
+          <button type="button" onClick={() => void submit()} disabled={submitting || uploading || !title.trim() || !imageUrl}
+            className="rounded-lg bg-white px-4 py-2 text-[12.5px] font-bold text-neutral-900 disabled:opacity-50">
+            {submitting ? 'Creating…' : 'Create advertisement'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

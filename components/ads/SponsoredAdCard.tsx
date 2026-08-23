@@ -128,7 +128,7 @@ export default function SponsoredAdCard({ adIndex = 0 }: { adIndex?: number }) {
           alt=""
           loading="lazy"
           onError={() => setBroken(true)}
-          className="mb-2.5 block h-auto w-full rounded-[10px] object-contain"
+          className={`mb-2.5 block h-auto w-full object-contain${ad.backgroundColor ? '' : ' rounded-[10px]'}`}
           data-no-invert
         />
       )}
@@ -162,18 +162,17 @@ export default function SponsoredAdCard({ adIndex = 0 }: { adIndex?: number }) {
       style={
         ad.backgroundColor && ink
           ? {
-              /* Premium card (reference look): the chosen colour fills a
-                 rounded, softly-bordered, subtly-shadowed box with padding
-                 around the creative. Horizontal margin insets it so the
-                 rounded corners read as a card floating in the feed rather
-                 than a full-bleed band. The colour surrounds the image; the
-                 image itself is never touched. */
-              margin: '16px 12px',
+              /* Full-width flat band: the chosen colour fills the entire feed
+                 width — no horizontal margin, no rounded corners, no card
+                 shadow. Only a subtle top/bottom hairline separates it from
+                 adjacent posts. The colour surrounds the creative; the image
+                 itself is never touched. */
+              margin: '18px 0',
               padding: 16,
-              borderRadius: 16,
+              borderRadius: 0,
               background: ad.backgroundColor,
-              border: `1px solid ${ink.cardBorder}`,
-              boxShadow: '0 6px 22px rgba(0,0,0,0.16), inset 0 1px 0 rgba(255,255,255,0.06)',
+              borderTop: `1px solid ${ink.cardBorder}`,
+              borderBottom: `1px solid ${ink.cardBorder}`,
             }
           : {
               /* Fallback — existing ads with no colour keep the exact original

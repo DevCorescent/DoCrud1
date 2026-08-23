@@ -44,6 +44,10 @@ export type SponsoredAd = {
   description?: string;
   ctaLabel?: string;
   ctaHref?: string;
+  /** Card background colour behind the creative — a 3/6-digit hex. Optional:
+      an ad without one keeps the existing dark-glass card. Never applied to
+      the image itself. */
+  backgroundColor?: string;
 
   /* Targeting. Empty array = no restriction on that dimension. */
   targetSection?: string[];

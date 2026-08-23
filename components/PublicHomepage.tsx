@@ -13,6 +13,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { applyColorMode, getStoredColorMode } from '@/app/components/ThemeController';
 import { PresenceDot } from '@/components/PresenceBadge';
 import { PublishedFeedCard, ExpandableBody, nonTypeBadge } from '@/components/feed/PublishedFeedCard';
+import { parseChartBody, ChartView, PostCtaButton } from '@/components/feed/PostExtras';
 import { CardCommentPanel } from '@/components/feed/CardCommentPanel';
 import { composeFeed } from '@/lib/feed-composition';
 import { useFeedModuleSlots } from '@/lib/use-feed-modules';
@@ -2119,26 +2120,36 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({
           </h3>
         ) : null
       }
-      renderMainBody={
-        hpHasRealCaption(item.body) ? (
-          /* Full text with its paragraphs intact: the clamp is CSS, so "Read
-             more" reveals the rest in place instead of sending the reader to
-             the post page — which is what clicking the card already does. */
+      renderMainBody={(() => {
+        /* Chart is CONTENT inside the normal post card — render the
+           visualization in the body slot instead of the raw "Type/Labels/
+           Values" text. Any non-chart body keeps the existing ExpandableBody
+           behaviour, so normal posts are unchanged. */
+        const chart = parseChartBody(item.body);
+        if (chart) return <div className={showTitle ? 'mt-1.5' : ''}><ChartView chart={chart} /></div>;
+        return hpHasRealCaption(item.body) ? (
           <ExpandableBody
             text={hpGetBodyFull(item.body)}
             className={showTitle ? 'mt-1.5' : ''}
           />
-        ) : null
-      }
+        ) : null;
+      })()}
       /* Social proof (from origin/main). The home card has no inline comment
          panel, so the comment half routes to the post's comments section —
          the same target the comment count beside it uses. */
       beforeActions={
-        <PostSocialProofRow
-          postId={item.id}
-          socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
-          onOpenComments={() => router.push(`${postHref}#comments`)}
-        />
+        <>
+          <PostCtaButton
+            cta={(item as { cta?: { label: string; url: string } | null }).cta}
+            category={item.category}
+            surface="homepage"
+          />
+          <PostSocialProofRow
+            postId={item.id}
+            socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
+            onOpenComments={() => router.push(`${postHref}#comments`)}
+          />
+        </>
       }
       actions={
         <>

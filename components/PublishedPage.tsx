@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
-import { sanitizeCtaUrl, isInternalCtaUrl } from '@/lib/cta';
+import { sanitizeCtaUrl } from '@/lib/cta';
+import { parseChartBody, ChartView, PostCtaButton } from '@/components/feed/PostExtras';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -1254,7 +1255,7 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
           ))}
         </div>
       ) : null}
-      <PostCtaButton item={item} />
+      <PostCtaButton cta={item.cta} category={item.category} surface="published_page" />
     </article>
   );
 }
@@ -1381,13 +1382,20 @@ function PublishedCard({ item, searchQuery }: { item: PublishedItem; searchQuery
         /* Preserve BodyDisplay (structured chips OR highlighted prose). When
            category metadata is available it moves to the metadata section, so
            the body slot shows the description/summary instead. */
-        renderMainBody={<BodyDisplay body={item.body} searchQuery={searchQuery} proseOnly={useCategoryMeta} />}
+        renderMainBody={(() => {
+          /* Chart is CONTENT inside the normal post: when the body parses as a
+             chart, render the visualization here; otherwise the usual body. */
+          const chart = parseChartBody(item.body);
+          return chart
+            ? <ChartView chart={chart} />
+            : <BodyDisplay body={item.body} searchQuery={searchQuery} proseOnly={useCategoryMeta} />;
+        })()}
         renderMetadata={useCategoryMeta ? <FeedMetaChipRow chips={catMeta} /> : null}
         /* Social proof (from origin/main) — existing who-reacted modal and this
            card's existing comment panel. */
         beforeActions={
           <>
-          <PostCtaButton item={item} />
+          <PostCtaButton cta={item.cta} category={item.category} surface="published_page" />
           <PostSocialProofRow
             postId={item.id}
             socialProof={(item as { socialProof?: import('@/lib/social-proof').PostSocialProof | null }).socialProof}
@@ -1860,7 +1868,7 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
         )
       )}
 
-      <PostCtaButton item={item} />
+      <PostCtaButton cta={item.cta} category={item.category} surface="published_page" />
 
       {/* Social proof — existing who-reacted modal, existing comment panel. */}
       <PostSocialProofRow
@@ -2065,66 +2073,6 @@ function SurveyCard({ item }: { item: PublishedItem }) {
  * own href wins. External links open in a new tab; internal ones navigate in
  * place.
  */
-function PostCtaButton({ item }: { item: PublishedItem }) {
-  if (!item.cta?.url || !item.cta.label) return null;
-  return (
-    <div className="mt-3">
-      <a
-        href={item.cta.url}
-        onClick={(e) => { e.stopPropagation(); trackCTA('post_cta', item.category); }}
-        {...(isInternalCtaUrl(item.cta.url) ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
-        aria-label={item.cta.label}
-        className="inline-flex max-w-full items-center gap-2 rounded-[12px] border border-white/[0.14] bg-white/[0.08] px-4 py-2.5 text-[13px] font-semibold text-white/90 transition duration-150 hover:border-white/[0.22] hover:bg-white/[0.13] hover:text-white active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-      >
-        <span className="min-w-0 break-words">{item.cta.label}</span>
-        <span aria-hidden className="shrink-0">&rarr;</span>
-      </a>
-    </div>
-  );
-}
-
-type ChartKind = 'bar' | 'line' | 'pie';
-interface ParsedChart { type: ChartKind; points: Array<{ label: string; value: number }>; }
-
-/**
- * Parse the chart the composer serialised into the post body.
- *
- * The composer writes plain text lines:
- *   Chart: <title>
- *   Type: bar | line | pie
- *   Labels: A,B,C
- *   Values: 40,65,30
- * (a two-chart post separates blocks with a line of "==="; the first is used).
- *
- * Everything here is defensive: a missing/empty/mismatched/ non-numeric body
- * yields null, and the card falls back to its old rendering rather than
- * throwing. Only as many pairs as BOTH arrays supply are kept.
- */
-function parseChartBody(body: string): ParsedChart | null {
-  if (!body) return null;
-  const block = body.split(/^\s*===\s*$/m)[0] ?? body;
-  const line = (key: string) => {
-    const m = block.match(new RegExp('^\\s*' + key + '\\s*:\\s*(.+)$', 'im'));
-    return m ? m[1].trim() : '';
-  };
-  const rawType = line('Type').toLowerCase();
-  const type: ChartKind = rawType === 'line' ? 'line' : rawType === 'pie' ? 'pie' : 'bar';
-  const labels = line('Labels').split(',').map((x) => x.trim()).filter(Boolean);
-  const values = line('Values').split(',').map((x) => x.trim());
-  if (!labels.length || !values.length) return null;
-  const n = Math.min(labels.length, values.length);
-  const points: Array<{ label: string; value: number }> = [];
-  for (let i = 0; i < n; i++) {
-    const v = Number(values[i].replace(/[^0-9.\-]/g, ''));
-    if (!Number.isFinite(v)) continue;
-    points.push({ label: labels[i], value: v });
-  }
-  return points.length ? { type, points } : null;
-}
-
-/* A small, theme-aware palette for pie slices / series accents. Emerald-led to
-   match the existing chart card's accent. */
-const CHART_COLORS = ['#34d399', '#60a5fa', '#f59e0b', '#f472b6', '#a78bfa', '#22d3ee', '#fb7185', '#4ade80'];
 
 function ChartCard({ item }: { item: PublishedItem }) {
   const statLine = item.stats?.slice(0,2) ?? [];
@@ -2190,7 +2138,7 @@ function ChartCard({ item }: { item: PublishedItem }) {
       )}
 
     </Link>
-      <PostCtaButton item={item} />
+      <PostCtaButton cta={item.cta} category={item.category} surface="published_page" />
     </div>
   );
 }
@@ -2201,83 +2149,6 @@ function ChartCard({ item }: { item: PublishedItem }) {
  * width-relative (percent / viewBox), so it fills the card at any width without
  * a measured container, and colours come from tokens that read in both themes.
  */
-function ChartView({ chart }: { chart: ParsedChart }) {
-  const { type, points } = chart;
-  const max = Math.max(...points.map((p) => p.value), 1);
-  const min = Math.min(...points.map((p) => p.value), 0);
-
-  if (type === 'pie') {
-    const total = points.reduce((sum, p) => sum + Math.max(0, p.value), 0) || 1;
-    let acc = 0;
-    const R = 16, C = 2 * Math.PI * R;
-    return (
-      <div className="flex items-center gap-4">
-        <svg viewBox="0 0 40 40" className="h-24 w-24 shrink-0 -rotate-90" role="img" aria-label="Pie chart">
-          {points.map((p, i) => {
-            const frac = Math.max(0, p.value) / total;
-            const dash = `${frac * C} ${C}`;
-            const el = (
-              <circle key={i} cx="20" cy="20" r={R} fill="none"
-                stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth="8"
-                strokeDasharray={dash} strokeDashoffset={-acc * C} />
-            );
-            acc += frac;
-            return el;
-          })}
-        </svg>
-        <ul className="min-w-0 flex-1 space-y-1">
-          {points.map((p, i) => (
-            <li key={i} className="flex items-center gap-2 text-[10.5px]">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
-              <span className="min-w-0 flex-1 truncate text-white/55">{p.label}</span>
-              <span className="shrink-0 font-bold tabular-nums text-white/80">{p.value}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  }
-
-  if (type === 'line') {
-    const span = max - min || 1;
-    const stepX = points.length > 1 ? 100 / (points.length - 1) : 0;
-    const xy = (i: number, v: number) => [
-      points.length > 1 ? i * stepX : 50,
-      100 - ((v - min) / span) * 100,
-    ] as const;
-    const path = points.map((p, i) => { const [x, y] = xy(i, p.value); return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`; }).join(' ');
-    return (
-      <div>
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="h-28 w-full" role="img" aria-label="Line chart">
-          <polyline points="0,100 100,100" stroke="rgba(255,255,255,0.10)" strokeWidth="0.6" fill="none" />
-          <path d={path} fill="none" stroke={CHART_COLORS[0]} strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
-          {points.map((p, i) => { const [x, y] = xy(i, p.value); return <circle key={i} cx={x} cy={y} r="1.4" fill={CHART_COLORS[0]} vectorEffect="non-scaling-stroke" />; })}
-        </svg>
-        <div className="mt-1.5 flex justify-between gap-1 text-[9px] text-white/35">
-          {points.map((p, i) => <span key={i} className="min-w-0 flex-1 truncate text-center">{p.label}</span>)}
-        </div>
-      </div>
-    );
-  }
-
-  /* bar */
-  return (
-    <div className="space-y-1.5">
-      {points.map((p, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <span className="w-20 shrink-0 truncate text-[9.5px] text-white/40">{p.label}</span>
-          <div className="flex-1 h-4 rounded-full bg-white/[0.04] overflow-hidden">
-            <div className="h-full rounded-full" style={{
-              width: `${(Math.max(0, p.value) / max) * 100}%`,
-              background: `linear-gradient(90deg, ${CHART_COLORS[i % CHART_COLORS.length]}cc, ${CHART_COLORS[i % CHART_COLORS.length]}88)`,
-            }} />
-          </div>
-          <span className="w-12 shrink-0 text-right text-[9.5px] font-bold tabular-nums text-white/70">{p.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 /* ─── thread card — instagram-style ─────────────────────────────── */
 function ThreadCard({ item, searchQuery }: { item: PublishedItem; searchQuery: string }) {
@@ -2718,7 +2589,7 @@ function SearchResults({ items, query }: { items: PublishedItem[]; query: string
           item.category === 'gig' ? <GigCard key={item.id} item={item} />
           : item.category === 'poll' ? <PollCard key={item.id} item={item} />
           : item.category === 'survey' ? <SurveyCard key={item.id} item={item} />
-          : item.category === 'chart' ? <ChartCard key={item.id} item={item} />
+          : item.category === 'chart' ? <PublishedCard key={item.id} item={item} searchQuery={query} />
           : item.category === 'post' ? <PostCard key={item.id} item={item} searchQuery={query} />
           : item.category === 'thread' ? <ThreadCard key={item.id} item={item} searchQuery={query} />
           : item.category === 'video' ? <VideoCard key={item.id} item={item} searchQuery={query} />
@@ -4023,7 +3894,7 @@ export default function PublishedPage() {
                             : item.category === 'survey'
                               ? <SurveyCard key={item.id} item={item} />
                               : item.category === 'chart'
-                                ? <ChartCard key={item.id} item={item} />
+                                ? <PublishedCard key={item.id} item={item} searchQuery="" />
                                 : <PublishedCard key={item.id} item={item} searchQuery="" />;
                   })}
                 </div>

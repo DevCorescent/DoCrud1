@@ -159,6 +159,27 @@ export async function getProfileAvatars(userIds: string[]): Promise<Map<string, 
   return new Map(ids.map((id) => [id, profiles[id]?.avatarUrl ?? null]));
 }
 
+/**
+ * JSON-store write serialization.
+ *
+ * The JSON profile store is a single file: every write is read-whole-file →
+ * mutate one key → write-whole-file. Two of those interleaving lose each
+ * other's changes (last writer wins with a stale map). This promise-chain makes
+ * every JSON profile write run to completion before the next begins, so
+ * concurrent writers on this process can no longer clobber one another.
+ *
+ * Scope + limits: this serializes writes WITHIN ONE Node process, which is the
+ * JSON store's only deployment (local dev / single-instance self-host). The
+ * production Mongo path does not use this — it uses per-row atomic operations,
+ * which are also safe across multiple instances.
+ */
+let profilesWriteChain: Promise<void> = Promise.resolve();
+function serializeProfilesWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = profilesWriteChain.then(fn, fn);
+  profilesWriteChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 export async function updateProfileData(userId: string, data: Partial<UserProfileData>): Promise<void> {
   if (getDbPool()) {
     const current = (await selectUserProfileRow(userId)) ?? {};
@@ -170,13 +191,44 @@ export async function updateProfileData(userId: string, data: Partial<UserProfil
     await upsertUserProfileRow(userId, next);
     return;
   }
-  const profiles = await getAllProfiles();
-  profiles[userId] = {
-    ...(profiles[userId] ?? {}),
-    ...data,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeJsonFile(userProfilesPath, profiles);
+  await serializeProfilesWrite(async () => {
+    const profiles = await getAllProfiles();
+    profiles[userId] = {
+      ...(profiles[userId] ?? {}),
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeJsonFile(userProfilesPath, profiles);
+  });
+}
+
+/**
+ * JSON-store only: atomic read-modify-write of ONE profile under the write lock.
+ *
+ * `compute` is given the current profile and returns the patch to apply, or
+ * null to make NO change. The read, the decision, and the write all happen
+ * inside one serialized critical section, so a "skip if already X" check cannot
+ * be raced by a concurrent writer. Returns true iff a patch was written.
+ *
+ * Mongo callers must NOT use this — they express the same guard as a conditional
+ * DB update (atomic across instances). This is the single-instance JSON path.
+ */
+export async function atomicMutateProfileJson(
+  userId: string,
+  compute: (current: UserProfileData) => Partial<UserProfileData> | null,
+): Promise<boolean> {
+  return serializeProfilesWrite(async () => {
+    const profiles = await getAllProfiles();
+    const patch = compute(profiles[userId] ?? {});
+    if (!patch) return false;
+    profiles[userId] = {
+      ...(profiles[userId] ?? {}),
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    await writeJsonFile(userProfilesPath, profiles);
+    return true;
+  });
 }
 
 async function getFollowsData(): Promise<FollowsData> {

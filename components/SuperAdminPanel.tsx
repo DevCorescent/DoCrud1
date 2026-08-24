@@ -6766,17 +6766,55 @@ function InfinityTab() {
   const [grantPeriod, setGrantPeriod] = useState<'monthly' | '3m' | '6m' | 'annual'>('monthly');
   const [acting, setActing] = useState(false);
   const [actionMsg, setActionMsg] = useState('');
+  /* Bulk activation: counts come from the server (active-Infinity based), and the
+     button drives a server-side bulk grant — the browser never decides who is
+     eligible. */
+  const [counts, setCounts] = useState<{ totalUsers: number; premiumCount: number; nonPremiumCount: number } | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState('');
+  const [bulkErr, setBulkErr] = useState('');
 
   const loadData = useCallback(async () => {
-    const [dash, subs] = await Promise.all([
+    const [dash, subs, cnt] = await Promise.all([
       fetch('/api/super-admin/dashboard').then((r) => r.json()).catch(() => null),
       fetch('/api/super-admin/infinity').then((r) => r.json()).catch(() => ({ subscribers: [] })),
+      fetch('/api/super-admin/infinity/bulk-activate').then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ]);
     if (dash) setData(dash as FullDashboardData);
     setSubscribers((subs?.subscribers ?? []) as InfinitySubscriber[]);
+    if (cnt && typeof cnt.totalUsers === 'number') setCounts(cnt);
     setLoading(false);
     setSubLoading(false);
   }, []);
+
+  async function handleBulkActivate() {
+    if (bulkBusy) return;
+    if (counts && counts.nonPremiumCount === 0) return;
+    const confirmed = window.confirm(
+      'You are about to activate Infinity Premium for all users who do not currently have active Infinity Premium. Existing premium users will not be changed. Continue?',
+    );
+    if (!confirmed) return;
+    setBulkBusy(true); setBulkMsg(''); setBulkErr('');
+    try {
+      const res = await fetch('/api/super-admin/infinity/bulk-activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d?.success) { setBulkErr(d?.error || 'Bulk activation failed.'); return; }
+      setBulkMsg(
+        d.activatedCount > 0
+          ? `✓ Infinity Premium activated for ${d.activatedCount.toLocaleString('en-IN')} user${d.activatedCount === 1 ? '' : 's'}.${d.failedCount ? ` ${d.failedCount} failed.` : ''}`
+          : 'All users already have Infinity Premium.',
+      );
+      await loadData();
+    } catch {
+      setBulkErr('Bulk activation failed. Please try again.');
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -6832,6 +6870,46 @@ function InfinityTab() {
           <div className="text-3xl font-bold text-white">{fmtRev(inf.revenueLast30DaysPaise)}</div>
           <div className="text-xs text-zinc-500 mt-1">Infinity product type · paid transactions</div>
         </div>
+      </div>
+
+      {/* Bulk activation */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+        <SectionHeader title="Bulk Activation" sub="Activate Infinity Premium for every user who is not already premium" />
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-widest text-zinc-500">Premium users</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-400 tabular-nums">{counts ? counts.premiumCount.toLocaleString('en-IN') : '—'}</div>
+          </div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-widest text-zinc-500">Non-premium users</div>
+            <div className="mt-1 text-2xl font-bold text-amber-400 tabular-nums">{counts ? counts.nonPremiumCount.toLocaleString('en-IN') : '—'}</div>
+          </div>
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-widest text-zinc-500">Total users</div>
+            <div className="mt-1 text-2xl font-bold text-white tabular-nums">{counts ? counts.totalUsers.toLocaleString('en-IN') : '—'}</div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => void handleBulkActivate()}
+          disabled={bulkBusy || (counts != null && counts.nonPremiumCount === 0)}
+          className="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-zinc-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {bulkBusy && <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-950/30 border-t-zinc-950" />}
+          {bulkBusy
+            ? 'Activating…'
+            : counts && counts.nonPremiumCount === 0
+              ? 'All users are premium'
+              : `Activate for All Non-Premium${counts ? ` (${counts.nonPremiumCount.toLocaleString('en-IN')})` : ''}`}
+        </button>
+
+        {bulkMsg && (
+          <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{bulkMsg}</div>
+        )}
+        {bulkErr && (
+          <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{bulkErr}</div>
+        )}
       </div>
 
       {/* Grant / Revoke controls */}

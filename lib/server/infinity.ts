@@ -1,4 +1,4 @@
-import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
+import { getProfileData, getAllProfiles, updateProfileData, atomicMutateProfileJson, type UserProfileData } from '@/lib/server/user-profiles';
 import { getDbPool, getMongoDb } from '@/lib/server/database';
 import {
   INFINITY_MONTHLY_PAISE,
@@ -110,11 +110,19 @@ interface ActivateOpts {
  * - Renewal: extends expiresAt from current expiry (or now if already expired),
  *   increments renewalCount, updates orderId/paymentId
  */
-export async function activateInfinity(userId: string, opts: ActivateOpts = {}): Promise<void> {
-  const profile = await getProfileData(userId);
-  const period  = normalizeInfinityPeriod(opts.period);
-  const days    = PERIOD_DAYS[period];
-  const now     = new Date();
+/**
+ * The exact profile patch an activation/renewal writes, given the CURRENT
+ * profile. Extracted so activateInfinity() and the atomic bulk path
+ * (activateInfinityIfInactive) compute expiry/renewal IDENTICALLY — there is
+ * one definition of Infinity semantics, not two.
+ */
+function computeInfinityActivationFields(
+  profile: UserProfileData,
+  opts: ActivateOpts,
+  now: Date,
+): Partial<UserProfileData> {
+  const period = normalizeInfinityPeriod(opts.period);
+  const days   = PERIOD_DAYS[period];
 
   const isRenewal = !!profile.docrudInfinity;
 
@@ -128,7 +136,7 @@ export async function activateInfinity(userId: string, opts: ActivateOpts = {}):
 
   const expiresAt = addDays(baseDate, days);
 
-  await updateProfileData(userId, {
+  return {
     docrudInfinity:              true,
     docrudGo:                    true,   // ensures badge shows in nav immediately
     docrudInfinityPurchasedAt:   profile.docrudInfinityPurchasedAt ?? now.toISOString(),
@@ -144,6 +152,77 @@ export async function activateInfinity(userId: string, opts: ActivateOpts = {}):
     docrudDrivePlanGb:           INFINITY_DRIVE_GB,
     docrudDrivePlanPurchasedAt:  profile.docrudDrivePlanPurchasedAt ?? now.toISOString(),
     docrudDrivePlanPeriod:       period,
+  };
+}
+
+export async function activateInfinity(userId: string, opts: ActivateOpts = {}): Promise<void> {
+  const profile = await getProfileData(userId);
+  await updateProfileData(userId, computeInfinityActivationFields(profile, opts, new Date()));
+}
+
+/**
+ * Activate Infinity for a user ONLY IF they are not already active — atomically.
+ * Returns true if this call activated them, false if they were already active
+ * (or a concurrent racer activated them first).
+ *
+ * This closes the bulk-activation TOCTOU: the "is this user already premium?"
+ * check and the write happen as ONE indivisible step, so two concurrent bulk
+ * requests can never both activate/renew the same user.
+ *
+ *  - Mongo: a single conditional updateOne. The filter encodes "not active"
+ *    (no Infinity, or expired). Only the first racer matches and writes; the
+ *    second finds nothing to match and, on the upsert path, hits a duplicate
+ *    _id (11000) — either way it is a no-op. Atomic across processes/instances.
+ *  - JSON: the read-check-write runs inside the storage write lock, so on this
+ *    single process no other writer can interleave.
+ *
+ * Fields are computed by the SAME computeInfinityActivationFields() used by
+ * activateInfinity(), so expiry/renewal/grantedFree semantics are identical.
+ */
+export async function activateInfinityIfInactive(userId: string, opts: ActivateOpts = {}): Promise<boolean> {
+  if (getDbPool()) {
+    const now = new Date();
+    const profile = await getProfileData(userId);
+    // Fast path: already active → never touch it (also spares an exception).
+    if (profileHasActiveInfinity(profile, now.getTime())) return false;
+
+    const fields = computeInfinityActivationFields(profile, opts, now);
+    const db = await getMongoDb();
+    if (!db) {
+      // No Mongo handle despite a pool: fall back to the non-atomic path rather
+      // than fail the whole bulk. Logged so the degraded mode is visible.
+      console.warn('[infinity] activateInfinityIfInactive: no Mongo db handle, using non-atomic activate');
+      await updateProfileData(userId, fields);
+      return true;
+    }
+    const nowIso = now.toISOString();
+    // CAS guard: write only while the user is still not active. `$lt` on the
+    // ISO expiry is a chronological compare (all our timestamps are ...Z ISO).
+    const notActive = {
+      _id: userId,
+      $or: [
+        { docrudInfinity: { $ne: true } },
+        { docrudInfinityExpiresAt: { $lt: nowIso } },
+      ],
+    } as Record<string, unknown>;
+    try {
+      const res = await db.collection('user_profiles').updateOne(
+        notActive,
+        { $set: { ...fields, updatedAt: nowIso } },
+        { upsert: true },
+      );
+      return (res.upsertedCount ?? 0) > 0 || (res.modifiedCount ?? 0) > 0 || (res.matchedCount ?? 0) > 0;
+    } catch (err: unknown) {
+      // A concurrent racer created/activated the row first → duplicate _id.
+      if ((err as { code?: number })?.code === 11000) return false;
+      throw err;
+    }
+  }
+
+  // JSON store: the guard + write are one serialized critical section.
+  return atomicMutateProfileJson(userId, (current) => {
+    if (profileHasActiveInfinity(current, Date.now())) return null; // already active → skip
+    return computeInfinityActivationFields(current, opts, new Date());
   });
 }
 
@@ -236,4 +315,99 @@ export async function listInfinitySubscribers(): Promise<InfinitySubscriber[]> {
   return results.sort((a, b) =>
     (b.purchasedAt ?? '').localeCompare(a.purchasedAt ?? ''),
   );
+}
+
+/* ── Bulk grant (Super Admin) ───────────────────────────────────────
+ *
+ * "Active Infinity" is decided the SAME way getInfinityStatus() decides it:
+ * the flag is on AND the expiry has not passed. The server is the only place
+ * this is evaluated — the browser never sends a user list or a premium status.
+ */
+
+/** Whether a profile currently has ACTIVE (non-expired) Infinity. */
+function profileHasActiveInfinity(
+  p: { docrudInfinity?: boolean; docrudInfinityExpiresAt?: string } | undefined,
+  now: number,
+): boolean {
+  if (!p?.docrudInfinity) return false;
+  if (p.docrudInfinityExpiresAt && new Date(p.docrudInfinityExpiresAt).getTime() < now) return false;
+  return true;
+}
+
+/**
+ * Every real user with their current active-Infinity status, computed
+ * server-side. A user with no profile row simply has no Infinity (eligible).
+ * This is the single source of truth for both the counts and the bulk grant, so
+ * the two can never disagree about who is eligible.
+ */
+async function loadUserInfinityState(): Promise<{ userIds: string[]; activeById: Map<string, boolean> }> {
+  const { getStoredUsers } = await import('@/lib/server/auth');
+  const [users, profiles] = await Promise.all([getStoredUsers(), getAllProfiles()]);
+  const now = Date.now();
+  const activeById = new Map<string, boolean>();
+  for (const u of users) activeById.set(u.id, profileHasActiveInfinity(profiles[u.id], now));
+  return { userIds: users.map((u) => u.id), activeById };
+}
+
+export interface InfinityCounts {
+  totalUsers: number;
+  /** Users with ACTIVE (non-expired) Infinity right now. */
+  premiumCount: number;
+  /** Everyone else — the exact set the bulk grant would activate. */
+  nonPremiumCount: number;
+}
+
+export async function getInfinityCounts(): Promise<InfinityCounts> {
+  const { userIds, activeById } = await loadUserInfinityState();
+  const premiumCount = userIds.reduce((n, id) => n + (activeById.get(id) ? 1 : 0), 0);
+  return { totalUsers: userIds.length, premiumCount, nonPremiumCount: userIds.length - premiumCount };
+}
+
+export interface BulkActivateResult {
+  totalUsers: number;
+  /** Users skipped because they already had active Infinity (idempotency). */
+  alreadyPremiumCount: number;
+  /** Users actually activated by this run. */
+  activatedCount: number;
+  /** Users whose activation threw (kept honest; the rest still succeed). */
+  failedCount: number;
+}
+
+/**
+ * Grants Infinity to every user who does NOT currently have active Infinity,
+ * reusing the exact single-user activateInfinity() path (same period, expiry and
+ * grantedFree semantics as a manual admin grant / referral bonus). Users who are
+ * already active are left completely untouched, which makes a second run a no-op
+ * (0 activated) — the idempotency guarantee.
+ */
+export async function bulkActivateInfinityForNonPremium(
+  opts: { period?: InfinityPeriod } = {},
+): Promise<BulkActivateResult> {
+  const { userIds } = await loadUserInfinityState();
+  const period = normalizeInfinityPeriod(opts.period);
+
+  let activatedCount = 0;
+  let alreadyPremiumCount = 0;
+  let failedCount = 0;
+  // Every user goes through the ATOMIC check-and-activate. Eligibility is no
+  // longer decided from a pre-scan snapshot (which a concurrent request could
+  // race) — each user's "already active?" test and write are one atomic step,
+  // so two concurrent bulk runs activate each user at most once.
+  for (const id of userIds) {
+    try {
+      const didActivate = await activateInfinityIfInactive(id, { period, grantedFree: true });
+      if (didActivate) activatedCount += 1;
+      else alreadyPremiumCount += 1;
+    } catch (err) {
+      console.error('[infinity] bulk activation failed for user', id, err);
+      failedCount += 1;
+    }
+  }
+
+  return {
+    totalUsers: userIds.length,
+    alreadyPremiumCount,
+    activatedCount,
+    failedCount,
+  };
 }

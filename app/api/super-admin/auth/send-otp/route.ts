@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSuperAdminOtpSession, getSuperAdminEmail } from '@/lib/server/super-admin-auth';
 import { sendTrackedMail } from '@/lib/server/mailer';
+import { enforceRateLimits, getClientIp, rateKeyEmail, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +9,15 @@ export async function POST(req: NextRequest) {
     if (!email || typeof email !== 'string') {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
+
+    /* Throttle OTP sends by account and IP to prevent email/OTP flooding. This
+       runs before any account lookup, so it never reveals whether the email is
+       the super admin. */
+    const limited = await enforceRateLimits([
+      { key: `otp:send:superadmin:account:${rateKeyEmail(email)}`, policy: RATE_POLICIES.otpSendAccount },
+      { key: `otp:send:superadmin:ip:${getClientIp(req)}`, policy: RATE_POLICIES.otpSendIp },
+    ]);
+    if (limited) return limited;
 
     const saEmail = await getSuperAdminEmail();
     if (!saEmail) {

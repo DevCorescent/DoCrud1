@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import TurnstileWidget from '@/components/security/TurnstileWidget';
 
 type Stage = 'login' | 'success';
 
@@ -14,6 +15,7 @@ export default function SuperAdminAuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [checking, setChecking] = useState(true);
+  const [captchaToken, setCaptchaToken] = useState('');
 
   useEffect(() => {
     fetch('/api/super-admin/auth/check')
@@ -37,7 +39,7 @@ export default function SuperAdminAuthPage() {
       const res = await fetch('/api/super-admin/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: email.trim(), password, captchaToken }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -138,6 +140,7 @@ export default function SuperAdminAuthPage() {
               {error && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-red-400 text-sm">{error}</div>
               )}
+              <TurnstileWidget onToken={setCaptchaToken} action="superadmin_login" />
               <button
                 type="submit"
                 disabled={loading}

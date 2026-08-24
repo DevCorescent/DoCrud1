@@ -4,11 +4,19 @@ import { createPasswordHash, isValidEmail, normalizeEmail } from '@/lib/server/s
 import { applyRoadmapPromotionToSubscription, getDefaultPublicPlan } from '@/lib/server/saas';
 import { buildPolicyAcceptance } from '@/lib/policy-consent';
 import { processProfileActivation, markInviteSignedUp } from '@/lib/server/referrals';
+import { enforceRateLimits, getClientIp, RATE_POLICIES } from '@/lib/server/security/rate-limit';
+import { enforceCaptcha } from '@/lib/server/security/captcha';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // Throttle account creation per IP to blunt mass fake-signup floods.
+    const limited = await enforceRateLimits([
+      { key: `signup:individual:ip:${getClientIp(request)}`, policy: RATE_POLICIES.signupIp },
+    ]);
+    if (limited) return limited;
+
     const payload = await request.json() as {
       name?: string;
       email?: string;
@@ -17,6 +25,7 @@ export async function POST(request: NextRequest) {
       primaryUseCase?: string;
       policyAccepted?: boolean;
       referralCode?: string;
+      captchaToken?: string;
     };
 
     if (!payload.name?.trim() || !isValidEmail(payload.email || '') || !payload.password || payload.password.length < 8) {
@@ -26,6 +35,10 @@ export async function POST(request: NextRequest) {
     if (!payload.policyAccepted) {
       return NextResponse.json({ error: 'You must accept the required policies before creating a profile.' }, { status: 400 });
     }
+
+    // Bot protection (verified server-side) — after rate limiting, before any work.
+    const captchaFail = await enforceCaptcha(payload.captchaToken, { remoteIp: getClientIp(request), label: 'individual-signup' });
+    if (captchaFail) return captchaFail;
 
     const users = await getStoredUsers();
     const normalizedEmail = normalizeEmail(payload.email || '');

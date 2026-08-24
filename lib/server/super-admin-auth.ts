@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { readJsonFile, writeJsonFile, superAdminConfigPath } from '@/lib/server/storage';
+import { verifyPassword, normalizeEmail } from '@/lib/server/security';
 
 export interface SuperAdminOtpSession {
   id: string;
@@ -50,12 +51,30 @@ export interface SuperAdminConfig {
   platformFlags: SuperAdminPlatformFlags;
 }
 
-/** Hardcoded local/dev credentials — prefer env overrides when set. */
-export const HARDCODED_SUPER_ADMIN_EMAIL = 'superadmin@company.com';
-export const HARDCODED_SUPER_ADMIN_PASSWORD = 'superadmin123';
+/**
+ * Super-admin credentials come ONLY from server-side environment configuration —
+ * never from source code. Configure:
+ *   SUPER_ADMIN_EMAIL          — the admin email
+ *   SUPER_ADMIN_PASSWORD_HASH  — "<salt>:<hash>" produced by the project's own
+ *                                scrypt hasher, i.e. `${passwordSalt}:${passwordHash}`
+ *                                from createPasswordHash() in lib/server/security.ts.
+ * If either is absent or malformed, super-admin password login FAILS CLOSED.
+ * The plaintext password is never stored in code, config, or logs.
+ */
+function getConfiguredSuperAdmin(): { email: string; salt: string; hash: string } | null {
+  const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const combined = process.env.SUPER_ADMIN_PASSWORD_HASH?.trim();
+  if (!email || !combined) return null;
+  const sep = combined.indexOf(':');
+  if (sep <= 0) return null;
+  const salt = combined.slice(0, sep);
+  const hash = combined.slice(sep + 1);
+  if (!salt || !hash) return null;
+  return { email, salt, hash };
+}
 
 const DEFAULT_CONFIG: SuperAdminConfig = {
-  email: HARDCODED_SUPER_ADMIN_EMAIL,
+  email: '',
   otpSessions: [],
   activeSessions: [],
   auditLog: [],
@@ -91,22 +110,42 @@ function generateToken(): string {
 }
 
 export async function getSuperAdminEmail(): Promise<string> {
-  // Hardcoded credentials take priority so login always works with known local/dev creds
-  return HARDCODED_SUPER_ADMIN_EMAIL;
+  // Environment is the source of truth; fall back to an email persisted by the
+  // one-time setup flow. Empty string ⇒ not configured, so callers fail closed.
+  const envEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  if (envEmail) return envEmail;
+  const cfg = await readConfig();
+  return cfg.email?.trim().toLowerCase() || '';
 }
 
 export async function verifySuperAdminPassword(email: string, password: string): Promise<{ valid: boolean; email?: string; error?: string }> {
-  const normalized = email.trim().toLowerCase();
+  const normalized = normalizeEmail(email || '');
 
   if (!normalized || !password) {
-    return { valid: false, error: 'Email and password are required' };
+    return { valid: false, error: 'Invalid email or password' };
   }
 
-  if (normalized === HARDCODED_SUPER_ADMIN_EMAIL && password === HARDCODED_SUPER_ADMIN_PASSWORD) {
-    return { valid: true, email: HARDCODED_SUPER_ADMIN_EMAIL };
+  const creds = getConfiguredSuperAdmin();
+  if (!creds) {
+    // Fail closed. Controlled config error only — never logs the secret or hash,
+    // and never tells the unauthenticated client which variable is missing.
+    console.error('[super-admin] login unavailable: SUPER_ADMIN_EMAIL and/or SUPER_ADMIN_PASSWORD_HASH not configured');
+    return { valid: false, error: 'Invalid email or password' };
   }
 
-  return { valid: false, error: 'Invalid email or password' };
+  // Email must match, then the password is checked with the project's existing
+  // scrypt verifier (constant-time compare). A wrong email, wrong password, or a
+  // malformed configured hash all return the same generic failure and never
+  // reach a valid state. The old hardcoded credentials no longer work unless a
+  // matching hash is explicitly configured via the environment.
+  if (normalized !== creds.email) {
+    return { valid: false, error: 'Invalid email or password' };
+  }
+  if (!verifyPassword(password, creds.hash, creds.salt)) {
+    return { valid: false, error: 'Invalid email or password' };
+  }
+
+  return { valid: true, email: creds.email };
 }
 
 export async function setSuperAdminEmail(email: string): Promise<void> {

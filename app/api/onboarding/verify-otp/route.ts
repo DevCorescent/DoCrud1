@@ -4,6 +4,7 @@ import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
 import { otpSessionsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { updateProfileData } from '@/lib/server/user-profiles';
 import { sendTrackedMail } from '@/lib/server/mailer';
+import { enforceRateLimits, refundRateLimit, getClientIp, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +62,15 @@ export async function POST(req: NextRequest) {
     const actor = await getActor(emailFallback || undefined);
     if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    // Throttle OTP-verify by account + IP, on top of the existing per-session
+    // 5-attempt cap, so an attacker cannot brute-force across many sessions.
+    const acctKey = `otp:verify:emailverify:account:${actor.id}`;
+    const otpLimited = await enforceRateLimits([
+      { key: acctKey, policy: RATE_POLICIES.otpVerifyAccount },
+      { key: `otp:verify:emailverify:ip:${getClientIp(req)}`, policy: RATE_POLICIES.otpVerifyIp },
+    ]);
+    if (otpLimited) return otpLimited;
+
     const code = String(body.otp || '').trim();
     if (!/^\d{6}$/.test(code)) {
       return NextResponse.json({ error: 'Enter the 6-digit OTP.' }, { status: 400 });
@@ -101,6 +111,9 @@ export async function POST(req: NextRequest) {
     raw.verifiedAt = new Date().toISOString();
     sessions.splice(idx, 1);
     await writeJsonFile(otpSessionsPath, { sessions });
+
+    // Success → refund the account verify counter (only failures accumulate).
+    await refundRateLimit(acctKey, RATE_POLICIES.otpVerifyAccount);
 
     // Update user profile
     await updateProfileData(actor.id, {

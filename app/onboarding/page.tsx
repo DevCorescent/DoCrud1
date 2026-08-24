@@ -9,6 +9,7 @@ import AnimatedLoginBackground, {
 } from '@/components/AnimatedLoginBackground';
 import AccountTypeToggle, { normalizeAccountKind, type AccountKind } from '@/components/AccountTypeToggle';
 import BusinessSignupForm from '@/components/BusinessSignupForm';
+import TurnstileWidget from '@/components/security/TurnstileWidget';
 import {
   ArrowRight, Award, Bot, Briefcase, CheckCircle2, Eye, EyeOff,
   FileSignature, FileText, FormInput, Globe,
@@ -1337,6 +1338,8 @@ function OnboardingPageInner() {
      normal authenticated-redirect below is paused so it can't bounce a
      wrong-type session onward. */
   const [googleBusy, setGoogleBusy] = useState(false);
+  /* Bot-protection token for the individual signup POST (server-verified). */
+  const [captchaToken, setCaptchaToken] = useState('');
   const oauthReturn = searchParams?.get('oauth') === 'return';
   const oauthReturnRef = useRef(oauthReturn);
   oauthReturnRef.current = oauthReturn;
@@ -1800,7 +1803,7 @@ function OnboardingPageInner() {
   async function handleSignup() {
     setSLoading(true); setSError('');
     try {
-      const res = await fetch('/api/individual/signup', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ name:sName.trim(), email:sEmail.trim(), password:sPass, policyAccepted:true, referralCode: referralCode || undefined }) });
+      const res = await fetch('/api/individual/signup', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ name:sName.trim(), email:sEmail.trim(), password:sPass, policyAccepted:true, referralCode: referralCode || undefined, captchaToken }) });
       const d = await res.json() as { error?: string };
       if (!res.ok) { setSError(d.error ?? 'Signup failed.'); return; }
 
@@ -2303,6 +2306,7 @@ function OnboardingPageInner() {
 
             {/* CTA */}
             <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-4 space-y-2.5">
+              <TurnstileWidget onToken={setCaptchaToken} action="individual_signup" />
               <button onClick={() => void handleSignup()}
                 disabled={sLoading || !sName.trim() || !sEmail.trim() || sPass.length < 8}
                 className={`h-11 w-full ${WHITE_BTN} disabled:opacity-28 text-[13.5px]`}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { getSuperAdminSessionFromRequest } from '@/lib/server/super-admin-auth';
 import {
   publicFaceApplicationsPath,
   userProfilesPath,
@@ -12,9 +12,16 @@ import {
 } from '@/lib/server/public-face-emails';
 import type { PublicFaceApplication, PublicFaceBadgeInfo } from '@/types/document';
 
-async function verifySuperAdmin() {
-  const cookieStore = await cookies();
-  return cookieStore.get('sa_session')?.value === 'authenticated';
+/**
+ * Validate the super-admin session the SAME way every other super-admin route
+ * does: the sa_session cookie must be a real session TOKEN present in the
+ * server-side active-session store (checked for existence + expiry), not a
+ * client-guessable literal. Never trusts a raw cookie string, body, header, or
+ * query value.
+ */
+async function verifySuperAdmin(req: NextRequest) {
+  const session = await getSuperAdminSessionFromRequest(req);
+  return session.valid;
 }
 
 interface UserProfile {
@@ -23,7 +30,7 @@ interface UserProfile {
 }
 
 export async function GET(req: NextRequest) {
-  if (!(await verifySuperAdmin())) {
+  if (!(await verifySuperAdmin(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -47,7 +54,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!(await verifySuperAdmin())) {
+  if (!(await verifySuperAdmin(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -128,7 +135,7 @@ export async function POST(req: NextRequest) {
 
 // GET single application (with identity proof for admin)
 export async function PATCH(req: NextRequest) {
-  if (!(await verifySuperAdmin())) {
+  if (!(await verifySuperAdmin(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createBusinessSignupOtpSession } from '@/lib/server/otp-sessions';
 import { sendTrackedMail } from '@/lib/server/mailer';
+import { enforceRateLimits, getClientIp, rateKeyEmail, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,14 @@ function escapeHtmlLite(value: string) {
 export async function POST(request: NextRequest) {
   try {
     const { email }: { email?: string } = await request.json();
+
+    // Throttle OTP sends by account + IP to prevent verification-email flooding.
+    const limited = await enforceRateLimits([
+      { key: `otp:send:bizsignup:account:${rateKeyEmail(email)}`, policy: RATE_POLICIES.otpSendAccount },
+      { key: `otp:send:bizsignup:ip:${getClientIp(request)}`, policy: RATE_POLICIES.otpSendIp },
+    ]);
+    if (limited) return limited;
+
     const origin = request.nextUrl.origin;
 
     const { sessionId, otp, expiresAt } = await createBusinessSignupOtpSession(String(email || ''));

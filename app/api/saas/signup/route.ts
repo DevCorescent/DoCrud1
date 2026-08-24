@@ -8,6 +8,8 @@ import { provisionBusinessAccount } from '@/lib/server/business-provisioning';
 import { assertBusinessSignupOtpVerified } from '@/lib/server/otp-sessions';
 import { sendTrackedMail } from '@/lib/server/mailer';
 import { processProfileActivation } from '@/lib/server/referrals';
+import { enforceRateLimits, getClientIp, RATE_POLICIES } from '@/lib/server/security/rate-limit';
+import { enforceCaptcha } from '@/lib/server/security/captcha';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,12 @@ function escapeHtmlLite(value: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Throttle workspace creation per IP to blunt mass fake-signup floods.
+    const limited = await enforceRateLimits([
+      { key: `signup:business:ip:${getClientIp(request)}`, policy: RATE_POLICIES.signupIp },
+    ]);
+    if (limited) return limited;
+
     const payload = await request.json() as {
       name?: string;
       email?: string;
@@ -30,11 +38,16 @@ export async function POST(request: NextRequest) {
       policyAccepted?: boolean;
       otpSessionId?: string;
       referralCode?: string;
+      captchaToken?: string;
     };
 
     if (!payload.name?.trim() || !payload.organizationName?.trim() || !isValidEmail(payload.email || '') || !payload.password || payload.password.length < 8) {
       return NextResponse.json({ error: 'Name, organization, valid email, and password with at least 8 characters are required' }, { status: 400 });
     }
+
+    // Bot protection (verified server-side) — after rate limiting, before any work.
+    const captchaFail = await enforceCaptcha(payload.captchaToken, { remoteIp: getClientIp(request), label: 'business-signup' });
+    if (captchaFail) return captchaFail;
 
     if (!payload.policyAccepted) {
       return NextResponse.json({ error: 'You must accept the required policies before creating a workspace.' }, { status: 400 });

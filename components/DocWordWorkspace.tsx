@@ -72,6 +72,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { buildAbsoluteAppUrl, buildQrImageUrl } from '@/lib/url';
 import { useCollabEngine } from '@/lib/collabEngine';
+import { sanitizeDocWordHtml } from '@/lib/security/html-sanitizer';
 import CollabBar from '@/components/CollabBar';
 import { DocWordAccessGroup, DocWordBlock, DocWordDocument, DocWordSelectionComment, DocWordTrackedChange, FileDirectoryLocker, SecureFileTransfer } from '@/types/document';
 import PdfStudio from '@/components/PdfStudio';
@@ -664,7 +665,7 @@ function createBlock(type: DocWordBlock['type'] = 'paragraph', html = ''): DocWo
 }
 
 function buildHtml(blocks: DocWordBlock[]) {
-  return blocks
+  const assembled = blocks
     .map((block) => {
       if (block.type === 'image') {
         return block.meta?.src
@@ -693,6 +694,9 @@ function buildHtml(blocks: DocWordBlock[]) {
       return `<${tag}>${block.html || ''}</${tag}>`;
     })
     .join('\n');
+  // Sanitize the fully-assembled HTML (block content AND interpolated
+  // image/table-cell values) before it is rendered/printed/exported.
+  return sanitizeDocWordHtml(assembled);
 }
 
 function buildDocumentMarkup(document: DocWordDocument) {
@@ -776,8 +780,9 @@ function BlockContentEditable({
 
   useEffect(() => {
     if (!ref.current) return;
-    if (ref.current.innerHTML !== block.html) {
-      ref.current.innerHTML = block.html || '';
+    const safe = sanitizeDocWordHtml(block.html);
+    if (ref.current.innerHTML !== safe) {
+      ref.current.innerHTML = safe;
     }
   }, [block.html]);
 
@@ -833,8 +838,9 @@ function DocPageRegionEditable({
   useEffect(() => {
     if (!ref.current) return;
     if (isFocused) return;
-    if (ref.current.innerHTML !== normalizedHtml) {
-      ref.current.innerHTML = normalizedHtml;
+    const safe = sanitizeDocWordHtml(normalizedHtml);
+    if (ref.current.innerHTML !== safe) {
+      ref.current.innerHTML = safe;
     }
   }, [isFocused, normalizedHtml]);
 
@@ -914,7 +920,7 @@ function DocWordPreviewPage({
         {hasHeader ? (
           <div
             className="relative z-[1] mb-6 rounded-t-[0.9rem] border-b border-slate-200 pb-4 text-sm leading-6 text-slate-600"
-            dangerouslySetInnerHTML={{ __html: document.headerHtml!.trim() }}
+            dangerouslySetInnerHTML={{ __html: sanitizeDocWordHtml(document.headerHtml) }}
           />
         ) : null}
 
@@ -927,7 +933,7 @@ function DocWordPreviewPage({
           {hasFooter ? (
             <div
               className="relative z-[1] mt-8 rounded-b-[0.9rem] border-t border-slate-200 pt-4 text-sm leading-6 text-slate-600"
-              dangerouslySetInnerHTML={{ __html: document.footerHtml!.trim() }}
+              dangerouslySetInnerHTML={{ __html: sanitizeDocWordHtml(document.footerHtml) }}
             />
           ) : null}
         </div>
@@ -5350,7 +5356,7 @@ export default function DocWordWorkspace() {
                           previewMode ? (
                             <div
                               className="relative z-[1] mb-6 border-b border-slate-200/80 pb-5 text-sm leading-6 text-slate-600"
-                              dangerouslySetInnerHTML={{ __html: currentDocument.headerHtml!.trim() }}
+                              dangerouslySetInnerHTML={{ __html: sanitizeDocWordHtml(currentDocument.headerHtml) }}
                             />
                           ) : (
                             <div className="relative z-[1] mb-6 border-b border-slate-200 pb-4 text-sm leading-6">
@@ -5641,7 +5647,7 @@ export default function DocWordWorkspace() {
                             previewMode ? (
                               <div
                                 className="relative z-[1] mt-8 border-t border-slate-200/80 pt-5 text-sm leading-6 text-slate-600"
-                                dangerouslySetInnerHTML={{ __html: currentDocument.footerHtml!.trim() }}
+                                dangerouslySetInnerHTML={{ __html: sanitizeDocWordHtml(currentDocument.footerHtml) }}
                               />
                             ) : (
                               <div className="relative z-[1] mt-auto border-t border-slate-200 pt-4 text-sm leading-6">

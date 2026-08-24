@@ -4,12 +4,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
 import { createAccountActionOtp } from '@/lib/server/otp-sessions';
 import { sendAccountActionOtpEmail } from '@/lib/server/account-emails';
+import { enforceRateLimits, getClientIp, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 
 export async function POST(req: NextRequest) {
   const session = await getAuthSession();
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
+  // Throttle account-action OTP emails per user + IP to prevent email flooding.
+  const otpLimited = await enforceRateLimits([
+    { key: `otp:send:accountaction:user:${session.user.id}`, policy: RATE_POLICIES.otpSendAccount },
+    { key: `otp:send:accountaction:ip:${getClientIp(req)}`, policy: RATE_POLICIES.otpSendIp },
+  ]);
+  if (otpLimited) return otpLimited;
 
   let body: { action?: string };
   try { body = await req.json(); } catch {

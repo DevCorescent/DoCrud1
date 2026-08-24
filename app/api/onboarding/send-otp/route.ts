@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import { getStoredUsers } from '@/lib/server/auth';
 import { otpSessionsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getMailSettings } from '@/lib/server/settings';
+import { enforceRateLimits, getClientIp, rateKeyEmail, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 import {
   appendEmailOutboxEvent,
   createOutboundEmailId,
@@ -334,6 +335,14 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as { email?: string };
     const email = String(body.email ?? '').toLowerCase().trim();
     if (!email) return NextResponse.json({ error: 'Email is required.' }, { status: 400 });
+
+    // Throttle OTP sends by account + IP (runs before the account lookup, so it
+    // does not reveal whether the email is registered).
+    const otpLimited = await enforceRateLimits([
+      { key: `otp:send:emailverify:account:${rateKeyEmail(email)}`, policy: RATE_POLICIES.otpSendAccount },
+      { key: `otp:send:emailverify:ip:${getClientIp(req)}`, policy: RATE_POLICIES.otpSendIp },
+    ]);
+    if (otpLimited) return otpLimited;
 
     // Find the registered user for this email
     const users = await getStoredUsers();

@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import { User } from '@/types/document';
 import { normalizeEmail, verifyPassword } from '@/lib/server/security';
+import { rateLimit, refundRateLimit, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 import { applyRoadmapPromotionToSubscription, getDefaultPublicPlan, getEffectiveSaasPlanForUser, isSubscriptionPeriodExpired } from '@/lib/server/saas-plans';
 import { buildPolicyAcceptance } from '@/lib/policy-consent';
 import { getAuthSettings, getAuthSettingsSync } from '@/lib/server/settings';
@@ -12,10 +13,6 @@ import { readOAuthIntent, type OAuthIntent } from '@/lib/server/oauth-intent';
 
 export type { StoredUser };
 export { getStoredUsers, saveStoredUsers };
-
-function getLegacyPassword(user: User) {
-  return user.role === 'client' || user.role === 'employee' ? `${user.role}123` : `${user.role}123`;
-}
 
 function getAuthSecret() {
   return process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
@@ -171,6 +168,19 @@ export async function authenticateUser(identifier: string, password: string, pol
   const normalizedIdentifier = identifier.trim();
   const normalizedEmail = normalizeEmail(identifier);
   const normalizedLoginId = normalizeLoginId(identifier);
+
+  /* Brute-force protection for credentials login, keyed by account. This is the
+     primary defense: an attacker guessing one account's password is blocked
+     after RATE_POLICIES.loginAccount.limit failures regardless of source IP. A
+     blocked attempt returns null (generic invalid-credentials — no enumeration,
+     no separate 429 through the NextAuth credentials flow). Successful logins
+     are refunded below so only failures accumulate. */
+  const loginKey = `login:account:${normalizedEmail || normalizedLoginId}`;
+  const rl = await rateLimit(loginKey, RATE_POLICIES.loginAccount);
+  if (!rl.allowed) {
+    return null;
+  }
+
   const users = await getStoredUsers();
 
   // Find matching user — include deactivated accounts so they can log back in
@@ -192,9 +202,7 @@ export async function authenticateUser(identifier: string, password: string, pol
     return null;
   }
 
-  const isValidPassword =
-    verifyPassword(password, user.passwordHash, user.passwordSalt) ||
-    password === getLegacyPassword(user);
+  const isValidPassword = verifyPassword(password, user.passwordHash, user.passwordSalt);
 
   if (!isValidPassword) {
     return null;
@@ -232,6 +240,9 @@ export async function authenticateUser(identifier: string, password: string, pol
       )
       .catch(() => {});
   }
+
+  // Success → refund the account counter so only FAILED attempts accumulate.
+  await refundRateLimit(loginKey, RATE_POLICIES.loginAccount);
 
   const { passwordHash, passwordSalt, ...safeUser } = updatedUser;
   return {

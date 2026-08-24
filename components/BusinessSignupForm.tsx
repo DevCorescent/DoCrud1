@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
+import TurnstileWidget from '@/components/security/TurnstileWidget';
 import {
   ArrowLeft,
   ArrowRight,
@@ -288,6 +289,8 @@ export default function BusinessSignupForm({
 
   // step -1 = post-signup referral share panel
   const [step, setStep] = useState(0);
+  /* Bot-protection token for the business signup POST (server-verified). */
+  const [captchaToken, setCaptchaToken] = useState('');
   const [mounted, setMounted] = useState(false);
 
   const [form, setForm] = useState({
@@ -405,6 +408,7 @@ export default function BusinessSignupForm({
           policyAccepted: true,
           otpSessionId,
           referralCode: referralCode || undefined,
+          captchaToken,
         }),
       });
       const payload = await response.json().catch(() => null);
@@ -933,6 +937,13 @@ export default function BusinessSignupForm({
                 <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] px-4 py-3 text-[12.5px] text-emerald-400"
                   style={{ animation: 'obScaleIn 0.2s ease both' }}>
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />{success}
+                </div>
+              )}
+
+              {/* Bot protection on the final submit step (server-verified). */}
+              {step === STEPS.length - 1 && (
+                <div className="mt-6">
+                  <TurnstileWidget onToken={setCaptchaToken} action="business_signup" />
                 </div>
               )}
 

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { DocWordBlock, DocWordDocument } from '@/types/document';
 import { buildAbsoluteAppUrl } from '@/lib/url';
 import { cn } from '@/lib/utils';
+import { sanitizeDocWordHtml } from '@/lib/security/html-sanitizer';
 
 function stripHtml(value: string) {
   return value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -23,7 +24,7 @@ function estimateReadTime(value: string) {
 }
 
 function buildHtml(blocks: DocWordBlock[]) {
-  return blocks
+  const assembled = blocks
     .map((block) => {
       if (block.type === 'image') {
         return block.meta?.src
@@ -52,6 +53,9 @@ function buildHtml(blocks: DocWordBlock[]) {
       return `<${tag}>${block.html || ''}</${tag}>`;
     })
     .join('\n');
+  // Sanitize the fully-assembled HTML (covers block content AND interpolated
+  // image/table-cell values) before export/render.
+  return sanitizeDocWordHtml(assembled);
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -74,8 +78,9 @@ function SharedEditableBlock({
 
   useEffect(() => {
     if (!ref.current) return;
-    if (ref.current.innerHTML !== block.html) {
-      ref.current.innerHTML = block.html || '';
+    const safe = sanitizeDocWordHtml(block.html);
+    if (ref.current.innerHTML !== safe) {
+      ref.current.innerHTML = safe;
     }
   }, [block.html]);
 
@@ -506,7 +511,7 @@ export default function PublicDocWordSharedPage({ token }: { token: string }) {
                         }
                       />
                     ) : (
-                      <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: block.html || '' }} />
+                      <div className="prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: sanitizeDocWordHtml(block.html) }} />
                     )}
                   </article>
                 ))}

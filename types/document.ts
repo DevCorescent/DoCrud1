@@ -480,6 +480,12 @@ export interface HiringJobPosting {
   shareUrl?: string;
   createdAt: string;
   updatedAt: string;
+  /** Origin of the posting. Absent/'hiring' = native Hiring Desk job; 'business_page' = projected from a Business Page job; 'scraper' = bulk-imported via Super Admin CSV import. */
+  source?: 'hiring' | 'business_page' | 'scraper';
+  /** Set when source==='business_page': the owning Business Page id (also used as organizationId for these postings). */
+  pageId?: string;
+  /** Optional external application URL carried through from a Business Page job. */
+  applyUrl?: string;
 }
 
 export interface HiringJobApplication {

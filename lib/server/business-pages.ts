@@ -425,6 +425,43 @@ export async function getPageJobs(pageId: string, status?: string): Promise<Busi
   return jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
+/**
+ * All business-page jobs that are live (status 'open'), each joined with a small
+ * slice of its owning page (name + ownerUserId). Used by the hiring layer to
+ * project business jobs into the Main Jobs Feed without duplicating the record —
+ * the BusinessJob stays the single source of truth here; the feed only reads it.
+ */
+export async function getAllPublishedBusinessJobs(): Promise<Array<BusinessJob & { pageName: string; pageOwnerUserId: string }>> {
+  if (getDbPool()) {
+    const db = await getMongoDb();
+    if (db) {
+      const docs = await db.collection<JobDoc>('business_page_jobs').find({ status: 'open' }).sort({ createdAt: -1 }).toArray();
+      const jobs = docs.map(stripJob);
+      const pageIds = Array.from(new Set(jobs.map((j) => j.pageId)));
+      const pages = await db.collection('business_pages').find({ _id: { $in: pageIds as any } }).toArray();
+      const pageMap = new Map(pages.map((p: any) => [String(p._id), p]));
+      return jobs
+        .map((j) => {
+          const page: any = pageMap.get(j.pageId);
+          if (!page || page.status !== 'active') return null;
+          return { ...j, pageName: page.name as string, pageOwnerUserId: page.ownerUserId as string };
+        })
+        .filter(Boolean) as Array<BusinessJob & { pageName: string; pageOwnerUserId: string }>;
+    }
+  }
+  const store = await readStore();
+  const pageMap = new Map(store.pages.map((p) => [p.id, p]));
+  return store.jobs
+    .filter((j) => j.status === 'open')
+    .map((j) => {
+      const page = pageMap.get(j.pageId);
+      if (!page || page.status !== 'active') return null;
+      return { ...j, pageName: page.name, pageOwnerUserId: page.ownerUserId };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date((b as BusinessJob).createdAt).getTime() - new Date((a as BusinessJob).createdAt).getTime()) as Array<BusinessJob & { pageName: string; pageOwnerUserId: string }>;
+}
+
 export async function createJob(data: { id: string; pageId: string; title: string; description: string; location?: string; jobType?: string; experienceLevel?: string; salaryMin?: number; salaryMax?: number; skills?: string[]; applyUrl?: string }): Promise<BusinessJob> {
   const now = new Date().toISOString();
   const newJob: BusinessJob = {

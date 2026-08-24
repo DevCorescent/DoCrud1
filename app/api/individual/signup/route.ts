@@ -6,6 +6,7 @@ import { buildPolicyAcceptance } from '@/lib/policy-consent';
 import { processProfileActivation, markInviteSignedUp } from '@/lib/server/referrals';
 import { enforceRateLimits, getClientIp, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 import { enforceCaptcha } from '@/lib/server/security/captcha';
+import { issueLoginGrant } from '@/lib/server/security/login-grant';
 
 export const dynamic = 'force-dynamic';
 

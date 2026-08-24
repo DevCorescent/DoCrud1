@@ -4,6 +4,8 @@ import GoogleProvider from 'next-auth/providers/google';
 import { User } from '@/types/document';
 import { normalizeEmail, verifyPassword } from '@/lib/server/security';
 import { rateLimit, refundRateLimit, RATE_POLICIES } from '@/lib/server/security/rate-limit';
+import { isCaptchaConfigured, verifyCaptcha } from '@/lib/server/security/captcha';
+import { verifyLoginGrant } from '@/lib/server/security/login-grant';
 import { applyRoadmapPromotionToSubscription, getDefaultPublicPlan, getEffectiveSaasPlanForUser, isSubscriptionPeriodExpired } from '@/lib/server/saas-plans';
 import { buildPolicyAcceptance } from '@/lib/policy-consent';
 import { getAuthSettings, getAuthSettingsSync } from '@/lib/server/settings';
@@ -259,10 +261,26 @@ export function buildAuthOptions(): NextAuthOptions {
         email: { label: 'Email or Login ID', type: 'text' },
         password: { label: 'Password', type: 'password' },
         policyAccepted: { label: 'Policy Accepted', type: 'text' },
+        captchaToken: { label: 'Captcha Token', type: 'text' },
+        loginGrant: { label: 'Login Grant', type: 'text' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
           return null;
+        }
+
+        // CAPTCHA gate for credentials login (server-verified; never trusts a
+        // client boolean). Accepts a fresh Turnstile token OR a short-lived,
+        // HMAC-signed login grant minted by the signup routes for the immediate
+        // post-signup auto-login (which has no fresh token). When CAPTCHA is not
+        // configured for the deployment, this is skipped (rate limiting in
+        // authenticateUser still applies).
+        if (isCaptchaConfigured()) {
+          const grantOk = verifyLoginGrant(credentials.loginGrant, credentials.email);
+          if (!grantOk) {
+            const captcha = await verifyCaptcha(credentials.captchaToken);
+            if (!captcha.ok) return null;
+          }
         }
 
         return authenticateUser(credentials.email, credentials.password, credentials.policyAccepted === 'accepted');

@@ -9,7 +9,7 @@ import AnimatedLoginBackground, {
 } from '@/components/AnimatedLoginBackground';
 import AccountTypeToggle, { normalizeAccountKind, type AccountKind } from '@/components/AccountTypeToggle';
 import BusinessSignupForm from '@/components/BusinessSignupForm';
-import TurnstileWidget from '@/components/security/TurnstileWidget';
+import { SecurityVerification, isTurnstileEnabled } from '@/components/security/SecurityVerification';
 import {
   ArrowRight, Award, Bot, Briefcase, CheckCircle2, Eye, EyeOff,
   FileSignature, FileText, FormInput, Globe,
@@ -1338,8 +1338,11 @@ function OnboardingPageInner() {
      normal authenticated-redirect below is paused so it can't bounce a
      wrong-type session onward. */
   const [googleBusy, setGoogleBusy] = useState(false);
-  /* Bot-protection token for the individual signup POST (server-verified). */
+  /* Bot-protection token for the individual signup POST (server-verified).
+     Only the current attempt's token lives here — never persisted or reused.
+     Bumping captchaResetSignal forces a fresh Turnstile challenge. */
   const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
   const oauthReturn = searchParams?.get('oauth') === 'return';
   const oauthReturnRef = useRef(oauthReturn);
   oauthReturnRef.current = oauthReturn;
@@ -2306,9 +2309,9 @@ function OnboardingPageInner() {
 
             {/* CTA */}
             <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-4 space-y-2.5">
-              <TurnstileWidget onToken={setCaptchaToken} action="individual_signup" />
+              <SecurityVerification onToken={setCaptchaToken} action="individual_signup" resetSignal={captchaResetSignal} />
               <button onClick={() => void handleSignup()}
-                disabled={sLoading || !sName.trim() || !sEmail.trim() || sPass.length < 8}
+                disabled={sLoading || !sName.trim() || !sEmail.trim() || sPass.length < 8 || (isTurnstileEnabled() && !captchaToken)}
                 className={`h-11 w-full ${WHITE_BTN} disabled:opacity-28 text-[13.5px]`}
                 style={{ ...WHITE_BTN_SHADOW, boxShadow: '0 4px 28px rgba(255,255,255,0.13), 0 1px 0 rgba(255,255,255,0.9) inset' }}>
                 {sLoading

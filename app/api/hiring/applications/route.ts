@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
 import { analyzeResumeFromText } from '@/lib/server/resume-ats';
-import { createHiringApplication, getHiringJobs, getVisibleHiringApplicationsForUser, updateHiringApplicationStatus } from '@/lib/server/hiring';
+import { canUserManageApplication, createHiringApplication, getHiringApplications, getPublishedHiringJobById, getVisibleHiringApplicationsForUser, updateHiringApplicationStatus } from '@/lib/server/hiring';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,9 +51,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Job and resume content are required.' }, { status: 400 });
     }
 
-    const jobs = await getHiringJobs();
-    const job = jobs.find((entry) => entry.id === jobId && entry.status === 'published');
-    if (!job) {
+    // Resolves both native hiring jobs and Business Page jobs projected into the feed.
+    const job = await getPublishedHiringJobById(jobId);
+    if (!job || job.status !== 'published') {
       return NextResponse.json({ error: 'Job posting not found.' }, { status: 404 });
     }
 
@@ -116,7 +116,20 @@ export async function PATCH(request: NextRequest) {
     }
 
     const payload = await request.json();
-    const updated = await updateHiringApplicationStatus(String(payload?.applicationId || ''), payload?.status);
+    const applicationId = String(payload?.applicationId || '');
+
+    // Authorize against the application's owning org/page BEFORE mutating status —
+    // a business may only review applications to its own hiring or Business Page jobs.
+    const applications = await getHiringApplications();
+    const target = applications.find((entry) => entry.id === applicationId);
+    if (!target) {
+      return NextResponse.json({ error: 'Application not found.' }, { status: 404 });
+    }
+    if (!(await canUserManageApplication(storedUser, target))) {
+      return NextResponse.json({ error: 'You are not authorized to review this application.' }, { status: 403 });
+    }
+
+    const updated = await updateHiringApplicationStatus(applicationId, payload?.status);
     if (!updated) {
       return NextResponse.json({ error: 'Application not found.' }, { status: 404 });
     }

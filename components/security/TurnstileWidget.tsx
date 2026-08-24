@@ -30,21 +30,33 @@ declare global {
 const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 const SCRIPT_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
 
+export type TurnstileStatus = 'ready' | 'solved' | 'expired' | 'error';
+
 export function TurnstileWidget({
   onToken,
+  onStatusChange,
   action,
   className,
+  resetSignal,
 }: {
   /** Called with a fresh token on success, or '' when it expires/errors. */
   onToken: (token: string) => void;
+  /** Optional UX signal for the surrounding "Security verification" section. */
+  onStatusChange?: (status: TurnstileStatus) => void;
   action?: string;
   className?: string;
+  /** Increment to force a fresh challenge (e.g. after a successful submit). */
+  resetSignal?: number;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
   const [scriptReady, setScriptReady] = useState(false);
 
   const emit = useCallback((t: string) => onToken(t), [onToken]);
+  // Keep the status callback in a ref so it never re-renders the widget.
+  const statusRef = useRef(onStatusChange);
+  statusRef.current = onStatusChange;
+  const status = useCallback((s: TurnstileStatus) => statusRef.current?.(s), []);
 
   // Load the Turnstile script once.
   useEffect(() => {
@@ -71,10 +83,11 @@ export function TurnstileWidget({
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: SITE_KEY,
         action,
-        callback: (t: string) => emit(t),
-        'expired-callback': () => emit(''),
-        'error-callback': () => emit(''),
+        callback: (t: string) => { emit(t); status('solved'); },
+        'expired-callback': () => { emit(''); status('expired'); },
+        'error-callback': () => { emit(''); status('error'); },
       });
+      status('ready');
     } catch {
       /* render failure → no token; the server fails closed when configured */
     }
@@ -82,7 +95,19 @@ export function TurnstileWidget({
       try { if (widgetIdRef.current && window.turnstile) window.turnstile.remove(widgetIdRef.current); } catch { /* noop */ }
       widgetIdRef.current = null;
     };
-  }, [scriptReady, action, emit]);
+  }, [scriptReady, action, emit, status]);
+
+  // Parent-driven reset: obtain a fresh challenge and clear any stale token.
+  useEffect(() => {
+    if (!resetSignal) return;
+    try {
+      if (widgetIdRef.current && window.turnstile) {
+        window.turnstile.reset(widgetIdRef.current);
+        emit('');
+        status('ready');
+      }
+    } catch { /* noop */ }
+  }, [resetSignal, emit, status]);
 
   if (!SITE_KEY) return null; // captcha disabled for this deployment
   return <div ref={containerRef} className={className} style={{ maxWidth: '100%', overflow: 'hidden' }} />;

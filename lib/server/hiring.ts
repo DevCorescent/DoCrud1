@@ -1,10 +1,62 @@
 import { HiringJobApplication, HiringJobPosting, User } from '@/types/document';
 import { hiringApplicationsPath, hiringJobsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
+import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/server/business-pages';
 
 function jobOwnerId(user: User) {
   if (user.role === 'client') return user.id;
   if (user.role === 'member' && user.organizationId) return user.organizationId;
   return user.id;
+}
+
+const BUSINESS_EXPERIENCE_MAP: Record<string, HiringJobPosting['experienceLevel']> = {
+  entry: 'entry', associate: 'associate', mid: 'mid', senior: 'senior', lead: 'lead',
+  fresher: 'entry', junior: 'associate', 'mid_level': 'mid', executive: 'lead',
+};
+const BUSINESS_EMPLOYMENT_MAP: Record<string, HiringJobPosting['employmentType']> = {
+  full_time: 'full_time', part_time: 'part_time', contract: 'contract', internship: 'internship', freelance: 'freelance',
+};
+
+/**
+ * Project a Business Page job into the HiringJobPosting shape used by the feed,
+ * job-detail page, and application pipeline. The record is NOT copied into the
+ * hiring store — this is a read-time view. The owning page is the "organization"
+ * (organizationId = pageId), so page-scoped authorization stays intact.
+ */
+function mapBusinessJobToFeedJob(job: Awaited<ReturnType<typeof getAllPublishedBusinessJobs>>[number]): HiringJobPosting {
+  return {
+    id: job.id,
+    organizationId: job.pageId,
+    organizationName: job.pageName,
+    createdByUserId: job.pageOwnerUserId,
+    createdByEmail: '',
+    title: job.title,
+    location: job.location,
+    employmentType: BUSINESS_EMPLOYMENT_MAP[job.jobType] || 'full_time',
+    experienceLevel: job.experienceLevel ? (BUSINESS_EXPERIENCE_MAP[job.experienceLevel] || undefined) : undefined,
+    description: job.description,
+    responsibilities: [],
+    requirements: [],
+    preferredSkills: Array.isArray(job.skills) ? job.skills : [],
+    targetRoleKeywords: Array.isArray(job.skills) ? job.skills : [],
+    minimumAtsScore: 0,
+    status: 'published',
+    shareUrl: `/jobs/${job.id}`,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    source: 'business_page',
+    pageId: job.pageId,
+    applyUrl: job.applyUrl,
+  };
+}
+
+/** All Business Page jobs projected into feed shape (best-effort; never blocks the hiring feed). */
+async function getPublishedBusinessFeedJobs(): Promise<HiringJobPosting[]> {
+  try {
+    const jobs = await getAllPublishedBusinessJobs();
+    return jobs.map(mapBusinessJobToFeedJob);
+  } catch {
+    return [];
+  }
 }
 
 function jobOwnerName(user: User) {
@@ -17,7 +69,11 @@ export async function getHiringJobs() {
 
 export async function getPublishedHiringJobs() {
   const jobs = await getHiringJobs();
-  return jobs.filter((job) => job.status === 'published');
+  const hiring = jobs.filter((job) => job.status === 'published');
+  const business = await getPublishedBusinessFeedJobs();
+  // Single source of truth per record: hiring jobs from the hiring store,
+  // business jobs projected from the business-pages store. Merged only here.
+  return [...hiring, ...business];
 }
 
 export async function getPublishedHiringJobById(id: string) {
@@ -88,13 +144,37 @@ export async function getVisibleHiringJobsForUser(user: User) {
   return jobs.filter((job) => job.status === 'published');
 }
 
+/** Business Page ids the user owns — used to authorize access to applications on their page jobs. */
+async function ownedBusinessPageIds(userId: string): Promise<Set<string>> {
+  try {
+    const pages = await getBusinessPagesByOwner(userId);
+    return new Set(pages.map((page) => page.id));
+  } catch {
+    return new Set();
+  }
+}
+
 export async function getVisibleHiringApplicationsForUser(user: User) {
   const applications = await getHiringApplications();
   if (user.role === 'admin') return applications;
   if (user.accountType === 'business' || user.role === 'client' || user.role === 'member') {
-    return applications.filter((application) => application.organizationId === jobOwnerId(user));
+    const ownerId = jobOwnerId(user);
+    const pageIds = await ownedBusinessPageIds(user.id);
+    // Apps on the workspace's own hiring jobs (organizationId === ownerId)
+    // OR apps on a Business Page the user owns (organizationId === that page id).
+    return applications.filter(
+      (application) => application.organizationId === ownerId || pageIds.has(application.organizationId),
+    );
   }
   return applications.filter((application) => application.candidateUserId === user.id);
+}
+
+/** True when the user is authorized to review/act on a specific application (own hiring job or own page job). */
+export async function canUserManageApplication(user: User, application: HiringJobApplication): Promise<boolean> {
+  if (user.role === 'admin') return true;
+  if (application.organizationId === jobOwnerId(user)) return true;
+  const pageIds = await ownedBusinessPageIds(user.id);
+  return pageIds.has(application.organizationId);
 }
 
 export async function createHiringApplication(payload: HiringJobApplication) {

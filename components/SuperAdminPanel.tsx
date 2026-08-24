@@ -1,6 +1,7 @@
 'use client';
 
 import SponsoredAdsTab from '@/components/superadmin/SponsoredAdsTab';
+import JobsTab from '@/components/superadmin/JobsTab';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { profileStatusStyle } from '@/lib/profile-score';
@@ -9,7 +10,7 @@ const HomepageCommandCenter = dynamic(() => import('@/components/HomepageCommand
 const AdBannerManager = dynamic(() => import('@/components/AdBannerManagerPanel'), { ssr: false });
 
 // ── Types ──────────────────────────────────────────────────────────────
-type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners' | 'sponsored-ads' | 'announcements';
+type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners' | 'sponsored-ads' | 'announcements' | 'jobs';
 
 interface DashboardData {
   users: { total: number; active: number; suspended: number; disabled: number; business: number; individual: number; newLast30Days: number; newLast7Days: number; planDistribution: Record<string, number>; subscriptionStatusDistribution: Record<string, number>; roleDistribution: Record<string, number>; recentSignups: UserRow[]; dailySignups: { date: string; count: number }[] };
@@ -160,6 +161,7 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
       { id: 'marketplace', label: 'Marketplace', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg> },
       { id: 'services', label: 'Services', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> },
       { id: 'gigs', label: 'Gigs / Connect', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+      { id: 'jobs', label: 'Jobs', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> },
       { id: 'referrals', label: 'Referrals', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg> },
       { id: 'feeds', label: 'Feeds & Reports', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" /></svg> },
       { id: 'infinity' as Tab, label: '∞ Infinity', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 12c-2-2.5-4-4-6-4a4 4 0 000 8c2 0 4-1.5 6-4zm0 0c2 2.5 4 4 6 4a4 4 0 000-8c-2 0-4 1.5-6 4z" /></svg> },
@@ -290,6 +292,7 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
           {tab === 'homepage' && <HomepageCommandCenterTab />}
           {tab === 'ad-banners' && <AdBannersTab />}
           {tab === 'sponsored-ads' && <SponsoredAdsTab />}
+          {tab === 'jobs' && <JobsTab />}
         </div>
       </main>
     </div>

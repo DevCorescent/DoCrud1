@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { renderWithMentions } from '@/lib/mentions';
 import { isInternalCtaUrl } from '@/lib/cta';
+import { linkifyText } from '@/lib/linkify';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import {
@@ -280,11 +281,11 @@ function BodyOrChips({ body, byline, category, proseOnly = false }: { body: stri
   if (proseOnly) {
     const prose = getFeedDescription(body, 200);
     if (!prose) return null;
-    return <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{prose}</p>;
+    return <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{linkifyText(prose)}</p>;
   }
   const chips = buildChips(body, byline, category).slice(0, 5);
   if (!chips.length) return (
-    <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{getBodySnippet(body)}</p>
+    <p className="mt-1.5 text-[13px] leading-relaxed text-white/50 line-clamp-2">{linkifyText(getBodySnippet(body))}</p>
   );
   return (
     <div className="mt-3 flex flex-wrap gap-1.5">

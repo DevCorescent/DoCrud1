@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Newspaper } from 'lucide-react';
 import { PresenceDot } from '@/components/PresenceBadge';
+import { linkifyText } from '@/lib/linkify';
 import {
   FEED_AVATAR_CLS,
   feedCategoryLabel,
@@ -91,7 +92,7 @@ export function ExpandableBody({
           expanded ? '' : 'line-clamp-4 sm:line-clamp-3'
         }`}
       >
-        {text}
+        {linkifyText(text)}
       </p>
 
       {(clipped || expanded) && (

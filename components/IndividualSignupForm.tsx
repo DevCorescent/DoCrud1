@@ -105,6 +105,8 @@ export default function IndividualSignupForm({ initialPlanId, initialConfig, ini
         email: form.email.trim(),
         password: form.password,
         policyAccepted: 'accepted',
+        // One-shot grant so this post-signup login passes the CAPTCHA gate.
+        loginGrant: payload?.loginGrant,
         redirect: false,
         callbackUrl: checkoutUrl,
       });

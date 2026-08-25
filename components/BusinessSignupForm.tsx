@@ -418,6 +418,8 @@ export default function BusinessSignupForm({
         email: form.email.trim(),
         password: form.password,
         policyAccepted: 'accepted',
+        // One-shot grant so this post-signup login passes the CAPTCHA gate.
+        loginGrant: payload?.loginGrant,
         redirect: false,
         callbackUrl: selectedPlanId
           ? `/checkout?plan=${selectedPlanId}${initialConfig ? `&config=${initialConfig}` : ''}`

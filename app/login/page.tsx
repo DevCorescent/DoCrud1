@@ -31,6 +31,7 @@ import {
 import { requiredPolicyIds, policyDefinitions } from '@/lib/policies';
 import AnimatedLoginBackground from '@/components/AnimatedLoginBackground';
 import AccountTypeToggle, { normalizeAccountKind, type AccountKind } from '@/components/AccountTypeToggle';
+import { SecurityVerification, isTurnstileEnabled } from '@/components/security/SecurityVerification';
 
 /* ─────────────────────────────────────────────────────────────
    Feature showcase data
@@ -537,6 +538,10 @@ export default function LoginPage() {
   const [error, setError]                     = useState('');
   const [notice, setNotice]                   = useState('');
   const [isSubmitting, setIsSubmitting]       = useState(false);
+  /* Bot-protection token for this login attempt only (server-verified). Never
+     persisted or reused; bumping the reset signal forces a fresh challenge. */
+  const [captchaToken, setCaptchaToken]       = useState('');
+  const [captchaResetSignal, setCaptchaResetSignal] = useState(0);
   const [googleEnabled, setGoogleEnabled]     = useState(false);
   const [googleBusy, setGoogleBusy]           = useState(false);
   const [mounted, setMounted]                 = useState(false);
@@ -596,15 +601,22 @@ export default function LoginPage() {
       setError('You must accept the required policies before using this platform.');
       return;
     }
+    if (isTurnstileEnabled() && !captchaToken) {
+      setError('Please complete the security verification.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       const result = await signIn('credentials', {
         email: identifier.trim(),
         password,
         policyAccepted: 'accepted',
+        captchaToken,
         redirect: false,
         callbackUrl: '/',
       });
+      // The Turnstile token is single-use; force a fresh one for any retry.
+      setCaptchaToken(''); setCaptchaResetSignal((n) => n + 1);
       if (!result) throw new Error('Unable to reach the authentication service. Please try again.');
       if (result.error) {
         setError(result.error === 'CredentialsSignin'
@@ -854,8 +866,11 @@ export default function LoginPage() {
                     </div>
                   )}
 
+                  {/* Security verification (Cloudflare Turnstile) */}
+                  <SecurityVerification onToken={setCaptchaToken} action="individual_login" resetSignal={captchaResetSignal} />
+
                   {/* Submit button */}
-                  <button type="submit" disabled={isSubmitting}
+                  <button type="submit" disabled={isSubmitting || (isTurnstileEnabled() && !captchaToken)}
                     className="group relative flex h-9 w-full items-center justify-center gap-2 overflow-hidden rounded-[11px] bg-white text-[13px] font-black text-[#070709] shadow-[0_0_40px_rgba(255,255,255,0.08),inset_0_1px_0_rgba(255,255,255,0.6)] transition hover:bg-white/93 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 sm:h-10 sm:rounded-[13px] sm:text-[13.5px]">
                     <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
                     <span className="relative">{isSubmitting ? 'Signing in…' : 'Sign in'}</span>

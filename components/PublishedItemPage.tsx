@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { renderWithMentions } from '@/lib/mentions';
 import { isInternalCtaUrl } from '@/lib/cta';
+import { linkifyText } from '@/lib/linkify';
 import { usePostReactions, PostReactionButton, PostReactionSummaryBar } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
 import { CommentAvatar } from '@/components/social/CommentAvatar';
@@ -273,7 +274,7 @@ function BodyRenderer({ body, category }: { body: string; category: string }) {
       )}
       {/* prose paragraphs */}
       {prose.map((para, i) => (
-        <p key={i} className="text-[15px] leading-[1.85] text-white/72 whitespace-pre-line">{para}</p>
+        <p key={i} className="text-[15px] leading-[1.85] text-white/72 whitespace-pre-line">{linkifyText(para)}</p>
       ))}
     </div>
   );

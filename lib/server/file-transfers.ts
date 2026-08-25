@@ -188,6 +188,10 @@ export async function appendFileTransfer(
     directoryVisibility: input.directoryVisibility,
     directoryCategory: input.directoryCategory,
     directoryTags: input.directoryTags,
+    // Publisher call-to-action. Must be copied through explicitly — this object
+    // is built field-by-field, so omitting it silently dropped every post's CTA
+    // before it was ever stored (the feed cards then had nothing to render).
+    cta: input.cta,
     authMode: input.authMode,
     accessPassword,
     fileAccessPassword: input.fileAccessPassword,

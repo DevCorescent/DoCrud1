@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { BriefcaseBusiness, Loader2, QrCode, Share2, Sparkles } from 'lucide-react';
 import PublicSiteChrome from '@/components/PublicSiteChrome';
@@ -32,11 +32,35 @@ export default function PublicHiringJobPage({ softwareName, accentLabel, setting
   const [message, setMessage] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
+  const [alreadyApplied, setAlreadyApplied] = useState(false);
+  const [ownerApplicationCount, setOwnerApplicationCount] = useState<number | null>(null);
 
   const shareUrl = buildAbsoluteAppUrl(job.shareUrl || `/jobs/${job.id}`, typeof window !== 'undefined' ? window.location.origin : undefined);
   const qrUrl = buildQrImageUrl(job.shareUrl || `/jobs/${job.id}`, typeof window !== 'undefined' ? window.location.origin : undefined, 220);
   const eligible = analysis ? analysis.atsScore >= job.minimumAtsScore : false;
   const isCandidate = status === 'authenticated' && session?.user?.accountType === 'individual';
+  // Owner detection is UI-only (which control to show). Real authorization for
+  // reviewing applications is enforced server-side by /api/hiring/applications.
+  const isOwner = status === 'authenticated' && !!session?.user?.id && session.user.id === job.createdByUserId;
+
+  // Reads the viewer's own /api/hiring/applications (server-scoped): for a
+  // candidate it returns only their applications → drives the "Applied" state;
+  // for the owner it returns the applications to their org → drives the count on
+  // this job. Neither path exposes anyone else's data; real authorization stays
+  // server-side.
+  useEffect(() => {
+    if (!isCandidate && !isOwner) { setAlreadyApplied(false); setOwnerApplicationCount(null); return; }
+    let active = true;
+    fetch('/api/hiring/applications', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        if (!active || !Array.isArray(list)) return;
+        if (isCandidate) setAlreadyApplied(list.some((a: { jobId?: string }) => a?.jobId === job.id));
+        if (isOwner) setOwnerApplicationCount(list.filter((a: { jobId?: string }) => a?.jobId === job.id).length);
+      })
+      .catch(() => { /* non-fatal — apply flow still guards duplicates server-side */ });
+    return () => { active = false; };
+  }, [isCandidate, isOwner, job.id]);
 
   const jobHighlights = useMemo(
     () => [
@@ -96,6 +120,7 @@ export default function PublicHiringJobPage({ softwareName, accentLabel, setting
         throw new Error(payload?.error || 'Unable to submit this application.');
       }
       setMessage(`Application submitted to ${job.organizationName}.`);
+      setAlreadyApplied(true);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to submit this application.');
     } finally {
@@ -172,52 +197,84 @@ export default function PublicHiringJobPage({ softwareName, accentLabel, setting
             </div>
           </article>
 
-          <article className="rounded-[1.8rem] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-slate-950">Resume benchmark check</p>
-              <span className="rounded-full bg-slate-950 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white">Private screening</span>
-            </div>
-            <div className="mt-4 grid gap-3">
-              <Input placeholder="Phone number" value={candidatePhone} onChange={(event) => setCandidatePhone(event.target.value)} />
-              <textarea
-                value={resumeText}
-                onChange={(event) => setResumeText(event.target.value)}
-                className="min-h-[220px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900"
-                placeholder="Paste the resume here to check whether it clears the company's ATS threshold."
-              />
-              <Button type="button" className="h-11 rounded-xl bg-slate-950 text-white hover:bg-slate-800" onClick={analyzeResume} disabled={isAnalyzing}>
-                {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                {isAnalyzing ? 'Scoring resume...' : 'Check eligibility'}
-              </Button>
-            </div>
-
-            {analysis ? (
-              <div className={`mt-4 rounded-[1.2rem] border p-4 ${eligible ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-950">Current ATS score</p>
-                  <span className="text-lg font-semibold text-slate-950">{analysis.atsScore}</span>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{analysis.executiveSummary}</p>
-                <p className="mt-2 text-xs text-slate-500">Best-fit role: {analysis.roleMatches[0]?.role || 'Not enough data'}</p>
+          {isOwner ? (
+            /* Owner view — no candidate resume/ATS tooling; show status, count, and the manage action. */
+            <article className="rounded-[1.8rem] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-950">Manage this role</p>
+                <span className="rounded-full bg-slate-950 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white">Your posting</span>
               </div>
-            ) : null}
-
-            {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {isCandidate ? (
-                <Button type="button" className="h-11 rounded-xl bg-slate-950 px-5 text-white hover:bg-slate-800" disabled={!eligible || isApplying} onClick={applyNow}>
-                  {isApplying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Apply now
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Status</p>
+                  <p className="mt-2 text-sm font-semibold capitalize text-slate-950">{job.status || 'published'}</p>
+                </div>
+                <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Applications</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-950">{ownerApplicationCount === null ? '—' : ownerApplicationCount}</p>
+                </div>
+              </div>
+              <p className="mt-4 text-xs leading-5 text-slate-500">You posted this role, so the candidate screening tools are hidden. Review applicants from your hiring desk.</p>
+              <div className="mt-4">
+                <Button asChild type="button" className="h-11 w-full rounded-xl bg-slate-950 px-5 text-white hover:bg-slate-800">
+                  <Link href="/workspace?tab=hiring-desk">
+                    View applications{ownerApplicationCount ? ` (${ownerApplicationCount})` : ''}
+                  </Link>
                 </Button>
-              ) : (
-                <Button asChild type="button" className="h-11 rounded-xl bg-slate-950 px-5 text-white hover:bg-slate-800">
-                  <Link href={`/login?next=${encodeURIComponent(`/jobs/${job.id}`)}`}>Login to apply</Link>
+              </div>
+            </article>
+          ) : (
+            <article className="rounded-[1.8rem] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-950">Resume benchmark check</p>
+                <span className="rounded-full bg-slate-950 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white">Private screening</span>
+              </div>
+              <div className="mt-4 grid gap-3">
+                <Input placeholder="Phone number" value={candidatePhone} onChange={(event) => setCandidatePhone(event.target.value)} />
+                <textarea
+                  value={resumeText}
+                  onChange={(event) => setResumeText(event.target.value)}
+                  className="min-h-[220px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900"
+                  placeholder="Paste the resume here to check whether it clears the company's ATS threshold."
+                />
+                <Button type="button" className="h-11 rounded-xl bg-slate-950 text-white hover:bg-slate-800" onClick={analyzeResume} disabled={isAnalyzing}>
+                  {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                  {isAnalyzing ? 'Scoring resume...' : 'Check eligibility'}
                 </Button>
-              )}
-              {!eligible && analysis ? <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700">Resume does not yet meet this role&apos;s internal screening gate</span> : null}
-            </div>
-          </article>
+              </div>
+
+              {analysis ? (
+                <div className={`mt-4 rounded-[1.2rem] border p-4 ${eligible ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-950">Current ATS score</p>
+                    <span className="text-lg font-semibold text-slate-950">{analysis.atsScore}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{analysis.executiveSummary}</p>
+                  <p className="mt-2 text-xs text-slate-500">Best-fit role: {analysis.roleMatches[0]?.role || 'Not enough data'}</p>
+                </div>
+              ) : null}
+
+              {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {alreadyApplied ? (
+                  <span className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white">
+                    <Sparkles className="h-4 w-4" /> Applied
+                  </span>
+                ) : isCandidate ? (
+                  <Button type="button" className="h-11 rounded-xl bg-slate-950 px-5 text-white hover:bg-slate-800" disabled={!eligible || isApplying} onClick={applyNow}>
+                    {isApplying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Apply now
+                  </Button>
+                ) : (
+                  <Button asChild type="button" className="h-11 rounded-xl bg-slate-950 px-5 text-white hover:bg-slate-800">
+                    <Link href={`/login?next=${encodeURIComponent(`/jobs/${job.id}`)}`}>Login to apply</Link>
+                  </Button>
+                )}
+                {!alreadyApplied && !eligible && analysis ? <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700">Resume does not yet meet this role&apos;s internal screening gate</span> : null}
+              </div>
+            </article>
+          )}
         </aside>
       </section>
     </PublicSiteChrome>

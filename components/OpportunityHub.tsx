@@ -95,8 +95,8 @@ const OPPORTUNITIES: Opportunity[] = [
     // Hiring Desk publishes roles (components/HiringDeskCenter)
     add: { kind: 'route', href: '/workspace?tab=hiring-desk' },
     addLabel: 'Post Job',
-    // Existing jobs discovery: the published feed's Jobs tab deep-link
-    open: { kind: 'route', href: '/published?tab=job' },
+    // Browsable structured Jobs Feed (hiring-desk + business-page roles).
+    open: { kind: 'route', href: '/jobs' },
   },
   {
     id: 'gigs',

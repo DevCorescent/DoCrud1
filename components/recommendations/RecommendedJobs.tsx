@@ -41,33 +41,22 @@ export default function RecommendedJobs() {
 
   return (
     <section className="rounded-[14px] border border-white/[0.07] bg-white/[0.02] px-3 py-3" aria-label="Recommended jobs">
-      <style>{`
-        .rjob-strip {
-          overflow-x: auto; overflow-y: hidden; flex-wrap: nowrap;
-          touch-action: pan-x; overscroll-behavior-x: contain;
-          -webkit-overflow-scrolling: touch; scroll-behavior: auto;
-          scrollbar-width: none; -ms-overflow-style: none;
-        }
-        .rjob-strip::-webkit-scrollbar { display: none; }
-        .rjob-card { width: 190px; }
-        @media (min-width: 640px) { .rjob-card { width: 210px; } }
-      `}</style>
-
       <div className="mb-2.5 flex items-center justify-between px-0.5">
         <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-white/28">
           <Briefcase className="h-3 w-3" /> Recommended jobs
         </span>
-        <Link href="/published?tab=job" className="text-[11px] font-semibold text-white/30 transition-colors hover:text-white/60">
+        <Link href="/jobs" className="text-[11px] font-semibold text-white/30 transition-colors hover:text-white/60">
           See all
         </Link>
       </div>
 
-      <div className="rjob-strip flex items-stretch gap-2">
+      {/* Responsive grid — fluid cards so nothing is clipped on mobile. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {jobs.map((j) => (
           <Link
             key={j.id}
             href={`/jobs/${j.id}`}
-            className="rjob-card flex shrink-0 flex-col rounded-[12px] border border-white/[0.08] bg-white/[0.025] p-3 transition-colors hover:border-white/[0.14]"
+            className="flex min-w-0 flex-col rounded-[12px] border border-white/[0.08] bg-white/[0.025] p-3 transition-colors hover:border-white/[0.14]"
           >
             <span className="line-clamp-2 text-[12.5px] font-bold text-white/90">{j.title || 'Open role'}</span>
             <span className="mt-1 line-clamp-1 text-[11px] font-medium text-white/45">{j.organizationName || 'Docrud'}</span>
@@ -80,6 +69,13 @@ export default function RecommendedJobs() {
           </Link>
         ))}
       </div>
+
+      <Link
+        href="/jobs"
+        className="mt-2.5 flex w-full items-center justify-center rounded-[11px] border border-white/[0.08] bg-white/[0.02] py-2 text-[11.5px] font-semibold text-white/45 transition-colors hover:border-white/[0.16] hover:text-white/70"
+      >
+        See all jobs →
+      </Link>
     </section>
   );
 }

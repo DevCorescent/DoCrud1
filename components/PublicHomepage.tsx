@@ -5584,7 +5584,7 @@ const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = 
   { label: 'Businesses', href: '/businesses',        Icon: Building2 },
   { label: 'Services',   href: '/services',          Icon: Wrench    },
   { label: 'Projects',   href: '/projects',          Icon: Rocket    },
-  { label: 'Jobs',       href: '/published?tab=job', Icon: Briefcase },
+  { label: 'Jobs',       href: '/jobs',              Icon: Briefcase },
   { label: 'Gigs',       href: '/published?tab=gig', Icon: Zap       },
   { label: 'People',     href: '/people',            Icon: Users     },
 ];

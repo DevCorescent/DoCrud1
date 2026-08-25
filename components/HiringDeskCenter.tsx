@@ -23,7 +23,9 @@ const emptyJob = {
   requirements: '',
   preferredSkills: '',
   minimumAtsScore: '72',
-  status: 'draft',
+  // Publish by default so a newly posted role appears in the Jobs Feed
+  // immediately. The composer still offers Draft/Closed for explicit control.
+  status: 'published',
 };
 
 export default function HiringDeskCenter() {

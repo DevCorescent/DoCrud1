@@ -10,6 +10,7 @@ import { sendTrackedMail } from '@/lib/server/mailer';
 import { processProfileActivation } from '@/lib/server/referrals';
 import { enforceRateLimits, getClientIp, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 import { enforceCaptcha } from '@/lib/server/security/captcha';
+import { issueLoginGrant } from '@/lib/server/security/login-grant';
 
 export const dynamic = 'force-dynamic';
 
@@ -234,6 +235,9 @@ export async function POST(request: NextRequest) {
       planName: defaultPlan?.name,
       referralActivated: referralResult?.bonusGranted ?? false,
       message: 'docrud workspace created successfully. Your trial is active, non-AI features are ready immediately, and a few AI tries are waiting once you log in.',
+      // One-shot grant so the immediate post-signup auto-login passes the
+      // credentials CAPTCHA gate (it has no fresh Turnstile token).
+      loginGrant: issueLoginGrant(normalizedEmail),
     }, { status: 201 });
   } catch (error) {
     console.error(error);

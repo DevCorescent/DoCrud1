@@ -1807,16 +1807,25 @@ function OnboardingPageInner() {
     setSLoading(true); setSError('');
     try {
       const res = await fetch('/api/individual/signup', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ name:sName.trim(), email:sEmail.trim(), password:sPass, policyAccepted:true, referralCode: referralCode || undefined, captchaToken }) });
-      const d = await res.json() as { error?: string };
-      if (!res.ok) { setSError(d.error ?? 'Signup failed.'); return; }
+      const d = await res.json() as { error?: string; loginGrant?: string };
+      if (!res.ok) {
+        setSError(d.error ?? 'Signup failed.');
+        // Token is one-time; force a fresh challenge for the next attempt.
+        setCaptchaToken(''); setCaptchaResetSignal((n) => n + 1);
+        return;
+      }
 
       // Attempt signIn — retry once after a short delay (handles cases where the
-      // new account hasn't fully propagated before the auth handler runs)
-      let si = await signIn('credentials', { email:sEmail.trim(), password:sPass, policyAccepted:'accepted', redirect:false });
+      // new account hasn't fully propagated before the auth handler runs). The
+      // one-shot loginGrant lets this internal login pass the CAPTCHA gate.
+      const grant = d.loginGrant;
+      let si = await signIn('credentials', { email:sEmail.trim(), password:sPass, policyAccepted:'accepted', loginGrant: grant, redirect:false });
       if (si?.error) {
         await new Promise(r => setTimeout(r, 800));
-        si = await signIn('credentials', { email:sEmail.trim(), password:sPass, policyAccepted:'accepted', redirect:false });
+        si = await signIn('credentials', { email:sEmail.trim(), password:sPass, policyAccepted:'accepted', loginGrant: grant, redirect:false });
       }
+      // Signup succeeded — clear the spent token and reset the widget.
+      setCaptchaToken(''); setCaptchaResetSignal((n) => n + 1);
       // Even if signIn failed both times, account exists — advance to OTP.
       // verify-otp falls back to email-based lookup when no session is present.
       if (!si?.error) hasSignedUpInSession.current = true;

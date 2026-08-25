@@ -37,6 +37,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You must accept the required policies before creating a profile.' }, { status: 400 });
     }
 
+    // Second rate-limit dimension: per-email (blunts distributed/rotating-IP
+    // floods against a single address). Generic 429 — no account-existence leak.
+    const emailForLimit = normalizeEmail(payload.email || '');
+    const emailLimited = await enforceRateLimits([
+      { key: `signup:individual:email:${emailForLimit}`, policy: RATE_POLICIES.signupEmail },
+    ]);
+    if (emailLimited) return emailLimited;
+
     // Bot protection (verified server-side) — after rate limiting, before any work.
     const captchaFail = await enforceCaptcha(payload.captchaToken, { remoteIp: getClientIp(request), label: 'individual-signup' });
     if (captchaFail) return captchaFail;
@@ -106,6 +114,9 @@ export async function POST(request: NextRequest) {
       planName: selectedPlan.name,
       referralActivated: !!referralCode,
       message: 'Your docrud workspace trial is ready.',
+      // One-shot grant so the immediate post-signup auto-login passes the
+      // credentials CAPTCHA gate (it has no fresh Turnstile token).
+      loginGrant: issueLoginGrant(normalizedEmail),
     }, { status: 201 });
   } catch (error) {
     console.error(error);

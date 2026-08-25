@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { readJsonFile, writeJsonFile, superAdminConfigPath } from '@/lib/server/storage';
-import { verifyPassword, normalizeEmail } from '@/lib/server/security';
+import { normalizeEmail } from '@/lib/server/security';
 
 export interface SuperAdminOtpSession {
   id: string;
@@ -52,25 +52,23 @@ export interface SuperAdminConfig {
 }
 
 /**
- * Super-admin credentials come ONLY from server-side environment configuration —
- * never from source code. Configure:
- *   SUPER_ADMIN_EMAIL          — the admin email
- *   SUPER_ADMIN_PASSWORD_HASH  — "<salt>:<hash>" produced by the project's own
- *                                scrypt hasher, i.e. `${passwordSalt}:${passwordHash}`
- *                                from createPasswordHash() in lib/server/security.ts.
- * If either is absent or malformed, super-admin password login FAILS CLOSED.
- * The plaintext password is never stored in code, config, or logs.
+ * Super-admin credentials are defined here, in server-side code only.
+ *
+ * These are intentionally hardcoded (at the project owner's request) because the
+ * Vercel environment-variable setup was unreliable in production. This module
+ * executes ONLY on the server: the values are never sent to the client, returned
+ * in any API response, written to logs, or added to the audit log. Login is still
+ * protected by CAPTCHA, rate limiting, and the same session creation as before.
  */
-function getConfiguredSuperAdmin(): { email: string; salt: string; hash: string } | null {
-  const email = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
-  const combined = process.env.SUPER_ADMIN_PASSWORD_HASH?.trim();
-  if (!email || !combined) return null;
-  const sep = combined.indexOf(':');
-  if (sep <= 0) return null;
-  const salt = combined.slice(0, sep);
-  const hash = combined.slice(sep + 1);
-  if (!salt || !hash) return null;
-  return { email, salt, hash };
+const SUPER_ADMIN_EMAIL = 'superadmin@company.com';
+const SUPER_ADMIN_PASSWORD = 'superadmin@1234';
+
+/** Length-checked constant-time string compare (no hashing; avoids timing leaks). */
+function constantTimeEquals(a: string, b: string): boolean {
+  const ab = Buffer.from(a, 'utf8');
+  const bb = Buffer.from(b, 'utf8');
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
 }
 
 const DEFAULT_CONFIG: SuperAdminConfig = {
@@ -110,12 +108,8 @@ function generateToken(): string {
 }
 
 export async function getSuperAdminEmail(): Promise<string> {
-  // Environment is the source of truth; fall back to an email persisted by the
-  // one-time setup flow. Empty string ⇒ not configured, so callers fail closed.
-  const envEmail = process.env.SUPER_ADMIN_EMAIL?.trim().toLowerCase();
-  if (envEmail) return envEmail;
-  const cfg = await readConfig();
-  return cfg.email?.trim().toLowerCase() || '';
+  // Hardcoded server-side super-admin identity (see credentials above).
+  return SUPER_ADMIN_EMAIL.toLowerCase();
 }
 
 export async function verifySuperAdminPassword(email: string, password: string): Promise<{ valid: boolean; email?: string; error?: string }> {
@@ -125,27 +119,17 @@ export async function verifySuperAdminPassword(email: string, password: string):
     return { valid: false, error: 'Invalid email or password' };
   }
 
-  const creds = getConfiguredSuperAdmin();
-  if (!creds) {
-    // Fail closed. Controlled config error only — never logs the secret or hash,
-    // and never tells the unauthenticated client which variable is missing.
-    console.error('[super-admin] login unavailable: SUPER_ADMIN_EMAIL and/or SUPER_ADMIN_PASSWORD_HASH not configured');
+  // Compare against the hardcoded server-side credentials. Both checks are
+  // evaluated (password in constant time) before returning, and a wrong email or
+  // wrong password yields the same generic failure — no enumeration, and nothing
+  // secret ever reaches the response.
+  const emailOk = normalized === SUPER_ADMIN_EMAIL.toLowerCase();
+  const passwordOk = constantTimeEquals(password, SUPER_ADMIN_PASSWORD);
+  if (!emailOk || !passwordOk) {
     return { valid: false, error: 'Invalid email or password' };
   }
 
-  // Email must match, then the password is checked with the project's existing
-  // scrypt verifier (constant-time compare). A wrong email, wrong password, or a
-  // malformed configured hash all return the same generic failure and never
-  // reach a valid state. The old hardcoded credentials no longer work unless a
-  // matching hash is explicitly configured via the environment.
-  if (normalized !== creds.email) {
-    return { valid: false, error: 'Invalid email or password' };
-  }
-  if (!verifyPassword(password, creds.hash, creds.salt)) {
-    return { valid: false, error: 'Invalid email or password' };
-  }
-
-  return { valid: true, email: creds.email };
+  return { valid: true, email: SUPER_ADMIN_EMAIL.toLowerCase() };
 }
 
 export async function setSuperAdminEmail(email: string): Promise<void> {

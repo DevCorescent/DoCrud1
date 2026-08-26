@@ -80,6 +80,7 @@ import {
   X,
 } from 'lucide-react';
 import { applyColorMode, getStoredColorMode, type ColorMode } from '@/app/components/ThemeController';
+import ThemeToggle from '@/app/components/ThemeToggle';
 
 interface WorkspaceNotification {
   id: string;
@@ -280,8 +281,7 @@ useEffect(() => {
   };
 }, []);
 
-  function toggleColorMode() {
-    const next: ColorMode = colorMode === 'dark' ? 'light' : 'dark';
+  function setMode(next: ColorMode) {
     setColorMode(next);
     applyColorMode(next);
   }
@@ -921,16 +921,8 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Theme toggle — Light / Dark */}
-        <button
-          type="button"
-          onClick={toggleColorMode}
-          className="hidden sm:flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/50 transition hover:bg-white/[0.09] hover:text-white/80 active:scale-95"
-          aria-label={colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          title={colorMode === 'dark' ? 'Light mode' : 'Dark mode'}
-        >
-          {colorMode === 'dark' ? <Sun className="h-[15px] w-[15px]" /> : <Moon className="h-[15px] w-[15px]" />}
-        </button>
+        {/* Theme toggle — segmented Light / Dark */}
+        <ThemeToggle value={colorMode} onChange={setMode} className="hidden shrink-0 sm:inline-flex" />
 
         {/* Profile avatar — authenticated users only */}
         {isAuthenticated && !guestMode && (
@@ -1053,20 +1045,7 @@ useEffect(() => {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={toggleColorMode}
-          className={`relative h-5 w-9 rounded-full transition-colors ${
-            colorMode === 'dark' ? 'bg-violet-500/75' : 'bg-white/15'
-          }`}
-          aria-label="Toggle dark and light mode"
-        >
-          <span
-            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-              colorMode === 'dark' ? 'translate-x-4' : 'translate-x-0.5'
-            }`}
-          />
-        </button>
+        <ThemeToggle value={colorMode} onChange={setMode} />
       </div>
 
       {/* Ddrive */}

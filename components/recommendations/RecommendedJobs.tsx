@@ -20,6 +20,9 @@ type PublicJob = {
   location?: string;
   employmentType?: string;
   createdAt?: string;
+  /** Present only when the viewer has a profile; computed server-side. */
+  matchScore?: number;
+  matchReasons?: string[];
 };
 
 export default function RecommendedJobs() {
@@ -58,8 +61,23 @@ export default function RecommendedJobs() {
             href={`/jobs/${j.id}`}
             className="flex min-w-0 flex-col rounded-[12px] border border-white/[0.08] bg-white/[0.025] p-3 transition-colors hover:border-white/[0.14]"
           >
+            {typeof j.matchScore === 'number' && j.matchScore > 0 && (
+              <span className="mb-1.5 inline-flex w-fit items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                {j.matchScore}% match
+              </span>
+            )}
             <span className="line-clamp-2 text-[12.5px] font-bold text-white/90">{j.title || 'Open role'}</span>
             <span className="mt-1 line-clamp-1 text-[11px] font-medium text-white/45">{j.organizationName || 'Docrud'}</span>
+            {j.matchReasons && j.matchReasons.length > 0 && (
+              <ul className="mt-1.5 space-y-0.5">
+                {j.matchReasons.slice(0, 2).map((reason) => (
+                  <li key={reason} className="flex items-center gap-1 text-[10px] text-white/40">
+                    <span aria-hidden className="text-emerald-400">✓</span>
+                    <span className="truncate">{reason}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
             {(j.location || j.employmentType) && (
               <span className="mt-auto flex items-center gap-1 pt-2 text-[10.5px] text-white/30">
                 {j.location && <MapPin className="h-2.5 w-2.5 shrink-0" />}

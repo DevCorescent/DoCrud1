@@ -6,11 +6,17 @@
  * importer (lib/server/job-import.ts). No new job model, no second pipeline.
  */
 
+export type SourceProvider = 'ashby' | 'lever' | 'jsonld';
+
 export interface ScrapeSource {
   /** Stable identifier the admin selects (never a raw URL). */
   name: string;
   label?: string;
   enabled: boolean;
+  /** Which fetch/parse strategy this source uses. Defaults to 'jsonld'. */
+  provider?: SourceProvider;
+  /** Ashby job-board name (provider 'ashby') / Lever company slug (provider 'lever'). */
+  board?: string;
   /** SSRF guard: the ONLY host the fetcher is allowed to request for this source. */
   host: string;
   /** Discovery: a sitemap of job pages (preferred) or a listing page to crawl. */
@@ -64,4 +70,61 @@ export interface ScrapeDeps {
   robotsAllows?: (url: string) => Promise<boolean>;
   /** Deterministic time source (tests); defaults to Date.now. */
   now?: () => number;
+}
+
+/**
+ * A job normalized from any provider into a common shape, before it is turned
+ * into the 13 CSV content columns the existing importer accepts. Only real
+ * fields are populated — missing data stays empty (never invented).
+ */
+export interface NormalizedJob {
+  source: string;          // source name, e.g. 'ashby:acme'
+  provider: SourceProvider;
+  externalId: string;      // provider job id (dedup identity: provider+externalId)
+  title: string;
+  organizationName: string;
+  location: string;
+  department: string;
+  employmentType: string;  // canonical (full_time…) or ''
+  workMode: string;        // remote | hybrid | onsite | ''
+  experienceLevel: string;
+  description: string;
+  responsibilities: string[];
+  requirements: string[];
+  preferredSkills: string[];
+  targetRoleKeywords: string[];
+  salaryPresent: boolean;
+  postedAt: string;        // ISO or ''
+  jobUrl: string;
+  applyUrl: string;
+  isActive: boolean;       // listed/published (only true is importable)
+  score?: number;
+}
+
+/** Injectable deps for provider fetching (tests inject fixtures — no network). */
+export interface ProviderDeps {
+  fetchJson?: (url: string) => Promise<unknown | null>;
+  now?: () => number;
+}
+
+export interface SourceRunStat {
+  name: string;
+  provider: SourceProvider;
+  fetched: number;
+  active: number;
+  failed: boolean;
+  error?: string;
+}
+
+export interface AggregateScrapeResult {
+  sources: number;
+  fetched: number;
+  valid: number;
+  duplicates: number;   // within-batch duplicates removed before import
+  imported: number;
+  rejected: number;
+  failed: number;       // sources that errored
+  perSource: SourceRunStat[];
+  csv: string;
+  runAt: string;
 }

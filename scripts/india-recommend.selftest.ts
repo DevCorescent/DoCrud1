@@ -22,6 +22,7 @@ import type { NormalizedJob, ScrapeSource } from '../lib/server/job-scraper/type
 import {
   buildRecProfile, hasProfileSignals, recommendMatch, deriveExperienceLevel, type RecJob,
 } from '../lib/server/job-recommend';
+import { jobSourceLabel, formatJobLocation, isValidApplyUrl } from '../lib/jobs-ui';
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -191,6 +192,34 @@ test('no invented data: a job with no skills/desc/date contributes nothing beyon
   const m = recommendMatch(profile, bare, NOW);
   assert.ok(m.score >= 0 && m.score <= 100);
   assert.equal(m.reasons.some((r) => /location/i.test(r)), false);   // job has no location → no location reason invented
+});
+
+// ── Jobs UI helpers (card source attribution, India location, apply URL) ────
+test('jobSourceLabel derives the real ATS from the apply URL host', () => {
+  assert.equal(jobSourceLabel('https://jobs.ashbyhq.com/atlan/abc/application'), 'Ashby');
+  assert.equal(jobSourceLabel('https://jobs.lever.co/mindtickle/xyz'), 'Lever');
+  assert.equal(jobSourceLabel('https://job-boards.greenhouse.io/postman/jobs/123'), 'Greenhouse');
+  assert.equal(jobSourceLabel('https://careers.acme.com/apply/9'), 'Acme');   // unknown host → domain
+  assert.equal(jobSourceLabel(''), '');
+  assert.equal(jobSourceLabel('not-a-url'), '');
+});
+
+test('isValidApplyUrl only accepts http(s) URLs', () => {
+  assert.equal(isValidApplyUrl('https://jobs.lever.co/x'), true);
+  assert.equal(isValidApplyUrl('http://x.co/y'), true);
+  assert.equal(isValidApplyUrl(''), false);
+  assert.equal(isValidApplyUrl('javascript:alert(1)'), false);
+  assert.equal(isValidApplyUrl('/jobs/123'), false);
+});
+
+test('formatJobLocation is India-aware and never fabricates India', () => {
+  assert.equal(formatJobLocation('Bengaluru', 'hybrid'), 'Bengaluru · India · Hybrid');
+  assert.equal(formatJobLocation('Bengaluru, Karnataka', 'remote'), 'Bengaluru · India · Remote');
+  assert.equal(formatJobLocation('India', 'remote'), 'India · Remote');
+  assert.equal(formatJobLocation('Remote, India', undefined), 'Remote, India');   // no duplicate "India"
+  assert.equal(formatJobLocation('Berlin', 'onsite'), 'Berlin · On-site');        // global untouched
+  assert.equal(formatJobLocation('', 'remote'), 'Remote');
+  assert.equal(formatJobLocation('', ''), '');
 });
 
 console.log(`\n${passed} checks passed.`);

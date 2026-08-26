@@ -13,6 +13,7 @@ import { getProfileFields } from '@/lib/server/user-profiles';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
 import { getFeedConfig } from '@/lib/server/feed-config';
 import { buildRecProfile, hasProfileSignals, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
+import { isValidApplyUrl } from '@/lib/jobs-ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,6 +60,9 @@ export async function GET() {
         employmentType: recJob.employmentType,
         workMode: recJob.workMode,
         preferredSkills: (recJob.preferredSkills ?? []).slice(0, 4),
+        // The REAL original application URL (Ashby/Lever/Greenhouse) carried through
+        // untouched — powers the "Apply Now" action + source attribution in the UI.
+        applyUrl: isValidApplyUrl(String(j.applyUrl ?? '')) ? String(j.applyUrl) : '',
         createdAt: recJob.createdAt,
       };
       if (showMatch) { job.matchScore = match.score; job.matchReasons = match.reasons; }

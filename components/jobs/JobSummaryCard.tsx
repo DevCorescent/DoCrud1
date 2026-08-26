@@ -21,7 +21,7 @@ import { useRouter } from 'next/navigation';
 import { MapPin, ArrowUpRight, CalendarClock, Check } from 'lucide-react';
 import { isIndiaRelevant } from '@/lib/server/job-scraper/india';
 import {
-  EMPLOYMENT_TYPE_LABELS, EXPERIENCE_LABELS,
+  EMPLOYMENT_TYPE_LABELS, EXPERIENCE_LABELS, JOB_STATUS_LABELS,
   jobDetailHref, formatPosted, formatJobLocation, jobSourceLabel, isValidApplyUrl,
 } from '@/lib/jobs-ui';
 
@@ -59,15 +59,21 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
   const canApply = isValidApplyUrl(job.applyUrl);
   const reasons = (job.matchReasons ?? []).filter(Boolean).slice(0, 4);
   const hasMatch = typeof job.matchScore === 'number';
+  const status = job.status || 'published';
+  const statusLabel = JOB_STATUS_LABELS[status] ?? status;
 
   // Shared design tokens (same language as ProjectSummaryCard).
   const outerBorder = 'rgba(255,255,255,0.09)';
   const cardBg = '#0d0d10';
-  const hoverGlow = '0 24px 72px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.4)';
+  const hoverGlow = '0 16px 44px rgba(0,0,0,0.42)';
   const pillStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.55)' };
   const expStyle = { background: 'rgba(139,92,246,0.16)', border: '1px solid rgba(139,92,246,0.28)', color: '#c4b5fd' };
   const matchStyle = { background: 'rgba(16,185,129,0.16)', border: '1px solid rgba(16,185,129,0.32)', color: '#6ee7b7' };
-  const sourceStyle = { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.48)' };
+  const statusStyle = status === 'published'
+    ? { background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(16,185,129,0.28)', color: '#6ee7b7' }
+    : status === 'draft'
+      ? { background: 'rgba(245,158,11,0.16)', border: '1px solid rgba(245,158,11,0.30)', color: '#fcd34d' }
+      : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.52)' };
 
   const open = () => router.push(detail);
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -83,23 +89,19 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
           className="rounded-[19px] h-full flex flex-col p-4 sm:p-[18px] transition-shadow duration-300 group-hover:shadow-[var(--card-hover-glow)]"
           style={{ background: cardBg, '--card-hover-glow': hoverGlow } as React.CSSProperties}
         >
-          {/* ── Header: Match % (USP) + honest source attribution ── */}
-          {(hasMatch || source) && (
-            <div className="flex items-center justify-between gap-2 mb-3">
-              {hasMatch
-                ? <span className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={matchStyle}>{job.matchScore}% Match</span>
-                : <span />}
-              {source && (
-                <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold shrink-0" style={sourceStyle}>
-                  Source · {source}
-                </span>
-              )}
-            </div>
-          )}
+          {/* ── Header: Match % (USP) + Open/status badge ── */}
+          <div className="flex items-center justify-between gap-2 mb-2.5">
+            {hasMatch
+              ? <span className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={matchStyle}>{job.matchScore}% Match</span>
+              : <span />}
+            <span className="rounded-full px-2.5 py-1 text-[10px] font-semibold shrink-0" style={statusStyle}>{statusLabel}</span>
+          </div>
 
-          {/* ── Title + company ── */}
-          <h3 className="font-bold text-[15px] leading-snug text-white line-clamp-2">{job.title}</h3>
-          <p className="mt-0.5 text-[12.5px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.52)' }}>{company}</p>
+          {/* ── Company (muted) → Job title (prominent) ── */}
+          <p className="text-[11.5px] font-semibold truncate" style={{ color: 'rgba(255,255,255,0.42)' }}>
+            {company}{source && <span style={{ color: 'rgba(255,255,255,0.30)' }}> · via {source}</span>}
+          </p>
+          <h3 className="mt-0.5 font-bold text-[15.5px] leading-snug text-white line-clamp-2">{job.title}</h3>
 
           {/* ── India-aware location · work mode ── */}
           {locationLabel && (
@@ -122,7 +124,7 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
           {/* ── Why this matches (only real, data-backed reasons) ── */}
           {hasMatch && reasons.length > 0 && (
             <div className="mt-3.5 rounded-[12px] px-3 py-2.5" style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.14)' }}>
-              <p className="text-[9.5px] font-bold uppercase tracking-[0.12em]" style={{ color: 'rgba(110,231,183,0.72)' }}>Why this matches</p>
+              <p className="text-[9.5px] font-bold uppercase tracking-[0.12em]" style={{ color: 'rgba(110,231,183,0.72)' }}>Why this matches you</p>
               <ul className="mt-1.5 flex flex-col gap-1">
                 {reasons.map((r) => (
                   <li key={r} className="flex items-center gap-1.5 text-[11.5px]" style={{ color: 'rgba(255,255,255,0.62)' }}>
@@ -134,10 +136,10 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
             </div>
           )}
 
-          {/* ── Footer: posted + actions ── */}
-          <div className="mt-auto pt-4">
+          {/* ── Footer: divider → posted + employment → actions ── */}
+          <div className="mt-auto pt-3.5" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
             {(posted || employment) && (
-              <div className="flex items-center gap-2 mb-2.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
+              <div className="flex items-center gap-2 mb-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
                 {posted && <span className="flex items-center gap-1 truncate"><CalendarClock className="h-3 w-3" />Posted {posted}</span>}
                 {employment && <span className="ml-auto shrink-0 font-semibold" style={{ color: 'rgba(255,255,255,0.60)' }}>{employment}</span>}
               </div>

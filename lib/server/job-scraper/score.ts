@@ -4,6 +4,7 @@
  * Used to rank jobs before import so the best jobs are persisted first.
  */
 import { NormalizedJob } from './types';
+import { isIndiaRelevant } from './india';
 
 const TECH_KEYWORDS = [
   'engineer', 'developer', 'software', 'backend', 'frontend', 'full stack', 'fullstack',
@@ -40,5 +41,8 @@ export function scoreJob(job: NormalizedJob, now: number = Date.now()): number {
   // +5 — a clear http(s) application URL.
   if (/^https?:\/\/\S+$/i.test(job.applyUrl || '')) s += 5;
 
-  return s;
+  // +10 — India location relevance (only when the source data actually says so).
+  if (isIndiaRelevant(job.location || '')) s += 10;
+
+  return Math.min(100, s);
 }

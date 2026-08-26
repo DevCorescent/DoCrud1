@@ -36,6 +36,9 @@ export type JobSummary = {
   status?: string;
   createdAt?: string;
   applyUrl?: string;
+  /** Present only in the profile-matched "Recommended for You" context. */
+  matchScore?: number;
+  matchReasons?: string[];
 };
 
 const BANNER_GRADIENTS = [
@@ -103,6 +106,12 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
     <div className="relative shrink-0 rounded-t-[19px] overflow-hidden" style={{ height, ...bannerStyle }}>
       <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom,rgba(0,0,0,0.06) 0%,rgba(0,0,0,0.72) 100%)' }} />
       <span className="absolute inset-0 flex items-center justify-center text-3xl opacity-30" aria-hidden>💼</span>
+      {typeof job.matchScore === 'number' && (
+        <span className={`absolute ${badgeTop} left-3 rounded-full px-2.5 py-1 text-[9px] font-bold backdrop-blur-md`}
+          style={{ background: 'rgba(16,185,129,0.24)', border: '1px solid rgba(16,185,129,0.4)', color: '#6ee7b7' }}>
+          {job.matchScore}% Match
+        </span>
+      )}
       <span className={`absolute ${badgeTop} right-3 rounded-full px-2.5 py-1 text-[9px] font-semibold backdrop-blur-md`} style={statusStyle}>
         {JOB_STATUS_LABELS[status] ?? status}
       </span>

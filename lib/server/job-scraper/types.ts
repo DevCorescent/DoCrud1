@@ -6,7 +6,7 @@
  * importer (lib/server/job-import.ts). No new job model, no second pipeline.
  */
 
-export type SourceProvider = 'ashby' | 'lever' | 'jsonld';
+export type SourceProvider = 'ashby' | 'lever' | 'greenhouse' | 'jsonld';
 
 export interface ScrapeSource {
   /** Stable identifier the admin selects (never a raw URL). */
@@ -15,8 +15,10 @@ export interface ScrapeSource {
   enabled: boolean;
   /** Which fetch/parse strategy this source uses. Defaults to 'jsonld'. */
   provider?: SourceProvider;
-  /** Ashby job-board name (provider 'ashby') / Lever company slug (provider 'lever'). */
+  /** Provider board/company identifier (Ashby board / Lever company / Greenhouse board). */
   board?: string;
+  /** Optional country tag for the source registry (e.g. 'IN'). Presentation only. */
+  country?: string;
   /** SSRF guard: the ONLY host the fetcher is allowed to request for this source. */
   host: string;
   /** Discovery: a sitemap of job pages (preferred) or a listing page to crawl. */

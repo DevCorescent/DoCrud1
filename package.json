@@ -11,6 +11,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:presence": "tsx scripts/presence-selftest.ts",
+    "test:jobs": "tsx scripts/india-recommend.selftest.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:indexes": "node scripts/db-indexes.mjs",
     "db:seed": "node scripts/db-seed.mjs",

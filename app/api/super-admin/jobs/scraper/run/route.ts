@@ -1,46 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
-import { runScraper } from '@/lib/server/scraper-client';
+import { runApprovedAndImport } from '@/lib/server/scraper-client';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+/**
+ * Run the approved-source scraper: fetch every enabled approved source
+ * (Ashby / Lever public APIs), normalize, score, dedupe and persist the best
+ * jobs through the EXISTING importer. Super-Admin only. Returns a summary.
+ */
 export async function POST(req: NextRequest) {
   const session = await getSuperAdminSessionFromRequest(req);
   if (!session.valid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  let body: { source?: unknown; limit?: unknown; resume?: unknown };
+  let body: { limit?: unknown };
   try {
-    body = await req.json();
+    body = await req.json().catch(() => ({}));
   } catch {
-    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+    body = {};
   }
+  const totalLimit = Number(body.limit) || undefined;
 
   try {
-    const result = await runScraper({
-      source: String(body.source || ''),
-      limit: Number(body.limit),
-      resume: Boolean(body.resume),
-    });
+    const summary = await runApprovedAndImport({ totalLimit, adminEmail: session.email || '' });
 
     await appendSuperAdminAudit({
       action: 'jobs.scrape',
       targetType: 'hiring_job',
       details: {
         actor: session.email || 'super-admin',
-        source: String(body.source || ''),
-        scanned: result.scanned,
-        valid: result.valid,
-        invalid: result.invalid,
-        duplicates: result.duplicates,
+        sources: summary.sources,
+        fetched: summary.fetched,
+        imported: summary.imported,
+        duplicates: summary.duplicates,
+        rejected: summary.rejected,
+        failed: summary.failed,
       },
     });
 
-    // The CSV is public job content (13 columns only). The browser hands it to
-    // the EXISTING /api/super-admin/jobs/import for preview + commit.
-    return NextResponse.json(result);
+    return NextResponse.json(summary);
   } catch (error) {
-    // Safe message only — never leak service URLs, keys, or filesystem paths.
+    // Safe message only — never leak internal details.
     const message = error instanceof Error ? error.message : 'Scrape failed.';
     return NextResponse.json({ error: message }, { status: 400 });
   }

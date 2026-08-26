@@ -1,45 +1,70 @@
 /**
  * Approved source registry (the SSRF allowlist).
  *
- * The admin selects a source by NAME; the browser never supplies a URL. The
- * fetcher will only ever request the configured `host` for a source. Add real
- * public careers sites you are permitted to scrape and set `enabled: true`.
+ * Sources are built from CONFIGURATION, never from a browser-supplied URL. The
+ * admin selects an approved source by NAME; the fetcher only ever calls the
+ * provider's fixed API host for that source.
+ *
+ * Configuration (server env; public APIs — no secret needed):
+ *   JOB_SCRAPER_ENABLED   'false' disables all scraping (default: enabled).
+ *   ASHBY_JOB_BOARDS      comma list of Ashby job-board names.  e.g. "acme,globex|Globex Inc"
+ *   LEVER_COMPANIES       comma list of Lever company slugs.    e.g. "leverdemo"
+ * Each entry may be "slug" or "slug|Display Name".
  */
 import { ScrapeSource } from './types';
 
-export const APPROVED_SOURCES: ScrapeSource[] = [
-  {
-    // Template — disabled. Copy this, point it at a PUBLIC careers site you are
-    // permitted to scrape, set enabled:true, and confirm its host.
-    name: 'example-careers',
-    label: 'Example Careers (template — disabled)',
-    enabled: false,
-    host: 'example.com',
-    sitemapUrl: 'https://example.com/sitemap-jobs.xml',
-    listingUrl: 'https://example.com/careers',
-    jobLinkSelector: 'a.job-card',
-    cssFallback: {
-      title: 'h1.job-title',
-      organizationName: '.company-name',
-      location: '.job-location',
-      department: '.job-department',
-      description: '.job-description',
-      responsibilities: '.job-responsibilities li',
-      requirements: '.job-requirements li',
-      preferredSkills: '.job-skills li',
-      applyUrl: 'a.apply-button@href',
-    },
-    maxPages: 20,
-    minIntervalMs: 1500,
-  },
-];
+const SLUG_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
+
+function parseList(raw: string | undefined): Array<{ slug: string; label?: string }> {
+  return (raw || '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean)
+    .map((e) => {
+      const [slug, label] = e.split('|').map((x) => x.trim());
+      return { slug, label: label || undefined };
+    })
+    .filter((e) => SLUG_RE.test(e.slug));
+}
+
+function buildSources(): ScrapeSource[] {
+  const enabled = (process.env.JOB_SCRAPER_ENABLED || '').trim().toLowerCase() !== 'false';
+  const out: ScrapeSource[] = [];
+
+  for (const { slug, label } of parseList(process.env.ASHBY_JOB_BOARDS)) {
+    out.push({
+      name: `ashby:${slug}`,
+      label: label || slug,
+      provider: 'ashby',
+      board: slug,
+      host: 'api.ashbyhq.com',
+      enabled,
+    });
+  }
+  for (const { slug, label } of parseList(process.env.LEVER_COMPANIES)) {
+    out.push({
+      name: `lever:${slug}`,
+      label: label || slug,
+      provider: 'lever',
+      board: slug,
+      host: 'api.lever.co',
+      enabled,
+    });
+  }
+  return out;
+}
+
+// Rebuilt per call so tests / runtime env changes are reflected.
+export function allSources(): ScrapeSource[] {
+  return buildSources();
+}
 
 export function listSources(): ScrapeSource[] {
-  return APPROVED_SOURCES.filter((s) => s.enabled);
+  return buildSources().filter((s) => s.enabled);
 }
 
 export function getSource(name: string): ScrapeSource | null {
-  return APPROVED_SOURCES.find((s) => s.enabled && s.name === name) || null;
+  return buildSources().find((s) => s.enabled && s.name === name) || null;
 }
 
 export function sourceNames(): string[] {

@@ -14,6 +14,11 @@ import { fetchText as realFetchText, sleep, SCRAPER_UA } from './fetcher';
 import { fetchRobots } from './robots';
 import { parseHtml, selectAll } from './html';
 import { htmlToText, splitList, deriveKeywords, safeUrl, clip, clipList } from './normalize';
+import { fetchAshby } from './providers/ashby';
+import { fetchLever } from './providers/lever';
+import { scoreJob } from './score';
+import { listSources } from './sources';
+import { NormalizedJob, ProviderDeps, SourceRunStat } from './types';
 
 const BUDGET_MS = 45_000;
 const MAX_PAGES_CAP = 100;
@@ -150,4 +155,97 @@ export async function runScrape(
     duplicates,
     csv: toCsv(rows),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Provider aggregation (Ashby / Lever official public APIs)
+// ─────────────────────────────────────────────────────────────────────────
+
+function normalizedRow(j: NormalizedJob): Record<string, string> {
+  const skills = clipList((j.preferredSkills || []).map(htmlToText));
+  const title = clip(j.title, 300);
+  return {
+    title,
+    organizationName: clip(j.organizationName, 300),
+    location: clip(j.location, 300),
+    department: clip(j.department, 200),
+    employmentType: (j.employmentType || '').trim(),
+    workMode: (j.workMode || '').trim(),
+    experienceLevel: (j.experienceLevel || '').trim(),
+    description: clip(j.description, 20000),
+    responsibilities: clipList(j.responsibilities || []).join('|'),
+    requirements: clipList(j.requirements || []).join('|'),
+    preferredSkills: skills.join('|'),
+    targetRoleKeywords: clipList((j.targetRoleKeywords || []).length ? j.targetRoleKeywords : deriveKeywords(title, skills)).join('|'),
+    applyUrl: safeUrl(j.applyUrl || j.jobUrl),
+  };
+}
+
+async function fetchSource(source: ScrapeSource, deps: ProviderDeps): Promise<NormalizedJob[]> {
+  if (source.provider === 'ashby') return fetchAshby(source, deps);
+  if (source.provider === 'lever') return fetchLever(source, deps);
+  return []; // 'jsonld' sources use runScrape(); the env registry builds only API sources
+}
+
+export interface ApprovedScrapeOptions { totalLimit?: number; deps?: ProviderDeps }
+
+export interface ApprovedScrapeOutput {
+  csv: string;
+  fetched: number;    // total normalized jobs across sources
+  active: number;     // active + valid (before dedupe)
+  rejected: number;   // inactive / missing title-org / no valid URL
+  failed: number;     // sources that errored
+  duplicates: number; // within-batch fingerprint duplicates removed
+  perSource: SourceRunStat[];
+  jobs: NormalizedJob[];
+}
+
+/**
+ * Run EVERY enabled approved source, filter to active+valid jobs, score, sort
+ * best-first, and within-batch dedupe. Returns the 13-column CSV to hand to the
+ * existing importer (which does the existing-job dedupe + system-field
+ * generation). A failed source is recorded and never aborts the run.
+ */
+export async function runApprovedScrape(opts: ApprovedScrapeOptions = {}): Promise<ApprovedScrapeOutput> {
+  const deps = opts.deps ?? {};
+  const now = deps.now ? deps.now() : Date.now();
+  const cap = Math.max(1, Math.min(500, opts.totalLimit ?? 200));
+
+  const perSource: SourceRunStat[] = [];
+  let fetched = 0, active = 0, rejected = 0, failed = 0, duplicates = 0;
+  const collected: NormalizedJob[] = [];
+
+  for (const source of listSources()) {
+    const provider = source.provider ?? 'jsonld';
+    try {
+      const jobs = await fetchSource(source, deps);
+      fetched += jobs.length;
+      let a = 0;
+      for (const j of jobs) {
+        const url = safeUrl(j.applyUrl || j.jobUrl);
+        if (!j.isActive || !j.title.trim() || !j.organizationName.trim() || !url) { rejected++; continue; }
+        j.score = scoreJob(j, now);
+        collected.push(j);
+        a++;
+      }
+      active += a;
+      perSource.push({ name: source.name, provider, fetched: jobs.length, active: a, failed: false });
+    } catch {
+      failed++;
+      perSource.push({ name: source.name, provider, fetched: 0, active: 0, failed: true, error: 'fetch failed' });
+    }
+  }
+
+  collected.sort((x, y) => (y.score ?? 0) - (x.score ?? 0));
+  const seen = new Set<string>();
+  const jobs: NormalizedJob[] = [];
+  for (const j of collected) {
+    if (jobs.length >= cap) break;
+    const fp = jobFingerprint(j.organizationName, j.title, j.location);
+    if (seen.has(fp)) { duplicates++; continue; }
+    seen.add(fp);
+    jobs.push(j);
+  }
+
+  return { csv: toCsv(jobs.map(normalizedRow)), fetched, active, rejected, failed, duplicates, perSource, jobs };
 }

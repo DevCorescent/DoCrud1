@@ -3,12 +3,16 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { BriefcaseBusiness, Loader2, QrCode, Share2, Sparkles } from 'lucide-react';
+import { ArrowUpRight, BriefcaseBusiness, Loader2, QrCode, Share2, Sparkles } from 'lucide-react';
 import PublicSiteChrome from '@/components/PublicSiteChrome';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { HiringJobPosting, LandingSettings } from '@/types/document';
 import { buildAbsoluteAppUrl, buildQrImageUrl } from '@/lib/url';
+import {
+  WORK_MODE_LABELS, EXPERIENCE_LABELS, EMPLOYMENT_TYPE_LABELS,
+  formatJobLocation, jobSourceLabel, isValidApplyUrl,
+} from '@/lib/jobs-ui';
 
 type ResumeAtsResponse = {
   atsScore: number;
@@ -62,15 +66,23 @@ export default function PublicHiringJobPage({ softwareName, accentLabel, setting
     return () => { active = false; };
   }, [isCandidate, isOwner, job.id]);
 
-  const jobHighlights = useMemo(
-    () => [
-      { label: 'Work mode', value: job.workMode || 'hybrid' },
-      { label: 'Level', value: job.experienceLevel || 'associate' },
-      { label: 'Location', value: job.location || 'Flexible' },
-      { label: 'Screening', value: 'Company-managed' },
-    ],
-    [job.experienceLevel, job.location, job.workMode],
-  );
+  // Honest source attribution + apply-at-source (scraped jobs carry the real ATS
+  // URL through job.applyUrl). Nothing is fabricated: unavailable → not shown.
+  const source = jobSourceLabel(job.applyUrl);
+  const canApplyExternal = isValidApplyUrl(job.applyUrl);
+  const locationLabel = formatJobLocation(job.location, job.workMode);
+  const metaLine = [job.organizationName, job.department, locationLabel].filter(Boolean).join(' · ');
+
+  // Only real, present fields become highlight tiles — no invented defaults.
+  const jobHighlights = useMemo(() => {
+    const items: Array<{ label: string; value: string }> = [];
+    if (job.workMode) items.push({ label: 'Work mode', value: WORK_MODE_LABELS[job.workMode] ?? job.workMode });
+    if (job.experienceLevel) items.push({ label: 'Level', value: EXPERIENCE_LABELS[job.experienceLevel] ?? job.experienceLevel });
+    const loc = formatJobLocation(job.location);
+    if (loc) items.push({ label: 'Location', value: loc });
+    if (job.employmentType) items.push({ label: 'Employment', value: EMPLOYMENT_TYPE_LABELS[job.employmentType] ?? job.employmentType });
+    return items;
+  }, [job.employmentType, job.experienceLevel, job.location, job.workMode]);
 
   const analyzeResume = async () => {
     if (!resumeText.trim()) {
@@ -137,40 +149,76 @@ export default function PublicHiringJobPage({ softwareName, accentLabel, setting
             Hiring Desk
           </div>
           <h1 className="mt-4 text-[2rem] font-semibold tracking-[-0.04em] text-slate-950 sm:text-[2.8rem]">{job.title}</h1>
-          <p className="mt-3 text-sm leading-7 text-slate-600">{job.organizationName} · {job.department || 'General hiring'} · {job.location || 'Location flexible'}</p>
+          <p className="mt-3 text-sm leading-7 text-slate-600">
+            {metaLine}
+            {source && <> · <span className="font-medium text-slate-500">via {source}</span></>}
+          </p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {jobHighlights.map((item) => (
-              <div key={item.label} className="rounded-[1.2rem] border border-slate-200 bg-slate-50 p-4">
-                <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
-                <p className="mt-2 text-sm font-semibold text-slate-950">{item.value}</p>
-              </div>
-            ))}
-          </div>
+          {/* Apply on the ORIGINAL source (scraped jobs) — the real employer ATS URL, never replaced. */}
+          {canApplyExternal && (
+            <div className="mt-5">
+              <Button asChild type="button" className="h-11 rounded-xl bg-slate-950 px-5 text-white hover:bg-slate-800">
+                <a href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow">
+                  Apply on the original source <ArrowUpRight className="ml-1 h-4 w-4" />
+                </a>
+              </Button>
+              <p className="mt-2 text-xs text-slate-500">Opens the employer&apos;s official application page{source ? ` on ${source}` : ''} in a new tab.</p>
+            </div>
+          )}
 
-          <div className="mt-6 rounded-[1.4rem] border border-slate-200 bg-slate-50 p-5">
-            <p className="text-sm font-semibold text-slate-950">Role overview</p>
-            <p className="mt-3 text-sm leading-7 text-slate-600">{job.description}</p>
-          </div>
+          {jobHighlights.length > 0 && (
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {jobHighlights.map((item) => (
+                <div key={item.label} className="rounded-[1.2rem] border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{item.label}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-950">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
 
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <div className="rounded-[1.4rem] border border-slate-200 bg-white p-5">
-              <p className="text-sm font-semibold text-slate-950">Responsibilities</p>
-              <div className="mt-3 space-y-2">
-                {job.responsibilities.map((item) => (
-                  <div key={item} className="rounded-[1rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">{item}</div>
+          {job.description?.trim() && (
+            <div className="mt-6 rounded-[1.4rem] border border-slate-200 bg-slate-50 p-5">
+              <p className="text-sm font-semibold text-slate-950">Role overview</p>
+              <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{job.description}</p>
+            </div>
+          )}
+
+          {(job.responsibilities.length > 0 || job.requirements.length > 0) && (
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
+              {job.responsibilities.length > 0 && (
+                <div className="rounded-[1.4rem] border border-slate-200 bg-white p-5">
+                  <p className="text-sm font-semibold text-slate-950">Responsibilities</p>
+                  <div className="mt-3 space-y-2">
+                    {job.responsibilities.map((item) => (
+                      <div key={item} className="rounded-[1rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">{item}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {job.requirements.length > 0 && (
+                <div className="rounded-[1.4rem] border border-slate-200 bg-white p-5">
+                  <p className="text-sm font-semibold text-slate-950">Requirements</p>
+                  <div className="mt-3 space-y-2">
+                    {job.requirements.map((item) => (
+                      <div key={item} className="rounded-[1rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">{item}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {job.preferredSkills.length > 0 && (
+            <div className="mt-5 rounded-[1.4rem] border border-slate-200 bg-white p-5">
+              <p className="text-sm font-semibold text-slate-950">Skills</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {job.preferredSkills.map((skill) => (
+                  <span key={skill} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">{skill}</span>
                 ))}
               </div>
             </div>
-            <div className="rounded-[1.4rem] border border-slate-200 bg-white p-5">
-              <p className="text-sm font-semibold text-slate-950">Requirements</p>
-              <div className="mt-3 space-y-2">
-                {job.requirements.map((item) => (
-                  <div key={item} className="rounded-[1rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700">{item}</div>
-                ))}
-              </div>
-            </div>
-          </div>
+          )}
         </article>
 
         <aside className="space-y-5">

@@ -28,7 +28,7 @@ type ImportSummary = {
   preview: { title: string; organizationName: string; location: string; employmentType: string; workMode: string; experienceLevel: string }[];
 };
 
-type ScraperStatus = { mode: 'service' | 'local' | 'unconfigured'; configured: boolean; sources: string[] };
+type ScraperStatus = { mode: 'internal' | 'unconfigured'; configured: boolean; sources: string[] };
 type ScrapeResult = { runId: string; status: string; scanned: number; valid: number; invalid: number; duplicates: number; csv: string };
 
 const CSV_HEADER = 'title,organizationName,location,department,employmentType,workMode,experienceLevel,description,responsibilities,requirements,preferredSkills,targetRoleKeywords,applyUrl';
@@ -157,14 +157,14 @@ export default function JobsTab() {
           <div className="text-sm font-semibold text-white">Job Scraper</div>
           <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${scraper?.configured ? 'text-emerald-400' : 'text-zinc-500'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${scraper?.configured ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-            {scraper?.configured ? `Connected (${scraper.mode})` : 'Not configured'}
+            {scraper?.configured ? 'Ready' : 'No approved sources'}
           </span>
         </div>
 
         {!scraper?.configured ? (
           <p className="mt-2 text-[12px] text-zinc-500">
-            Job scraper is not configured. Set <span className="font-mono text-zinc-400">JOB_SCRAPER_MODE</span> and its source allowlist on the server,
-            or use manual CSV import below.
+            No approved scraper sources are enabled. Add and enable a source in{' '}
+            <span className="font-mono text-zinc-400">lib/server/job-scraper/sources.ts</span>, or use manual CSV import below.
           </p>
         ) : (
           <>

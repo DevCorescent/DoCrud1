@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import JobsFeedPage from '@/components/JobsFeedPage';
 import { buildPageMetadata } from '@/lib/seo';
-import { getLandingSettings, getThemeSettings } from '@/lib/server/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,17 +13,6 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-export default async function JobsFeedRoute() {
-  const [landingSettings, themeSettings] = await Promise.all([
-    getLandingSettings(),
-    getThemeSettings(),
-  ]);
-
-  return (
-    <JobsFeedPage
-      softwareName={themeSettings.softwareName}
-      accentLabel={themeSettings.accentLabel}
-      settings={landingSettings}
-    />
-  );
+export default function JobsFeedRoute() {
+  return <JobsFeedPage />;
 }

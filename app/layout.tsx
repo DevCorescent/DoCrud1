@@ -23,11 +23,11 @@ const siteUrl = getPublicAppBaseUrl()
 const metadataBase = new URL(siteUrl)
 const googleAnalyticsId = 'G-C3WEQ82QWE'
 
-const siteTitle = 'Docrud — Connecting Talent, Work & Opportunity'
-const siteTitleFull = 'Docrud — Connecting Talent, Work & Opportunity | Professional Platform for Careers, Networking & Documents'
-const siteDescription =
-  'Docrud is a modern professional platform designed to bring together careers, networking, documents, and opportunities into one intelligent ecosystem. Built for professionals, freelancers, job seekers, and growing businesses, Docrud enables seamless collaboration, professional discovery, daily industry updates, secure document workflows, and meaningful connections — all in one place.'
+const siteTitle = 'Docrud';
+const siteTitleFull = 'Docrud - A right connection can change everything';
 
+const siteDescription =
+  'Docrud connects professionals, businesses, talent and opportunities in one place. Discover people, jobs, projects and businesses, and build the right connections.';
 const siteKeywords = [
   // Platform identity
   'Docrud',

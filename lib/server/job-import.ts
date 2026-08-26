@@ -24,6 +24,38 @@ const DEFAULT_EMPLOYMENT: HiringJobPosting['employmentType'] = 'full_time';
 const DEFAULT_WORK_MODE: HiringJobPosting['workMode'] = 'hybrid';
 const DEFAULT_EXPERIENCE: HiringJobPosting['experienceLevel'] = 'associate';
 
+// Scraper data is messy: "Full Time", "full-time", "FULL_TIME" all mean the same
+// thing. Canonicalize (lowercase, collapse spaces/hyphens to underscore) then map
+// common synonyms onto the exact enum values the model allows. An unrecognized
+// value still returns null → the row is rejected (never coerced to a wrong enum).
+function canonEnum(raw: string): string {
+  return raw.trim().toLowerCase().replace(/[\s\-/]+/g, '_').replace(/_+/g, '_');
+}
+const EMPLOYMENT_ALIASES: Record<string, HiringJobPosting['employmentType']> = {
+  full_time: 'full_time', fulltime: 'full_time', permanent: 'full_time', regular: 'full_time',
+  part_time: 'part_time', parttime: 'part_time',
+  contract: 'contract', contractor: 'contract', contractual: 'contract', temporary: 'contract', temp: 'contract',
+  internship: 'internship', intern: 'internship', trainee: 'internship',
+  freelance: 'freelance', freelancer: 'freelance',
+};
+const WORKMODE_ALIASES: Record<string, HiringJobPosting['workMode']> = {
+  remote: 'remote', wfh: 'remote', work_from_home: 'remote', telecommute: 'remote', virtual: 'remote',
+  hybrid: 'hybrid', flexible: 'hybrid',
+  onsite: 'onsite', on_site: 'onsite', in_office: 'onsite', office: 'onsite', in_person: 'onsite',
+};
+const EXPERIENCE_ALIASES: Record<string, HiringJobPosting['experienceLevel']> = {
+  entry: 'entry', entry_level: 'entry', junior: 'entry', jr: 'entry', fresher: 'entry', graduate: 'entry', trainee: 'entry',
+  associate: 'associate',
+  mid: 'mid', mid_level: 'mid', intermediate: 'mid', midweight: 'mid',
+  senior: 'senior', sr: 'senior', senior_level: 'senior',
+  lead: 'lead', principal: 'lead', staff: 'lead', director: 'lead', head: 'lead', manager: 'lead', expert: 'lead',
+};
+/** Map a raw enum cell to a canonical value, or null when it isn't recognized. */
+function normalizeEnum<T>(raw: string, aliases: Record<string, T>): T | null {
+  const key = canonEnum(raw);
+  return key in aliases ? aliases[key] : null;
+}
+
 // Reasonable ceilings — generous enough for real scraper batches, low enough to
 // bound memory/abuse. Not tunable by the client.
 export const LIMITS = {
@@ -132,9 +164,9 @@ export async function importJobsFromCsv(
     const description = cell(r, 'description');
     const location = cell(r, 'location');
     const department = cell(r, 'department');
-    const employmentRaw = cell(r, 'employmentType').toLowerCase();
-    const workModeRaw = cell(r, 'workMode').toLowerCase();
-    const experienceRaw = cell(r, 'experienceLevel').toLowerCase();
+    const employmentRaw = cell(r, 'employmentType');
+    const workModeRaw = cell(r, 'workMode');
+    const experienceRaw = cell(r, 'experienceLevel');
     const applyUrl = cell(r, 'applyUrl');
 
     if (!title) errors.push('title is required');
@@ -146,14 +178,15 @@ export async function importJobsFromCsv(
     if (location.length > LIMITS.location) errors.push(`location exceeds ${LIMITS.location} chars`);
     if (department.length > LIMITS.department) errors.push(`department exceeds ${LIMITS.department} chars`);
 
-    const employmentType = employmentRaw
-      ? (EMPLOYMENT_TYPES.includes(employmentRaw as never) ? employmentRaw as HiringJobPosting['employmentType'] : (errors.push(`employmentType "${employmentRaw}" is invalid`), undefined))
+    // Blank optional enum → importer default; present → normalized; unrecognized → row rejected.
+    const employmentType = employmentRaw.trim()
+      ? (normalizeEnum(employmentRaw, EMPLOYMENT_ALIASES) ?? (errors.push(`employmentType "${employmentRaw}" is invalid`), undefined))
       : DEFAULT_EMPLOYMENT;
-    const workMode = workModeRaw
-      ? (WORK_MODES.includes(workModeRaw as never) ? workModeRaw as HiringJobPosting['workMode'] : (errors.push(`workMode "${workModeRaw}" is invalid`), undefined))
+    const workMode = workModeRaw.trim()
+      ? (normalizeEnum(workModeRaw, WORKMODE_ALIASES) ?? (errors.push(`workMode "${workModeRaw}" is invalid`), undefined))
       : DEFAULT_WORK_MODE;
-    const experienceLevel = experienceRaw
-      ? (EXPERIENCE_LEVELS.includes(experienceRaw as never) ? experienceRaw as HiringJobPosting['experienceLevel'] : (errors.push(`experienceLevel "${experienceRaw}" is invalid`), undefined))
+    const experienceLevel = experienceRaw.trim()
+      ? (normalizeEnum(experienceRaw, EXPERIENCE_ALIASES) ?? (errors.push(`experienceLevel "${experienceRaw}" is invalid`), undefined))
       : DEFAULT_EXPERIENCE;
 
     const responsibilities = splitArray(cell(r, 'responsibilities'));

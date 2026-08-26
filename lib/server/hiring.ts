@@ -81,6 +81,22 @@ export async function getPublishedHiringJobById(id: string) {
   return jobs.find((job) => job.id === id) || null;
 }
 
+/**
+ * Public-safe view of a job posting. Strips internal / PII fields that must never
+ * reach an unauthenticated client — the poster's user id and email, the internal
+ * organization id, and import metadata (source / pageId) — while preserving
+ * everything a public listing or detail view needs (title, company name,
+ * location, department, requirements, skills, ATS threshold, dates, apply link).
+ * Use this in every PUBLIC (`/api/public/...`) job response. Server components
+ * that need the full record (e.g. owner detection on the detail page) keep
+ * calling the getters above directly and are unaffected.
+ */
+export type PublicHiringJob = Omit<HiringJobPosting, 'createdByUserId' | 'createdByEmail' | 'organizationId' | 'source' | 'pageId'>;
+export function toPublicHiringJob(job: HiringJobPosting): PublicHiringJob {
+  const { createdByUserId: _u, createdByEmail: _e, organizationId: _o, source: _s, pageId: _p, ...pub } = job;
+  return pub;
+}
+
 export async function saveHiringJobs(jobs: HiringJobPosting[]) {
   await writeJsonFile(hiringJobsPath, jobs);
 }

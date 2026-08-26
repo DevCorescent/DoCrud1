@@ -28,6 +28,9 @@ type ImportSummary = {
   preview: { title: string; organizationName: string; location: string; employmentType: string; workMode: string; experienceLevel: string }[];
 };
 
+type ScraperStatus = { mode: 'service' | 'local' | 'unconfigured'; configured: boolean; sources: string[] };
+type ScrapeResult = { runId: string; status: string; scanned: number; valid: number; invalid: number; duplicates: number; csv: string };
+
 const CSV_HEADER = 'title,organizationName,location,department,employmentType,workMode,experienceLevel,description,responsibilities,requirements,preferredSkills,targetRoleKeywords,applyUrl';
 
 export default function JobsTab() {
@@ -42,6 +45,46 @@ export default function JobsTab() {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // --- Job Scraper (runs the EXTERNAL scraper via a Super-Admin-only proxy) ---
+  const [scraper, setScraper] = useState<ScraperStatus | null>(null);
+  const [scrapeSource, setScrapeSource] = useState('');
+  const [scrapeLimit, setScrapeLimit] = useState('50');
+  const [scrapeResume, setScrapeResume] = useState(false);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState<ScrapeResult | null>(null);
+  const [scrapeErr, setScrapeErr] = useState('');
+
+  useEffect(() => {
+    fetch('/api/super-admin/jobs/scraper')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: ScraperStatus | null) => {
+        if (!d) return;
+        setScraper(d);
+        if (d.sources.length && !scrapeSource) setScrapeSource(d.sources[0]);
+      })
+      .catch(() => { /* scraper is optional; ignore */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const runScraper = async () => {
+    if (!scrapeSource) { setScrapeErr('Select a source.'); return; }
+    setScraping(true); setScrapeErr(''); setErr(''); setMsg(''); setScrapeResult(null); setSummary(null);
+    try {
+      const r = await fetch('/api/super-admin/jobs/scraper/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: scrapeSource, limit: Number(scrapeLimit) || 50, resume: scrapeResume }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setScrapeErr(d.error || 'Scrape failed.'); return; }
+      setScrapeResult(d);
+      setCsvText(d.csv || '');
+      setFileName(`scrape: ${scrapeSource}`);
+      // Feed the scraped CSV straight into the EXISTING import preview (validate + dedup).
+      if (d.csv) await run('preview', d.csv);
+    } catch { setScrapeErr('Network error.'); }
+    finally { setScraping(false); }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,13 +106,14 @@ export default function JobsTab() {
     setCsvText(text);
   };
 
-  const run = async (mode: 'preview' | 'commit') => {
-    if (!csvText.trim()) { setErr('Choose a CSV file first.'); return; }
+  const run = async (mode: 'preview' | 'commit', csvArg?: string) => {
+    const csv = csvArg ?? csvText;
+    if (!csv.trim()) { setErr('Choose a CSV file first.'); return; }
     setBusy(mode); setErr(''); setMsg('');
     try {
       const r = await fetch('/api/super-admin/jobs/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csv: csvText, mode }),
+        body: JSON.stringify({ csv, mode }),
       });
       const d = await r.json();
       if (!r.ok) { setErr(d.error || 'Import failed.'); return; }
@@ -104,6 +148,58 @@ export default function JobsTab() {
         {stat('Draft', stats?.draft ?? 0, 'text-amber-400')}
         {stat('Closed', stats?.closed ?? 0, 'text-zinc-400')}
         {stat('Scraped', stats?.scraped ?? 0, 'text-sky-400')}
+      </div>
+
+      {/* Job Scraper — operates the EXTERNAL scraper via a Super-Admin-only proxy.
+          Its output feeds the SAME import flow below (no second import path). */}
+      <div className={CARD}>
+        <div className="flex items-center justify-between">
+          <div className="text-sm font-semibold text-white">Job Scraper</div>
+          <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${scraper?.configured ? 'text-emerald-400' : 'text-zinc-500'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${scraper?.configured ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+            {scraper?.configured ? `Connected (${scraper.mode})` : 'Not configured'}
+          </span>
+        </div>
+
+        {!scraper?.configured ? (
+          <p className="mt-2 text-[12px] text-zinc-500">
+            Job scraper is not configured. Set <span className="font-mono text-zinc-400">JOB_SCRAPER_MODE</span> and its source allowlist on the server,
+            or use manual CSV import below.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-2.5 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+              <label className="block">
+                <span className="mb-1 block text-[11px] uppercase tracking-wide text-zinc-500">Source</span>
+                <select value={scrapeSource} onChange={(e) => setScrapeSource(e.target.value)} className={INPUT}>
+                  {scraper.sources.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[11px] uppercase tracking-wide text-zinc-500">Max jobs</span>
+                <input type="number" min={1} max={1000} value={scrapeLimit} onChange={(e) => setScrapeLimit(e.target.value)} className={`${INPUT} w-24`} />
+              </label>
+              <label className="flex h-9 items-center gap-1.5 text-[12px] text-zinc-400">
+                <input type="checkbox" checked={scrapeResume} onChange={(e) => setScrapeResume(e.target.checked)} /> Resume
+              </label>
+            </div>
+            <div className="mt-3">
+              <button type="button" disabled={scraping || !scrapeSource || busy !== ''} onClick={() => void runScraper()} className={`${BTN} bg-sky-500/90 text-white hover:bg-sky-500`}>
+                {scraping ? 'Scraping…' : 'Run scraper'}
+              </button>
+            </div>
+            {scrapeErr && <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-300">{scrapeErr}</div>}
+            {scrapeResult && (
+              <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300">Scanned: <b className="text-white">{scrapeResult.scanned}</b></span>
+                <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-300">Scraped: <b>{scrapeResult.valid}</b></span>
+                <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-300">Duplicates: <b>{scrapeResult.duplicates}</b></span>
+                <span className="rounded-md bg-red-500/10 px-2 py-1 text-red-300">Invalid: <b>{scrapeResult.invalid}</b></span>
+                <span className="text-zinc-500">→ previewed below; import valid rows with the button.</span>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Import */}

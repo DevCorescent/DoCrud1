@@ -16,6 +16,8 @@ import { parseHtml, selectAll } from './html';
 import { htmlToText, splitList, deriveKeywords, safeUrl, clip, clipList } from './normalize';
 import { fetchAshby } from './providers/ashby';
 import { fetchLever } from './providers/lever';
+import { fetchGreenhouse } from './providers/greenhouse';
+import { normalizeIndiaLocation } from './india';
 import { scoreJob } from './score';
 import { listSources } from './sources';
 import { NormalizedJob, ProviderDeps, SourceRunStat } from './types';
@@ -167,7 +169,7 @@ function normalizedRow(j: NormalizedJob): Record<string, string> {
   return {
     title,
     organizationName: clip(j.organizationName, 300),
-    location: clip(j.location, 300),
+    location: clip(normalizeIndiaLocation(j.location), 300),  // canonicalize Indian cities
     department: clip(j.department, 200),
     employmentType: (j.employmentType || '').trim(),
     workMode: (j.workMode || '').trim(),
@@ -184,6 +186,7 @@ function normalizedRow(j: NormalizedJob): Record<string, string> {
 async function fetchSource(source: ScrapeSource, deps: ProviderDeps): Promise<NormalizedJob[]> {
   if (source.provider === 'ashby') return fetchAshby(source, deps);
   if (source.provider === 'lever') return fetchLever(source, deps);
+  if (source.provider === 'greenhouse') return fetchGreenhouse(source, deps);
   return []; // 'jsonld' sources use runScrape(); the env registry builds only API sources
 }
 

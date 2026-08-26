@@ -19,6 +19,18 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Briefcase, Building2, LayoutGrid, MapPin, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, EXPERIENCE_LABELS } from '@/lib/jobs-ui';
 import { JobSummaryCard, type JobSummary } from '@/components/jobs/JobSummaryCard';
+import { matchesIndiaFilter, type IndiaBucket } from '@/lib/server/job-scraper/india';
+
+/** India location quick-filter chips (label ↔ bucket used by matchesIndiaFilter). */
+const INDIA_FILTERS: Array<{ id: IndiaBucket; label: string }> = [
+  { id: 'india', label: 'India' },
+  { id: 'bengaluru', label: 'Bengaluru' },
+  { id: 'hyderabad', label: 'Hyderabad' },
+  { id: 'pune', label: 'Pune' },
+  { id: 'mumbai', label: 'Mumbai' },
+  { id: 'delhi-ncr', label: 'Delhi NCR' },
+  { id: 'remote-india', label: 'Remote India' },
+];
 
 /* ── Presentation tokens — identical set to app/projects/page.tsx ── */
 const HEADER_H = 56;
@@ -84,11 +96,13 @@ export default function JobsFeedPage() {
   const [experience, setExperience] = useState<string[]>([]);
   const [skills, setSkills] = useState<string[]>([]);
   const [location, setLocation] = useState('');
+  const [india, setIndia] = useState<IndiaBucket>('');
   const [sort, setSort] = useState<'recommended' | 'newest'>('recommended');
   const [sheetOpen, setSheetOpen] = useState(false);
 
   const [all, setAll] = useState<JobSummary[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [recommended, setRecommended] = useState<JobSummary[]>([]);
 
   const load = useCallback(() => {
     setState('loading');
@@ -101,12 +115,27 @@ export default function JobsFeedPage() {
   }, []);
   useEffect(() => load(), [load]);
 
+  // Session-scoped recommendations (the API resolves the current user; a signed-out
+  // viewer or one with no matched jobs simply gets an empty list → section hidden).
+  useEffect(() => {
+    let active = true;
+    fetch('/api/recommendations/jobs', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { jobs: [] }))
+      .then((d) => {
+        if (!active) return;
+        const jobs = Array.isArray(d?.jobs) ? (d.jobs as JobSummary[]) : [];
+        setRecommended(jobs.filter((j) => typeof j.matchScore === 'number'));
+      })
+      .catch(() => { /* recommendations are best-effort; never block the feed */ });
+    return () => { active = false; };
+  }, []);
+
   const toggle = (list: string[], setList: (v: string[]) => void, value: string) =>
     setList(list.includes(value) ? list.filter(v => v !== value) : [...list, value]);
 
   const clearAll = () => {
     setQuery(''); setEmployment([]); setWorkMode([]); setExperience([]);
-    setSkills([]); setLocation(''); setSort('recommended');
+    setSkills([]); setLocation(''); setIndia(''); setSort('recommended');
   };
 
   /* Facets derived from ALL loaded jobs (Projects derives them server-side). */
@@ -138,6 +167,7 @@ export default function JobsFeedPage() {
         if (!skills.some((s) => js.has(s))) return false;
       }
       if (loc && !(j.location || '').toLowerCase().includes(loc)) return false;
+      if (india && !matchesIndiaFilter(j.location || '', j.workMode || undefined, india)) return false;
       if (q) {
         const hay = `${j.title} ${j.organizationName || ''} ${j.location || ''} ${(j.preferredSkills ?? []).join(' ')} ${(j.targetRoleKeywords ?? []).join(' ')}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -150,7 +180,7 @@ export default function JobsFeedPage() {
     }
     // 'recommended' keeps the order the feed API returns (already newest-first).
     return out;
-  }, [all, query, employment, workMode, experience, skills, location, sort]);
+  }, [all, query, employment, workMode, experience, skills, location, india, sort]);
 
   const activeChips = [
     ...employment.map(v => ({ label: EMPLOYMENT_TYPE_LABELS[v] ?? v, clear: () => toggle(employment, setEmployment, v) })),
@@ -158,6 +188,7 @@ export default function JobsFeedPage() {
     ...experience.map(v => ({ label: EXPERIENCE_LABELS[v] ?? v, clear: () => toggle(experience, setExperience, v) })),
     ...skills.map(v => ({ label: v, clear: () => toggle(skills, setSkills, v) })),
     ...(location.trim() ? [{ label: location.trim(), clear: () => setLocation('') }] : []),
+    ...(india ? [{ label: INDIA_FILTERS.find(f => f.id === india)?.label ?? 'India', clear: () => setIndia('') }] : []),
   ];
   const hasFilters = activeChips.length > 0 || query.trim().length > 0;
 
@@ -209,6 +240,16 @@ export default function JobsFeedPage() {
         <div className="relative">
           <MapPin className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-white/22" />
           <input value={location} onChange={e => setLocation(e.target.value)} placeholder="City or area…" aria-label="Filter by location" className={`${INPUT} pl-8`} />
+        </div>
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
+          {INDIA_FILTERS.map(f => {
+            const on = india === f.id;
+            return (
+              <button key={f.id} type="button" onClick={() => setIndia(on ? '' : f.id)} aria-pressed={on} className={`${PILL} ${on ? PILL_ON : PILL_OFF}`}>
+                {f.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -362,6 +403,25 @@ export default function JobsFeedPage() {
               <span className="flex items-center gap-1.5"><Building2 className="h-3 w-3" /><span className="font-semibold text-white/48">{companyCount}</span> companies</span>
               <span className="flex items-center gap-1.5"><LayoutGrid className="h-3 w-3" /><span className="font-semibold text-white/48">{openCount}</span> open</span>
             </div>
+          )}
+
+          {recommended.length > 0 && (
+            <section className="mb-9">
+              <div className="flex items-baseline justify-between gap-3 mb-3.5">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-[15px] font-bold tracking-[-0.01em] text-white">Recommended for You</h2>
+                  <span className="text-[11.5px] font-medium text-white/28">matched to your profile</span>
+                </div>
+              </div>
+              <div className={GRID}>
+                {recommended.slice(0, 4).map((j, i) => (
+                  <div key={`rec-${j.id}`} className="jc-anim" style={{ animationDelay: `${Math.min(i, 3) * 0.04}s` }}>
+                    <JobSummaryCard job={j} />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-7 border-t border-white/[0.06]" />
+            </section>
           )}
 
           {state === 'loading' && <div className={GRID}>{Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}</div>}

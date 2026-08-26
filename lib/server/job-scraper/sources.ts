@@ -13,6 +13,12 @@
  *   GREENHOUSE_BOARDS     comma list of Greenhouse board tokens.
  * Each entry may be "slug", "slug|Display Name", or "slug|Display Name|IN"
  * (the 3rd field is an optional ISO country tag, e.g. IN for India).
+ *
+ * Deliberately NOT supported: Internshala and Instahyre. Neither publishes an
+ * officially supported public jobs API — Internshala's robots.txt disallows its
+ * /job/search and /api paths, and Instahyre exposes only an undocumented internal
+ * endpoint. Integrating either would require scraping or a private API, which the
+ * public-source architecture forbids. See scripts/india-sources.verify.ts.
  */
 import { ScrapeSource } from './types';
 

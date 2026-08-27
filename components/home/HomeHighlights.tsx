@@ -30,6 +30,7 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { ArrowRight, Users } from 'lucide-react';
 import { profileStatusStyle } from '@/lib/profile-score';
+import { cachedJson } from '@/lib/client/request-cache';
 import AnimatedWelcomeCharacter from '@/components/home/AnimatedWelcomeCharacter';
 
 export type HomeGreetingConfig = {
@@ -124,11 +125,13 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
     if (status !== 'authenticated') return;
     let active = true;
 
+    /* Shared with the nav avatar ring (/api/me/badge) and the recommended-jobs
+       carousel (/api/recommendations/jobs), which ask for the same data on the
+       same page — cachedJson collapses those into one request each. The three
+       here are independent and already run concurrently. */
     const load = async (url: string, key: 'total' | 'profileScore', set: (n: number) => void) => {
       try {
-        const response = await fetch(url, { cache: 'no-store' });
-        if (!response.ok) return;
-        const data = await response.json();
+        const data = await cachedJson<Record<string, unknown>>(url);
         const value = Number(data?.[key]);
         if (active && Number.isFinite(value)) set(Math.max(0, Math.round(value)));
       } catch { /* a tile that cannot load keeps its skeleton rather than showing a wrong number */ }

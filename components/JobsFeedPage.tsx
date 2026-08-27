@@ -319,7 +319,10 @@ export default function JobsFeedPage() {
   const load = useCallback(() => {
     setState('loading');
     let active = true;
-    fetch('/api/public/hiring/jobs', { cache: 'no-store' })
+    /* view=list drops description/responsibilities/requirements — ~2.7 MB of
+       payload the cards never render. Filtering, search, sort and facets all
+       read fields the list view keeps. */
+    fetch('/api/public/hiring/jobs?view=list', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('load-failed'))))
       .then((d) => { if (active) { setAll(Array.isArray(d) ? d : []); setState('ready'); } })
       .catch(() => { if (active) setState('error'); });

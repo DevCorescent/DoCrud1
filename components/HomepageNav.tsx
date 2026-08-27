@@ -7,6 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import GlobalSearchBar, { type GlobalSearchBarHandle, type LocalSearchResult } from '@/components/GlobalSearchBar';
 import { ProfileCompletionRing } from '@/components/nav/ProfileCompletion';
+import { cachedJson } from '@/lib/client/request-cache';
 import { useSession ,signOut } from 'next-auth/react';
 
 /* ── Ddrive premium "D" icon ──────────────────────────────────────── */
@@ -445,8 +446,15 @@ useEffect(() => {
   useEffect(() => {
     if (!isAuthenticated || guestMode) return;
     const id = setTimeout(() => {
-      fetch('/api/me/badge')
-        .then((r) => r.ok ? r.json() : null)
+      /* Shared with the homepage Profile Score card, which needs the same
+         document — cachedJson makes the pair one request. */
+      cachedJson<{
+        docrudGo?: boolean;
+        premium?: boolean;
+        avatarUrl?: string | null;
+        profileScore?: number | null;
+        freePremium?: { spotsLeft: number; totalSpots: number } | null;
+      } | null>('/api/me/badge')
         .then((d: {
           docrudGo?: boolean;
           premium?: boolean;

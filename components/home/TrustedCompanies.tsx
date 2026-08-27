@@ -27,6 +27,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { logoKey } from '@/lib/company-logos';
+import { cachedJson } from '@/lib/client/request-cache';
 
 export type TrustedCompany = {
   id: string;
@@ -46,10 +47,15 @@ function CompanyMark({ company }: { company: TrustedCompany }) {
     <span className="flex shrink-0 items-center gap-2.5">
       {showLogo && (
         <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-white/[0.09] bg-white/[0.06] sm:h-8 sm:w-8">
+          {/* Intrinsic size matches the chip, so the row reserves its space
+              before the logo arrives — a slow or failed logo cannot reflow the
+              marquee mid-animation. */}
           <img
             src={company.logoUrl}
             alt=""
             aria-hidden
+            width={32}
+            height={32}
             loading="lazy"
             decoding="async"
             onError={() => setFailed(true)}
@@ -87,8 +93,7 @@ export default function TrustedCompanies({
   useEffect(() => {
     if (!autoFromJobs) return;
     let active = true;
-    fetch('/api/public/hiring-companies', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : null))
+    cachedJson<{ companies?: HiringCompany[] }>('/api/public/hiring-companies')
       .then((data) => {
         if (active && Array.isArray(data?.companies)) setHiring(data.companies);
       })

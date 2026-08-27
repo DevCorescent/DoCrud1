@@ -24,6 +24,7 @@ import Link from 'next/link';
 import { Briefcase, MapPin } from 'lucide-react';
 import { getCompanyLogo } from '@/lib/company-logos';
 import { companyHue } from '@/lib/jobs-ui';
+import { cachedJson } from '@/lib/client/request-cache';
 
 type PublicJob = {
   id: string;
@@ -82,9 +83,10 @@ export default function RecommendedJobs() {
   useEffect(() => {
     if (fetched.current) return;
     fetched.current = true;
-    fetch('/api/recommendations/jobs')
-      .then((r) => (r.ok ? r.json() : { jobs: [] }))
-      .then((d: { jobs?: PublicJob[] }) => setJobs(Array.isArray(d.jobs) ? d.jobs : []))
+    /* Same endpoint the homepage headline count uses; cachedJson makes the two
+       one request. Ranking and the card cap still come from the server. */
+    cachedJson<{ jobs?: PublicJob[] }>('/api/recommendations/jobs')
+      .then((d) => setJobs(Array.isArray(d.jobs) ? d.jobs : []))
       .catch(() => setJobs([]));   // a failing jobs service must not break the feed
   }, []);
 

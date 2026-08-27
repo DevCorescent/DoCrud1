@@ -17,7 +17,7 @@
  * rejected vote (signed out, rate limited) snaps back rather than lying.
  */
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import {
@@ -145,10 +145,11 @@ function VoteStack({
 }
 
 /* ─── one row ───────────────────────────────────────────────────────────── */
-function TrendRow({
+function TrendRowBase({
   trend, rank, busy, onVote, expanded,
 }: {
-  trend: TrendView; rank: number; busy: boolean; onVote: (direction: 1 | -1) => void; expanded: boolean;
+  trend: TrendView; rank: number; busy: boolean;
+  onVote: (trend: TrendView, direction: 1 | -1) => void; expanded: boolean;
 }) {
   const rising = trend.change > 0;
   const falling = trend.change < 0;
@@ -180,10 +181,16 @@ function TrendRow({
       </div>
 
       <TrendChart history={trend.history} width={expanded ? 132 : 84} height={expanded ? 46 : 38} showAxis={expanded} />
-      <VoteStack trend={trend} busy={busy} onVote={onVote} />
+      <VoteStack trend={trend} busy={busy} onVote={(direction) => onVote(trend, direction)} />
     </li>
   );
 }
+
+/* Voting on one trend only changes that trend's row. Without this, every row
+   (and every chart in it) re-rendered on each vote. The props are all stable —
+   `onVote` is a useCallback and `trend` only changes for the voted row — so the
+   comparison actually holds. */
+const TrendRow = memo(TrendRowBase);
 
 /* ─── board ─────────────────────────────────────────────────────────────── */
 export default function TrendsBoard({ variant = 'home' }: { variant?: 'home' | 'full' }) {
@@ -217,7 +224,7 @@ export default function TrendsBoard({ variant = 'home' }: { variant?: 'home' | '
     return () => clearTimeout(timer);
   }, [error]);
 
-  const vote = async (trend: TrendView, direction: 1 | -1) => {
+  const vote = useCallback(async (trend: TrendView, direction: 1 | -1) => {
     if (status !== 'authenticated') { setError('Sign in to vote on trends.'); return; }
     setBusyId(trend.id);
     setError('');
@@ -236,7 +243,7 @@ export default function TrendsBoard({ variant = 'home' }: { variant?: 'home' | '
     } finally {
       setBusyId('');
     }
-  };
+  }, [status]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -340,7 +347,7 @@ export default function TrendsBoard({ variant = 'home' }: { variant?: 'home' | '
           <ul>
             {visible.map((trend, index) => (
               <TrendRow key={trend.id} trend={trend} rank={index + 1} expanded={full}
-                busy={busyId === trend.id} onVote={(direction) => vote(trend, direction)} />
+                busy={busyId === trend.id} onVote={vote} />
             ))}
           </ul>
         )}

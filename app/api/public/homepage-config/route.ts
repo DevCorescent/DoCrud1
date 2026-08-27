@@ -12,7 +12,7 @@ type SectionVisibility = {
 };
 type TrustedCompany = { id: string; name: string; logoUrl: string; href: string; visible: boolean };
 /** The "Top companies trust docrud" marquee — Super Admin owns the list AND the logos. */
-type TrustedCompanies = { label: string; items: TrustedCompany[] };
+type TrustedCompanies = { label: string; items: TrustedCompany[]; autoFromJobs: boolean };
 /** Copy + artwork for the signed-in greeting card. The name comes from the session. */
 type HomeGreeting = { subtitle: string; cadenceLabel: string; illustrationUrl: string };
 type HomepageConfig = {
@@ -34,17 +34,11 @@ const DEFAULT_CONFIG: HomepageConfig = {
   sections: { trustedCompanies:true, homeHighlights:true, trendsBoard:true, heroBanner:true, featureCards:true, publishHeading:true, contentDiscovery:true, adBanners:true, gigsGrid:false, leaderboards:false, builtInIndia:true, footer:true },
   trustedCompanies: {
     label: 'Top companies trust docrud',
-    /* Seeded with names only. A logo appears once Super Admin attaches one —
-       until then the name renders as a wordmark, never a broken image. */
-    items: [
-      { id: 'google',    name: 'Google',     logoUrl: '', href: '', visible: true },
-      { id: 'microsoft', name: 'Microsoft',  logoUrl: '', href: '', visible: true },
-      { id: 'amazon',    name: 'Amazon',     logoUrl: '', href: '', visible: true },
-      { id: 'ibm',       name: 'IBM',        logoUrl: '', href: '', visible: true },
-      { id: 'adobe',     name: 'Adobe',      logoUrl: '', href: '', visible: true },
-      { id: 'deloitte',  name: 'Deloitte',   logoUrl: '', href: '', visible: true },
-      { id: 'infosys',   name: 'Infosys',    logoUrl: '', href: '', visible: true },
-    ],
+    /* Empty by default: the row is filled from the employers actually posting
+       jobs (/api/public/hiring-companies). Items added here are PINNED and
+       lead the row — use them for partners with no live posting. */
+    items: [],
+    autoFromJobs: true,
   },
   greeting: {
     subtitle: "We've found some jobs and connections for you.",

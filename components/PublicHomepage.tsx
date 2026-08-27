@@ -133,7 +133,7 @@ type HPConfig = {
   sections: HPSectionVisibility;
   /* The "Top companies trust docrud" marquee and the greeting card copy —
      both owned by Super Admin, both delivered by /api/public/homepage-config. */
-  trustedCompanies: { label:string; items:HPTrustedCompany[] };
+  trustedCompanies: { label:string; items:HPTrustedCompany[]; autoFromJobs:boolean };
   greeting: { subtitle:string; cadenceLabel:string; illustrationUrl:string };
   hero: { slotWords: {word:string;subtitle:string;color:string}[]; backgroundImage:string; guestCtaPrimary:string; guestCtaSecondary:string; authCtaPrimary:string; authCtaSecondary:string };
   nav: { logoText:string; logoUrl:string; links:{id:string;label:string;href:string;visible:boolean;order:number}[]; showSignIn:boolean; showSignUp:boolean };
@@ -6176,6 +6176,7 @@ function NewHomepageContent({
             <TrustedCompanies
               label={hpConfig.trustedCompanies.label}
               items={hpConfig.trustedCompanies.items ?? []}
+              autoFromJobs={hpConfig.trustedCompanies.autoFromJobs !== false}
             />
           </div>
         )}

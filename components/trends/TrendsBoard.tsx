@@ -60,10 +60,9 @@ const INPUT =
 function TrendChart({ history, height = 40, width = 96, showAxis = false }: {
   history: TrendPoint[]; height?: number; width?: number; showAxis?: boolean;
 }) {
-  const points = history.length ? history : [];
   const geometry = useMemo(() => {
-    if (points.length === 0) return null;
-    const values = points.map((p) => p.score);
+    if (history.length === 0) return null;
+    const values = history.map((p) => p.score);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const span = max - min || 1;
@@ -71,21 +70,21 @@ function TrendChart({ history, height = 40, width = 96, showAxis = false }: {
     const usable = height - pad * 2;
 
     // A single close has no line to draw — it is rendered as a flat mid-line.
-    const coords = points.map((p, i) => {
-      const x = points.length === 1 ? width / 2 : (i / (points.length - 1)) * width;
+    const coords = history.map((p, i) => {
+      const x = history.length === 1 ? width / 2 : (i / (history.length - 1)) * width;
       const y = pad + (1 - (p.score - min) / span) * usable;
       return { x, y };
     });
 
-    const path = points.length === 1
+    const path = history.length === 1
       ? `M 0 ${height / 2} L ${width} ${height / 2}`
       : `M ${coords.map((c) => `${c.x.toFixed(2)} ${c.y.toFixed(2)}`).join(' L ')}`;
-    const area = points.length === 1
+    const area = history.length === 1
       ? ''
       : `${path} L ${width} ${height} L 0 ${height} Z`;
 
     return { path, area, min, max, first: values[0], last: values[values.length - 1] };
-  }, [points, height, width]);
+  }, [history, height, width]);
 
   if (!geometry) return <div style={{ width, height }} aria-hidden />;
 
@@ -93,7 +92,7 @@ function TrendChart({ history, height = 40, width = 96, showAxis = false }: {
   const falling = geometry.last < geometry.first;
   const stroke = rising ? '#34d399' : falling ? '#f87171' : 'rgba(255,255,255,0.32)';
   const fill = rising ? 'rgba(52,211,153,0.13)' : falling ? 'rgba(248,113,113,0.11)' : 'rgba(255,255,255,0.05)';
-  const gradientId = `tg-${Math.abs(geometry.first)}-${points.length}-${rising ? 'u' : falling ? 'd' : 'f'}`;
+  const gradientId = `tg-${Math.abs(geometry.first)}-${history.length}-${rising ? 'u' : falling ? 'd' : 'f'}`;
 
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden

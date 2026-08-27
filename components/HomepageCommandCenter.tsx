@@ -28,7 +28,7 @@ type AnnouncementBanner = {
 };
 type HomepageConfig = {
   sections: SectionVisibility;
-  trustedCompanies: { label: string; items: TrustedCompany[] };
+  trustedCompanies: { label: string; items: TrustedCompany[]; autoFromJobs: boolean };
   greeting: { subtitle: string; cadenceLabel: string; illustrationUrl: string };
   hero: { slotWords: SlotWord[]; backgroundImage: string; guestCtaPrimary: string; guestCtaSecondary: string; authCtaPrimary: string; authCtaSecondary: string };
   nav: { logoText: string; logoUrl: string; links: NavLink[]; showSignIn: boolean; showSignUp: boolean };
@@ -42,7 +42,7 @@ type HomepageConfig = {
 /* ── Constants ─────────────────────────────────────────────────────────────── */
 const DEFAULT_CONFIG: HomepageConfig = {
   sections: { trustedCompanies: true, homeHighlights: true, trendsBoard: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
-  trustedCompanies: { label: 'Top companies trust docrud', items: [] },
+  trustedCompanies: { label: 'Top companies trust docrud', items: [], autoFromJobs: true },
   greeting: { subtitle: '', cadenceLabel: '', illustrationUrl: '' },
   hero: { slotWords: [], backgroundImage: '', guestCtaPrimary: '', guestCtaSecondary: '', authCtaPrimary: '', authCtaSecondary: '' },
   nav: { logoText: '', logoUrl: '', links: [], showSignIn: true, showSignUp: true },
@@ -381,7 +381,7 @@ function TrustedCompaniesPanel({
   uploadImage: (file: File, field: string, onDone: (url: string) => void) => Promise<void>;
   uploadingField: string | null;
 }) {
-  const block = config.trustedCompanies ?? { label: '', items: [] };
+  const block = config.trustedCompanies ?? { label: '', items: [], autoFromJobs: true };
   const items = block.items ?? [];
 
   const setBlock = (patch: Partial<HomepageConfig['trustedCompanies']>) =>
@@ -424,10 +424,23 @@ function TrustedCompaniesPanel({
           <p className="mt-1.5 text-[11px] text-zinc-600">Leave empty to show the logos with no caption.</p>
         </div>
 
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-800/40 px-3.5 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-white">Show companies that are hiring</p>
+            <p className="mt-0.5 text-[11px] text-zinc-600">
+              Fills the row from employers with live job postings, using their verified logo where
+              we have one. Companies pinned below still lead the row.
+            </p>
+          </div>
+          <Toggle on={block.autoFromJobs !== false} onToggle={() => setBlock({ autoFromJobs: block.autoFromJobs === false })} />
+        </div>
+
         {items.length === 0 ? (
           <div className={infoBox}>
             <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-            No companies configured — the marquee is hidden on the homepage until you add one.
+            {block.autoFromJobs === false
+              ? 'Nothing pinned and auto-fill is off — the marquee is hidden on the homepage.'
+              : 'Nothing pinned — the row shows the employers currently posting jobs.'}
           </div>
         ) : (
           <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">

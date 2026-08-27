@@ -3,19 +3,26 @@
 /**
  * "Top companies trust docrud" — the marquee above the homepage greeting.
  *
- * The label and every company come from the Super Admin homepage config
- * (`trustedCompanies`), so the row is edited from the panel and never from
- * this file. A company renders its uploaded logo when it has one and its name
- * as a wordmark when it does not — a missing logo is a real state, not a
- * broken image.
+ * WHERE THE COMPANIES COME FROM: by default, the employers actually posting on
+ * Docrud (/api/public/hiring-companies, derived from published hiring jobs), so
+ * the row names real brands with live roles rather than a hardcoded list. Super
+ * Admin can pin extra companies in the homepage config; pinned ones lead the
+ * row and the live employers follow, de-duplicated by name.
+ *
+ * EACH MARK IS LOGO + NAME, scrolling together as one unit — the logo alone is
+ * unreadable at this size for the many employers with no vendored asset, and a
+ * verified logo beside its own name is what makes the row read as authentic. A
+ * company with no logo shows its name alone; nothing is guessed and no broken
+ * image is ever rendered.
  *
  * The track is duplicated once and translated by exactly -50%, so the loop is
  * seamless whatever the row's width. It pauses on hover and honours
  * prefers-reduced-motion.
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
+import { logoKey } from '@/lib/company-logos';
 
 export type TrustedCompany = {
   id: string;
@@ -25,28 +32,37 @@ export type TrustedCompany = {
   visible: boolean;
 };
 
+type HiringCompany = { name: string; logoUrl: string; jobCount: number };
+
 function CompanyMark({ company }: { company: TrustedCompany }) {
   const [failed, setFailed] = useState(false);
+  const showLogo = Boolean(company.logoUrl) && !failed;
 
-  const body = company.logoUrl && !failed ? (
-    <img
-      src={company.logoUrl}
-      alt={company.name}
-      loading="lazy"
-      decoding="async"
-      onError={() => setFailed(true)}
-      className="h-5 w-auto max-w-[112px] object-contain opacity-80 transition-opacity hover:opacity-100 sm:h-6"
-    />
-  ) : (
-    <span className="whitespace-nowrap text-[15px] font-bold tracking-[-0.01em] text-white/70 transition-colors hover:text-white/90 sm:text-[17px]">
-      {company.name}
+  const body = (
+    <span className="flex shrink-0 items-center gap-2.5">
+      {showLogo && (
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-white/[0.09] bg-white/[0.06] sm:h-8 sm:w-8">
+          <img
+            src={company.logoUrl}
+            alt=""
+            aria-hidden
+            loading="lazy"
+            decoding="async"
+            onError={() => setFailed(true)}
+            className="h-full w-full object-contain p-1"
+          />
+        </span>
+      )}
+      <span className="whitespace-nowrap text-[15px] font-bold tracking-[-0.01em] text-white/70 transition-colors group-hover/mark:text-white/90 sm:text-[17px]">
+        {company.name}
+      </span>
     </span>
   );
 
-  if (!company.href) return <span className="flex shrink-0 items-center">{body}</span>;
+  if (!company.href) return <span className="group/mark flex shrink-0 items-center">{body}</span>;
   return (
     <a href={company.href} target="_blank" rel="noopener noreferrer nofollow"
-      aria-label={company.name} className="flex shrink-0 items-center">
+      aria-label={company.name} className="group/mark flex shrink-0 items-center">
       {body}
     </a>
   );
@@ -55,12 +71,39 @@ function CompanyMark({ company }: { company: TrustedCompany }) {
 export default function TrustedCompanies({
   label,
   items,
+  autoFromJobs = true,
 }: {
   label: string;
   items: TrustedCompany[];
+  /** Pull the employers currently posting jobs in behind the pinned list. */
+  autoFromJobs?: boolean;
 }) {
-  const companies = (items ?? []).filter((c) => c && c.visible !== false && (c.name || c.logoUrl));
-  // No configured companies is a real state: the row simply does not render.
+  const [hiring, setHiring] = useState<HiringCompany[]>([]);
+
+  useEffect(() => {
+    if (!autoFromJobs) return;
+    let active = true;
+    fetch('/api/public/hiring-companies', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (active && Array.isArray(data?.companies)) setHiring(data.companies);
+      })
+      .catch(() => { /* the pinned list still renders on its own */ });
+    return () => { active = false; };
+  }, [autoFromJobs]);
+
+  const companies = useMemo(() => {
+    const pinned = (items ?? []).filter((c) => c && c.visible !== false && (c.name || c.logoUrl));
+    const seen = new Set(pinned.map((c) => logoKey(c.name)).filter(Boolean));
+
+    const live: TrustedCompany[] = hiring
+      .filter((c) => c?.name && !seen.has(logoKey(c.name)))
+      .map((c) => ({ id: `hiring-${logoKey(c.name)}`, name: c.name, logoUrl: c.logoUrl, href: '', visible: true }));
+
+    return [...pinned, ...live];
+  }, [items, hiring]);
+
+  // Nothing pinned and nobody hiring is a real state: the row does not render.
   if (companies.length === 0) return null;
 
   const row = (ariaHidden: boolean) => (

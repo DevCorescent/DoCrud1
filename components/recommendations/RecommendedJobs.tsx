@@ -22,6 +22,8 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Briefcase, MapPin } from 'lucide-react';
+import { getCompanyLogo } from '@/lib/company-logos';
+import { companyHue } from '@/lib/jobs-ui';
 
 type PublicJob = {
   id: string;
@@ -34,6 +36,42 @@ type PublicJob = {
   matchScore?: number;
   matchReasons?: string[];
 };
+
+/**
+ * The employer's real mark, by exactly the rules the rest of the jobs surface
+ * uses: the verified logo from the curated registry when there is one, the
+ * company's initials on a stable hued chip when there is not. Never a guessed
+ * logo, never a broken image.
+ */
+function CompanyMark({ company }: { company: string }) {
+  const logo = getCompanyLogo(company);
+  const [failed, setFailed] = useState(false);
+  const box = 'h-5 w-5 shrink-0 overflow-hidden rounded-[6px]';
+
+  if (logo && !failed) {
+    return (
+      <span className={`${box} flex items-center justify-center border border-white/[0.10] bg-white/[0.06]`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={logo.src} alt="" aria-hidden width={20} height={20}
+          loading="lazy" decoding="async" onError={() => setFailed(true)}
+          className="h-full w-full object-contain p-[2px]" />
+      </span>
+    );
+  }
+
+  const initials = company.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || 'C';
+  const hue = companyHue(company);
+  return (
+    <span className={`${box} flex items-center justify-center text-[8.5px] font-bold`} aria-hidden
+      style={{
+        background: `hsl(${hue} 45% 18%)`,
+        border: `1px solid hsl(${hue} 45% 32% / 0.5)`,
+        color: `hsl(${hue} 60% 78%)`,
+      }}>
+      {initials}
+    </span>
+  );
+}
 
 export default function RecommendedJobs() {
   const [jobs, setJobs] = useState<PublicJob[] | null>(null);
@@ -103,7 +141,10 @@ export default function RecommendedJobs() {
               </span>
             )}
             <span className="line-clamp-2 text-[12.5px] font-bold text-white/90">{j.title || 'Open role'}</span>
-            <span className="mt-1 line-clamp-1 text-[11px] font-medium text-white/45">{j.organizationName || 'Docrud'}</span>
+            <span className="mt-1 flex min-w-0 items-center gap-1.5">
+              <CompanyMark company={j.organizationName || 'Docrud'} />
+              <span className="line-clamp-1 text-[11px] font-medium text-white/45">{j.organizationName || 'Docrud'}</span>
+            </span>
             {j.matchReasons && j.matchReasons.length > 0 && (
               <ul className="mt-1.5 space-y-0.5">
                 {j.matchReasons.slice(0, 2).map((reason) => (

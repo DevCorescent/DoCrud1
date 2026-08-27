@@ -24,7 +24,7 @@ export async function GET() {
 
     const jobs = await getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>);
     if (!Array.isArray(jobs) || jobs.length === 0) {
-      return NextResponse.json({ jobs: [] }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({ jobs: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     // Viewer signals from the stored profile — never client-supplied.
@@ -70,12 +70,17 @@ export async function GET() {
     });
 
     scored.sort((a, b) => b.score - a.score || Date.parse(String(b.job.createdAt)) - Date.parse(String(a.job.createdAt)));
+    /* `total` is the real number of roles that matched, BEFORE maxCards trims
+       the row. The homepage headline count reports this, so it never shrinks
+       to the size of a carousel. Without profile signals nothing is scored, so
+       every open role counts. */
+    const total = showMatch ? scored.filter((s) => s.score > 0).length : scored.length;
     return NextResponse.json(
-      { jobs: scored.slice(0, config.jobs.maxCards).map((s) => s.job) },
+      { jobs: scored.slice(0, config.jobs.maxCards).map((s) => s.job), total },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
     console.error('[recommendations/jobs] GET error', error);
-    return NextResponse.json({ jobs: [] }, { status: 200 });
+    return NextResponse.json({ jobs: [], total: 0 }, { status: 200 });
   }
 }

@@ -5,12 +5,20 @@ import { NextResponse } from 'next/server';
 import { readJsonFile, homepageConfigPath } from '@/lib/server/storage';
 
 type SectionVisibility = {
-  recentsBar: boolean; heroBanner: boolean; featureCards: boolean;
+  trustedCompanies: boolean; homeHighlights: boolean; trendsBoard: boolean;
+  heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
   gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
 };
+type TrustedCompany = { id: string; name: string; logoUrl: string; href: string; visible: boolean };
+/** The "Top companies trust docrud" marquee — Super Admin owns the list AND the logos. */
+type TrustedCompanies = { label: string; items: TrustedCompany[] };
+/** Copy + artwork for the signed-in greeting card. The name comes from the session. */
+type HomeGreeting = { subtitle: string; cadenceLabel: string; illustrationUrl: string };
 type HomepageConfig = {
   sections: SectionVisibility;
+  trustedCompanies: TrustedCompanies;
+  greeting: HomeGreeting;
   hero: { slotWords: {word:string;subtitle:string;color:string}[]; backgroundImage:string; guestCtaPrimary:string; guestCtaSecondary:string; authCtaPrimary:string; authCtaSecondary:string };
   nav: { logoText:string; logoUrl:string; links:{id:string;label:string;href:string;visible:boolean;order:number}[]; showSignIn:boolean; showSignUp:boolean };
   featureCards: { guestFeatureIds:string[]; defaultFeatureIds:string[] };
@@ -23,7 +31,26 @@ type HomepageConfig = {
 };
 
 const DEFAULT_CONFIG: HomepageConfig = {
-  sections: { recentsBar:true, heroBanner:true, featureCards:true, publishHeading:true, contentDiscovery:true, adBanners:true, gigsGrid:false, leaderboards:false, builtInIndia:true, footer:true },
+  sections: { trustedCompanies:true, homeHighlights:true, trendsBoard:true, heroBanner:true, featureCards:true, publishHeading:true, contentDiscovery:true, adBanners:true, gigsGrid:false, leaderboards:false, builtInIndia:true, footer:true },
+  trustedCompanies: {
+    label: 'Top companies trust docrud',
+    /* Seeded with names only. A logo appears once Super Admin attaches one —
+       until then the name renders as a wordmark, never a broken image. */
+    items: [
+      { id: 'google',    name: 'Google',     logoUrl: '', href: '', visible: true },
+      { id: 'microsoft', name: 'Microsoft',  logoUrl: '', href: '', visible: true },
+      { id: 'amazon',    name: 'Amazon',     logoUrl: '', href: '', visible: true },
+      { id: 'ibm',       name: 'IBM',        logoUrl: '', href: '', visible: true },
+      { id: 'adobe',     name: 'Adobe',      logoUrl: '', href: '', visible: true },
+      { id: 'deloitte',  name: 'Deloitte',   logoUrl: '', href: '', visible: true },
+      { id: 'infosys',   name: 'Infosys',    logoUrl: '', href: '', visible: true },
+    ],
+  },
+  greeting: {
+    subtitle: "We've found some jobs and connections for you.",
+    cadenceLabel: 'Updated everyday',
+    illustrationUrl: '',
+  },
   hero: { slotWords:[], backgroundImage:'', guestCtaPrimary:'', guestCtaSecondary:'', authCtaPrimary:'', authCtaSecondary:'' },
   nav: { logoText:'', logoUrl:'', links:[], showSignIn:true, showSignUp:true },
   featureCards: { guestFeatureIds:[], defaultFeatureIds:[] },
@@ -43,6 +70,8 @@ export async function GET() {
       ...DEFAULT_CONFIG,
       ...stored,
       sections: { ...DEFAULT_CONFIG.sections, ...(stored.sections ?? {}) },
+      trustedCompanies: { ...DEFAULT_CONFIG.trustedCompanies, ...(stored.trustedCompanies ?? {}) },
+      greeting: { ...DEFAULT_CONFIG.greeting, ...(stored.greeting ?? {}) },
       hero:     { ...DEFAULT_CONFIG.hero,     ...(stored.hero     ?? {}) },
       nav:      { ...DEFAULT_CONFIG.nav,      ...(stored.nav      ?? {}) },
       featureCards:     { ...DEFAULT_CONFIG.featureCards,     ...(stored.featureCards     ?? {}) },

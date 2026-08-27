@@ -88,6 +88,8 @@ export const otpSessionsPath = path.join(dataDir, 'otp-sessions.json');
 export const homepageAiChatsPath = path.join(dataDir, 'homepage-ai-chats.json');
 export const userProfilesPath = path.join(dataDir, 'user-profiles.json');
 export const followsPath = path.join(dataDir, 'follows.json');
+/** Community Trends: the trend list plus the per-user vote ledger (lib/server/trends.ts). */
+export const trendsPath = path.join(dataDir, 'trends.json');
 export const upraisedPath = path.join(dataDir, 'upraised.json');
 export const socialEventsPath = path.join(dataDir, 'social-events.json');
 export const messagesPath = path.join(dataDir, 'messages.json');

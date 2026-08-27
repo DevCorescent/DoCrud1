@@ -44,6 +44,13 @@ const GHOST_BTN =
   'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] border border-white/[0.10] bg-white/[0.04] px-5 text-[13px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/85';
 const PRIMARY_BTN =
   'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] bg-white px-5 text-[13px] font-bold text-[#0A0A0C] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60';
+/* Apply is emerald-on-white-text so the button and its label stay legible on a
+   light ground as well as this dark one — a white pill vanishes on white.
+   Emerald is already the jobs accent, so no new colour is introduced. */
+const APPLY_BTN =
+  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] bg-emerald-500 px-5 text-[13px] font-bold text-white shadow-[0_1px_8px_rgba(16,185,129,0.30)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60';
+const APPLY_BTN_SM =
+  'inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-emerald-500 px-3.5 text-[12.5px] font-bold text-white transition hover:bg-emerald-400';
 
 /* ─── company mark (same rules as the feed card) ──────────────────────── */
 function CompanyLogo({ company }: { company: string }) {
@@ -273,12 +280,12 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
             </button>
             {externalApply ? (
               <a href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow"
-                className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-white px-3.5 text-[12.5px] font-bold text-[#0A0A0C] transition hover:bg-white/90">
+                className={APPLY_BTN_SM}>
                 Apply <ArrowUpRight className="h-3.5 w-3.5" />
               </a>
             ) : (
               <button type="button" onClick={scrollToApply}
-                className="inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-white px-3.5 text-[12.5px] font-bold text-[#0A0A0C] transition hover:bg-white/90">
+                className={APPLY_BTN_SM}>
                 {applied ? 'Applied' : 'Apply'} <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
@@ -335,11 +342,11 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
             {externalApply ? (
               <a href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow"
                 aria-label={`Apply for ${job.title} at ${company} on the original source`}
-                className={`${PRIMARY_BTN} w-full sm:w-auto`}>
+                className={`${APPLY_BTN} w-full sm:w-auto`}>
                 Apply Now <ArrowUpRight className="h-3.5 w-3.5" />
               </a>
             ) : (
-              <button type="button" onClick={scrollToApply} className={`${PRIMARY_BTN} w-full sm:w-auto`}>
+              <button type="button" onClick={scrollToApply} className={`${APPLY_BTN} w-full sm:w-auto`}>
                 {applied ? 'View Application' : 'Apply Now'} <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
@@ -574,7 +581,7 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
                         : !resumeReady ? 'Choose a resume to continue.' : 'Your profile, resume and attachments are sent together.'}
                     </p>
                     <button type="button" onClick={submit} disabled={!canSubmit}
-                      className={`${PRIMARY_BTN} w-full sm:w-auto`}>
+                      className={`${APPLY_BTN} w-full sm:w-auto`}>
                       {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                       {submitting ? 'Submitting…' : 'Submit Application'}
                     </button>

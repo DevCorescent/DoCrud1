@@ -7,6 +7,13 @@
  * route. No new job system, no new API. Ranking prefers overlap between the
  * role and the viewer's own headline/skills when the profile provides them;
  * otherwise the most recent openings are shown.
+ *
+ * The section is a flat pastel-orange band (#FEC98F) rather than a rounded card,
+ * so it reads as a deliberate highlight inside the dark feed. The cards stay
+ * dark: their translucent white fill would have tinted orange through the band,
+ * so it is pinned to the opaque value it already rendered as (#141416 = the feed
+ * ground plus the same two white washes). The band's own label, link and CTA use
+ * dark ink — low-opacity white is invisible on pastel.
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -43,12 +50,12 @@ export default function RecommendedJobs() {
   if (!jobs || jobs.length === 0) return null;
 
   return (
-    <section className="rounded-[14px] border border-white/[0.07] bg-white/[0.02] px-3 py-3" aria-label="Recommended jobs">
+    <section className="bg-[#FEC98F] px-3 py-3" aria-label="Recommended jobs">
       <div className="mb-2.5 flex items-center justify-between px-0.5">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-white/28">
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.10em] text-[#0D0D0F]/55">
           <Briefcase className="h-3 w-3" /> Recommended jobs
         </span>
-        <Link href="/jobs" className="text-[11px] font-semibold text-white/30 transition-colors hover:text-white/60">
+        <Link href="/jobs" className="text-[11px] font-semibold text-[#0D0D0F]/50 transition-colors hover:text-[#0D0D0F]/80">
           See all
         </Link>
       </div>
@@ -59,7 +66,7 @@ export default function RecommendedJobs() {
           <Link
             key={j.id}
             href={`/jobs/${j.id}`}
-            className="flex min-w-0 flex-col rounded-[12px] border border-white/[0.08] bg-white/[0.025] p-3 transition-colors hover:border-white/[0.14]"
+            className="flex min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-[#141416] p-3 transition-colors hover:border-white/[0.14]"
           >
             {typeof j.matchScore === 'number' && j.matchScore > 0 && (
               <span className="mb-1.5 inline-flex w-fit items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
@@ -90,7 +97,7 @@ export default function RecommendedJobs() {
 
       <Link
         href="/jobs"
-        className="mt-2.5 flex w-full items-center justify-center rounded-[11px] border border-white/[0.08] bg-white/[0.02] py-2 text-[11.5px] font-semibold text-white/45 transition-colors hover:border-white/[0.16] hover:text-white/70"
+        className="mt-2.5 flex w-full items-center justify-center rounded-[11px] border border-[#0D0D0F]/15 bg-[#0D0D0F]/[0.04] py-2 text-[11.5px] font-semibold text-[#0D0D0F]/65 transition-colors hover:border-[#0D0D0F]/30 hover:text-[#0D0D0F]/90"
       >
         See all jobs →
       </Link>

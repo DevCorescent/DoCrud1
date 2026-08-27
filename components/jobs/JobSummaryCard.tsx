@@ -50,6 +50,18 @@ export type JobSummary = {
   matchReasons?: string[];
 };
 
+/**
+ * Apply carries its own colour rather than inheriting the card's.
+ *
+ * It used to be a white pill with near-black text, which only reads against a
+ * dark ground — on any light surface the fill disappeared into the page and the
+ * label went with it. A solid emerald fill with white text keeps the button and
+ * its text legible either way, and emerald is already this card's own accent
+ * (the Open pill, the match badge), so nothing new enters the palette.
+ */
+const APPLY_BTN =
+  'inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3 py-1 text-[11.5px] font-bold text-white shadow-[0_1px_6px_rgba(16,185,129,0.30)] transition hover:bg-emerald-400';
+
 function CompanyLogo({ company }: { company: string }) {
   const logo = getCompanyLogo(company);
   const [failed, setFailed] = useState(false);
@@ -190,7 +202,7 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
                 <a
                   href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow" onClick={stop}
                   aria-label={`Apply for ${job.title} at ${company} on the original source`}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11.5px] font-bold text-[#0A0A0C] transition hover:bg-white/90"
+                  className={APPLY_BTN}
                 >
                   Apply <ArrowUpRight className="h-3.5 w-3.5" />
                 </a>
@@ -198,7 +210,7 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
                 <Link
                   href={`${detail}#apply`} onClick={stop}
                   aria-label={`Apply for ${job.title} at ${company} on Docrud`}
-                  className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11.5px] font-bold text-[#0A0A0C] transition hover:bg-white/90"
+                  className={APPLY_BTN}
                 >
                   Apply <ArrowRight className="h-3.5 w-3.5" />
                 </Link>

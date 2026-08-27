@@ -11,7 +11,7 @@ import {
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 type SectionVisibility = {
-  trustedCompanies: boolean; homeHighlights: boolean; trendsBoard: boolean;
+  trustedCompanies: boolean; homeHighlights: boolean;
   heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
   gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
@@ -41,7 +41,7 @@ type HomepageConfig = {
 
 /* ── Constants ─────────────────────────────────────────────────────────────── */
 const DEFAULT_CONFIG: HomepageConfig = {
-  sections: { trustedCompanies: true, homeHighlights: true, trendsBoard: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
+  sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
   trustedCompanies: { label: 'Top companies trust docrud', items: [], autoFromJobs: true },
   greeting: { subtitle: '', cadenceLabel: '', illustrationUrl: '' },
   hero: { slotWords: [], backgroundImage: '', guestCtaPrimary: '', guestCtaSecondary: '', authCtaPrimary: '', authCtaSecondary: '' },
@@ -109,7 +109,6 @@ const DEFAULT_BADGES = [
 const SECTION_META: { key: keyof SectionVisibility; label: string; desc: string; default: boolean }[] = [
   { key: 'trustedCompanies', label: 'Top Companies',        desc: 'Trust marquee above the greeting',     default: true },
   { key: 'homeHighlights',   label: 'Greeting & Matches',   desc: 'Hey-there card, job/people counts, score', default: true },
-  { key: 'trendsBoard',      label: 'Trends Board',         desc: 'Community trends with up/down voting', default: true },
   { key: 'heroBanner',       label: 'Hero Banner',          desc: 'Slot-machine headline + CTAs',         default: true },
   { key: 'featureCards',     label: 'Feature Cards',        desc: 'Quick-action 2×2 feature grid',        default: true },
   { key: 'publishHeading',   label: 'Publish Heading',      desc: 'CTA strip to publish content',         default: true },

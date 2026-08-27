@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { readJsonFile, homepageConfigPath } from '@/lib/server/storage';
 
 type SectionVisibility = {
-  trustedCompanies: boolean; homeHighlights: boolean; trendsBoard: boolean;
+  trustedCompanies: boolean; homeHighlights: boolean;
   heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
   gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
@@ -31,7 +31,7 @@ type HomepageConfig = {
 };
 
 const DEFAULT_CONFIG: HomepageConfig = {
-  sections: { trustedCompanies:true, homeHighlights:true, trendsBoard:true, heroBanner:true, featureCards:true, publishHeading:true, contentDiscovery:true, adBanners:true, gigsGrid:false, leaderboards:false, builtInIndia:true, footer:true },
+  sections: { trustedCompanies:true, homeHighlights:true, heroBanner:true, featureCards:true, publishHeading:true, contentDiscovery:true, adBanners:true, gigsGrid:false, leaderboards:false, builtInIndia:true, footer:true },
   trustedCompanies: {
     label: 'Top companies trust docrud',
     /* Empty by default: the row is filled from the employers actually posting

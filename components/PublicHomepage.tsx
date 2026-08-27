@@ -112,7 +112,6 @@ const QuickFileEditorDialog = dynamic(() => import('@/components/QuickFileEditor
 const PublishAnythingDialog  = dynamic(() => import('@/components/PublishAnythingDialog'),  { ssr: false });
 const TrustedCompanies       = dynamic(() => import('@/components/home/TrustedCompanies'),   { ssr: false });
 const HomeHighlights         = dynamic(() => import('@/components/home/HomeHighlights'),     { ssr: false });
-const TrendsBoard            = dynamic(() => import('@/components/trends/TrendsBoard'),      { ssr: false });
 const FileTransferCenter     = dynamic(() => import('@/components/FileTransferCenter'),     { ssr: false });
 const PdfStudio              = dynamic(() => import('@/components/PdfStudio'),              { ssr: false });
 const FormsCenter            = dynamic(() => import('@/components/FormsCenter'),            { ssr: false });
@@ -123,7 +122,7 @@ const ESignStudioModal       = dynamic(() => import('@/components/ESignStudioMod
 const FileDriveCenter        = dynamic(() => import('@/components/FileDriveCenter'),        { ssr: false });
 
 type HPSectionVisibility = {
-  trustedCompanies: boolean; homeHighlights: boolean; trendsBoard: boolean;
+  trustedCompanies: boolean; homeHighlights: boolean;
   heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
   gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
@@ -144,7 +143,7 @@ type HPConfig = {
   seoTitle:string; seoDescription:string; updatedAt:string;
 };
 const DEFAULT_HP_SECTIONS: HPSectionVisibility = {
-  trustedCompanies:true, homeHighlights:true, trendsBoard:true,
+  trustedCompanies:true, homeHighlights:true,
   heroBanner:true, featureCards:true, publishHeading:true,
   contentDiscovery:true, adBanners:true, gigsGrid:false, leaderboards:false,
   builtInIndia:true, footer:true,
@@ -5583,6 +5582,179 @@ type AdBanner = {
   createdAt: string;
 };
 
+/* ─── Explore ─────────────────────────────────────────────────────────
+   Entry points into the opportunity network, using routes that already
+   exist. Tabs stay plain markup + native overflow scrolling.
+
+   The profile-completion announcement that used to share this row is gone:
+   HomeHighlights above carries the one Profile Score prompt now, so the
+   number is not shown twice. */
+const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = [
+  { label: 'Businesses', href: '/businesses',        Icon: Building2 },
+  { label: 'Services',   href: '/services',          Icon: Wrench    },
+  { label: 'Projects',   href: '/projects',          Icon: Rocket    },
+  { label: 'Jobs',       href: '/jobs',              Icon: Briefcase },
+  { label: 'Gigs',       href: '/published?tab=gig', Icon: Zap       },
+  { label: 'People',     href: '/people',            Icon: Users     },
+  { label: 'Trends',     href: '/trends',            Icon: TrendingUp },
+];
+
+function ExploreSection() {
+  return (
+    <div>
+      <style>{`
+        .exp-strip { overflow-x: auto; overflow-y: hidden; touch-action: pan-x;
+                     overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
+                     scroll-behavior: auto; scrollbar-width: none; -ms-overflow-style: none; }
+        .exp-strip::-webkit-scrollbar { display: none; }
+
+        /* Dark-glass tiles: icon and label share one translucent surface.
+           Same glass language as the rest of the homepage — blur, a hairline
+           white border and a low-opacity inner highlight. Monochrome only:
+           no category colour, no glow, no scale. */
+        .exp-tile {
+          position: relative;
+          /* 82px + a 10px gap gives a 92px pitch. Four of those clear the
+             382px strip at 390px with room to spare, so the fifth tile
+             straddles the right edge and tells the user the row scrolls. At
+             the 14px desktop gap the pitch would be 96px, which fits exactly
+             four times and reads as a complete, static row. */
+          width: 82px; height: 82px;
+          flex-shrink: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          overflow: hidden;
+          text-decoration: none;
+          border-radius: 15px;
+          border: 1px solid rgba(255,255,255,0.12);
+          /* Flat translucent surface — no gradient at any breakpoint. Desktop
+             already used this value; the base now matches it. */
+          background: rgba(255,255,255,0.045);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
+          transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        /* Legacy highlight layer, now unused — see .exp-sheen below. */
+        /* The decorative radial glow is off. Kept as a rule rather than
+           removed from the markup so the change stays CSS-only. */
+        .exp-sheen { display: none; }
+        .exp-tile:hover {
+          background-color: rgba(255,255,255,0.03);
+          border-color: rgba(255,255,255,0.20);
+          box-shadow: 0 2px 6px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10);
+        }
+        .exp-tile:focus-visible {
+          outline: 2px solid rgba(255,255,255,0.55);
+          outline-offset: 2px;
+        }
+        .exp-icon {
+          position: relative;
+          width: 27px; height: 27px;
+          color: rgba(255,255,255,0.82);
+          transition: color 0.15s ease;
+        }
+        .exp-tile:hover .exp-icon { color: rgba(255,255,255,0.95); }
+        .exp-label {
+          position: relative;
+          font-size: 11.5px;
+          font-weight: 600;
+          line-height: 1;
+          color: rgba(255,255,255,0.70);
+          text-align: center;
+          transition: color 0.15s ease;
+        }
+        .exp-tile:hover .exp-label { color: rgba(255,255,255,0.92); }
+        @media (min-width: 640px) {
+          .exp-tile { width: 92px; height: 92px; gap: 8px; }
+          .exp-icon { width: 30px; height: 30px; }
+        }
+
+        /* ── Desktop only (lg and up) ──────────────────────────────────────
+           Larger, more premium glass tiles. Nothing here can reach mobile or
+           tablet: every rule is inside the 1024px query, and the base rules
+           above are untouched. */
+        @media (min-width: 1024px) {
+          /* One flat translucent surface — no gradient of any kind. The depth
+             comes from the blur, the hairline border and the inset highlight,
+             not from a colour ramp. Matches the flat base surface above. */
+          .exp-tile {
+            width: 110px; height: 110px; gap: 9px;
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.10);
+            background: rgba(255,255,255,0.045);
+            backdrop-filter: blur(18px) saturate(130%);
+            -webkit-backdrop-filter: blur(18px) saturate(130%);
+            box-shadow:
+              0 4px 18px rgba(0,0,0,0.18),
+              inset 0 1px 0 rgba(255,255,255,0.055);
+          }
+          /* Hover lifts the same flat surface a little. No scale, no glow, no
+             gradient, no movement. */
+          .exp-tile:hover {
+            background: rgba(255,255,255,0.065);
+            border-color: rgba(255,255,255,0.16);
+            box-shadow:
+              0 4px 18px rgba(0,0,0,0.18),
+              inset 0 1px 0 rgba(255,255,255,0.055);
+          }
+          /* The gold bottom hairline is a gradient, so it is off here too.
+             The sheen is already off in the base rules. */
+          .exp-tile::after { content: none; }
+          .exp-icon { width: 30px; height: 30px; color: rgba(255,255,255,0.82); }
+          .exp-label { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.70); }
+        }
+        @media (min-width: 1280px) {
+          .exp-tile { width: 120px; height: 120px; gap: 10px; }
+          .exp-icon { width: 31px; height: 31px; }
+        }
+      `}</style>
+
+      {/* Section heading — identical treatment to the removed Promotions heading */}
+      <div className="flex items-center justify-between mb-3 px-1">
+        <div className="flex items-center gap-2">
+          <span className="flex flex-col">
+            <span className="flex items-center gap-1.5">
+              {/* Lowercase, and the `uppercase` utility removed — otherwise CSS
+                  would shout it back into EXPLORE regardless of the string. */}
+              <span
+                className="hp-sec text-[11px] font-semibold tracking-[0.10em]"
+                style={{ color: 'rgba(255,255,255,0.28)' }}
+              >
+                Explore
+              </span>
+              {/* Desktop-only sparkle + reflection; hidden below lg so the
+                  mobile heading stays exactly as it was. */}
+              <Sparkles
+                className="hidden h-[10px] w-[10px] lg:block"
+                style={{ color: 'rgba(206,151,96,0.55)' }}
+                aria-hidden="true"
+              />
+            </span>
+            <span className="exp-head-glow hidden" aria-hidden="true" />
+          </span>
+        </div>
+      </div>
+
+      {/* Tabs on their own row — the announcement slot that shared it is gone. */}
+      <div className="flex min-w-0 items-center gap-3.5 px-1 pb-1">
+        <div className="exp-strip flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3.5 lg:flex-none">
+          {EXPLORE_ITEMS.map((it) => (
+            <Link key={it.label} href={it.href} className="exp-tile" aria-label={it.label}>
+              <span className="exp-sheen" aria-hidden="true" />
+              <it.Icon className="exp-icon" aria-hidden="true" />
+              <span className="exp-label">{it.label}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const BANNER_HEADING_FALLBACK = 'Featured & Promotions';
 
 function AdBannerSlider() {
@@ -6188,12 +6360,8 @@ function NewHomepageContent({
           </div>
         )}
 
-        {/* ── Trends — replaces Recents; the community prices what is moving ── */}
-        {hpSections.trendsBoard && (
-          <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
-            <TrendsBoard variant="home" />
-          </div>
-        )}
+        {/* ── Explore — entry points into the opportunity network ── */}
+        <ExploreSection />
 
         {hpConfig?.announcementBanner?.active && (
           <div style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', borderRadius:12, marginBottom:2,

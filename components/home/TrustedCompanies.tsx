@@ -1,7 +1,11 @@
 'use client';
 
 /**
- * "Top companies trust docrud" — the marquee above the homepage greeting.
+ * The company marquee above the homepage greeting.
+ *
+ * NO CAPTION BY DEFAULT — the row carries no heading text; the logos and names
+ * are the message. Super Admin can still set one in the homepage config and it
+ * renders above the row.
  *
  * WHERE THE COMPANIES COME FROM: by default, the employers actually posting on
  * Docrud (/api/public/hiring-companies, derived from published hiring jobs), so
@@ -113,7 +117,7 @@ export default function TrustedCompanies({
   );
 
   return (
-    <section aria-label={label} className="w-full min-w-0">
+    <section aria-label={label || 'Companies hiring on Docrud'} className="w-full min-w-0">
       <style>{`
         @keyframes tc-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
         .tc-track { animation: tc-marquee 32s linear infinite; will-change: transform; }

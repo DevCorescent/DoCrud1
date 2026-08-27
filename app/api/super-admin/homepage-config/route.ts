@@ -39,7 +39,9 @@ export type HomepageConfig = {
 const DEFAULT_CONFIG: HomepageConfig = {
   sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
   trustedCompanies: {
-    label: 'Top companies trust docrud',
+    /* No caption by default — the logos speak for themselves. Super Admin can
+       still type one here and it renders above the row. */
+    label: '',
     /* Empty by default: the row is filled from the employers actually posting
        jobs (/api/public/hiring-companies). Items added here are PINNED and
        lead the row — use them for partners with no live posting. */

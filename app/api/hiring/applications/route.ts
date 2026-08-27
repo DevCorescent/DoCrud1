@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { HiringJobApplication } from '@/types/document';
 import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
 import { analyzeResumeFromText } from '@/lib/server/resume-ats';
+import { extractDocumentText } from '@/lib/server/document-parser';
+import { getProfileData } from '@/lib/server/user-profiles';
+import { r2KeyFromUrl } from '@/lib/server/r2';
 import { canUserManageApplication, createHiringApplication, getHiringApplications, getPublishedHiringJobById, getVisibleHiringApplicationsForUser, updateHiringApplicationStatus } from '@/lib/server/hiring';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +29,74 @@ export async function GET() {
   }
 }
 
+/**
+ * Resolves the text the ATS gate scores, and the reference pinned onto the
+ * application, from whichever resume the candidate chose.
+ *
+ * The text is derived SERVER-SIDE from the actual file in every file-backed
+ * case. A browser could otherwise submit a strong body of text while attaching
+ * a weak document, and the recruiter would receive a score that describes
+ * something they were never sent.
+ */
+async function resolveResume(
+  userId: string,
+  payload: {
+    resumeSource?: { kind?: string; resumeId?: string; url?: string; fileName?: string };
+    resumeText?: string;
+    resumeFileName?: string;
+  },
+): Promise<{ text: string; ref: HiringJobApplication['resumeRef'] } | { error: string }> {
+  const kind = payload.resumeSource?.kind;
+
+  if (kind === 'profile') {
+    const profile = await getProfileData(userId);
+    const entry = (profile?.resumeFiles ?? []).find((item) => item.id === payload.resumeSource?.resumeId);
+    if (!entry?.url) return { error: 'That resume is no longer available on your profile.' };
+    const text = await textFromStoredFile(entry.url, entry.fileName);
+    if (!text) return { error: 'We could not read that resume. Upload it again for this application.' };
+    return {
+      text,
+      ref: { source: 'profile', resumeId: entry.id, fileName: entry.fileName, url: entry.url },
+    };
+  }
+
+  if (kind === 'upload') {
+    const url = String(payload.resumeSource?.url || '');
+    const fileName = String(payload.resumeSource?.fileName || 'resume');
+    // Must be a URL our OWN bucket issued. isStorageUrl() only tests for an
+    // http(s) prefix, which would let the browser make this endpoint fetch any
+    // address it likes (SSRF); r2KeyFromUrl returns null for anything outside
+    // R2_PUBLIC_URL.
+    if (!ownStorageUrl(url)) return { error: 'Upload the resume again before submitting.' };
+    const text = await textFromStoredFile(url, fileName);
+    if (!text) return { error: 'We could not read that file. Try a PDF, Word or text resume.' };
+    return { text, ref: { source: 'upload', fileName, url } };
+  }
+
+  // Pasted text — the original flow, unchanged.
+  const text = String(payload.resumeText || '').trim();
+  if (!text) return { error: 'Job and resume content are required.' };
+  return { text, ref: { source: 'text', fileName: payload.resumeFileName || 'Pasted resume' } };
+}
+
+/** True only for a URL our own R2 bucket issued. */
+function ownStorageUrl(url: string): boolean {
+  return !!url && r2KeyFromUrl(url) !== null;
+}
+
+/** Reads a file back out of our own storage and returns its text ('' on failure). */
+async function textFromStoredFile(url: string, fileName: string): Promise<string> {
+  try {
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) return '';
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const mime = response.headers.get('content-type') || 'application/octet-stream';
+    return (await extractDocumentText(fileName, mime, buffer)).trim();
+  } catch {
+    return '';
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const session = await getAuthSession();
@@ -43,11 +115,11 @@ export async function POST(request: NextRequest) {
 
     const payload = await request.json();
     const jobId = String(payload?.jobId || '').trim();
-    const resumeText = String(payload?.resumeText || '').trim();
     const targetRole = String(payload?.targetRole || '').trim();
     const candidatePhone = String(payload?.candidatePhone || '').trim();
+    const coverLetter = String(payload?.coverLetter || '').trim();
 
-    if (!jobId || !resumeText) {
+    if (!jobId) {
       return NextResponse.json({ error: 'Job and resume content are required.' }, { status: 400 });
     }
 
@@ -57,7 +129,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Job posting not found.' }, { status: 404 });
     }
 
-    const analysis = await analyzeResumeFromText(resumeText, targetRole || job.title, payload?.resumeFileName || 'Candidate resume');
+    const resolved = await resolveResume(storedUser.id, payload);
+    if ('error' in resolved) {
+      return NextResponse.json({ error: resolved.error }, { status: 400 });
+    }
+    const { text: resumeText, ref: resumeRef } = resolved;
+
+    /* Attachments. Every URL must be one our own storage issued — the record is
+       shown to the recruiter, so an arbitrary link here would let an applicant
+       point a company's staff at anything. */
+    const documents: NonNullable<HiringJobApplication['documents']> = [];
+    for (const entry of Array.isArray(payload?.documents) ? payload.documents : []) {
+      const url = String(entry?.url || '');
+      if (!ownStorageUrl(url)) continue;
+      documents.push({
+        id: String(entry?.id || `doc-${documents.length + 1}`),
+        label: String(entry?.label || 'Additional document').slice(0, 80),
+        fileName: String(entry?.fileName || 'document').slice(0, 200),
+        url,
+        uploadedAt: new Date().toISOString(),
+      });
+    }
+
+    /* Only documents this job actually asked for can block submission. A job
+       that requested nothing must never appear to require anything. */
+    const requested = (job.requiredDocuments ?? []).filter(Boolean);
+    const missing = requested.filter(
+      (label) => !documents.some((doc) => doc.label.toLowerCase() === label.toLowerCase()),
+    );
+    if (missing.length > 0) {
+      return NextResponse.json(
+        { error: `This role requires: ${missing.join(', ')}.` },
+        { status: 400 },
+      );
+    }
+
+    const analysis = await analyzeResumeFromText(resumeText, targetRole || job.title, resumeRef?.fileName || 'Candidate resume');
     if (analysis.atsScore < job.minimumAtsScore) {
       return NextResponse.json({ error: `This role requires a minimum ATS score of ${job.minimumAtsScore}. Your current score is ${analysis.atsScore}.` }, { status: 400 });
     }
@@ -75,7 +182,10 @@ export async function POST(request: NextRequest) {
       atsScore: analysis.atsScore,
       targetRole: targetRole || job.title,
       resumeText,
-      resumeFileName: payload?.resumeFileName || undefined,
+      resumeFileName: resumeRef?.fileName,
+      resumeRef,
+      documents: documents.length > 0 ? documents : undefined,
+      coverLetter: coverLetter || undefined,
       analysisSummary: analysis.executiveSummary,
       analysisDetails: {
         executiveSummary: analysis.executiveSummary,

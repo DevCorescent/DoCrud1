@@ -41,6 +41,7 @@ const emptyJob = {
   requirements: '',
   preferredSkills: '',
   minimumAtsScore: '72',
+  requiredDocuments: '',
   status: 'published',
 };
 
@@ -127,6 +128,7 @@ export default function PostJobPage() {
           responsibilities: jobForm.responsibilities.split('\n').map((item) => item.trim()).filter(Boolean),
           requirements: jobForm.requirements.split('\n').map((item) => item.trim()).filter(Boolean),
           preferredSkills: jobForm.preferredSkills.split('\n').map((item) => item.trim()).filter(Boolean),
+          requiredDocuments: jobForm.requiredDocuments.split('\n').map((item) => item.trim()).filter(Boolean),
           targetRoleKeywords: jobForm.title.split(/\s+/).filter(Boolean),
         }),
       });
@@ -317,6 +319,15 @@ export default function PostJobPage() {
                     <textarea id="job-skills" value={jobForm.preferredSkills}
                       onChange={(e) => set('preferredSkills', e.target.value)}
                       rows={3} placeholder={'React\nTypeScript\nNext.js'}
+                      className={`${TEXTAREA_CLASS} min-h-[80px]`} />
+                  </Field>
+                </Section>
+
+                <Section title="Application" caption="What applicants must attach. Leave empty to ask for a resume only.">
+                  <Field id="job-documents" label="Requested documents" hint="One per line — applicants cannot submit until each is attached.">
+                    <textarea id="job-documents" value={jobForm.requiredDocuments}
+                      onChange={(e) => set('requiredDocuments', e.target.value)}
+                      rows={3} placeholder={'Portfolio\nCover letter'}
                       className={`${TEXTAREA_CLASS} min-h-[80px]`} />
                   </Field>
                 </Section>

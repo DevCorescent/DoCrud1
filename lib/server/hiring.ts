@@ -136,6 +136,9 @@ export async function upsertHiringJob(
     requirements: Array.isArray(payload.requirements) ? payload.requirements.map((item) => item.trim()).filter(Boolean) : [],
     preferredSkills: Array.isArray(payload.preferredSkills) ? payload.preferredSkills.map((item) => item.trim()).filter(Boolean) : [],
     targetRoleKeywords: Array.isArray(payload.targetRoleKeywords) ? payload.targetRoleKeywords.map((item) => item.trim()).filter(Boolean) : [],
+    requiredDocuments: Array.isArray(payload.requiredDocuments)
+      ? payload.requiredDocuments.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
+      : [],
     minimumAtsScore: Math.max(0, Math.min(100, Math.round(Number(payload.minimumAtsScore) || 0))),
     status: payload.status || 'draft',
     shareUrl: `/jobs/${jobId}`,

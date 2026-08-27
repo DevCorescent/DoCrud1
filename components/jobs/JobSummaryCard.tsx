@@ -3,24 +3,31 @@
 /**
  * The one job card — drawn in the SAME language as components/BusinessDirectory's
  * BusinessCard so the Jobs directory reads as the same product as Businesses:
- * a flat rounded-2xl glass card (no gradient border, no lift/glow), an initials
- * avatar for the company, the identity block, tag pills, location and a footer
- * with the actions. Job-specific features are preserved — profile Match %,
+ * a flat rounded-2xl glass card (no gradient border, no lift/glow), the identity
+ * block, tag pills, location and a footer with the actions. Job-specific features are preserved — profile Match %,
  * why-it-matches reasons, honest source attribution and a direct Apply to the
  * original ATS via the existing applyUrl.
  *
- * Image-free by product decision: no company logo/banner is fetched — only the
- * deterministic initials box Businesses itself uses as its logo fallback. Only
- * real fields render; nothing is fabricated.
+ * The company mark is the employer's verified logo (a local asset — no
+ * third-party request while the feed renders) or a deterministic monogram. No
+ * banner/cover image is ever fetched. Only real fields render; nothing is
+ * fabricated.
+ *
+ * The whole card is the link to the job: there is no separate View button, and
+ * Apply is the one action, stopping propagation so it never opens the detail
+ * page instead of the application.
  */
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MapPin, ArrowUpRight, Check, ArrowRight } from 'lucide-react';
+import { MapPin, ArrowUpRight, ArrowRight, Check } from 'lucide-react';
 import {
   EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, EXPERIENCE_LABELS,
   jobDetailHref, formatPosted, formatJobLocation, jobSourceLabel, isValidApplyUrl,
+  companyHue,
 } from '@/lib/jobs-ui';
+import { getCompanyLogo } from '@/lib/company-logos';
 import { isIndiaRelevant } from '@/lib/server/job-scraper/india';
 
 export type JobSummary = {
@@ -43,11 +50,44 @@ export type JobSummary = {
   matchReasons?: string[];
 };
 
+function CompanyLogo({ company }: { company: string }) {
+  const logo = getCompanyLogo(company);
+  const [failed, setFailed] = useState(false);
+  const box = 'h-10 w-10 shrink-0 overflow-hidden rounded-xl sm:h-12 sm:w-12';
+
+  if (logo && !failed) {
+    return (
+      <div className={`${box} flex items-center justify-center border border-white/[0.08] bg-white/[0.05]`}>
+        <img
+          src={logo.src} alt={`${logo.name} logo`} width={48} height={48}
+          loading="lazy" decoding="async" onError={() => setFailed(true)}
+          className="h-full w-full object-contain p-1.5"
+        />
+      </div>
+    );
+  }
+
+  const initials = company.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || 'C';
+  const hue = companyHue(company);
+  return (
+    <div
+      className={`${box} flex items-center justify-center text-[12px] font-bold sm:text-[13px]`}
+      role="img" aria-label={`${company} logo`}
+      style={{
+        background: `hsl(${hue} 45% 16%)`,
+        border: `1px solid hsl(${hue} 45% 30% / 0.5)`,
+        color: `hsl(${hue} 60% 76%)`,
+      }}
+    >
+      {initials}
+    </div>
+  );
+}
+
 export function JobSummaryCard({ job }: { job: JobSummary }) {
   const router = useRouter();
   const detail = jobDetailHref(job.id);
   const company = job.organizationName || 'Company';
-  const initials = company.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || 'C';
   const employment = job.employmentType ? EMPLOYMENT_TYPE_LABELS[job.employmentType] ?? job.employmentType : null;
   const workMode = job.workMode ? WORK_MODE_LABELS[job.workMode] ?? job.workMode : null;
   const experience = job.experienceLevel ? EXPERIENCE_LABELS[job.experienceLevel] ?? job.experienceLevel : null;
@@ -71,11 +111,9 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
     >
       <article className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] transition-all duration-200 hover:border-white/[0.14] hover:bg-white/[0.035]">
         <div className="p-4 sm:p-5">
-          {/* header: company initials + identity + match badge */}
+          {/* header: company mark + identity + match badge */}
           <div className="flex items-start gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] text-[13px] font-bold text-white/60">
-              {initials}
-            </div>
+            <CompanyLogo company={company} />
             <div className="min-w-0 flex-1">
               <div className="flex items-start gap-2">
                 <h3 className="min-w-0 flex-1 text-[15px] font-bold leading-tight tracking-tight text-white transition-colors group-hover:text-white/90 line-clamp-2">
@@ -138,25 +176,32 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
           )}
 
           {/* footer: meta + actions */}
-          <div className="mt-4 flex items-center gap-x-4 gap-y-2 border-t border-white/[0.05] pt-3.5">
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/[0.05] pt-3.5">
             <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-white/30">
               {posted && <span className="truncate">Posted {posted}</span>}
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
-              <Link
-                href={detail} onClick={stop}
-                className="inline-flex items-center gap-1 rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold text-white/55 transition hover:border-white/[0.18] hover:bg-white/[0.08] hover:text-white/90"
-              >
-                View <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-              {canApply && (
+              {/* Apply routes to whichever application the job actually has: a
+                  scraped role goes to the employer's own stored applyUrl (never
+                  rewritten, never invented); a role posted on Docrud opens the
+                  native flow on its detail page. Both stop propagation so Apply
+                  never turns into a plain card click. */}
+              {canApply ? (
                 <a
                   href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow" onClick={stop}
-                  aria-label={`Apply for ${job.title} on the original source`}
+                  aria-label={`Apply for ${job.title} at ${company} on the original source`}
                   className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11.5px] font-bold text-[#0A0A0C] transition hover:bg-white/90"
                 >
                   Apply <ArrowUpRight className="h-3.5 w-3.5" />
                 </a>
+              ) : (
+                <Link
+                  href={`${detail}#apply`} onClick={stop}
+                  aria-label={`Apply for ${job.title} at ${company} on Docrud`}
+                  className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[11.5px] font-bold text-[#0A0A0C] transition hover:bg-white/90"
+                >
+                  Apply <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
               )}
             </div>
           </div>

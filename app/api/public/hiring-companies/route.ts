@@ -17,11 +17,21 @@ import { getCompanyLogo, logoKey } from '@/lib/company-logos';
 
 export const dynamic = 'force-dynamic';
 
+/* Public, identical for every visitor, and derived from a job list that only
+   changes when someone posts. Holding it briefly means the marquee costs one
+   cheap read instead of re-grouping 360 postings on every homepage load. */
+let derived: { value: unknown[]; ts: number } | null = null;
+const CACHE_TTL = 60_000;
+
 /** Enough to fill a looping row several times over without an unbounded payload. */
 const MAX_COMPANIES = 24;
 
 export async function GET() {
   try {
+    if (derived && Date.now() - derived.ts < CACHE_TTL) {
+      return NextResponse.json({ companies: derived.value }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
     const jobs = await getPublishedHiringJobs().catch(() => []);
 
     /* Grouped on the normalized name so "MindTickle" and "Mindtickle" are one
@@ -50,6 +60,7 @@ export async function GET() {
         || a.name.localeCompare(b.name))
       .slice(0, MAX_COMPANIES);
 
+    derived = { value: companies, ts: Date.now() };
     return NextResponse.json({ companies }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[public/hiring-companies] GET error', error);

@@ -67,13 +67,60 @@ export async function getHiringJobs() {
   return readJsonFile<HiringJobPosting[]>(hiringJobsPath, []);
 }
 
-export async function getPublishedHiringJobs() {
-  const jobs = await getHiringJobs();
-  const hiring = jobs.filter((job) => job.status === 'published');
-  const business = await getPublishedBusinessFeedJobs();
+/* ─── published-jobs cache ────────────────────────────────────────────────
+   The hiring-jobs document is ~2.7 MB (360 postings, 88% of it descriptions)
+   and EVERY caller re-read and re-parsed the whole thing: one homepage load
+   alone hit it three times — the recommendations count, the recommendations
+   carousel and the trusted-companies marquee — for ~8 MB of reads that all
+   returned identical data.
+
+   So the merged published list is held for a few seconds and shared. This is
+   NOT a correctness compromise: saveHiringJobs() — the only write path, used
+   by both the Hiring Desk and the CSV importer — clears it, so a posting is
+   visible immediately in the process that created it. Across several server
+   instances a new posting can lag by at most TTL, which is the same window
+   the feed already tolerated. */
+type PublishedCache = { value: HiringJobPosting[]; ts: number };
+const PUBLISHED_TTL = 15_000;
+let publishedCache: PublishedCache | null = null;
+/* Concurrent callers during a cold read share ONE read instead of each firing
+   their own 2.7 MB fetch — the same coalescing the app_state reader uses. */
+let publishedInFlight: Promise<HiringJobPosting[]> | null = null;
+
+/** Called by every write path so the next read rebuilds from storage. */
+export function invalidatePublishedHiringJobs() {
+  publishedCache = null;
+  publishedInFlight = null;
+}
+
+async function readPublishedHiringJobs(): Promise<HiringJobPosting[]> {
+  // The two stores are independent; they were being awaited one after the other.
+  const [jobs, business] = await Promise.all([
+    getHiringJobs(),
+    getPublishedBusinessFeedJobs(),
+  ]);
   // Single source of truth per record: hiring jobs from the hiring store,
   // business jobs projected from the business-pages store. Merged only here.
-  return [...hiring, ...business];
+  return [...jobs.filter((job) => job.status === 'published'), ...business];
+}
+
+export async function getPublishedHiringJobs(): Promise<HiringJobPosting[]> {
+  if (publishedCache && Date.now() - publishedCache.ts < PUBLISHED_TTL) {
+    return publishedCache.value;
+  }
+  if (publishedInFlight) return publishedInFlight;
+
+  publishedInFlight = readPublishedHiringJobs()
+    .then((value) => {
+      publishedCache = { value, ts: Date.now() };
+      publishedInFlight = null;
+      return value;
+    })
+    .catch((error) => {
+      publishedInFlight = null;
+      throw error;
+    });
+  return publishedInFlight;
 }
 
 export async function getPublishedHiringJobById(id: string) {
@@ -97,8 +144,45 @@ export function toPublicHiringJob(job: HiringJobPosting): PublicHiringJob {
   return pub;
 }
 
+/**
+ * The LISTING view of a job: exactly the fields a card renders, and nothing
+ * else. `description`, `responsibilities` and `requirements` are the bulk of a
+ * posting and no list UI reads them, so they are dropped here rather than
+ * shipped to the browser and ignored.
+ *
+ * Derived from PublicHiringJob, so it can never leak a field the public view
+ * does not already allow.
+ */
+export type PublicHiringJobListItem = Pick<
+  PublicHiringJob,
+  'id' | 'title' | 'organizationName' | 'location' | 'department'
+  | 'employmentType' | 'workMode' | 'experienceLevel'
+  | 'preferredSkills' | 'applyUrl' | 'shareUrl' | 'createdAt' | 'updatedAt'
+>;
+
+export function toPublicHiringJobListItem(job: HiringJobPosting): PublicHiringJobListItem {
+  return {
+    id: job.id,
+    title: job.title,
+    organizationName: job.organizationName,
+    location: job.location,
+    department: job.department,
+    employmentType: job.employmentType,
+    workMode: job.workMode,
+    experienceLevel: job.experienceLevel,
+    preferredSkills: job.preferredSkills,
+    applyUrl: job.applyUrl,
+    shareUrl: job.shareUrl,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
 export async function saveHiringJobs(jobs: HiringJobPosting[]) {
   await writeJsonFile(hiringJobsPath, jobs);
+  // Every write path funnels through here, so this is the one place the
+  // published cache can go stale — and the one place it is cleared.
+  invalidatePublishedHiringJobs();
 }
 
 export async function getHiringApplications() {

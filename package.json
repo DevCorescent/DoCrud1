@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:presence": "tsx scripts/presence-selftest.ts",
     "test:jobs": "tsx scripts/india-recommend.selftest.ts",
+    "test:trends": "tsx scripts/trends.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:indexes": "node scripts/db-indexes.mjs",

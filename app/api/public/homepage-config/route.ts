@@ -57,10 +57,22 @@ const DEFAULT_CONFIG: HomepageConfig = {
   updatedAt: '',
 };
 
+/* Read on every homepage load by every visitor, written only from Super Admin.
+   A short hold turns that into one storage read per window instead of one per
+   visit; an admin save is visible within the window. */
+let cached: { config: HomepageConfig; ts: number } | null = null;
+const CACHE_TTL = 30_000;
+
 export async function GET() {
   try {
+    if (cached && Date.now() - cached.ts < CACHE_TTL) {
+      return NextResponse.json({ config: cached.config });
+    }
     const stored = await readJsonFile<Partial<HomepageConfig> | null>(homepageConfigPath, null);
-    if (!stored) return NextResponse.json({ config: DEFAULT_CONFIG });
+    if (!stored) {
+      cached = { config: DEFAULT_CONFIG, ts: Date.now() };
+      return NextResponse.json({ config: DEFAULT_CONFIG });
+    }
     const config: HomepageConfig = {
       ...DEFAULT_CONFIG,
       ...stored,
@@ -73,6 +85,7 @@ export async function GET() {
       contentDiscovery: { ...DEFAULT_CONFIG.contentDiscovery, ...(stored.contentDiscovery ?? {}) },
       footer:           { ...DEFAULT_CONFIG.footer,           ...(stored.footer           ?? {}) },
     };
+    cached = { config, ts: Date.now() };
     return NextResponse.json({ config });
   } catch (err) {
     console.error('[public/homepage-config GET]', err);

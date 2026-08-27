@@ -17,22 +17,49 @@ import { isValidApplyUrl } from '@/lib/jobs-ui';
 
 export const dynamic = 'force-dynamic';
 
+/* ─── per-viewer result cache ─────────────────────────────────────────────
+   Ranking scores every published posting against the viewer's profile. One
+   homepage load asked for it TWICE — the headline count and the recommended
+   carousel — and the jobs page asks again, so the same 360-job scoring pass ran
+   three times for one visit and returned identical results each time.
+
+   Keyed by viewer AND scope, because the trimmed row and the full recommended
+   set are different payloads. Session-scoped by construction: a signed-out
+   viewer is keyed 'anon' and can never be served another member's data. Same
+   one-minute window and same shape the people route already uses. */
+type CachedRecs = { payload: { jobs: unknown[]; total: number }; ts: number };
+const CACHE_TTL = 60_000;
+const cache = new Map<string, CachedRecs>();
+
 export async function GET(request: Request) {
   try {
-    const config = await getFeedConfig();
-    if (!config.jobs.enabled) return NextResponse.json({ jobs: [] }, { headers: { 'Cache-Control': 'no-store' } });
-
-    const jobs = await getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>);
-    if (!Array.isArray(jobs) || jobs.length === 0) {
-      return NextResponse.json({ jobs: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
-    }
+    const scope = new URL(request.url).searchParams.get('scope') === 'recommended' ? 'recommended' : 'row';
 
     // Viewer signals from the stored profile — never client-supplied.
     const session = await getAuthSession().catch(() => null);
     const meId = session?.user ? await resolveSessionUserId(session).catch(() => null) : null;
-    const fields = meId
-      ? await getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests']).catch(() => null)
-      : null;
+
+    const cacheKey = `${meId ?? 'anon'}:${scope}`;
+    const hit = cache.get(cacheKey);
+    if (hit && Date.now() - hit.ts < CACHE_TTL) {
+      return NextResponse.json(hit.payload, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    const config = await getFeedConfig();
+    if (!config.jobs.enabled) return NextResponse.json({ jobs: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
+
+    /* The job list and the viewer's profile are independent reads; they were
+       being awaited one after the other. */
+    const [jobs, fields] = await Promise.all([
+      getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>),
+      meId
+        ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests']).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+    if (!Array.isArray(jobs) || jobs.length === 0) {
+      return NextResponse.json({ jobs: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
     const profile = buildRecProfile((fields ?? {}) as Parameters<typeof buildRecProfile>[0]);
     const showMatch = hasProfileSignals(profile);
     const now = Date.now();
@@ -81,15 +108,16 @@ export async function GET(request: Request) {
     const recommended = scored.filter((s) => s.recommended);
     const total = recommended.length;
 
-    /* ?scope=recommended returns the whole recommended set instead of the
+    /* scope 'recommended' returns the whole recommended set instead of the
        carousel's worth — what /jobs?recommended=1 renders, so the page can
        never show fewer roles than the headline promised. */
-    const scope = new URL(request.url).searchParams.get('scope');
-    const payload = scope === 'recommended'
+    const list = scope === 'recommended'
       ? recommended.map((s) => s.job)
       : scored.slice(0, config.jobs.maxCards).map((s) => s.job);
 
-    return NextResponse.json({ jobs: payload, total }, { headers: { 'Cache-Control': 'no-store' } });
+    const payload = { jobs: list, total };
+    cache.set(cacheKey, { payload, ts: Date.now() });
+    return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[recommendations/jobs] GET error', error);
     return NextResponse.json({ jobs: [], total: 0 }, { status: 200 });

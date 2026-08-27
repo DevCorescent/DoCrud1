@@ -39,40 +39,54 @@ export type TrustedCompany = {
 
 type HiringCompany = { name: string; logoUrl: string; jobCount: number };
 
-function CompanyMark({ company }: { company: TrustedCompany }) {
+/* One element, not two nested ones. The outer wrapper and the inner row carried
+   the same flex/shrink rules, so every mark cost a redundant span — 26 across
+   the duplicated track. Merging them changes nothing visually: the merged class
+   list is exactly the union the browser was already computing. */
+const MARK = 'group/mark flex shrink-0 items-center gap-2.5';
+const CHIP = 'flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-white/[0.09] bg-white/[0.06] sm:h-8 sm:w-8';
+const LABEL = 'whitespace-nowrap text-[15px] font-bold tracking-[-0.01em] text-white/70 transition-colors group-hover/mark:text-white/90 sm:text-[17px]';
+
+function CompanyMark({ company, priority }: { company: TrustedCompany; priority: boolean }) {
   const [failed, setFailed] = useState(false);
   const showLogo = Boolean(company.logoUrl) && !failed;
 
   const body = (
-    <span className="flex shrink-0 items-center gap-2.5">
+    <>
       {showLogo && (
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border border-white/[0.09] bg-white/[0.06] sm:h-8 sm:w-8">
+        <span className={CHIP}>
           {/* Intrinsic size matches the chip, so the row reserves its space
               before the logo arrives — a slow or failed logo cannot reflow the
-              marquee mid-animation. */}
+              marquee mid-animation.
+
+              The FIRST copy of the row is the one on screen at the top of the
+              page, so it loads eagerly: `lazy` there defers an above-the-fold
+              image until layout and makes the row pop in late. The duplicate is
+              off-screen, so it stays lazy — and since both copies point at the
+              same URL it costs no extra request either way. Low priority keeps
+              logos from competing with more important resources. */}
           <img
             src={company.logoUrl}
             alt=""
             aria-hidden
             width={32}
             height={32}
-            loading="lazy"
+            loading={priority ? 'eager' : 'lazy'}
+            fetchPriority="low"
             decoding="async"
             onError={() => setFailed(true)}
             className="h-full w-full object-contain p-1"
           />
         </span>
       )}
-      <span className="whitespace-nowrap text-[15px] font-bold tracking-[-0.01em] text-white/70 transition-colors group-hover/mark:text-white/90 sm:text-[17px]">
-        {company.name}
-      </span>
-    </span>
+      <span className={LABEL}>{company.name}</span>
+    </>
   );
 
-  if (!company.href) return <span className="group/mark flex shrink-0 items-center">{body}</span>;
+  if (!company.href) return <span className={MARK}>{body}</span>;
   return (
     <a href={company.href} target="_blank" rel="noopener noreferrer nofollow"
-      aria-label={company.name} className="group/mark flex shrink-0 items-center">
+      aria-label={company.name} className={MARK}>
       {body}
     </a>
   );
@@ -115,9 +129,14 @@ export default function TrustedCompanies({
   // Nothing pinned and nobody hiring is a real state: the row does not render.
   if (companies.length === 0) return null;
 
-  const row = (ariaHidden: boolean) => (
-    <div className="flex shrink-0 items-center gap-8 pr-8 sm:gap-12 sm:pr-12" aria-hidden={ariaHidden || undefined}>
-      {companies.map((c) => <CompanyMark key={`${ariaHidden ? 'b' : 'a'}-${c.id}`} company={c} />)}
+  const row = (duplicate: boolean) => (
+    <div
+      className={`flex shrink-0 items-center gap-8 pr-8 sm:gap-12 sm:pr-12${duplicate ? ' tc-dup' : ''}`}
+      aria-hidden={duplicate || undefined}
+    >
+      {companies.map((c) => (
+        <CompanyMark key={`${duplicate ? 'b' : 'a'}-${c.id}`} company={c} priority={!duplicate} />
+      ))}
     </div>
   );
 
@@ -125,9 +144,20 @@ export default function TrustedCompanies({
     <section aria-label={label || 'Companies hiring on Docrud'} className="w-full min-w-0">
       <style>{`
         @keyframes tc-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        /* transform only — the compositor handles it, so the loop never
+           triggers layout or paint on the rest of the page. */
         .tc-track { animation: tc-marquee 32s linear infinite; will-change: transform; }
         .tc-viewport:hover .tc-track { animation-play-state: paused; }
-        @media (prefers-reduced-motion: reduce) { .tc-track { animation: none; } }
+        /* Scope the marquee's own paint/layout work so it cannot invalidate
+           anything outside this box while it scrolls. */
+        .tc-viewport { contain: layout paint; }
+        @media (prefers-reduced-motion: reduce) {
+          .tc-track { animation: none; }
+          /* Nothing scrolls, so the second copy exists only to make the loop
+             seamless — with the animation off it is dead DOM and dead image
+             decodes. Halves the row for anyone on reduced motion. */
+          .tc-dup { display: none; }
+        }
       `}</style>
 
       {label && (

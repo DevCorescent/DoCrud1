@@ -23,8 +23,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
-  ArrowLeft, ArrowRight, ArrowUpRight, Briefcase, Check, Copy, FileText, Loader2,
-  MapPin, Paperclip, Share2, Upload, X,
+  ArrowLeft, ArrowRight, ArrowUpRight, Bookmark, BookmarkCheck, Briefcase, Check,
+  Copy, Facebook, FileText, Link2, Linkedin, Loader2, MapPin, Paperclip, Share2,
+  Twitter, Upload, X, Zap,
 } from 'lucide-react';
 import { HiringJobPosting } from '@/types/document';
 import {
@@ -98,6 +99,172 @@ function ListSection({ title, items }: { title: string; items?: string[] }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+/* ─── save + share bar ────────────────────────────────────────────────────
+   Same controls as the reference layout, in Docrud's own visual language:
+   the "early applicant" note sits at the start of the row and the save /
+   share controls sit at its end. Only the arrangement is borrowed — every
+   surface below reuses the detail page's existing button tokens, so no
+   colour, radius, height or background of the Jobs UI changes.
+
+   Saving is client-side only (the same localStorage pattern the public
+   profile already uses for its saved items); no job API is touched. */
+
+const SAVED_JOBS_KEY = 'docrud-saved-jobs';
+/** A role counts as "early" for its first week, measured from its real postedAt. */
+const EARLY_APPLICANT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+const ICON_BTN =
+  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-white/[0.10] bg-white/[0.04] text-white/55 transition hover:bg-white/[0.08] hover:text-white/85';
+const ICON_BTN_ON =
+  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-amber-400/25 bg-amber-400/[0.10] text-amber-200/90 transition hover:bg-amber-400/[0.16]';
+const MENU_ITEM =
+  'flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[12.5px] font-semibold text-white/60 transition hover:bg-white/[0.06] hover:text-white/90';
+
+function readSavedJobs(): string[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SAVED_JOBS_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch { return []; }
+}
+
+/** WhatsApp has no lucide glyph, so its mark is drawn inline. */
+function WhatsAppIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={className}>
+      <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.87 9.87 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 18.02h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.17 8.17 0 0 1-1.25-4.35c0-4.54 3.7-8.24 8.25-8.24 2.2 0 4.27.86 5.83 2.42a8.19 8.19 0 0 1 2.41 5.83c0 4.54-3.7 8.2-8.25 8.2Zm4.52-6.16c-.25-.13-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.24-.64.8-.78.97-.15.16-.29.18-.53.06-.25-.13-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.71-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.44.13-.15.17-.25.25-.41.09-.17.04-.31-.02-.44-.06-.12-.56-1.34-.76-1.84-.2-.48-.4-.41-.56-.42h-.47c-.16 0-.43.06-.65.31-.22.24-.85.83-.85 2.03s.87 2.35.99 2.51c.12.17 1.72 2.62 4.16 3.68.58.25 1.03.4 1.39.51.58.19 1.11.16 1.53.1.47-.07 1.47-.6 1.68-1.18.2-.58.2-1.07.14-1.18-.06-.11-.22-.17-.47-.29Z" />
+    </svg>
+  );
+}
+
+function JobActionBar({
+  jobId, title, company, shareUrl, postedAt, onNote,
+}: {
+  jobId: string;
+  title: string;
+  company: string;
+  shareUrl: string;
+  postedAt?: string;
+  onNote: (note: string) => void;
+}) {
+  const [saved, setSaved] = useState(false);
+  const [early, setEarly] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const linkRef = useRef<HTMLInputElement>(null);
+
+  /* Both flags are resolved after mount: saved state lives in the browser and
+     "early" depends on the current clock, so neither can be rendered on the
+     server without a hydration mismatch. */
+  useEffect(() => { setSaved(readSavedJobs().includes(jobId)); }, [jobId]);
+  useEffect(() => {
+    const at = postedAt ? new Date(postedAt).getTime() : NaN;
+    setEarly(Number.isFinite(at) && Date.now() - at <= EARLY_APPLICANT_WINDOW_MS);
+  }, [postedAt]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [menuOpen]);
+
+  const toggleSave = () => {
+    const current = readSavedJobs();
+    const next = saved ? current.filter((id) => id !== jobId) : [...current, jobId];
+    try { window.localStorage.setItem(SAVED_JOBS_KEY, JSON.stringify(next)); } catch { /* private mode — the button still reflects this session */ }
+    setSaved(!saved);
+  };
+
+  /** Tags the shared link with its channel, exactly as the share row implies. */
+  const tagged = (channel: string) => {
+    try {
+      const url = new URL(shareUrl, typeof window !== 'undefined' ? window.location.origin : 'https://docrud.com');
+      url.searchParams.set('utm_source', channel);
+      url.searchParams.set('referral', 'web_share');
+      return url.toString();
+    } catch { return shareUrl; }
+  };
+
+  const headline = `${title} at ${company}`;
+  const iconCls = 'h-4 w-4 shrink-0 text-white/40';
+  const channels = [
+    { key: 'wp', label: 'Share on WhatsApp', icon: <WhatsAppIcon className={iconCls} />, href: `https://wa.me/?text=${encodeURIComponent(`Check out this job — ${headline}\n${tagged('wp_share')}`)}` },
+    { key: 'li', label: 'Share on LinkedIn', icon: <Linkedin className={iconCls} />, href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(tagged('li_share'))}` },
+    { key: 'fb', label: 'Share on Facebook', icon: <Facebook className={iconCls} />, href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(tagged('fb_share'))}` },
+    { key: 'tw', label: 'Share on X', icon: <Twitter className={iconCls} />, href: `https://twitter.com/intent/tweet?text=${encodeURIComponent(headline)}&url=${encodeURIComponent(tagged('tw_share'))}` },
+  ];
+
+  const copyLink = async () => {
+    const link = tagged('cp_link');
+    try {
+      await navigator.clipboard.writeText(link);
+      onNote('Link copied');
+    } catch {
+      // No clipboard permission — fall back to selecting the hidden field.
+      const field = linkRef.current;
+      if (field) {
+        field.value = link;
+        field.select();
+        const ok = document.execCommand?.('copy');
+        onNote(ok ? 'Link copied' : 'Copy failed — select the URL manually');
+      } else {
+        onNote('Copy failed — select the URL manually');
+      }
+    }
+    setMenuOpen(false);
+  };
+
+  return (
+    <div className="flex w-full flex-wrap items-center gap-2.5 sm:ml-auto sm:w-auto">
+      {early && (
+        <span className="inline-flex h-10 items-center gap-1.5 rounded-[13px] border border-amber-400/20 bg-amber-400/[0.07] px-3.5 text-[12.5px] font-semibold text-amber-200/85">
+          <Zap className="h-3.5 w-3.5 shrink-0 text-amber-300/90" /> Be an early applicant
+        </span>
+      )}
+
+      <div ref={wrapRef} className="relative ml-auto flex items-center gap-2.5">
+        <button type="button" onClick={toggleSave} aria-pressed={saved}
+          aria-label={saved ? 'Remove this job from saved' : 'Save this job'}
+          title={saved ? 'Saved' : 'Save this job'}
+          className={saved ? ICON_BTN_ON : ICON_BTN}>
+          {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+        </button>
+
+        <button type="button" onClick={() => setMenuOpen((open) => !open)}
+          aria-haspopup="menu" aria-expanded={menuOpen} className={GHOST_BTN}>
+          <Share2 className="h-3.5 w-3.5" /> Share Job
+        </button>
+
+        {menuOpen && (
+          <div role="menu" aria-label="Share this job"
+            className="absolute right-0 top-[calc(100%+8px)] z-40 w-60 overflow-hidden rounded-[13px] border border-white/[0.10] bg-[#111114] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.55)]">
+            {channels.map(({ key, label, icon, href }) => (
+              <a key={key} role="menuitem" href={href} target="_blank" rel="noopener noreferrer"
+                onClick={() => setMenuOpen(false)} className={MENU_ITEM}>
+                {icon} {label}
+              </a>
+            ))}
+            <button type="button" role="menuitem" onClick={copyLink} className={MENU_ITEM}>
+              <Link2 className={iconCls} /> Copy link
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Copy fallback for browsers without the async clipboard API. */}
+      <input ref={linkRef} type="text" readOnly defaultValue={shareUrl} tabIndex={-1} aria-hidden
+        className="pointer-events-none fixed left-[-9999px] top-0 h-px w-px opacity-0" />
+    </div>
   );
 }
 
@@ -338,7 +505,7 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
           )}
 
           {/* ── Actions ──────────────────────────────────────────────── */}
-          <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
+          <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:items-center">
             {externalApply ? (
               <a href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow"
                 aria-label={`Apply for ${job.title} at ${company} on the original source`}
@@ -350,9 +517,8 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
                 {applied ? 'View Application' : 'Apply Now'} <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
-            <button type="button" onClick={shareJob} className={`${GHOST_BTN} w-full sm:w-auto`}>
-              <Share2 className="h-3.5 w-3.5" /> Share Job
-            </button>
+            <JobActionBar jobId={job.id} title={job.title} company={company}
+              shareUrl={shareUrl} postedAt={job.createdAt} onNote={setShareNote} />
           </div>
 
           {externalApply && (

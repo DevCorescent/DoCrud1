@@ -28,12 +28,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { ArrowRight, CalendarDays, Users } from 'lucide-react';
+import { ArrowRight, Users } from 'lucide-react';
 import { profileStatusStyle } from '@/lib/profile-score';
+import AnimatedWelcomeCharacter from '@/components/home/AnimatedWelcomeCharacter';
 
 export type HomeGreetingConfig = {
   subtitle: string;
-  cadenceLabel: string;
   illustrationUrl: string;
 };
 
@@ -54,37 +54,6 @@ const BAND_WORD: Record<string, string> = {
   'complete': 'Complete',
 };
 
-/** The default artwork, so the card is never a broken image before an upload. */
-function GreetingArtwork() {
-  return (
-    <svg viewBox="0 0 120 96" fill="none" aria-hidden className="h-[86px] w-[108px] shrink-0 sm:h-[104px] sm:w-[130px]">
-      <rect x="8" y="10" width="46" height="58" rx="6" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.13)" />
-      <circle cx="21" cy="24" r="5" fill="rgba(255,255,255,0.20)" />
-      <rect x="31" y="21" width="17" height="3" rx="1.5" fill="rgba(255,255,255,0.18)" />
-      <rect x="15" y="36" width="33" height="3" rx="1.5" fill="rgba(255,255,255,0.14)" />
-      <rect x="15" y="44" width="26" height="3" rx="1.5" fill="rgba(255,255,255,0.12)" />
-      <rect x="15" y="52" width="30" height="3" rx="1.5" fill="rgba(255,255,255,0.10)" />
-      <rect x="52" y="40" width="54" height="38" rx="7" fill="#1b1c20" stroke="rgba(255,255,255,0.14)" />
-      <rect x="70" y="33" width="18" height="9" rx="3" fill="#1b1c20" stroke="rgba(255,255,255,0.14)" />
-      <rect x="52" y="55" width="54" height="2.5" fill="rgba(255,255,255,0.10)" />
-      <rect x="74" y="52" width="10" height="8" rx="2" fill="rgba(255,255,255,0.16)" />
-      <circle cx="30" cy="76" r="9" fill="rgba(52,211,153,0.16)" stroke="rgba(52,211,153,0.30)" />
-      <circle cx="46" cy="80" r="6" fill="rgba(52,211,153,0.11)" stroke="rgba(52,211,153,0.22)" />
-    </svg>
-  );
-}
-
-/**
- * A count tile. No icon: the label already says what the number is, and the
- * chip cost a whole row at the top while pushing the reading down the box.
- * What is left is stacked deliberately — label and action on the top line, the
- * number, then its caption — with `justify-between` over a fixed minimum
- * height, so both tiles are the same balanced box instead of content floating
- * in whatever height the grid row happened to be.
- *
- * `tint` survives as the corner wash, which is all the per-tile colour that is
- * needed once the icon chip is gone.
- */
 function StatTile({
   tint, label, value, caption, href,
 }: {
@@ -178,7 +147,6 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
   const bandStyle = profileStatusStyle(score ?? 0);
   const word = BAND_WORD[bandStyle.band] ?? 'In progress';
   const subtitle = greeting?.subtitle?.trim() || "We've found some jobs and connections for you.";
-  const cadence = greeting?.cadenceLabel?.trim() || 'Updated everyday';
 
   return (
     <section aria-label="Your Docrud summary" className="flex w-full min-w-0 flex-col gap-2.5">
@@ -190,15 +158,20 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
             Hey, {firstName} <span aria-hidden>👋</span>
           </h2>
           <p className="mt-1.5 text-[13px] leading-relaxed text-white/45">{subtitle}</p>
-          <p className="mt-3 inline-flex items-center gap-1.5 text-[12px] text-white/32">
-            <CalendarDays className="h-3.5 w-3.5 shrink-0" /> {cadence}
-          </p>
         </div>
 
+        {/* An uploaded illustration still wins; the animated character is the
+            default.
+
+            Mobile and tablet keep the ORIGINAL box exactly, so the card cannot
+            gain height or shift where space is tight. Only from lg — where the
+            card is wide and the left column is nowhere near full — does the
+            character grow to read at roughly 40% of the card, which is the one
+            place the reference asks for it. */}
         {greeting?.illustrationUrl
           ? <img src={greeting.illustrationUrl} alt="" aria-hidden loading="lazy" decoding="async"
-              className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px]" />
-          : <GreetingArtwork />}
+              className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px] lg:h-[150px]" />
+          : <AnimatedWelcomeCharacter className="h-[86px] w-[108px] shrink-0 sm:h-[104px] sm:w-[130px] lg:h-[150px] lg:w-[190px]" />}
 
         <Link href={RECOMMENDED_PEOPLE_HREF} aria-label="People you may know"
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.06] text-white/55 transition hover:text-white/90 sm:right-4 sm:top-4">

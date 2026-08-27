@@ -29,7 +29,7 @@ type AnnouncementBanner = {
 type HomepageConfig = {
   sections: SectionVisibility;
   trustedCompanies: { label: string; items: TrustedCompany[]; autoFromJobs: boolean };
-  greeting: { subtitle: string; cadenceLabel: string; illustrationUrl: string };
+  greeting: { subtitle: string; illustrationUrl: string };
   hero: { slotWords: SlotWord[]; backgroundImage: string; guestCtaPrimary: string; guestCtaSecondary: string; authCtaPrimary: string; authCtaSecondary: string };
   nav: { logoText: string; logoUrl: string; links: NavLink[]; showSignIn: boolean; showSignUp: boolean };
   featureCards: { guestFeatureIds: string[]; defaultFeatureIds: string[] };
@@ -43,7 +43,7 @@ type HomepageConfig = {
 const DEFAULT_CONFIG: HomepageConfig = {
   sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
   trustedCompanies: { label: '', items: [], autoFromJobs: true },
-  greeting: { subtitle: '', cadenceLabel: '', illustrationUrl: '' },
+  greeting: { subtitle: '', illustrationUrl: '' },
   hero: { slotWords: [], backgroundImage: '', guestCtaPrimary: '', guestCtaSecondary: '', authCtaPrimary: '', authCtaSecondary: '' },
   nav: { logoText: '', logoUrl: '', links: [], showSignIn: true, showSignUp: true },
   featureCards: { guestFeatureIds: [], defaultFeatureIds: [] },

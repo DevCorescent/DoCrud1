@@ -14,7 +14,7 @@ type TrustedCompany = { id: string; name: string; logoUrl: string; href: string;
 /** The "Top companies trust docrud" marquee — Super Admin owns the list AND the logos. */
 type TrustedCompanies = { label: string; items: TrustedCompany[]; autoFromJobs: boolean };
 /** Copy + artwork for the signed-in greeting card. The name comes from the session. */
-type HomeGreeting = { subtitle: string; cadenceLabel: string; illustrationUrl: string };
+type HomeGreeting = { subtitle: string; illustrationUrl: string };
 type HomepageConfig = {
   sections: SectionVisibility;
   trustedCompanies: TrustedCompanies;
@@ -44,7 +44,6 @@ const DEFAULT_CONFIG: HomepageConfig = {
   },
   greeting: {
     subtitle: "We've found some jobs and connections for you.",
-    cadenceLabel: 'Updated everyday',
     illustrationUrl: '',
   },
   hero: { slotWords:[], backgroundImage:'', guestCtaPrimary:'', guestCtaSecondary:'', authCtaPrimary:'', authCtaSecondary:'' },

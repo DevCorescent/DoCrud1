@@ -161,12 +161,17 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
         </div>
 
         {/* An uploaded illustration still wins; the animated character is the
-            default. Identical box at both breakpoints, so swapping the artwork
-            cannot shift the card. */}
+            default.
+
+            Mobile and tablet keep the ORIGINAL box exactly, so the card cannot
+            gain height or shift where space is tight. Only from lg — where the
+            card is wide and the left column is nowhere near full — does the
+            character grow to read at roughly 40% of the card, which is the one
+            place the reference asks for it. */}
         {greeting?.illustrationUrl
           ? <img src={greeting.illustrationUrl} alt="" aria-hidden loading="lazy" decoding="async"
-              className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px]" />
-          : <AnimatedWelcomeCharacter className="h-[86px] w-[108px] shrink-0 sm:h-[104px] sm:w-[130px]" />}
+              className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px] lg:h-[150px]" />
+          : <AnimatedWelcomeCharacter className="h-[86px] w-[108px] shrink-0 sm:h-[104px] sm:w-[130px] lg:h-[150px] lg:w-[190px]" />}
 
         <Link href={RECOMMENDED_PEOPLE_HREF} aria-label="People you may know"
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.06] text-white/55 transition hover:text-white/90 sm:right-4 sm:top-4">

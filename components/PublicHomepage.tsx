@@ -128,6 +128,9 @@ type HPSectionVisibility = {
   gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
 };
 type HPTrustedCompany = { id:string; name:string; logoUrl:string; href:string; visible:boolean };
+/** The derived "currently hiring" shape the marquee seeds from — see
+    /api/public/hiring-companies. */
+type HPHiringCompany = { name:string; logoUrl:string; jobCount:number };
 type HPConfig = {
   sections: HPSectionVisibility;
   /* The "Top companies trust docrud" marquee and the greeting card copy —
@@ -153,6 +156,12 @@ interface PublicHomepageProps {
   softwareName: string;
   accentLabel: string;
   guestMode?: boolean;
+  /* Seeded by the server component that renders this page. The homepage is
+     `ssr: false`, so these arrive with the RSC payload rather than costing a
+     round trip after hydration — which is what the marquee used to wait on.
+     Both are optional: when absent the client fetches exactly as before. */
+  initialHpConfig?: HPConfig | null;
+  initialCompanies?: HPHiringCompany[] | null;
 }
 
 type ChatMessage = {
@@ -6055,6 +6064,7 @@ function NewHomepageContent({
   liveFeeds = [],
   hpSections = DEFAULT_HP_SECTIONS,
   hpConfig = null,
+  initialCompanies = null,
   guestMode = false,
 }: {
   softwareName: string;
@@ -6074,6 +6084,8 @@ function NewHomepageContent({
   liveFeeds?: NHCLiveFeed[];
   hpSections?: HPSectionVisibility;
   hpConfig?: HPConfig | null;
+  /** Server-seeded marquee companies; see PublicHomepageProps. */
+  initialCompanies?: HPHiringCompany[] | null;
   guestMode?: boolean;
 }) {
   const { data: nhcSession } = useSession();
@@ -6351,6 +6363,7 @@ function NewHomepageContent({
               label={hpConfig.trustedCompanies.label}
               items={hpConfig.trustedCompanies.items ?? []}
               autoFromJobs={hpConfig.trustedCompanies.autoFromJobs !== false}
+              initialCompanies={initialCompanies}
             />
           </div>
         )}
@@ -6997,7 +7010,10 @@ function DdriveIconTile({ style }: { style?: React.CSSProperties }) {
   );
 }
 
-export default function PublicHomepage({ softwareName, accentLabel, guestMode = false }: PublicHomepageProps) {
+export default function PublicHomepage({
+  softwareName, accentLabel, guestMode = false,
+  initialHpConfig = null, initialCompanies = null,
+}: PublicHomepageProps) {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
   const pathname = usePathname();
@@ -7042,8 +7058,10 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const [chatHistoryQuery, setChatHistoryQuery] = useState('');
   const [headlineIndex, setHeadlineIndex] = useState(0);
-  const [hpSections, setHpSections] = useState<HPSectionVisibility>(DEFAULT_HP_SECTIONS);
-  const [hpConfig, setHpConfig] = useState<HPConfig | null>(null);
+  const [hpSections, setHpSections] = useState<HPSectionVisibility>(
+    initialHpConfig?.sections ? { ...DEFAULT_HP_SECTIONS, ...initialHpConfig.sections } : DEFAULT_HP_SECTIONS,
+  );
+  const [hpConfig, setHpConfig] = useState<HPConfig | null>(initialHpConfig);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [publishInitialCategory, setPublishInitialCategory] = useState<string | undefined>(undefined);
   const openPublishModal = (category?: string) => {
@@ -7104,6 +7122,25 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
   const [liveMetrics, setLiveMetrics] = useState<LiveMetrics | null>(null);
   const [liveFeeds, setLiveFeeds] = useState<LiveFeed[]>([]);
 
+  /* Super Admin config: needed by the marquee, the nav and the footer, and
+     independent of every other homepage request — so it starts on mount rather
+     than queueing behind the live-content batch. Seeded from the server when
+     the page passed it down, in which case this is a background refresh and
+     nothing on screen waits for it. */
+  useEffect(() => {
+    if (initialHpConfig) return;
+    let active = true;
+    fetch('/api/public/homepage-config', { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { config?: { sections?: Partial<HPSectionVisibility> } } | null) => {
+        if (!active || !d?.config) return;
+        setHpConfig(d.config as HPConfig);
+        setHpSections(prev => ({ ...prev, ...d.config!.sections }));
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [initialHpConfig]);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -7133,15 +7170,10 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
           const d = await fRes.json() as { feeds?: LiveFeed[] };
           if (Array.isArray(d.feeds)) setLiveFeeds(d.feeds);
         }
-        fetch('/api/public/homepage-config', { cache: 'no-store' })
-          .then(r => r.ok ? r.json() : null)
-          .then((d: { config?: { sections?: Partial<HPSectionVisibility> } } | null) => {
-            if (d?.config) {
-              setHpConfig(d.config as HPConfig);
-              setHpSections(prev => ({ ...prev, ...d.config!.sections }));
-            }
-          })
-          .catch(() => {});
+        /* The homepage config fetch used to sit HERE — after the await above —
+           so it could not start until gigs, metrics and feeds had all resolved,
+           and the marquee (which needs it) waited on three unrelated requests.
+           It now runs in its own effect below, in parallel from the start. */
       } catch { /* ignore */ }
     };
     // Defer below-fold data until browser is idle — doesn't block first paint
@@ -8418,6 +8450,7 @@ export default function PublicHomepage({ softwareName, accentLabel, guestMode = 
                   liveFeeds={liveFeeds}
                   hpSections={hpSections}
                   hpConfig={hpConfig}
+                  initialCompanies={initialCompanies}
                   guestMode={guestMode}
                 />
               ) : (

@@ -42,7 +42,7 @@ type HomepageConfig = {
 /* ── Constants ─────────────────────────────────────────────────────────────── */
 const DEFAULT_CONFIG: HomepageConfig = {
   sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
-  trustedCompanies: { label: 'Top companies trust docrud', items: [], autoFromJobs: true },
+  trustedCompanies: { label: '', items: [], autoFromJobs: true },
   greeting: { subtitle: '', cadenceLabel: '', illustrationUrl: '' },
   hero: { slotWords: [], backgroundImage: '', guestCtaPrimary: '', guestCtaSecondary: '', authCtaPrimary: '', authCtaSecondary: '' },
   nav: { logoText: '', logoUrl: '', links: [], showSignIn: true, showSignUp: true },

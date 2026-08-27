@@ -37,7 +37,7 @@ export type TrustedCompany = {
   visible: boolean;
 };
 
-type HiringCompany = { name: string; logoUrl: string; jobCount: number };
+export type HiringCompany = { name: string; logoUrl: string; jobCount: number };
 
 /* One element, not two nested ones. The outer wrapper and the inner row carried
    the same flex/shrink rules, so every mark cost a redundant span — 26 across
@@ -96,16 +96,22 @@ export default function TrustedCompanies({
   label,
   items,
   autoFromJobs = true,
+  initialCompanies = null,
 }: {
   label: string;
   items: TrustedCompany[];
   /** Pull the employers currently posting jobs in behind the pinned list. */
   autoFromJobs?: boolean;
+  /* Seeded by the server when the derived list was already warm there. The row
+     then paints on first render instead of after a round trip — and this
+     component skips its fetch entirely. Null means "not available cheaply", so
+     the client fetch runs exactly as before. */
+  initialCompanies?: HiringCompany[] | null;
 }) {
-  const [hiring, setHiring] = useState<HiringCompany[]>([]);
+  const [hiring, setHiring] = useState<HiringCompany[]>(initialCompanies ?? []);
 
   useEffect(() => {
-    if (!autoFromJobs) return;
+    if (!autoFromJobs || initialCompanies) return;
     let active = true;
     cachedJson<{ companies?: HiringCompany[] }>('/api/public/hiring-companies')
       .then((data) => {
@@ -113,7 +119,7 @@ export default function TrustedCompanies({
       })
       .catch(() => { /* the pinned list still renders on its own */ });
     return () => { active = false; };
-  }, [autoFromJobs]);
+  }, [autoFromJobs, initialCompanies]);
 
   const companies = useMemo(() => {
     const pinned = (items ?? []).filter((c) => c && c.visible !== false && (c.name || c.logoUrl));

@@ -5,6 +5,8 @@ import { buildPageMetadata } from '@/lib/seo';
 import { getThemeSettings } from '@/lib/server/settings';
 import { getAuthSession } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
+import { getHomepageConfig } from '@/lib/server/homepage-config';
+import { peekHiringCompanies } from '@/lib/server/hiring-companies';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,9 +28,13 @@ export default async function Home() {
   const cookieStore = await cookies();
   const isGuest = cookieStore.get('guestMode')?.value === '1';
 
-  const [session, themeSettings] = await Promise.all([
+  /* The homepage config joins the batch: it is a sub-kilobyte cached read, and
+     fetching it here means the marquee, nav and footer no longer wait for a
+     round trip after hydration to learn their own configuration. */
+  const [session, themeSettings, hpConfig] = await Promise.all([
     getAuthSession().catch(() => null),
     getThemeSettings().catch(() => ({ softwareName: 'Docrud', accentLabel: 'Platform' })),
+    getHomepageConfig().catch(() => null),
   ]);
 
   if (!session && !isGuest) {
@@ -51,11 +57,18 @@ export default async function Home() {
     redirect('/onboarding/start');
   }
 
+  /* Warm cache only — deliberately NOT awaited into existence. Deriving this
+     cold means reading the whole 2.7 MB job store, which must never sit on the
+     path to first byte; null simply lets the browser fetch it as before. */
+  const initialCompanies = peekHiringCompanies();
+
   return (
     <PublicHomepage
       softwareName={themeSettings.softwareName}
       accentLabel={themeSettings.accentLabel}
       guestMode={!session && isGuest}
+      initialHpConfig={hpConfig}
+      initialCompanies={initialCompanies}
     />
   );
 }

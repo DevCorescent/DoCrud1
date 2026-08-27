@@ -8,8 +8,8 @@
  * by side, then the full-width profile-score card. It was once compacted into
  * a single strip and that is not this design — restore the reference, not the
  * strip. The score card is the one deliberate departure from it: a single row
- * — ring, band, headline, reason, one action — rather than a stacked ring over
- * two buttons. "Edit Profile" is gone; both buttons pointed at the same page
+ * — ring, band, reason, one action — rather than a stacked ring over two
+ * buttons. "Edit Profile" is gone; both buttons pointed at the same page
  * and that pair was most of the card's height.
  *
  * THE COUNTS ARE RECOMMENDATIONS, NOT INVENTORY. Both tiles report the size of
@@ -52,14 +52,6 @@ const BAND_WORD: Record<string, string> = {
   'medium-high': 'Good',
   'high': 'Great',
   'complete': 'Complete',
-};
-
-const BAND_HEADLINE: Record<string, string> = {
-  'low': 'Let’s get you started',
-  'medium-low': 'Good start',
-  'medium-high': 'Good going',
-  'high': 'Almost there',
-  'complete': 'Your profile is complete',
 };
 
 /** The default artwork, so the card is never a broken image before an upload. */
@@ -185,7 +177,6 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
 
   const bandStyle = profileStatusStyle(score ?? 0);
   const word = BAND_WORD[bandStyle.band] ?? 'In progress';
-  const headline = BAND_HEADLINE[bandStyle.band] ?? 'Keep going';
   const subtitle = greeting?.subtitle?.trim() || "We've found some jobs and connections for you.";
   const cadence = greeting?.cadenceLabel?.trim() || 'Updated everyday';
 
@@ -234,10 +225,10 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
       </div>
 
       {/* ── Profile score ──────────────────────────────────────────────────
-          One row: the ring, then the band, the headline, the reason and a
-          single action. "Edit Profile" is gone — two buttons pointing at the
-          same profile was the bulk of this card's height, and "Improve score"
-          is the one that says what to do. */}
+          One row: the ring, then the band, the reason and a single action.
+          "Edit Profile" is gone — two buttons pointing at the same profile was
+          the bulk of this card's height, and "Improve score" is the one that
+          says what to do. */}
       <div className={`flex items-center gap-4 p-4 sm:gap-5 sm:p-5 ${CARD}`}>
         <ScoreRing score={score} colour={bandStyle.ring} />
 
@@ -250,10 +241,7 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
             </span>
           </p>
 
-          <h3 className="mt-1.5 truncate text-[16px] font-bold tracking-[-0.01em] text-white sm:text-[17px]">
-            {headline}, {firstName}!
-          </h3>
-          <p className="mt-1 text-[12.5px] leading-snug text-white/40">
+          <p className="mt-1.5 text-[13px] leading-snug text-white">
             A complete profile gets 3x more visibility.
           </p>
 

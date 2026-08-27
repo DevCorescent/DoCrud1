@@ -12,12 +12,12 @@ import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
 import { getFeedConfig } from '@/lib/server/feed-config';
-import { buildRecProfile, hasProfileSignals, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
+import { buildRecProfile, hasProfileSignals, isRecommended, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
 import { isValidApplyUrl } from '@/lib/jobs-ui';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const config = await getFeedConfig();
     if (!config.jobs.enabled) return NextResponse.json({ jobs: [] }, { headers: { 'Cache-Control': 'no-store' } });
@@ -66,19 +66,30 @@ export async function GET() {
         createdAt: recJob.createdAt,
       };
       if (showMatch) { job.matchScore = match.score; job.matchReasons = match.reasons; }
-      return { score: showMatch ? match.score : 0, job };
+      return { score: showMatch ? match.score : 0, recommended: showMatch && isRecommended(match), job };
     });
 
     scored.sort((a, b) => b.score - a.score || Date.parse(String(b.job.createdAt)) - Date.parse(String(a.job.createdAt)));
-    /* `total` is the real number of roles that matched, BEFORE maxCards trims
-       the row. The homepage headline count reports this, so it never shrinks
-       to the size of a carousel. Without profile signals nothing is scored, so
-       every open role counts. */
-    const total = showMatch ? scored.filter((s) => s.score > 0).length : scored.length;
-    return NextResponse.json(
-      { jobs: scored.slice(0, config.jobs.maxCards).map((s) => s.job), total },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+    /* THE RECOMMENDED SET: roles that genuinely overlap the viewer's profile
+       (a shared skill or a matching role), not merely everything that scored
+       above zero — "remote" and "posted recently" alone score 18 on every
+       listing, which made the old count read like the whole job board. With no
+       profile signals nothing can be recommended, and the count is honestly 0.
+
+       `total` is that set's real size, BEFORE maxCards trims the carousel, so
+       the homepage headline never shrinks to the size of a row. */
+    const recommended = scored.filter((s) => s.recommended);
+    const total = recommended.length;
+
+    /* ?scope=recommended returns the whole recommended set instead of the
+       carousel's worth — what /jobs?recommended=1 renders, so the page can
+       never show fewer roles than the headline promised. */
+    const scope = new URL(request.url).searchParams.get('scope');
+    const payload = scope === 'recommended'
+      ? recommended.map((s) => s.job)
+      : scored.slice(0, config.jobs.maxCards).map((s) => s.job);
+
+    return NextResponse.json({ jobs: payload, total }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[recommendations/jobs] GET error', error);
     return NextResponse.json({ jobs: [], total: 0 }, { status: 200 });

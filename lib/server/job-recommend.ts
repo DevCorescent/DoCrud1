@@ -36,7 +36,23 @@ export interface RecJob {
   createdAt?: string;
 }
 
-export interface RecMatch { score: number; reasons: string[] }
+export interface RecMatch {
+  score: number;
+  reasons: string[];
+  /**
+   * True when the job overlaps the viewer's profile for real — a shared skill
+   * or a matching role. THIS, not the raw score, is what makes a job a
+   * recommendation: "remote" plus "posted recently" alone already scores 18
+   * on every open role, which is why an unfiltered count read like the whole
+   * job board. A job with no overlap is a listing, not a match.
+   */
+  overlap: boolean;
+}
+
+/** The recommended set: jobs that genuinely overlap the viewer's profile. */
+export function isRecommended(match: RecMatch): boolean {
+  return match.overlap;
+}
 
 const LEVEL_ORDER = ['entry', 'associate', 'mid', 'senior', 'lead'];
 
@@ -136,5 +152,9 @@ export function recommendMatch(profile: RecProfile, job: RecJob, now: number): R
   else if (job.workMode === 'remote') reasons.push('Remote-friendly');
   if (expScore >= 9) reasons.push('Experience level fits');
 
-  return { score, reasons };
+  /* Skill overlap (declared or referenced in the text) or a role-title hit.
+     Location, work mode and recency are context, not evidence of a match. */
+  const overlap = matched.length > 0 || textHits > 0 || roleHit;
+
+  return { score, reasons, overlap };
 }

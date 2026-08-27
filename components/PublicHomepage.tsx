@@ -5614,21 +5614,22 @@ function ExploreSection() {
            no category colour, no glow, no scale. */
         .exp-tile {
           position: relative;
-          /* 82px + a 10px gap gives a 92px pitch. Four of those clear the
-             382px strip at 390px with room to spare, so the fifth tile
-             straddles the right edge and tells the user the row scrolls. At
-             the 14px desktop gap the pitch would be 96px, which fits exactly
-             four times and reads as a complete, static row. */
-          width: 82px; height: 82px;
+          /* A 40px pill, not an 82px square: the row is a navigation strip, and
+             stacking the icon over the label cost twice the height for the same
+             two pieces of information. Width follows the label, so the strip
+             still overflows on a phone and keeps its scroll affordance. */
+          height: 40px;
+          padding: 0 14px;
           flex-shrink: 0;
           display: flex;
-          flex-direction: column;
+          flex-direction: row;
           align-items: center;
           justify-content: center;
-          gap: 7px;
+          gap: 8px;
           overflow: hidden;
+          white-space: nowrap;
           text-decoration: none;
-          border-radius: 15px;
+          border-radius: 12px;
           border: 1px solid rgba(255,255,255,0.12);
           /* Flat translucent surface — no gradient at any breakpoint. Desktop
              already used this value; the base now matches it. */
@@ -5653,14 +5654,15 @@ function ExploreSection() {
         }
         .exp-icon {
           position: relative;
-          width: 27px; height: 27px;
+          width: 17px; height: 17px;
+          flex-shrink: 0;
           color: rgba(255,255,255,0.82);
           transition: color 0.15s ease;
         }
         .exp-tile:hover .exp-icon { color: rgba(255,255,255,0.95); }
         .exp-label {
           position: relative;
-          font-size: 11.5px;
+          font-size: 12px;
           font-weight: 600;
           line-height: 1;
           color: rgba(255,255,255,0.70);
@@ -5669,8 +5671,8 @@ function ExploreSection() {
         }
         .exp-tile:hover .exp-label { color: rgba(255,255,255,0.92); }
         @media (min-width: 640px) {
-          .exp-tile { width: 92px; height: 92px; gap: 8px; }
-          .exp-icon { width: 30px; height: 30px; }
+          .exp-tile { height: 42px; padding: 0 16px; gap: 9px; }
+          .exp-icon { width: 18px; height: 18px; }
         }
 
         /* ── Desktop only (lg and up) ──────────────────────────────────────
@@ -5682,8 +5684,8 @@ function ExploreSection() {
              comes from the blur, the hairline border and the inset highlight,
              not from a colour ramp. Matches the flat base surface above. */
           .exp-tile {
-            width: 110px; height: 110px; gap: 9px;
-            border-radius: 18px;
+            height: 44px; padding: 0 18px; gap: 10px;
+            border-radius: 14px;
             border: 1px solid rgba(255,255,255,0.10);
             background: rgba(255,255,255,0.045);
             backdrop-filter: blur(18px) saturate(130%);
@@ -5704,17 +5706,17 @@ function ExploreSection() {
           /* The gold bottom hairline is a gradient, so it is off here too.
              The sheen is already off in the base rules. */
           .exp-tile::after { content: none; }
-          .exp-icon { width: 30px; height: 30px; color: rgba(255,255,255,0.82); }
+          .exp-icon { width: 18px; height: 18px; color: rgba(255,255,255,0.82); }
           .exp-label { font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.70); }
         }
         @media (min-width: 1280px) {
-          .exp-tile { width: 120px; height: 120px; gap: 10px; }
-          .exp-icon { width: 31px; height: 31px; }
+          .exp-tile { height: 46px; padding: 0 20px; }
+          .exp-icon { width: 19px; height: 19px; }
         }
       `}</style>
 
       {/* Section heading — identical treatment to the removed Promotions heading */}
-      <div className="flex items-center justify-between mb-3 px-1">
+      <div className="flex items-center justify-between mb-2 px-1">
         <div className="flex items-center gap-2">
           <span className="flex flex-col">
             <span className="flex items-center gap-1.5">
@@ -5741,7 +5743,7 @@ function ExploreSection() {
 
       {/* Tabs on their own row — the announcement slot that shared it is gone. */}
       <div className="flex min-w-0 items-center gap-3.5 px-1 pb-1">
-        <div className="exp-strip flex min-w-0 flex-1 items-start gap-2.5 sm:gap-3.5 lg:flex-none">
+        <div className="exp-strip flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5 lg:flex-none">
           {EXPLORE_ITEMS.map((it) => (
             <Link key={it.label} href={it.href} className="exp-tile" aria-label={it.label}>
               <span className="exp-sheen" aria-hidden="true" />

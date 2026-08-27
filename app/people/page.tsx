@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { Suspense, useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PublicFaceStarIcon, PUBLIC_FACE_CATEGORY_LABELS } from '@/components/PublicFaceBadge';
 import { PresenceDot } from '@/components/PresenceBadge';
 import { useSession } from 'next-auth/react';
@@ -15,6 +15,7 @@ import {
   MapPin,
   Search,
   SlidersHorizontal,
+  Sparkles,
   TrendingUp,
   Users,
   X,
@@ -801,8 +802,24 @@ const DEFAULT_FILTERS: FilterState = {
   skills: new Set(),
 };
 
-export default function PeoplePage() {
+/* useSearchParams() opts this route into client-side rendering, which Next
+   requires to sit behind a Suspense boundary — without one the /people build
+   fails its prerender. The directory itself is unchanged; it just mounts
+   inside the boundary now. */
+export default function PeoplePageRoute() {
+  return (
+    <Suspense fallback={null}>
+      <PeopleDirectory />
+    </Suspense>
+  );
+}
+
+function PeopleDirectory() {
   const router = useRouter();
+  /* ?recommended=1 — arriving from the homepage Connections tile. The page then
+     shows ONLY the people who actually ranked as a match, so it can never list
+     more (or other) people than the count that was clicked. */
+  const recommendedOnly = useSearchParams()?.get('recommended') === '1';
   const { data: session } = useSession();
   const sessionUserId = (session?.user as { id?: string } | undefined)?.id;
 
@@ -812,6 +829,9 @@ export default function PeoplePage() {
   const [page, setPage] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  /* The matched set, by user id. Empty until it loads, and only fetched in
+     recommended mode — the normal directory does not pay for this call. */
+  const [recommendedIds, setRecommendedIds] = useState<Set<string> | null>(null);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
   const [upraisedIds, setUpraisedIds] = useState<Set<string>>(new Set());
   const [upraiseCounts, setUpraiseCounts] = useState<Record<string, number>>({});
@@ -836,6 +856,24 @@ export default function PeoplePage() {
     return () => { alive = false; };
   }, []);
 
+  useEffect(() => {
+    if (!recommendedOnly) { setRecommendedIds(null); return; }
+    let alive = true;
+    /* scope=recommended returns every matched person rather than the row's
+       worth, and never the discovery fill — those are people, not matches. */
+    fetch('/api/recommendations/people?scope=recommended', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive) return;
+        const ids = Array.isArray(d?.people)
+          ? d.people.map((x: { userId?: string }) => String(x?.userId ?? '')).filter(Boolean)
+          : [];
+        setRecommendedIds(new Set<string>(ids));
+      })
+      .catch(() => { if (alive) setRecommendedIds(new Set<string>()); });
+    return () => { alive = false; };
+  }, [recommendedOnly]);
+
   useEffect(() => { setPage(1); }, [filters]);
 
   const allSkills = useMemo(() => {
@@ -853,7 +891,12 @@ export default function PeoplePage() {
   ].filter(Boolean).length, [filters]);
 
   const filtered = useMemo(() => {
-    let r = people;
+    /* In recommended mode the matched people ARE the list; every filter below
+       still applies on top, so the viewer can narrow their matches further.
+       While the set is loading nothing is shown rather than the full
+       directory — showing everyone would contradict the count that was
+       clicked. */
+    let r = recommendedOnly ? people.filter((p) => recommendedIds?.has(p.id) ?? false) : people;
     if (filters.search) {
       /* Ranked, field-weighted matching instead of a whole-query substring
          test. The old filter required the entire query to appear verbatim
@@ -918,7 +961,7 @@ export default function PeoplePage() {
       }
     });
     return r;
-  }, [people, filters, upraiseCounts]);
+  }, [people, recommendedOnly, recommendedIds, filters, upraiseCounts]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -1225,6 +1268,19 @@ export default function PeoplePage() {
             </div>
           ) : (
             <>
+              {recommendedOnly && (
+                <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] border border-amber-400/20 bg-amber-400/[0.06] px-4 py-3">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-amber-300/80" />
+                  <p className="text-[12.5px] font-semibold text-amber-100/85">
+                    Showing your {filtered.length} best {filtered.length === 1 ? 'match' : 'matches'}
+                  </p>
+                  <span className="text-[12px] text-white/30">people who share your skills, role, location or connections</span>
+                  <Link href="/people"
+                    className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-white/[0.10] bg-white/[0.05] px-3 text-[12px] font-semibold text-white/60 transition hover:bg-white/[0.09] hover:text-white/90">
+                    Browse everyone
+                  </Link>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                 {paginated.map((person, i) => (
                   <div key={person.id} className="pc-anim" style={{ animationDelay: `${Math.min(i, 11) * 0.04}s` }}>

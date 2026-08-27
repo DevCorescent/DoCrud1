@@ -88,13 +88,18 @@ function stableKey(viewerId: string, candidateId: string): number {
   return (h >>> 0) / 4294967295;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getAuthSession();
     const meId = session?.user ? await resolveSessionUserId(session) : null;
     if (!meId) return NextResponse.json({ people: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
 
-    const hit = cache.get(meId);
+    /* Scope is part of the key: the trimmed row and the full recommended set
+       are different payloads for the same viewer. */
+    const scope = new URL(request.url).searchParams.get('scope') === 'recommended' ? 'recommended' : 'row';
+    const cacheKey = `${meId}:${scope}`;
+
+    const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.ts < CACHE_TTL) {
       return NextResponse.json(hit.payload, { headers: { 'Cache-Control': 'no-store' } });
     }
@@ -222,10 +227,16 @@ export async function GET() {
 
     /* `total` is how many people actually ranked as a match, BEFORE maxCards
        trims the row — the number the homepage headline reports. Discovery
-       fill is deliberately excluded: those are not matches. */
-    const payload = { people, total: scored.length };
+       fill is deliberately excluded: those are not matches, just people.
 
-    cache.set(meId, { payload, ts: Date.now() });
+       ?scope=recommended returns that whole matched set instead of the row's
+       worth (and never the discovery fill), so /people?recommended=1 shows
+       exactly the people the headline counted. */
+    const payload = scope === 'recommended'
+      ? { people: scored.map((s) => s.rec), total: scored.length }
+      : { people, total: scored.length };
+
+    cache.set(cacheKey, { payload, ts: Date.now() });
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[recommendations/people] GET error', error);

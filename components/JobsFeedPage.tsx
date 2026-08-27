@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft, Briefcase, Building2, ChevronLeft, ChevronRight, Globe, LayoutGrid, MapPin, Plus, Search,
   SlidersHorizontal, Sparkles, TrendingUp, X, Zap,
@@ -301,6 +301,10 @@ function SkeletonCard() {
 /* ─── Main page ──────────────────────────────────────────────────────── */
 export default function JobsFeedPage() {
   const router = useRouter();
+  /* ?recommended=1 — arriving from the homepage Jobs tile. The page then shows
+     ONLY the viewer's matched roles, so it can never list more (or other) jobs
+     than the count that was clicked. */
+  const recommendedOnly = useSearchParams()?.get('recommended') === '1';
 
   const [all, setAll] = useState<JobSummary[]>([]);
   const [recommended, setRecommended] = useState<JobSummary[]>([]);
@@ -326,12 +330,17 @@ export default function JobsFeedPage() {
   // Session-scoped recommendations — signed-out/no-profile viewers get [] (hidden).
   useEffect(() => {
     let active = true;
-    fetch('/api/recommendations/jobs', { cache: 'no-store' })
+    /* scope=recommended returns every matched role rather than the row's worth,
+       which is what the recommended-only view needs to render in full. */
+    const url = recommendedOnly
+      ? '/api/recommendations/jobs?scope=recommended'
+      : '/api/recommendations/jobs';
+    fetch(url, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : { jobs: [] }))
       .then((d) => { if (active) setRecommended((Array.isArray(d?.jobs) ? (d.jobs as JobSummary[]) : []).filter((j) => typeof j.matchScore === 'number')); })
       .catch(() => { /* best-effort */ });
     return () => { active = false; };
-  }, []);
+  }, [recommendedOnly]);
 
   /* ⌘K focus */
   useEffect(() => {
@@ -378,7 +387,11 @@ export default function JobsFeedPage() {
   const filtered = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     const loc = filters.location.trim().toLowerCase();
-    let out = all.filter((j) => {
+    /* In recommended-only mode the matched roles ARE the list — they already
+       carry matchScore and are ranked best-first by the server. Every filter
+       below still applies, so the viewer can narrow their matches further. */
+    const source = recommendedOnly ? recommended : all;
+    let out = source.filter((j) => {
       if (filters.employment.size && !filters.employment.has(j.employmentType || '')) return false;
       if (filters.workMode.size && !filters.workMode.has(j.workMode || '')) return false;
       if (filters.experience.size && !filters.experience.has(j.experienceLevel || '')) return false;
@@ -395,7 +408,7 @@ export default function JobsFeedPage() {
       out = out.slice().sort((a, b) => ts(b) - ts(a));
     }
     return out;
-  }, [all, filters]);
+  }, [all, recommended, recommendedOnly, filters]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -594,8 +607,24 @@ export default function JobsFeedPage() {
             </div>
           )}
 
+          {/* A banner instead of the carousel when the whole page IS the matched
+              set — otherwise the top four would simply repeat the list below. */}
+          {recommendedOnly && (
+            <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] border border-emerald-400/20 bg-emerald-400/[0.06] px-4 py-3">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-300/80" />
+              <p className="text-[12.5px] font-semibold text-emerald-100/85">
+                Showing your {recommended.length} best {recommended.length === 1 ? 'match' : 'matches'}
+              </p>
+              <span className="text-[12px] text-white/30">roles that overlap your skills or role</span>
+              <Link href="/jobs"
+                className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] border border-white/[0.10] bg-white/[0.05] px-3 text-[12px] font-semibold text-white/60 transition hover:bg-white/[0.09] hover:text-white/90">
+                Browse all jobs
+              </Link>
+            </div>
+          )}
+
           {/* Recommended for You — unchanged data, unchanged cards */}
-          {recommended.length > 0 && (
+          {!recommendedOnly && recommended.length > 0 && (
             <section className="mb-8">
               <div className="mb-3 flex items-center gap-2">
                 <Sparkles className="h-3.5 w-3.5 text-emerald-400/70" />

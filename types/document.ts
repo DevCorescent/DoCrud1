@@ -486,6 +486,12 @@ export interface HiringJobPosting {
   pageId?: string;
   /** Optional external application URL carried through from a Business Page job. */
   applyUrl?: string;
+  /**
+   * Documents this role asks applicants to attach, by label (e.g. 'Portfolio').
+   * Absent/empty means the role requests nothing beyond the resume — a job that
+   * did not specify documents must never appear to require any.
+   */
+  requiredDocuments?: string[];
 }
 
 export interface HiringJobApplication {
@@ -502,6 +508,31 @@ export interface HiringJobApplication {
   targetRole?: string;
   resumeText: string;
   resumeFileName?: string;
+  /**
+   * The EXACT resume this application was submitted with, pinned at submit time.
+   * A candidate who later uploads a newer resume must not retroactively change
+   * what a recruiter sees here — so the file reference is copied onto the
+   * application rather than read back off the live profile.
+   */
+  resumeRef?: {
+    source: 'profile' | 'upload' | 'text';
+    /** profile only: the resumeFiles[] entry this came from. */
+    resumeId?: string;
+    fileName: string;
+    /** Absent when the resume was pasted as text, or when storage was unavailable. */
+    url?: string;
+  };
+  /** Supporting files attached to THIS application (never the user's profile library). */
+  documents?: Array<{
+    id: string;
+    /** The job's requested-document label this satisfies, or 'Additional document'. */
+    label: string;
+    fileName: string;
+    url: string;
+    uploadedAt: string;
+  }>;
+  /** Optional applicant message / cover letter. */
+  coverLetter?: string;
   analysisSummary: string;
   analysisDetails?: {
     executiveSummary: string;

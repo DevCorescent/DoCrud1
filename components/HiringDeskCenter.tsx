@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { BriefcaseBusiness, Loader2, QrCode, Send, Share2, Sparkles, Users } from 'lucide-react';
+import { BriefcaseBusiness, FileText, Loader2, Paperclip, QrCode, Send, Share2, Sparkles, Users } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -297,6 +297,50 @@ export default function HiringDeskCenter() {
                             </select>
                           </div>
                           <p className="mt-2 text-sm leading-6 text-slate-600">{application.analysisSummary}</p>
+
+                          {/* What the candidate actually submitted. resumeRef is
+                              pinned at submit time, so this stays the exact file
+                              they applied with even after they update their
+                              profile resume later. */}
+                          {(application.resumeRef?.url || (application.documents?.length ?? 0) > 0 || application.coverLetter) ? (
+                            <div className="mt-3 rounded-[0.9rem] border border-slate-200 bg-slate-50 p-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Submitted with this application</p>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {application.resumeRef?.url ? (
+                                  <a
+                                    href={application.resumeRef.url} target="_blank" rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-950 transition hover:bg-slate-950 hover:text-white"
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    {application.resumeRef.fileName}
+                                  </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500">
+                                    <FileText className="h-3.5 w-3.5" />
+                                    {application.resumeFileName || 'Resume submitted as text'}
+                                  </span>
+                                )}
+                                {(application.documents ?? []).map((doc) => (
+                                  <a
+                                    key={doc.id} href={doc.url} target="_blank" rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-950 transition hover:bg-slate-950 hover:text-white"
+                                  >
+                                    <Paperclip className="h-3.5 w-3.5" />
+                                    {doc.label}: {doc.fileName}
+                                  </a>
+                                ))}
+                              </div>
+                              {application.candidatePhone ? (
+                                <p className="mt-2 text-xs text-slate-500">Phone: {application.candidatePhone}</p>
+                              ) : null}
+                              {application.coverLetter ? (
+                                <div className="mt-3 rounded-[0.8rem] border border-white bg-white p-3">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Message</p>
+                                  <p className="mt-1.5 whitespace-pre-line text-sm leading-6 text-slate-700">{application.coverLetter}</p>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                           {application.analysisDetails ? (
                             <div className="mt-3 grid gap-3 lg:grid-cols-2">
                               <div className="rounded-[0.9rem] border border-slate-200 bg-slate-50 p-3">

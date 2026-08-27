@@ -95,3 +95,10 @@ export function formatPosted(iso?: string): string {
   const months = Math.floor(days / 30);
   return months === 1 ? '1mo ago' : `${months}mo ago`;
 }
+
+/** Deterministic hue for a company's monogram tile, so a company always reads the same. */
+export function companyHue(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}

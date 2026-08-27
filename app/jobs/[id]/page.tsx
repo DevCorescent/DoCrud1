@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import PublicHiringJobPage from '@/components/PublicHiringJobPage';
+import JobDetailPage from '@/components/jobs/JobDetailPage';
 import { buildPageMetadata, buildJobPostingSchema, buildBreadcrumbSchema, jsonLd, metaDesc } from '@/lib/seo';
 import { getPublishedHiringJobById } from '@/lib/server/hiring';
-import { getLandingSettings, getThemeSettings } from '@/lib/server/settings';
 import { getPublicAppBaseUrl } from '@/lib/url';
 
 export const dynamic = 'force-dynamic';
@@ -47,11 +46,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
 export default async function PublicHiringJobDetailPage({ params }: { params: { id: string } }) {
   const baseUrl = getPublicAppBaseUrl();
-  const [landingSettings, themeSettings, job] = await Promise.all([
-    getLandingSettings(),
-    getThemeSettings(),
-    getPublishedHiringJobById(params.id),
-  ]);
+  // The marketplace detail view carries its own chrome, so the landing/theme
+  // settings the old public-site shell needed are no longer fetched here.
+  const job = await getPublishedHiringJobById(params.id);
 
   if (!job) notFound();
 
@@ -83,12 +80,7 @@ export default async function PublicHiringJobDetailPage({ params }: { params: { 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }}
       />
-      <PublicHiringJobPage
-        softwareName={themeSettings.softwareName}
-        accentLabel={themeSettings.accentLabel}
-        settings={landingSettings}
-        job={job}
-      />
+      <JobDetailPage job={job} />
     </>
   );
 }

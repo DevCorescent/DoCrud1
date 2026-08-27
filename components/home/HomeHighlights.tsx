@@ -25,10 +25,10 @@
  * Copy and artwork come from the Super Admin homepage config (`greeting`).
  */
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { ArrowRight, Briefcase, CalendarDays, Users } from 'lucide-react';
+import { ArrowRight, CalendarDays, Users } from 'lucide-react';
 import { profileStatusStyle } from '@/lib/profile-score';
 
 export type HomeGreetingConfig = {
@@ -82,35 +82,42 @@ function GreetingArtwork() {
   );
 }
 
+/**
+ * A count tile. No icon: the label already says what the number is, and the
+ * chip cost a whole row at the top while pushing the reading down the box.
+ * What is left is stacked deliberately — label and action on the top line, the
+ * number, then its caption — with `justify-between` over a fixed minimum
+ * height, so both tiles are the same balanced box instead of content floating
+ * in whatever height the grid row happened to be.
+ *
+ * `tint` survives as the corner wash, which is all the per-tile colour that is
+ * needed once the icon chip is gone.
+ */
 function StatTile({
-  icon, tint, border, label, value, caption, href,
+  tint, label, value, caption, href,
 }: {
-  icon: ReactNode; tint: string; border: string;
+  tint: string;
   label: string; value: number | null; caption: string; href: string;
 }) {
   return (
     <Link href={href}
-      className={`group relative flex min-w-0 flex-col overflow-hidden p-4 ${CARD} transition-colors hover:bg-white/[0.045]`}>
+      className={`group relative flex min-h-[124px] min-w-0 flex-col justify-between overflow-hidden p-4 ${CARD} transition-colors hover:bg-white/[0.045]`}>
       {/* Soft corner wash, echoing the tile's own accent. */}
       <div className="pointer-events-none absolute -bottom-10 -right-8 h-28 w-28 rounded-full blur-2xl"
         style={{ background: tint }} aria-hidden />
 
-      <span className="relative flex h-9 w-9 items-center justify-center rounded-[11px]"
-        style={{ background: tint, border: `1px solid ${border}` }}>
-        {icon}
-      </span>
-
-      <p className="relative mt-3 text-[13px] font-semibold text-white/60">{label}</p>
-
-      {value === null
-        ? <span className="relative mt-1.5 h-[30px] w-12 animate-pulse rounded-md bg-white/[0.06]" aria-hidden />
-        : <p className="relative mt-0.5 text-[28px] font-bold leading-none tracking-[-0.02em] text-white">{value}</p>}
-
-      <div className="relative mt-2.5 flex items-end justify-between gap-2">
-        <span className="text-[12px] text-white/32">{caption}</span>
+      <div className="relative flex items-start justify-between gap-2">
+        <p className="min-w-0 truncate text-[13px] font-semibold text-white/60">{label}</p>
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.05] text-white/50 transition group-hover:text-white/85">
           <ArrowRight className="h-3.5 w-3.5" />
         </span>
+      </div>
+
+      <div className="relative">
+        {value === null
+          ? <span className="block h-[30px] w-12 animate-pulse rounded-md bg-white/[0.06]" aria-hidden />
+          : <p className="text-[30px] font-bold leading-none tracking-[-0.02em] text-white">{value}</p>}
+        <p className="mt-1.5 truncate text-[12px] text-white/32">{caption}</p>
       </div>
     </Link>
   );
@@ -216,8 +223,6 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
           value={jobCount}
           caption="New matches"
           tint="rgba(16,185,129,0.13)"
-          border="rgba(16,185,129,0.26)"
-          icon={<Briefcase className="h-[17px] w-[17px] text-emerald-300" />}
         />
         <StatTile
           href={RECOMMENDED_PEOPLE_HREF}
@@ -225,8 +230,6 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
           value={peopleCount}
           caption="New people"
           tint="rgba(245,158,11,0.13)"
-          border="rgba(245,158,11,0.26)"
-          icon={<Users className="h-[17px] w-[17px] text-amber-300" />}
         />
       </div>
 

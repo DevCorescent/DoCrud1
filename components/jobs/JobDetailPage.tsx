@@ -102,6 +102,128 @@ function ListSection({ title, items }: { title: string; items?: string[] }) {
   );
 }
 
+/* ─── job description, structured ─────────────────────────────────────────
+   Descriptions arrive as one free-text blob — scraped roles especially, where
+   "About the job:", "Key responsibilities:", "1. …", "Stipend: ₹15,000 /month"
+   all sit inside a single paragraph. This reads that text back into the blocks
+   it already contains — sub-headings, bullet lists and label/value facts — so
+   the section is scannable instead of a wall of prose.
+
+   It only re-arranges what the employer wrote: every line survives, nothing is
+   reworded, and text with no structure still renders as its own paragraph. */
+
+type DescBlock =
+  | { kind: 'heading'; text: string }
+  | { kind: 'list'; items: string[] }
+  | { kind: 'facts'; items: Array<{ label: string; value: string }> }
+  | { kind: 'text'; text: string };
+
+const BULLET_RE = /^\s*(?:[-–—•*·▪◦]|\(?\d{1,2}[.)])\s+/;
+/** "Stipend: ₹15,000 /month" — a short label, then a real value on one line. */
+const FACT_RE = /^([A-Za-z][A-Za-z0-9 /&()'.+-]{1,34}):\s*(\S.*)$/;
+
+function parseDescription(raw: string): DescBlock[] {
+  const lines = raw
+    .split(/\r?\n/)
+    // A single line carrying inline bullets is really several bullet lines.
+    .flatMap((line) => {
+      const parts = line.split(/\s+[•·▪]\s+/);
+      return parts.length > 2 ? parts.map((part) => `• ${part.replace(BULLET_RE, '').trim()}`) : [line];
+    })
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const blocks: DescBlock[] = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const last = blocks[blocks.length - 1];
+
+    if (BULLET_RE.test(line)) {
+      const item = line.replace(BULLET_RE, '').trim();
+      if (!item) continue;
+      if (last?.kind === 'list') last.items.push(item);
+      else blocks.push({ kind: 'list', items: [item] });
+      continue;
+    }
+
+    // "Key responsibilities:" — a colon with nothing after it is a sub-heading.
+    if (/:$/.test(line) && line.replace(/:$/, '').trim().split(/\s+/).length <= 8) {
+      blocks.push({ kind: 'heading', text: line.replace(/:$/, '').trim() });
+      continue;
+    }
+
+    /* A bare label line — "About the job", "Perks". Deliberately narrow so a
+       short sentence is never promoted: no comma, no closing punctuation, and
+       something must follow it. */
+    if (
+      index < lines.length - 1 && line.length <= 48
+      && !line.includes(',') && !line.includes(':') && !/[.;!?]$/.test(line)
+      && line.split(/\s+/).length <= 6
+    ) {
+      blocks.push({ kind: 'heading', text: line });
+      continue;
+    }
+
+    const fact = FACT_RE.exec(line);
+    if (fact && fact[2].length <= 120) {
+      const item = { label: fact[1].trim(), value: fact[2].trim() };
+      if (last?.kind === 'facts') last.items.push(item);
+      else blocks.push({ kind: 'facts', items: [item] });
+      continue;
+    }
+
+    if (last?.kind === 'text') last.text = `${last.text} ${line}`;
+    else blocks.push({ kind: 'text', text: line });
+  }
+  return blocks;
+}
+
+function JobDescription({ description }: { description: string }) {
+  const blocks = useMemo(() => parseDescription(description), [description]);
+  if (blocks.length === 0) return null;
+
+  return (
+    <div className="mt-3.5 flex flex-col gap-3">
+      {blocks.map((block, i) => {
+        if (block.kind === 'heading') {
+          return (
+            <h3 key={`h-${i}`} className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/45 first:mt-0">
+              {block.text}
+            </h3>
+          );
+        }
+        if (block.kind === 'list') {
+          return (
+            <ul key={`l-${i}`} className="flex flex-col gap-2">
+              {block.items.map((item, j) => (
+                <li key={`${i}-${j}`} className="flex gap-2.5 text-[13.5px] leading-relaxed text-white/60">
+                  <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-white/25" />
+                  <span className="min-w-0">{item}</span>
+                </li>
+              ))}
+            </ul>
+          );
+        }
+        if (block.kind === 'facts') {
+          return (
+            <dl key={`f-${i}`} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {block.items.map((item, j) => (
+                <div key={`${i}-${j}`} className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/25">{item.label}</dt>
+                  <dd className="mt-1 text-[12.5px] font-semibold text-white/70">{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          );
+        }
+        return (
+          <p key={`p-${i}`} className="text-[13.5px] leading-relaxed text-white/60">{block.text}</p>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─── save + share bar ────────────────────────────────────────────────────
    Same controls as the reference layout, in Docrud's own visual language:
    the "early applicant" note sits at the start of the row and the save /
@@ -532,7 +654,7 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
             {job.description && (
               <section className="px-5 py-6 sm:px-6">
                 <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Job description</h2>
-                <p className="mt-3.5 whitespace-pre-line text-[13.5px] leading-relaxed text-white/60">{job.description}</p>
+                <JobDescription description={job.description} />
               </section>
             )}
             <ListSection title="Responsibilities" items={job.responsibilities} />

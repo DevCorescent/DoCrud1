@@ -92,7 +92,7 @@ export async function GET() {
   try {
     const session = await getAuthSession();
     const meId = session?.user ? await resolveSessionUserId(session) : null;
-    if (!meId) return NextResponse.json({ people: [] }, { headers: { 'Cache-Control': 'no-store' } });
+    if (!meId) return NextResponse.json({ people: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
 
     const hit = cache.get(meId);
     if (hit && Date.now() - hit.ts < CACHE_TTL) {
@@ -101,7 +101,7 @@ export async function GET() {
 
     const config = await getFeedConfig();
     if (!config.people.enabled) {
-      return NextResponse.json({ people: [] }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({ people: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     const [users, profiles, myFollowing] = await Promise.all([
@@ -220,12 +220,15 @@ export async function GET() {
         });
     }
 
-    const payload = { people };
+    /* `total` is how many people actually ranked as a match, BEFORE maxCards
+       trims the row — the number the homepage headline reports. Discovery
+       fill is deliberately excluded: those are not matches. */
+    const payload = { people, total: scored.length };
 
     cache.set(meId, { payload, ts: Date.now() });
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[recommendations/people] GET error', error);
-    return NextResponse.json({ people: [] }, { status: 200 });
+    return NextResponse.json({ people: [], total: 0 }, { status: 200 });
   }
 }

@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
 import GlobalSearchBar, { type GlobalSearchBarHandle, type LocalSearchResult } from '@/components/GlobalSearchBar';
-import { NavAnnouncementBar, ProfileCompletionRing, shouldShowAnnouncement, type NavAnnouncementConfig } from '@/components/nav/ProfileCompletion';
+import { ProfileCompletionRing } from '@/components/nav/ProfileCompletion';
 import { useSession ,signOut } from 'next-auth/react';
 
 /* ── Ddrive premium "D" icon ──────────────────────────────────────── */
@@ -241,8 +241,8 @@ const notificationsInitializedRef = useRef(false);
 const notifRef = useRef<HTMLDivElement>(null);
 const notifPanelRef = useRef<HTMLDivElement>(null);
   /* Published as a CSS variable so the scroll container can reserve exactly
-     this much room. Measured rather than hardcoded, because the profile
-     announcement below the bar appears and disappears. */
+     this much room. Measured rather than hardcoded so it stays correct
+     whatever the bar contains. */
   const overlayRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!overlay) return;
@@ -257,7 +257,6 @@ const notifPanelRef = useRef<HTMLDivElement>(null);
   }, [overlay]);
 
   const [badge, setBadge] = useState<{ docrudGo: boolean; premium?: boolean; avatarUrl: string | null; profileScore: number | null; freePremium?: { spotsLeft: number; totalSpots: number } | null } | null>(null);
-  const [announcement, setAnnouncement] = useState<NavAnnouncementConfig | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [colorMode, setColorMode] = useState<ColorMode>('dark');
   const [profileOpen, setProfileOpen] = useState(false);
@@ -468,20 +467,6 @@ useEffect(() => {
     return () => clearTimeout(id);
   }, [isAuthenticated, guestMode]);
 
-  /* Super Admin owns the announcement copy and its on/off switch, so the bar
-     reads it from the server rather than embedding a string in the bundle. */
-  useEffect(() => {
-    if (!isAuthenticated || guestMode) return;
-    let cancelled = false;
-    fetch('/api/announcement')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: NavAnnouncementConfig | null) => {
-        if (!cancelled && d) setAnnouncement({ enabled: !!d.enabled, text: d.text ?? '', href: d.href ?? '' });
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [isAuthenticated, guestMode]);
-
 
   /* Notification + unread polling.
      
@@ -652,9 +637,6 @@ useEffect(() => {
         getLocalResults={getLocalResults}
         className="mx-3"
       />
-
-      {/* Desktop announcement lives beside Explore tabs on the homepage
-          (PublicHomepage ExploreSection) — not next to Search. */}
 
       {/* Mobile publish + button — left of search pill, visible below md only */}
       {onPublishClick && (
@@ -1142,20 +1124,9 @@ useEffect(() => {
       </div>
     </header>
 
-    {/* Profile-completion announcement — mobile/tablet. Must sit directly under
-        the sticky header and ABOVE the scrollable homepage (recents). Kept out
-        of overflow-hidden content so it cannot be clipped. Absent at 100%. */}
-    {isAuthenticated && !guestMode && shouldShowAnnouncement(announcement, badge?.profileScore ?? null) && (
-      <div className="relative z-30 lg:hidden shrink-0 border-b border-white/[0.04] bg-[#060608]/92 px-4 pb-2 pt-2 backdrop-blur-md sm:px-6">
-        <NavAnnouncementBar
-          score={badge?.profileScore ?? null}
-          announcement={announcement}
-          variant="mobile"
-          premium={!!badge?.premium}
-          freePremium={badge?.freePremium ?? null}
-        />
-      </div>
-    )}
+    {/* The profile-completion pill that used to sit here is gone: the homepage
+        Profile Score card (components/home/HomeHighlights.tsx) is now the one
+        completion prompt, so the same number is not shown twice. */}
     </>
   );
 

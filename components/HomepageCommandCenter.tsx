@@ -11,10 +11,12 @@ import {
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 type SectionVisibility = {
-  recentsBar: boolean; heroBanner: boolean; featureCards: boolean;
+  trustedCompanies: boolean; homeHighlights: boolean; trendsBoard: boolean;
+  heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
   gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
 };
+type TrustedCompany = { id: string; name: string; logoUrl: string; href: string; visible: boolean };
 type SlotWord    = { word: string; subtitle: string; color: string };
 type NavLink     = { id: string; label: string; href: string; visible: boolean; order: number };
 type ContentTab  = { id: string; label: string; visible: boolean; order: number };
@@ -26,6 +28,8 @@ type AnnouncementBanner = {
 };
 type HomepageConfig = {
   sections: SectionVisibility;
+  trustedCompanies: { label: string; items: TrustedCompany[] };
+  greeting: { subtitle: string; cadenceLabel: string; illustrationUrl: string };
   hero: { slotWords: SlotWord[]; backgroundImage: string; guestCtaPrimary: string; guestCtaSecondary: string; authCtaPrimary: string; authCtaSecondary: string };
   nav: { logoText: string; logoUrl: string; links: NavLink[]; showSignIn: boolean; showSignUp: boolean };
   featureCards: { guestFeatureIds: string[]; defaultFeatureIds: string[] };
@@ -37,7 +41,9 @@ type HomepageConfig = {
 
 /* ── Constants ─────────────────────────────────────────────────────────────── */
 const DEFAULT_CONFIG: HomepageConfig = {
-  sections: { recentsBar: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
+  sections: { trustedCompanies: true, homeHighlights: true, trendsBoard: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
+  trustedCompanies: { label: 'Top companies trust docrud', items: [] },
+  greeting: { subtitle: '', cadenceLabel: '', illustrationUrl: '' },
   hero: { slotWords: [], backgroundImage: '', guestCtaPrimary: '', guestCtaSecondary: '', authCtaPrimary: '', authCtaSecondary: '' },
   nav: { logoText: '', logoUrl: '', links: [], showSignIn: true, showSignUp: true },
   featureCards: { guestFeatureIds: [], defaultFeatureIds: [] },
@@ -101,7 +107,9 @@ const DEFAULT_BADGES = [
 ];
 
 const SECTION_META: { key: keyof SectionVisibility; label: string; desc: string; default: boolean }[] = [
-  { key: 'recentsBar',       label: 'Recents Bar',         desc: 'Recently used features dock',          default: true },
+  { key: 'trustedCompanies', label: 'Top Companies',        desc: 'Trust marquee above the greeting',     default: true },
+  { key: 'homeHighlights',   label: 'Greeting & Matches',   desc: 'Hey-there card, job/people counts, score', default: true },
+  { key: 'trendsBoard',      label: 'Trends Board',         desc: 'Community trends with up/down voting', default: true },
   { key: 'heroBanner',       label: 'Hero Banner',          desc: 'Slot-machine headline + CTAs',         default: true },
   { key: 'featureCards',     label: 'Feature Cards',        desc: 'Quick-action 2×2 feature grid',        default: true },
   { key: 'publishHeading',   label: 'Publish Heading',      desc: 'CTA strip to publish content',         default: true },
@@ -120,10 +128,11 @@ const AB_STYLES = [
   { id: 'promo'   as const, label: 'Promo',   bg: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.35)', text: '#d8b4fe',  dot: 'bg-purple-400' },
 ];
 
-type Panel = 'sections' | 'announcement' | 'hero' | 'nav' | 'featureCards' | 'contentDiscovery' | 'footer' | 'seo';
+type Panel = 'sections' | 'trustedCompanies' | 'announcement' | 'hero' | 'nav' | 'featureCards' | 'contentDiscovery' | 'footer' | 'seo';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'sections',         label: 'Sections',           icon: <Layout className="h-4 w-4" /> },
+  { id: 'trustedCompanies', label: 'Top Companies',      icon: <ImageIcon className="h-4 w-4" /> },
   { id: 'announcement',     label: 'Announcement Bar',   icon: <Megaphone className="h-4 w-4" /> },
   { id: 'hero',             label: 'Hero Banner',        icon: <Type className="h-4 w-4" /> },
   { id: 'nav',              label: 'Navigation',         icon: <Navigation className="h-4 w-4" /> },
@@ -284,6 +293,10 @@ export default function HomepageCommandCenter() {
         {/* panel */}
         <div className="min-w-0 flex-1">
           {panel === 'sections'         && <SectionsPanel config={config} setSection={setSection} />}
+          {panel === 'trustedCompanies' && (
+            <TrustedCompaniesPanel config={config} setConfig={setConfig}
+              uploadImage={uploadImage} uploadingField={uploadingField} />
+          )}
           {panel === 'announcement'     && <AnnouncementPanel config={config} setConfig={setConfig} />}
           {panel === 'hero'             && (
             <HeroPanel config={config} setHero={setHero} uploadingField={uploadingField}
@@ -354,6 +367,138 @@ function SectionsPanel({ config, setSection }: { config: HomepageConfig; setSect
 /* ════════════════════════════════════════════════════════════════════
    Announcement
 ════════════════════════════════════════════════════════════════════ */
+/* ── Top Companies ──────────────────────────────────────────────────────────
+   The "Top companies trust docrud" marquee. Super Admin owns the heading, the
+   company list, the order and — the point of this panel — the LOGOS. A logo is
+   uploaded through the same image endpoint the ad banners use, so there is no
+   second upload path. A company with no logo renders its name as a wordmark on
+   the homepage; it is never shown as a broken image. */
+function TrustedCompaniesPanel({
+  config, setConfig, uploadImage, uploadingField,
+}: {
+  config: HomepageConfig;
+  setConfig: React.Dispatch<React.SetStateAction<HomepageConfig>>;
+  uploadImage: (file: File, field: string, onDone: (url: string) => void) => Promise<void>;
+  uploadingField: string | null;
+}) {
+  const block = config.trustedCompanies ?? { label: '', items: [] };
+  const items = block.items ?? [];
+
+  const setBlock = (patch: Partial<HomepageConfig['trustedCompanies']>) =>
+    setConfig(c => ({ ...c, trustedCompanies: { ...c.trustedCompanies, ...patch } }));
+  const setItems = (next: TrustedCompany[]) => setBlock({ items: next });
+  const update = (i: number, patch: Partial<TrustedCompany>) =>
+    setItems(items.map((item, idx) => (idx === i ? { ...item, ...patch } : item)));
+  const move = (i: number, dir: -1 | 1) => {
+    const next = [...items]; const j = i + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    setItems(next);
+  };
+  const add = () => setItems([
+    ...items,
+    { id: `company-${Date.now().toString(36)}`, name: '', logoUrl: '', href: '', visible: true },
+  ]);
+
+  return (
+    <div className={card}>
+      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold text-white">
+            <ImageIcon className="h-4 w-4 text-amber-400" /> Top Companies Marquee
+          </p>
+          <p className="mt-0.5 text-xs text-zinc-600">
+            The trust row above the homepage greeting. Add companies, upload their logos, reorder.
+          </p>
+        </div>
+        {items.length > 0 && (
+          <span className="text-xs text-zinc-600">{items.filter(i => i.visible).length}/{items.length} visible</span>
+        )}
+      </div>
+
+      <div className="space-y-4 p-5">
+        <div>
+          <label className={label}>Heading</label>
+          <input className={inp} value={block.label} placeholder="Top companies trust docrud"
+            onChange={e => setBlock({ label: e.target.value })} />
+          <p className="mt-1.5 text-[11px] text-zinc-600">Leave empty to show the logos with no caption.</p>
+        </div>
+
+        {items.length === 0 ? (
+          <div className={infoBox}>
+            <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            No companies configured — the marquee is hidden on the homepage until you add one.
+          </div>
+        ) : (
+          <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+            {items.map((item, i) => {
+              const field = `company-logo-${item.id}`;
+              return (
+                <div key={item.id}
+                  className={`rounded-xl border px-3 py-3 transition ${item.visible ? 'border-zinc-800 bg-zinc-800/40' : 'border-zinc-800/50 bg-zinc-900 opacity-60'}`}>
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="h-3.5 w-3.5 flex-shrink-0 text-zinc-700" />
+
+                    {/* Logo preview — the real uploaded file, or the initial. */}
+                    <div className="flex h-9 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900">
+                      {item.logoUrl
+                        ? <img src={item.logoUrl} alt="" className="h-full w-full object-contain p-1" />
+                        : <span className="text-[11px] font-bold text-zinc-600">{(item.name || '?').charAt(0).toUpperCase()}</span>}
+                    </div>
+
+                    <input className={`${inp} flex-1`} style={{ padding: '5px 10px', fontSize: 12 }}
+                      placeholder="Company name" value={item.name}
+                      onChange={e => update(i, { name: e.target.value })} />
+
+                    <Toggle on={item.visible} onToggle={() => update(i, { visible: !item.visible })} />
+                    <button onClick={() => move(i, -1)} disabled={i === 0}
+                      className="rounded p-0.5 text-zinc-700 transition hover:text-zinc-400 disabled:opacity-30"><ChevronUp className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => move(i, 1)} disabled={i === items.length - 1}
+                      className="rounded p-0.5 text-zinc-700 transition hover:text-zinc-400 disabled:opacity-30"><ChevronDown className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => setItems(items.filter((_, idx) => idx !== i))}
+                      className="rounded p-0.5 text-zinc-700 transition hover:text-red-400"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2 pl-6">
+                    <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-400 transition hover:text-white">
+                      {uploadingField === field
+                        ? <Loader2 className="h-3 w-3 animate-spin" />
+                        : <ImageIcon className="h-3 w-3" />}
+                      {item.logoUrl ? 'Replace logo' : 'Upload logo'}
+                      <input type="file" accept="image/*" className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          if (file) void uploadImage(file, field, url => update(i, { logoUrl: url }));
+                        }} />
+                    </label>
+
+                    {item.logoUrl && (
+                      <button onClick={() => update(i, { logoUrl: '' })}
+                        className="rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-500 transition hover:text-red-400">
+                        Remove logo
+                      </button>
+                    )}
+
+                    <input className={inp} style={{ padding: '5px 10px', fontSize: 12, flex: 1, minWidth: 180 }}
+                      placeholder="Link (optional) — https://company.com" value={item.href}
+                      onChange={e => update(i, { href: e.target.value })} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <button onClick={add}
+          className="flex items-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/15 px-3.5 py-2 text-xs font-semibold text-amber-400 transition hover:bg-amber-500/25">
+          <Plus className="h-3.5 w-3.5" /> Add Company
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AnnouncementPanel({ config, setConfig }: { config: HomepageConfig; setConfig: React.Dispatch<React.SetStateAction<HomepageConfig>> }) {
   const ab = config.announcementBanner;
   const setAb = (patch: Partial<AnnouncementBanner>) =>

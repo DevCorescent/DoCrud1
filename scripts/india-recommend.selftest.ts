@@ -217,6 +217,8 @@ test('formatJobLocation is India-aware and never fabricates India', () => {
   assert.equal(formatJobLocation('Bengaluru, Karnataka', 'remote'), 'Bengaluru · India · Remote');
   assert.equal(formatJobLocation('India', 'remote'), 'India · Remote');
   assert.equal(formatJobLocation('Remote, India', undefined), 'Remote, India');   // no duplicate "India"
+  assert.equal(formatJobLocation('Remote, Canada', 'remote'), 'Remote, Canada');  // no duplicate "Remote"
+  assert.equal(formatJobLocation('Remote, US', 'hybrid'), 'Remote, US · Hybrid'); // distinct mode still shown
   assert.equal(formatJobLocation('Berlin', 'onsite'), 'Berlin · On-site');        // global untouched
   assert.equal(formatJobLocation('', 'remote'), 'Remote');
   assert.equal(formatJobLocation('', ''), '');

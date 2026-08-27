@@ -141,7 +141,7 @@ export default function JobsTab() {
       </div>
 
       {/* Job Scraper — runs INSIDE DoCrud against approved public job APIs
-          (Ashby / Lever) and imports through the SAME importer (no second path). */}
+          (Greenhouse / Ashby / Lever) and imports through the SAME importer (no second path). */}
       <div className={CARD}>
         <div className="flex items-center justify-between">
           <div className="text-sm font-semibold text-white">Job Scraper</div>
@@ -153,7 +153,9 @@ export default function JobsTab() {
 
         {!scraper?.configured ? (
           <p className="mt-2 text-[12px] text-zinc-500">
-            No approved sources are configured. Set <span className="font-mono text-zinc-400">ASHBY_JOB_BOARDS</span> and/or{' '}
+            No approved sources are configured. Set{' '}
+            <span className="font-mono text-zinc-400">GREENHOUSE_BOARDS</span>,{' '}
+            <span className="font-mono text-zinc-400">ASHBY_JOB_BOARDS</span> and/or{' '}
             <span className="font-mono text-zinc-400">LEVER_COMPANIES</span> on the server (public APIs, no secret), or use manual CSV import below.
           </p>
         ) : (

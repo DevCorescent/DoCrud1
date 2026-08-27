@@ -76,8 +76,10 @@ export function formatJobLocation(location?: string | null, workMode?: string | 
     else if (/^india$/i.test(loc)) { parts.push('India'); }
     else { parts.push(loc); if (isIndiaRelevant(loc) && !/india/i.test(loc)) parts.push('India'); }
   }
+  // Append the work mode only when the location text doesn't already say it —
+  // avoids "Remote, Canada · Remote" style duplication.
   const wm = workMode ? WORK_MODE_LABELS[workMode] ?? workMode : '';
-  if (wm) parts.push(wm);
+  if (wm && !loc.toLowerCase().includes(wm.toLowerCase())) parts.push(wm);
   return parts.join(' · ');
 }
 

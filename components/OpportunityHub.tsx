@@ -92,8 +92,8 @@ const OPPORTUNITIES: Opportunity[] = [
     Icon: Briefcase,
     color: '#22c55e',
     tint: 'rgba(34,197,94,0.12)',
-    // Hiring Desk publishes roles (components/HiringDeskCenter)
-    add: { kind: 'route', href: '/workspace?tab=hiring-desk' },
+    // Marketplace composer — same POST /api/hiring/jobs the Hiring Desk uses.
+    add: { kind: 'route', href: '/jobs/post' },
     addLabel: 'Post Job',
     // Browsable structured Jobs Feed (hiring-desk + business-page roles).
     open: { kind: 'route', href: '/jobs' },

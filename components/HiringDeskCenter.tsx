@@ -5,8 +5,10 @@ import { BriefcaseBusiness, Loader2, QrCode, Send, Share2, Sparkles, Users } fro
 import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { HiringJobApplication, HiringJobPosting } from '@/types/document';
 import { buildAbsoluteAppUrl, buildQrImageUrl } from '@/lib/url';
+import { formatJobLocation } from '@/lib/jobs-ui';
 
 type ResumeAtsResponse = {
   atsScore: number;
@@ -193,10 +195,10 @@ export default function HiringDeskCenter() {
                 <Input placeholder="Department" value={jobForm.department} onChange={(event) => setJobForm((prev) => ({ ...prev, department: event.target.value }))} />
                 <Input placeholder="Location" value={jobForm.location} onChange={(event) => setJobForm((prev) => ({ ...prev, location: event.target.value }))} />
               </div>
-              <textarea className="min-h-[110px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900" placeholder="Role overview" value={jobForm.description} onChange={(event) => setJobForm((prev) => ({ ...prev, description: event.target.value }))} />
-              <textarea className="min-h-[90px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900" placeholder="Responsibilities (one per line)" value={jobForm.responsibilities} onChange={(event) => setJobForm((prev) => ({ ...prev, responsibilities: event.target.value }))} />
-              <textarea className="min-h-[90px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900" placeholder="Requirements (one per line)" value={jobForm.requirements} onChange={(event) => setJobForm((prev) => ({ ...prev, requirements: event.target.value }))} />
-              <textarea className="min-h-[90px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900" placeholder="Preferred skills (one per line)" value={jobForm.preferredSkills} onChange={(event) => setJobForm((prev) => ({ ...prev, preferredSkills: event.target.value }))} />
+              <Textarea className="min-h-[110px] rounded-2xl leading-6" placeholder="Role overview" value={jobForm.description} onChange={(event) => setJobForm((prev) => ({ ...prev, description: event.target.value }))} />
+              <Textarea className="min-h-[90px] rounded-2xl leading-6" placeholder="Responsibilities (one per line)" value={jobForm.responsibilities} onChange={(event) => setJobForm((prev) => ({ ...prev, responsibilities: event.target.value }))} />
+              <Textarea className="min-h-[90px] rounded-2xl leading-6" placeholder="Requirements (one per line)" value={jobForm.requirements} onChange={(event) => setJobForm((prev) => ({ ...prev, requirements: event.target.value }))} />
+              <Textarea className="min-h-[90px] rounded-2xl leading-6" placeholder="Preferred skills (one per line)" value={jobForm.preferredSkills} onChange={(event) => setJobForm((prev) => ({ ...prev, preferredSkills: event.target.value }))} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input placeholder="Minimum ATS score" value={jobForm.minimumAtsScore} onChange={(event) => setJobForm((prev) => ({ ...prev, minimumAtsScore: event.target.value }))} />
                 <select className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900" value={jobForm.status} onChange={(event) => setJobForm((prev) => ({ ...prev, status: event.target.value }))}>
@@ -360,7 +362,7 @@ export default function HiringDeskCenter() {
             <div className="mt-4 grid gap-3">
               <Input placeholder="Target role" value={targetRole} onChange={(event) => setTargetRole(event.target.value)} />
               <Input placeholder="Phone number for application" value={candidatePhone} onChange={(event) => setCandidatePhone(event.target.value)} />
-              <textarea className="min-h-[220px] w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-6 text-slate-900" placeholder="Paste your latest resume here to unlock matching jobs." value={resumeText} onChange={(event) => setResumeText(event.target.value)} />
+              <Textarea className="min-h-[220px] rounded-2xl leading-6" placeholder="Paste your latest resume here to unlock matching jobs." value={resumeText} onChange={(event) => setResumeText(event.target.value)} />
               <Button type="button" className="h-11 rounded-xl bg-slate-950 text-white hover:bg-slate-800" onClick={analyzeResume} disabled={analyzing}>
                 {analyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 {analyzing ? 'Scoring your resume...' : 'Find matching jobs'}
@@ -389,7 +391,7 @@ export default function HiringDeskCenter() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold text-slate-950">{job.title}</p>
-                        <p className="mt-1 text-xs text-slate-500">{job.organizationName} · {job.location || 'Location flexible'} · ATS {job.minimumAtsScore}+</p>
+                        <p className="mt-1 text-xs text-slate-500">{[job.organizationName, formatJobLocation(job.location, job.workMode)].filter(Boolean).join(' · ')} · ATS {job.minimumAtsScore}+</p>
                       </div>
                       <Button type="button" className="h-10 rounded-xl bg-slate-950 px-4 text-white hover:bg-slate-800" disabled={submittingJobId === job.id || submittedJobIds.has(job.id)} onClick={() => void applyToJob(job)}>
                         {submittingJobId === job.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}

@@ -1,6 +1,9 @@
 import { HiringJobApplication, HiringJobPosting, User } from '@/types/document';
 import { hiringApplicationsPath, hiringJobsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/server/business-pages';
+import {
+  selectPublishedJobCompanyNames, selectPublishedJobListRows, selectPublishedJobRowById,
+} from '@/lib/server/db/hiring-jobs-rows';
 
 function jobOwnerId(user: User) {
   if (user.role === 'client') return user.id;
@@ -91,6 +94,13 @@ let publishedInFlight: Promise<HiringJobPosting[]> | null = null;
 export function invalidatePublishedHiringJobs() {
   publishedCache = null;
   publishedInFlight = null;
+  listCache = null;
+  namesCache = null;
+}
+
+/** The full list IF it is already cached. Never reads storage. */
+function peekPublishedHiringJobs(): HiringJobPosting[] | null {
+  return publishedCache && Date.now() - publishedCache.ts < PUBLISHED_TTL ? publishedCache.value : null;
 }
 
 async function readPublishedHiringJobs(): Promise<HiringJobPosting[]> {
@@ -123,7 +133,83 @@ export async function getPublishedHiringJobs(): Promise<HiringJobPosting[]> {
   return publishedInFlight;
 }
 
+/* ─── projected reads ─────────────────────────────────────────────────────
+   Three callers need a slice of the jobs document, not the whole 2.7 MB of it.
+   Each tries the server-side projection (lib/server/db/hiring-jobs-rows.ts)
+   and falls back to the full read when it is unavailable, so behaviour is
+   identical either way — only the bytes differ.
+
+   Business Page jobs are projected from a different store and are few, so they
+   are merged in afterwards exactly as getPublishedHiringJobs() does. Order is
+   preserved: hiring jobs first, then business jobs. */
+
+type ListCache = { value: PublicHiringJobListItem[]; ts: number };
+let listCache: ListCache | null = null;
+type NamesCache = { value: string[]; ts: number };
+let namesCache: NamesCache | null = null;
+
+/** Every published posting as a listing card — see toPublicHiringJobListItem. */
+export async function getPublishedHiringJobList(): Promise<PublicHiringJobListItem[]> {
+  if (listCache && Date.now() - listCache.ts < PUBLISHED_TTL) return listCache.value;
+
+  // If the full list is already in memory, projecting again would be wasted work.
+  const warm = peekPublishedHiringJobs();
+  if (warm) {
+    const value = warm.map(toPublicHiringJobListItem);
+    listCache = { value, ts: Date.now() };
+    return value;
+  }
+
+  const [rows, business] = await Promise.all([
+    selectPublishedJobListRows(),
+    getPublishedBusinessFeedJobs(),
+  ]);
+  const value = rows
+    ? [...rows.map((r) => r as PublicHiringJobListItem), ...business.map(toPublicHiringJobListItem)]
+    : (await getPublishedHiringJobs()).map(toPublicHiringJobListItem);
+
+  listCache = { value, ts: Date.now() };
+  return value;
+}
+
+/** The employer name of every published posting — the marquee's whole input. */
+export async function getPublishedHiringJobCompanyNames(): Promise<string[]> {
+  if (namesCache && Date.now() - namesCache.ts < PUBLISHED_TTL) return namesCache.value;
+
+  const warm = peekPublishedHiringJobs();
+  if (warm) {
+    const value = warm.map((j) => j.organizationName ?? '');
+    namesCache = { value, ts: Date.now() };
+    return value;
+  }
+
+  const [names, business] = await Promise.all([
+    selectPublishedJobCompanyNames(),
+    getPublishedBusinessFeedJobs(),
+  ]);
+  const value = names
+    ? [...names, ...business.map((j) => j.organizationName ?? '')]
+    : (await getPublishedHiringJobs()).map((j) => j.organizationName ?? '');
+
+  namesCache = { value, ts: Date.now() };
+  return value;
+}
+
 export async function getPublishedHiringJobById(id: string) {
+  /* Already in memory — no query at all. */
+  const warm = peekPublishedHiringJobs();
+  if (warm) return warm.find((job) => job.id === id) || null;
+
+  /* Select the one matching element inside the array server-side rather than
+     transferring all 360 postings to find one. */
+  const projected = await selectPublishedJobRowById(id);
+  if (projected) {
+    if (projected.job) return projected.job;
+    // Not a hiring job — it may still be a Business Page job.
+    const business = await getPublishedBusinessFeedJobs();
+    return business.find((job) => job.id === id) || null;
+  }
+
   const jobs = await getPublishedHiringJobs();
   return jobs.find((job) => job.id === id) || null;
 }

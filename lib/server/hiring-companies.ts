@@ -16,7 +16,7 @@
  * `logoUrl`, and the marquee renders its name as a wordmark: never a guessed
  * logo, never a broken image.
  */
-import { getPublishedHiringJobs } from '@/lib/server/hiring';
+import { getPublishedHiringJobCompanyNames } from '@/lib/server/hiring';
 import { getCompanyLogo, logoKey } from '@/lib/company-logos';
 
 export type HiringCompany = { name: string; logoUrl: string; jobCount: number };
@@ -47,13 +47,15 @@ export async function getHiringCompanies(): Promise<HiringCompany[]> {
   const warm = peekHiringCompanies();
   if (warm) return warm;
 
-  const jobs = await getPublishedHiringJobs().catch(() => []);
+  /* Only the employer names are read — a database-side projection of the jobs
+     document rather than all 2.7 MB of it. 3 KB instead of 2737 KB. */
+  const names = await getPublishedHiringJobCompanyNames().catch(() => [] as string[]);
 
   /* Grouped on the normalized name so "MindTickle" and "Mindtickle" are one
      employer, while the display name keeps the spelling the employer used. */
   const byKey = new Map<string, { name: string; jobCount: number }>();
-  for (const job of jobs as Array<{ organizationName?: string }>) {
-    const name = (job?.organizationName ?? '').trim();
+  for (const raw of names) {
+    const name = (raw ?? '').trim();
     if (!name) continue;
     const key = logoKey(name);
     if (!key) continue;

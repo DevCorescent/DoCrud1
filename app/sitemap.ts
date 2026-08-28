@@ -7,14 +7,14 @@ import { getCertificates } from '@/lib/server/certificates';
 import { getPublicBlogPosts } from '@/lib/server/blog';
 import { getPublicDocrudiansData } from '@/lib/server/docrudians';
 import { getPublicGigListings } from '@/lib/server/gigs';
-import { getPublishedHiringJobs } from '@/lib/server/hiring';
+import { getPublishedHiringJobList } from '@/lib/server/hiring';
 import { getVirtualIdCards } from '@/lib/server/virtual-ids';
 import { listBusinessPages, type BusinessPage } from '@/lib/server/business-pages';
 import { listResumeDirectory } from '@/lib/server/resume-directory';
 import { listMarketplaceItems } from '@/lib/server/template-marketplace';
 import { getFileTransfers } from '@/lib/server/file-transfers';
 import { getPublicAppBaseUrl } from '@/lib/url';
-import type { HiringJobPosting, SecureFileTransfer, TemplateMarketplaceItem } from '@/types/document';
+import type { SecureFileTransfer, TemplateMarketplaceItem } from '@/types/document';
 import type { ResumeDirectoryEntry } from '@/lib/server/resume-directory';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -33,7 +33,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     templates,
     fileTransfers,
   ] = await Promise.all([
-    getPublishedHiringJobs(),
+    /* Only id + timestamps are used below, so this takes the projected list
+       (hiring_jobs → app_state projection → full read) instead of pulling all
+       360 descriptions — ~2.7 MB the sitemap never looks at. Same published
+       filtering, same fallback ladder, so an unavailable replica yields a
+       slower sitemap and never an empty one. */
+    getPublishedHiringJobList(),
     getCertificates(),
     getVirtualIdCards(),
     getPublicDocrudiansData(),
@@ -99,7 +104,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   /* ── Dynamic entries ─────────────────────────────────────────── */
 
-  const jobEntries: MetadataRoute.Sitemap = (jobs as HiringJobPosting[]).map((job) => ({
+  const jobEntries: MetadataRoute.Sitemap = jobs.map((job) => ({
     url: `${baseUrl}/jobs/${job.id}`,
     lastModified: new Date(job.updatedAt || job.createdAt || now),
     changeFrequency: 'weekly' as const,

@@ -12,9 +12,30 @@
  */
 import {
   getPublishedHiringJobById, getPublishedHiringJobCompanyNames,
-  getPublishedHiringJobList, getPublishedHiringJobs,
+  getPublishedHiringJobCount, getPublishedHiringJobList, getPublishedHiringJobs,
   invalidatePublishedHiringJobs, toPublicHiringJobListItem,
 } from '@/lib/server/hiring';
+import { markHiringJobsCollectionStale } from '@/lib/server/db/hiring-jobs-collection';
+
+/**
+ * Order-insensitive deep comparison.
+ *
+ * Mongo returns a document's fields alphabetically, while the app_state array
+ * preserves the order the objects were written in. JSON object key order is not
+ * part of any API contract — a client parses by name — so the contract to
+ * assert is "same field set, same values", not "same byte sequence".
+ */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value as Record<string, unknown>).sort()
+        .map((k) => [k, canonical((value as Record<string, unknown>)[k])]),
+    );
+  }
+  return value ?? null;
+}
+const deepEqual = (a: unknown, b: unknown) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
 
 let checks = 0;
 let failures = 0;
@@ -36,6 +57,8 @@ async function main() {
   const probeId = projectedList[0]?.id ?? '';
   const projectedJob = await getPublishedHiringJobById(probeId);
   const missing = await getPublishedHiringJobById('definitely-not-a-real-job-id');
+  invalidatePublishedHiringJobs();
+  const projectedCount = await getPublishedHiringJobCount();
 
   // Now the full read, which is the reference.
   invalidatePublishedHiringJobs();
@@ -74,7 +97,10 @@ async function main() {
 
   const expectedJob = full.find((j) => j.id === probeId) ?? null;
   check('a job fetched by id equals the same job from the full read',
-    JSON.stringify(projectedJob) === JSON.stringify(expectedJob));
+    deepEqual(projectedJob, expectedJob));
+  check('a job fetched by id has exactly the same field set (no extras, none missing)',
+    JSON.stringify(Object.keys(projectedJob ?? {}).sort())
+    === JSON.stringify(Object.keys(expectedJob ?? {}).sort()));
   /* Only meaningful with a populated store. Run without MONGODB_URI (the
      file-backed fallback path) and there are no jobs to probe — that is a
      valid environment, not a failure, so this check is skipped rather than
@@ -86,6 +112,30 @@ async function main() {
     console.log('  – empty store: id/description probe skipped (fallback path)');
   }
   check('an unknown id returns null rather than a wrong job', missing === null);
+  check('the published count matches the full read', projectedCount === full.length,
+    `${projectedCount} vs ${full.length}`);
+
+  /* ── fallback: mark the replica untrusted and re-read everything ──────────
+     An unavailable collection must produce the SAME answers by a slower route,
+     never an empty one — the failure mode that would silently empty the feed. */
+  markHiringJobsCollectionStale('self-test: forcing the fallback path');
+  invalidatePublishedHiringJobs();
+  const fbList = await getPublishedHiringJobList();
+  invalidatePublishedHiringJobs();
+  const fbNames = await getPublishedHiringJobCompanyNames();
+  invalidatePublishedHiringJobs();
+  const fbCount = await getPublishedHiringJobCount();
+  invalidatePublishedHiringJobs();
+  const fbJob = await getPublishedHiringJobById(probeId);
+
+  check('fallback list is not empty when the collection is unavailable',
+    full.length === 0 || fbList.length > 0);
+  check('fallback list is identical to the collection-backed list',
+    JSON.stringify(fbList) === JSON.stringify(projectedList),
+    `${fbList.length} vs ${projectedList.length}`);
+  check('fallback names are identical', JSON.stringify(fbNames) === JSON.stringify(projectedNames));
+  check('fallback count is identical', fbCount === projectedCount, `${fbCount} vs ${projectedCount}`);
+  check('fallback job-by-id is identical', deepEqual(fbJob, projectedJob));
 
   console.log(`\n${checks - failures}/${checks} checks passed.`);
   if (failures > 0) { console.log('SELF-TEST FAILED'); process.exit(1); }

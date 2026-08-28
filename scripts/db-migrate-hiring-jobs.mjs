@@ -25,6 +25,7 @@
  * Follows scripts/db-indexes.mjs: a deliberate, re-runnable maintenance script
  * rather than a startup hook, because it only needs to run when asked.
  */
+import { createHash } from 'node:crypto';
 import { MongoClient } from 'mongodb';
 import nextEnv from '@next/env';
 
@@ -51,6 +52,18 @@ const VALIDATED_FIELDS = [
 ];
 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/* Must match fingerprint() in lib/server/db/hiring-jobs-collection.ts, so the
+   first mirror after a migration sees the documents as unchanged instead of
+   rewriting all of them. */
+const canonical = (v) => {
+  if (Array.isArray(v)) return v.map(canonical);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])]));
+  }
+  return v ?? null;
+};
+const fingerprint = (job) => createHash('sha1').update(JSON.stringify(canonical(job))).digest('hex');
 
 /* The whole set is ~2.7 MB. On a slow link a single bulkWrite exceeds the
    default socket timeout, so writes are batched below and the socket is given
@@ -111,10 +124,13 @@ try {
        updates and only the missing ones are written. */
     for (let i = 0; i < withId.length; i += BATCH_SIZE) {
       const batch = withId.slice(i, i + BATCH_SIZE);
-      const ops = batch.map((job) => ({
+      const ops = batch.map((job, k) => ({
         updateOne: {
           filter: { _id: job.id },
-          update: { $set: { ...job, _id: job.id, migratedAt: new Date().toISOString() } },
+          /* `_order` is the job's position in the app_state array. The jobs
+             page renders the API's order under its default sort, so the replica
+             must reproduce it — Mongo's natural order is not a guarantee. */
+          update: { $set: { ...job, _id: job.id, _order: i + k, _fp: fingerprint(job), migratedAt: new Date().toISOString() } },
           upsert: true,
         },
       }));

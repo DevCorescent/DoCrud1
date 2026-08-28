@@ -4,6 +4,10 @@ import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/serv
 import {
   selectPublishedJobCompanyNames, selectPublishedJobListRows, selectPublishedJobRowById,
 } from '@/lib/server/db/hiring-jobs-rows';
+import {
+  countPublishedJobs, mirrorPublishedJobs, selectPublishedCompanyNames,
+  selectPublishedJobDocById, selectPublishedJobListDocs,
+} from '@/lib/server/db/hiring-jobs-collection';
 
 function jobOwnerId(user: User) {
   if (user.role === 'client') return user.id;
@@ -134,10 +138,19 @@ export async function getPublishedHiringJobs(): Promise<HiringJobPosting[]> {
 }
 
 /* ─── projected reads ─────────────────────────────────────────────────────
-   Three callers need a slice of the jobs document, not the whole 2.7 MB of it.
-   Each tries the server-side projection (lib/server/db/hiring-jobs-rows.ts)
-   and falls back to the full read when it is unavailable, so behaviour is
-   identical either way — only the bytes differ.
+   Four callers need a slice of the jobs data, not the whole 2.7 MB of it. Each
+   tries, in order:
+
+     1. the `hiring_jobs` COLLECTION — one document per job, so Mongo projects
+        per document (lib/server/db/hiring-jobs-collection.ts);
+     2. a server-side projection of the app_state document, which reduces the
+        array before sending it (lib/server/db/hiring-jobs-rows.ts);
+     3. the full app_state read.
+
+   Every step falls through on null, so an unavailable collection produces a
+   slower read and never an empty one. Behaviour is identical at each level;
+   only the bytes differ. Ranking is NOT in this list — it still takes the full
+   read, because matchReasons genuinely needs description text.
 
    Business Page jobs are projected from a different store and are few, so they
    are merged in afterwards exactly as getPublishedHiringJobs() does. Order is
@@ -160,13 +173,20 @@ export async function getPublishedHiringJobList(): Promise<PublicHiringJobListIt
     return value;
   }
 
-  const [rows, business] = await Promise.all([
-    selectPublishedJobListRows(),
+  const [docs, business] = await Promise.all([
+    selectPublishedJobListDocs(),
     getPublishedBusinessFeedJobs(),
   ]);
-  const value = rows
-    ? [...rows.map((r) => r as PublicHiringJobListItem), ...business.map(toPublicHiringJobListItem)]
-    : (await getPublishedHiringJobs()).map(toPublicHiringJobListItem);
+
+  let value: PublicHiringJobListItem[];
+  if (docs) {
+    value = [...docs.map(toPublicHiringJobListItem), ...business.map(toPublicHiringJobListItem)];
+  } else {
+    const rows = await selectPublishedJobListRows();
+    value = rows
+      ? [...rows.map((r) => r as PublicHiringJobListItem), ...business.map(toPublicHiringJobListItem)]
+      : (await getPublishedHiringJobs()).map(toPublicHiringJobListItem);
+  }
 
   listCache = { value, ts: Date.now() };
   return value;
@@ -183,22 +203,58 @@ export async function getPublishedHiringJobCompanyNames(): Promise<string[]> {
     return value;
   }
 
-  const [names, business] = await Promise.all([
-    selectPublishedJobCompanyNames(),
+  const [fromCollection, business] = await Promise.all([
+    selectPublishedCompanyNames(),
     getPublishedBusinessFeedJobs(),
   ]);
-  const value = names
-    ? [...names, ...business.map((j) => j.organizationName ?? '')]
-    : (await getPublishedHiringJobs()).map((j) => j.organizationName ?? '');
+  const businessNames = business.map((j) => j.organizationName ?? '');
+
+  let value: string[];
+  if (fromCollection) {
+    value = [...fromCollection, ...businessNames];
+  } else {
+    const projected = await selectPublishedJobCompanyNames();
+    value = projected
+      ? [...projected, ...businessNames]
+      : (await getPublishedHiringJobs()).map((j) => j.organizationName ?? '');
+  }
 
   namesCache = { value, ts: Date.now() };
   return value;
+}
+
+/**
+ * How many published postings exist.
+ *
+ * `countDocuments` against the collection answers this without transferring a
+ * single job. Falls back to counting the merged list, which is what the count
+ * has always meant — hiring jobs plus Business Page jobs.
+ */
+export async function getPublishedHiringJobCount(): Promise<number> {
+  const warm = peekPublishedHiringJobs();
+  if (warm) return warm.length;
+
+  const [count, business] = await Promise.all([
+    countPublishedJobs(),
+    getPublishedBusinessFeedJobs(),
+  ]);
+  if (count !== null) return count + business.length;
+
+  return (await getPublishedHiringJobs()).length;
 }
 
 export async function getPublishedHiringJobById(id: string) {
   /* Already in memory — no query at all. */
   const warm = peekPublishedHiringJobs();
   if (warm) return warm.find((job) => job.id === id) || null;
+
+  /* One indexed `_id` lookup against the collection — `_id` IS the job id. */
+  const fromCollection = await selectPublishedJobDocById(id);
+  if (fromCollection) {
+    if (fromCollection.job) return fromCollection.job;
+    const business = await getPublishedBusinessFeedJobs();
+    return business.find((job) => job.id === id) || null;
+  }
 
   /* Select the one matching element inside the array server-side rather than
      transferring all 360 postings to find one. */
@@ -265,7 +321,23 @@ export function toPublicHiringJobListItem(job: HiringJobPosting): PublicHiringJo
 }
 
 export async function saveHiringJobs(jobs: HiringJobPosting[]) {
+  // app_state remains the source of truth and is written FIRST.
   await writeJsonFile(hiringJobsPath, jobs);
+
+  /* The `hiring_jobs` collection is a read replica of what was just written.
+     Re-pointing it here is what stops the switched read paths from serving a
+     stale list after an import or an edit. It is best effort: the write above
+     has already succeeded, so a mirror failure must not fail the save — it
+     marks the replica untrusted instead, and every read falls back to
+     app_state until the next successful mirror. */
+  const mirror = await mirrorPublishedJobs(jobs as unknown as Array<Record<string, unknown>>);
+  if (mirror.ok && (mirror.rewritten || mirror.removed)) {
+    console.info(
+      `[hiring_jobs] mirrored: ${mirror.rewritten} rewritten, `
+      + `${mirror.reordered} reordered, ${mirror.removed} removed`,
+    );
+  }
+
   // Every write path funnels through here, so this is the one place the
   // published cache can go stale — and the one place it is cleared.
   invalidatePublishedHiringJobs();

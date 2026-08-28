@@ -14,6 +14,7 @@
     "test:jobs": "tsx scripts/india-recommend.selftest.ts",
     "test:trends": "tsx scripts/trends.selftest.ts",
     "test:hiring": "tsx scripts/hiring-projection.selftest.ts",
+    "test:ranking-parity": "tsx scripts/ranking-parity.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:indexes": "node scripts/db-indexes.mjs",

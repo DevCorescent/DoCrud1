@@ -10,11 +10,10 @@
  * the two can differ without either drifting from the real route.
  *
  * Every href points at a route that already exists. `/published?tab=<id>` is
- * the pattern that page already reads (see PublishedPage), and `/published`
- * with no query is its own "All" tab — not a new route.
+ * the pattern that page already reads (see PublishedPage), not a new one.
  */
 import {
-  BookOpen, Briefcase, Building2, LayoutGrid, Rocket, TrendingUp, Users, Wrench, Zap,
+  BookOpen, Briefcase, Building2, Rocket, TrendingUp, Users, Wrench, Zap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -22,21 +21,22 @@ export interface ExploreDestination {
   label: string;
   href: string;
   Icon: LucideIcon;
+  /** One-line explanation, shown in the bottom-nav panel. */
+  desc: string;
+  /** Icon tint. Reuses the palette ALL_QUICK_FEATURES already uses, so the
+      panel reads as the same product rather than a new colour system. */
+  ic: string;
 }
 
 const DESTINATIONS = {
-  businesses: { label: 'Businesses', href: '/businesses',            Icon: Building2 },
-  services:   { label: 'Services',   href: '/services',              Icon: Wrench },
-  projects:   { label: 'Projects',   href: '/projects',              Icon: Rocket },
-  jobs:       { label: 'Jobs',       href: '/jobs',                  Icon: Briefcase },
-  gigs:       { label: 'Gigs',       href: '/published?tab=gig',     Icon: Zap },
-  people:     { label: 'People',     href: '/people',                Icon: Users },
-  trends:     { label: 'Trends',     href: '/trends',                Icon: TrendingUp },
-  articles:   { label: 'Articles',   href: '/published?tab=article', Icon: BookOpen },
-  /* The existing "All" destination: the Published feed with no tab filter,
-     which is exactly what its own tab strip links to. LayoutGrid is the icon
-     the app already uses for the `all` entry. */
-  all:        { label: 'All',        href: '/published',             Icon: LayoutGrid },
+  businesses: { label: 'Businesses', href: '/businesses',            Icon: Building2,  desc: 'Discover companies',      ic: '#60a5fa' },
+  services:   { label: 'Services',   href: '/services',              Icon: Wrench,     desc: 'Find expert services',    ic: '#4ade80' },
+  projects:   { label: 'Projects',   href: '/projects',              Icon: Rocket,     desc: 'Explore projects',        ic: '#a78bfa' },
+  jobs:       { label: 'Jobs',       href: '/jobs',                  Icon: Briefcase,  desc: 'Find job opportunities',  ic: '#fb923c' },
+  gigs:       { label: 'Gigs',       href: '/published?tab=gig',     Icon: Zap,        desc: 'Find freelance gigs',     ic: '#facc15' },
+  people:     { label: 'People',     href: '/people',                Icon: Users,      desc: 'Connect with people',     ic: '#f472b6' },
+  trends:     { label: 'Trends',     href: '/trends',                Icon: TrendingUp, desc: 'Explore trends',          ic: '#22d3ee' },
+  articles:   { label: 'Articles',   href: '/published?tab=article', Icon: BookOpen,   desc: 'Read insights',           ic: '#93c5fd' },
 } satisfies Record<string, ExploreDestination>;
 
 /** The homepage Explore strip. */
@@ -50,16 +50,14 @@ export const EXPLORE_DESTINATIONS: ExploreDestination[] = [
   DESTINATIONS.trends,
 ];
 
-/**
- * The bottom navigation's Explore panel — deliberately five, so the row stays
- * one compact line on desktop. People already has its own item in the bar, and
- * Gigs / Trends / Articles remain reachable from the homepage strip and their
- * own routes; they are only absent from this panel.
- */
+/** The bottom navigation's Explore panel — every destination, with its blurb. */
 export const BOTTOM_NAV_EXPLORE: ExploreDestination[] = [
   DESTINATIONS.businesses,
   DESTINATIONS.services,
   DESTINATIONS.projects,
   DESTINATIONS.jobs,
-  DESTINATIONS.all,
+  DESTINATIONS.gigs,
+  DESTINATIONS.people,
+  DESTINATIONS.trends,
+  DESTINATIONS.articles,
 ];

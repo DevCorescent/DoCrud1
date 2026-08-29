@@ -5619,7 +5619,13 @@ const EXPLORE_ITEMS = EXPLORE_DESTINATIONS;
 
 function ExploreSection() {
   return (
-    <div>
+    /* `px-2 sm:px-3` is copied from HomeHighlights' <section>, not chosen: the
+       Explore heading and the first tile have to start on the same vertical
+       line as the Jobs / Connections cards directly above. The two children
+       below used to carry `px-1` of their own — that 4px was what pushed this
+       section out of alignment, so it moves up here and becomes the one place
+       the inset is defined. */
+    <div className="w-full min-w-0 px-2 sm:px-3">
       <style>{`
         .exp-strip { overflow-x: auto; overflow-y: hidden; touch-action: pan-x;
                      overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch;
@@ -5718,7 +5724,7 @@ function ExploreSection() {
       `}</style>
 
       {/* Section heading — identical treatment to the removed Promotions heading */}
-      <div className="flex items-center justify-between mb-2 px-1">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className="flex flex-col">
             <span className="flex items-center gap-1.5">
@@ -5744,7 +5750,7 @@ function ExploreSection() {
       </div>
 
       {/* Tabs on their own row — the announcement slot that shared it is gone. */}
-      <div className="flex min-w-0 items-center gap-3.5 px-1 pb-1">
+      <div className="flex min-w-0 items-center gap-3.5 pb-1">
         <div className="exp-strip flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5 lg:flex-none">
           {EXPLORE_ITEMS.map((it) => (
             /* The wash is a background-IMAGE, so it sits under the content and
@@ -6398,7 +6404,11 @@ function NewHomepageContent({
         )}
 
         {/* ── Explore — entry points into the opportunity network ── */}
-        <ExploreSection />
+        {/* Same wrapper the highlights block above uses, so the two sections
+            share one bottom rhythm as well as one left edge. */}
+        <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
+          <ExploreSection />
+        </div>
 
         {hpConfig?.announcementBanner?.active && (
           <div style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', borderRadius:12, marginBottom:2,

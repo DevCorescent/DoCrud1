@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowUp, Users } from 'lucide-react';
+import { cachedJson } from '@/lib/client/request-cache';
 
 export type PersonRecommendation = {
   userId: string;
@@ -140,9 +141,10 @@ export default function PeopleYouMayKnow() {
   useEffect(() => {
     if (fetched.current) return;
     fetched.current = true;
-    fetch('/api/recommendations/people')
-      .then((r) => (r.ok ? r.json() : { people: [] }))
-      .then((d: { people?: PersonRecommendation[] }) => setPeople(Array.isArray(d.people) ? d.people : []))
+    /* Same endpoint the homepage Connections count reads. cachedJson collapses
+       the pair into one request instead of two identical round trips. */
+    cachedJson<{ people?: PersonRecommendation[] }>('/api/recommendations/people')
+      .then((d) => setPeople(Array.isArray(d.people) ? d.people : []))
       .catch(() => setPeople([]));
   }, []);
 

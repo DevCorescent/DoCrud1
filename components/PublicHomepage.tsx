@@ -162,6 +162,9 @@ interface PublicHomepageProps {
      Both are optional: when absent the client fetches exactly as before. */
   initialHpConfig?: HPConfig | null;
   initialCompanies?: HPHiringCompany[] | null;
+  /* Who is signed in, resolved on the server. Lets the summary section start
+     its count requests on mount instead of after the client session call. */
+  initialViewer?: { name: string | null; email: string | null } | null;
 }
 
 type ChatMessage = {
@@ -6065,6 +6068,7 @@ function NewHomepageContent({
   hpSections = DEFAULT_HP_SECTIONS,
   hpConfig = null,
   initialCompanies = null,
+  initialViewer = null,
   guestMode = false,
 }: {
   softwareName: string;
@@ -6086,6 +6090,8 @@ function NewHomepageContent({
   hpConfig?: HPConfig | null;
   /** Server-seeded marquee companies; see PublicHomepageProps. */
   initialCompanies?: HPHiringCompany[] | null;
+  /** Server-resolved viewer; see PublicHomepageProps. */
+  initialViewer?: { name: string | null; email: string | null } | null;
   guestMode?: boolean;
 }) {
   const { data: nhcSession } = useSession();
@@ -6371,7 +6377,7 @@ function NewHomepageContent({
         {/* ── Greeting + Jobs/Connections matches + profile score ── */}
         {hpSections.homeHighlights && (
           <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
-            <HomeHighlights greeting={hpConfig?.greeting ?? null} />
+            <HomeHighlights greeting={hpConfig?.greeting ?? null} initialViewer={initialViewer} />
           </div>
         )}
 
@@ -7012,7 +7018,7 @@ function DdriveIconTile({ style }: { style?: React.CSSProperties }) {
 
 export default function PublicHomepage({
   softwareName, accentLabel, guestMode = false,
-  initialHpConfig = null, initialCompanies = null,
+  initialHpConfig = null, initialCompanies = null, initialViewer = null,
 }: PublicHomepageProps) {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
@@ -8451,6 +8457,7 @@ export default function PublicHomepage({
                   hpSections={hpSections}
                   hpConfig={hpConfig}
                   initialCompanies={initialCompanies}
+                  initialViewer={initialViewer}
                   guestMode={guestMode}
                 />
               ) : (

@@ -62,6 +62,14 @@ export default async function Home() {
      path to first byte; null simply lets the browser fetch it as before. */
   const initialCompanies = peekHiringCompanies();
 
+  /* The session is already resolved here. Passing the viewer down means the
+     summary section does not have to wait for next-auth's client-side
+     /api/auth/session round trip before it may start fetching its counts —
+     that request was sitting in front of both numbers on every load. */
+  const initialViewer = session?.user
+    ? { name: session.user.name ?? null, email: session.user.email ?? null }
+    : null;
+
   return (
     <PublicHomepage
       softwareName={themeSettings.softwareName}
@@ -69,6 +77,7 @@ export default async function Home() {
       guestMode={!session && isGuest}
       initialHpConfig={hpConfig}
       initialCompanies={initialCompanies}
+      initialViewer={initialViewer}
     />
   );
 }

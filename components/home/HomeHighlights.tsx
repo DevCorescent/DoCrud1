@@ -25,7 +25,7 @@
  * Copy and artwork come from the Super Admin homepage config (`greeting`).
  */
 
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { ArrowRight, Users } from 'lucide-react';
@@ -67,7 +67,7 @@ const BAND_WORD: Record<string, string> = {
 function StatTileBase({
   wash, label, value, caption, href,
 }: {
-  /** The corner accent, as a background-image. See WASH_* below. */
+  /** The accent colour as bare `r,g,b` channels. See WASH_* below. */
   wash: string;
   label: string; value: number | null; caption: string; href: string;
 }) {
@@ -79,9 +79,14 @@ function StatTileBase({
          `overflow-hidden` plus a `relative` wrapper on both children just to
          stack above it. The gradient below was matched against the blurred
          version pixel-wise (same peak alpha, same falloff start), so this is a
-         like-for-like swap, not an approximation. */
-      style={{ backgroundImage: wash }}
-      className={`group flex min-h-[124px] min-w-0 flex-col justify-between p-4 ${CARD} transition-colors hover:bg-white/[0.045]`}>
+         like-for-like swap, not an approximation.
+
+         Only the COLOUR travels inline now; the gradient itself lives in the
+         stylesheet below, because the alphas have to differ per theme and an
+         inline background-image would beat any rule that tried to change
+         them. */
+      style={{ '--wash-rgb': wash } as CSSProperties}
+      className={`hh-wash group flex min-h-[124px] min-w-0 flex-col justify-between p-4 ${CARD} transition-colors hover:bg-white/[0.045]`}>
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 truncate text-[13px] font-semibold text-white/60">{label}</p>
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.05] text-white/50 transition group-hover:text-white/85">
@@ -105,14 +110,29 @@ function StatTileBase({
    primitive, so the comparison is exact and needs no useCallback. */
 const StatTile = memo(StatTileBase);
 
-/* Same geometry the blurred circle had: centred 24px in from the right edge and
-   16px up from the bottom, fading out by ~84px. */
-const wash = (r: number, g: number, b: number) =>
+/* Just the channels — the gradient that consumes them is WASH_CSS below. */
+const WASH_EMERALD = '16,185,129';
+const WASH_AMBER = '245,158,11';
+
+/* The corner accent, in both themes.
+   Same geometry the blurred circle had: centred 24px in from the right edge and
+   16px up from the bottom, fading out by ~84px. Only the ALPHAS differ.
+
+   Light and dark cannot share one set. 13% emerald sits on a pale surface with
+   plenty of contrast to spare, but the dark card is near-black, so the same
+   13% lands within a couple of levels of the background and the wash simply
+   disappears. The dark alphas are raised to about 2.3x so the accent reads at
+   a comparable strength against its own surface — it is the same wash, not a
+   brighter one, and the dark card underneath stays clearly visible. */
+const washGradient = (a0: number, a1: number, a2: number) =>
   `radial-gradient(84px 84px at calc(100% - 24px) calc(100% - 16px),`
-  + ` rgba(${r},${g},${b},0.13) 0%, rgba(${r},${g},${b},0.105) 38%,`
-  + ` rgba(${r},${g},${b},0.045) 62%, transparent 78%)`;
-const WASH_EMERALD = wash(16, 185, 129);
-const WASH_AMBER = wash(245, 158, 11);
+  + ` rgba(var(--wash-rgb),${a0}) 0%, rgba(var(--wash-rgb),${a1}) 38%,`
+  + ` rgba(var(--wash-rgb),${a2}) 62%, transparent 78%)`;
+
+const WASH_CSS = `
+  .hh-wash { background-image: ${washGradient(0.13, 0.105, 0.045)}; }
+  .dark .hh-wash { background-image: ${washGradient(0.30, 0.24, 0.10)}; }
+`;
 
 /** The score ring. Stroke colour is the shared completion band, not a new palette. */
 function ScoreRing({ score, colour }: { score: number | null; colour: string }) {
@@ -225,6 +245,7 @@ export default function HomeHighlights({
       aria-label="Your Docrud summary"
       className={`flex w-full min-w-0 flex-col gap-2.5 px-2 sm:px-3 lg:grid lg:items-stretch lg:gap-2.5 ${showScoreCard ? ROW_4 : ROW_3}`}
     >
+      <style>{WASH_CSS}</style>
 
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
       <div className={`relative flex items-center gap-3 overflow-hidden p-4 sm:p-5 ${CARD}`}>

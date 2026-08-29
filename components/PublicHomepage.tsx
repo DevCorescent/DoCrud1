@@ -106,7 +106,7 @@ import { AssistantResultCardView } from '@/components/home-chat/AssistantResultC
 import type { DocumentHistory } from '@/types/document';
 import type { AssistantResultCard, DocumentQuickAction, UploadedDocument } from '@/types/doc-assistant';
 import { fireSearchEvent, SEARCH_CONTEXTS } from '@/lib/search-tracking';
-import { EXPLORE_DESTINATIONS } from '@/lib/explore-destinations';
+import { EXPLORE_DESTINATIONS, exploreWash } from '@/lib/explore-destinations';
 
 // Heavy modal components — loaded only when first opened, not part of the initial bundle
 const QuickFileEditorDialog = dynamic(() => import('@/components/QuickFileEditorDialog'), { ssr: false });
@@ -5641,24 +5641,24 @@ function ExploreSection() {
           overflow: hidden;
           white-space: nowrap;
           text-decoration: none;
-          border-radius: 12px;
-          border: 1px solid rgba(255,255,255,0.12);
-          /* Flat translucent surface — no gradient at any breakpoint. Desktop
-             already used this value; the base now matches it. */
-          background: rgba(255,255,255,0.045);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          box-shadow: 0 1px 2px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.06);
-          transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+          /* Same surface as the Jobs / Connections cards: same radius, same
+             hairline border, same translucent fill, same hover. Uses
+             background-color rather than the background shorthand ON PURPOSE —
+             the shorthand resets background-image, which is where each tile's
+             accent wash lives. No blur and no shadow, because those cards have
+             neither; matching them is the point. */
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.07);
+          background-color: rgba(255,255,255,0.025);
+          transition: background-color 0.15s ease, border-color 0.15s ease;
         }
         /* Legacy highlight layer, now unused — see .exp-sheen below. */
         /* The decorative radial glow is off. Kept as a rule rather than
            removed from the markup so the change stays CSS-only. */
         .exp-sheen { display: none; }
         .exp-tile:hover {
-          background-color: rgba(255,255,255,0.03);
-          border-color: rgba(255,255,255,0.20);
-          box-shadow: 0 2px 6px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.10);
+          background-color: rgba(255,255,255,0.045);
+          border-color: rgba(255,255,255,0.12);
         }
         .exp-tile:focus-visible {
           outline: 2px solid rgba(255,255,255,0.55);
@@ -5695,29 +5695,10 @@ function ExploreSection() {
            tablet: every rule is inside the 1024px query, and the base rules
            above are untouched. */
         @media (min-width: 1024px) {
-          /* One flat translucent surface — no gradient of any kind. The depth
-             comes from the blur, the hairline border and the inset highlight,
-             not from a colour ramp. Matches the flat base surface above. */
-          .exp-tile {
-            height: 44px; padding: 0 18px; gap: 10px;
-            border-radius: 14px;
-            border: 1px solid rgba(255,255,255,0.10);
-            background: rgba(255,255,255,0.045);
-            backdrop-filter: blur(18px) saturate(130%);
-            -webkit-backdrop-filter: blur(18px) saturate(130%);
-            box-shadow:
-              0 4px 18px rgba(0,0,0,0.18),
-              inset 0 1px 0 rgba(255,255,255,0.055);
-          }
-          /* Hover lifts the same flat surface a little. No scale, no glow, no
-             gradient, no movement. */
-          .exp-tile:hover {
-            background: rgba(255,255,255,0.065);
-            border-color: rgba(255,255,255,0.16);
-            box-shadow:
-              0 4px 18px rgba(0,0,0,0.18),
-              inset 0 1px 0 rgba(255,255,255,0.055);
-          }
+          /* Desktop changes only the GEOMETRY. The surface, border and hover
+             are inherited from the base rule so a tile can never drift away
+             from the Jobs / Connections cards at one breakpoint. */
+          .exp-tile { height: 44px; padding: 0 18px; gap: 10px; }
           /* The gold bottom hairline is a gradient, so it is off here too.
              The sheen is already off in the base rules. */
           .exp-tile::after { content: none; }
@@ -5760,7 +5741,15 @@ function ExploreSection() {
       <div className="flex min-w-0 items-center gap-3.5 px-1 pb-1">
         <div className="exp-strip flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5 lg:flex-none">
           {EXPLORE_ITEMS.map((it) => (
-            <Link key={it.label} href={it.href} className="exp-tile" aria-label={it.label}>
+            /* The wash is a background-IMAGE, so it sits under the content and
+               leaves the base background-color (and its hover) untouched. */
+            <Link
+              key={it.label}
+              href={it.href}
+              className="exp-tile"
+              style={{ backgroundImage: exploreWash(it.homeIc) }}
+              aria-label={it.label}
+            >
               <span className="exp-sheen" aria-hidden="true" />
               {/* Only the ICON carries the accent — the tile keeps its dark
                   surface, border and label exactly as before. */}

@@ -118,27 +118,27 @@ const StatTile = memo(StatTileBase);
 const WASH_EMERALD = '16,185,129';
 const WASH_AMBER = '245,158,11';
 
-/* The corner accent. Same geometry the blurred circle had: centred 24px in
-   from the right edge and 16px up from the bottom, fading out by ~84px.
+/* The corner accent, matched to the Explore tiles.
+
+   Same geometry the blurred circle had: centred 24px in from the right edge
+   and 16px up from the bottom, fading out by ~84px. The alphas are the ones
+   exploreWash() uses in lib/explore-destinations.ts, so the two surfaces read
+   as one accent language rather than two tunings of the same idea.
 
    ONE set of alphas, not one per theme. An earlier attempt keyed the strength
    off `.dark`, which was the wrong hook twice over: the rule never matched on
    a default first paint (the server renders data-ui-mode="light" and adds no
    `.dark` class until ThemeController runs on mount), and even when it did
-   match it was answering the wrong question. This card does not have a light
-   variant — `bg-white/[0.025]` over `text-white` is its surface in every
-   theme — so the background the wash has to survive is always near-black, and
-   the original 13% landed within a couple of levels of it and disappeared.
-   These alphas are ~2.3x that, tuned against the dark card the wash actually
-   sits on. The card underneath stays clearly visible; it is the same wash
-   read at its intended strength, not a brighter one. */
+   match it was answering the wrong question — this card has no light variant.
+   `bg-white/[0.025]` over `text-white` is its surface in every theme, so one
+   wash covers both and the card underneath stays clearly dark. */
 const WASH_CSS = `
   .hh-wash {
     background-image: radial-gradient(
       84px 84px at calc(100% - 24px) calc(100% - 16px),
-      rgba(var(--wash-rgb),0.30) 0%,
-      rgba(var(--wash-rgb),0.24) 38%,
-      rgba(var(--wash-rgb),0.10) 62%,
+      rgba(var(--wash-rgb),0.13) 0%,
+      rgba(var(--wash-rgb),0.106) 38%,
+      rgba(var(--wash-rgb),0.043) 62%,
       transparent 78%);
   }
 `;

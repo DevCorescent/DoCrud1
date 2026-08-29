@@ -25,7 +25,6 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { Sparkles } from 'lucide-react';
 import { logoKey } from '@/lib/company-logos';
 import { cachedJson } from '@/lib/client/request-cache';
 
@@ -172,10 +171,9 @@ export default function TrustedCompanies({
         </p>
       )}
 
-      <div className="relative flex items-center gap-2">
-        <Sparkles className="hidden h-3.5 w-3.5 shrink-0 text-amber-300/60 sm:block" aria-hidden />
-
-        <div className="tc-viewport relative min-w-0 flex-1 overflow-hidden">
+      {/* `flex-1`/`min-w-0` are gone with the flex row that held the icons —
+          a block viewport simply fills the full width. */}
+      <div className="tc-viewport relative overflow-hidden">
           {/* Edge fades, so marks enter and leave instead of being cut off. */}
           <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#08080A] to-transparent" aria-hidden />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#08080A] to-transparent" aria-hidden />
@@ -186,9 +184,6 @@ export default function TrustedCompanies({
               {row(true)}
             </div>
           </div>
-        </div>
-
-        <Sparkles className="hidden h-3.5 w-3.5 shrink-0 text-amber-300/60 sm:block" aria-hidden />
       </div>
     </section>
   );

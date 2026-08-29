@@ -291,3 +291,56 @@ export async function mirrorPublishedJobs(
     return failed;
   }
 }
+
+/**
+ * A cheap fingerprint of the published job set, for deciding whether a warm
+ * in-memory corpus is still current.
+ *
+ * WHY: the corpus is ~2.7 MB and costs ~43 s to re-read on this link. Expiring
+ * it on a timer means paying that repeatedly even when nothing changed; never
+ * expiring it means a job posted on ANOTHER instance is invisible to this one
+ * for the life of the process, because explicit invalidation is in-process
+ * only. This probe resolves both: ~50 bytes on the wire says whether a reload
+ * is needed at all.
+ *
+ * `count` catches creates and deletes; `maxUpdatedAt` catches edits, publishes
+ * and unpublishes, which change a timestamp without changing the count. Both
+ * stores that feed the corpus are covered — hiring jobs and the Business Page
+ * jobs merged in alongside them.
+ *
+ * Returns null when it cannot be determined, and the caller then treats the
+ * corpus as stale rather than assuming it is fresh.
+ */
+export interface CorpusVersion { count: number; maxUpdatedAt: string }
+
+export async function readHiringCorpusVersion(): Promise<CorpusVersion | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    const summarise = async (collection: string, match: Record<string, unknown>) => {
+      const rows = await db.collection(collection).aggregate([
+        { $match: match },
+        { $group: { _id: null, count: { $sum: 1 }, maxUpdatedAt: { $max: '$updatedAt' } } },
+      ]).toArray();
+      const row = rows[0] as { count?: number; maxUpdatedAt?: unknown } | undefined;
+      return {
+        count: Number(row?.count ?? 0),
+        maxUpdatedAt: typeof row?.maxUpdatedAt === 'string' ? row.maxUpdatedAt : '',
+      };
+    };
+
+    const [hiring, business] = await Promise.all([
+      summarise(COL, PUBLISHED),
+      /* Business Page jobs use 'open' for their live state — see
+         mapBusinessJobToFeedJob in lib/server/hiring.ts. */
+      summarise('business_page_jobs', { status: 'open' }),
+    ]);
+
+    return {
+      count: hiring.count + business.count,
+      maxUpdatedAt: hiring.maxUpdatedAt > business.maxUpdatedAt ? hiring.maxUpdatedAt : business.maxUpdatedAt,
+    };
+  } catch {
+    return null;
+  }
+}

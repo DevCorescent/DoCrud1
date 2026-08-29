@@ -14,7 +14,7 @@ import { getPublishedHiringJobs } from '@/lib/server/hiring';
 import { getFeedConfig } from '@/lib/server/feed-config';
 import { buildRecProfile, hasProfileSignals, isRecommended, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
 import { isValidApplyUrl } from '@/lib/jobs-ui';
-import { registerRecommendationCache } from '@/lib/server/recommendation-cache';
+import { registerRecommendationCache, rememberViewerCount } from '@/lib/server/recommendation-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,6 +120,9 @@ export async function GET(request: Request) {
 
     const payload = { jobs: list, total };
     cache.set(cacheKey, { payload, ts: Date.now() });
+    /* Remembered so the homepage can render this number on the NEXT server
+       render without re-running the ranking that produced it. */
+    if (meId) rememberViewerCount(meId, 'jobs', total);
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[recommendations/jobs] GET error', error);

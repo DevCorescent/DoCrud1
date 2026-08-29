@@ -15,6 +15,8 @@
     "test:trends": "tsx scripts/trends.selftest.ts",
     "test:hiring": "tsx scripts/hiring-projection.selftest.ts",
     "test:post-job": "tsx scripts/post-job.selftest.ts",
+    "test:homepage-counts": "tsx scripts/homepage-counts.selftest.ts",
+    "test:corpus-cache": "tsx scripts/corpus-cache.selftest.ts",
     "test:ranking-parity": "tsx scripts/ranking-parity.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
     "db:init": "node scripts/db-init.mjs",

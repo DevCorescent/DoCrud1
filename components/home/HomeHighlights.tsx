@@ -132,8 +132,17 @@ function ScoreRing({ score, colour }: { score: number | null; colour: string }) 
 export default function HomeHighlights({
   greeting,
   initialViewer = null,
+  initialJobCount = null,
+  initialPeopleCount = null,
 }: {
   greeting?: HomeGreetingConfig | null;
+  /* The last personalised totals the server knew for this viewer. Seeding state
+     with them is what removes the visible 0 → 149 flash: the number is already
+     in the first paint, and the refresh below only corrects it if it moved.
+     Null means the server had nothing cheap to give, so the tile shows its
+     existing skeleton and the fetch fills it in, exactly as before. */
+  initialJobCount?: number | null;
+  initialPeopleCount?: number | null;
   /* Who is signed in, resolved by the SERVER component that rendered the page.
      Without it this section had to wait for next-auth's client-side
      /api/auth/session round trip before `status` became 'authenticated' and the
@@ -148,8 +157,8 @@ export default function HomeHighlights({
      exactly as before. */
   const signedIn = initialViewer !== null || status === 'authenticated';
 
-  const [jobCount, setJobCount] = useState<number | null>(null);
-  const [peopleCount, setPeopleCount] = useState<number | null>(null);
+  const [jobCount, setJobCount] = useState<number | null>(initialJobCount);
+  const [peopleCount, setPeopleCount] = useState<number | null>(initialPeopleCount);
   const [score, setScore] = useState<number | null>(null);
 
   const firstName = useMemo(() => {
@@ -177,6 +186,9 @@ export default function HomeHighlights({
       } catch { /* a tile that cannot load keeps its skeleton rather than showing a wrong number */ }
     };
 
+    /* Refresh in the background. A seeded number is already on screen, so this
+       only ever corrects it — it never blanks the tile, and a failed refresh
+       silently leaves the seeded value in place. */
     load('/api/recommendations/jobs', 'total', setJobCount);
     load('/api/recommendations/people', 'total', setPeopleCount);
     load('/api/me/badge', 'profileScore', setScore);

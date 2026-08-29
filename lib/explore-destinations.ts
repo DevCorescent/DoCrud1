@@ -23,20 +23,25 @@ export interface ExploreDestination {
   Icon: LucideIcon;
   /** One-line explanation, shown in the bottom-nav panel. */
   desc: string;
-  /** Icon tint. Reuses the palette ALL_QUICK_FEATURES already uses, so the
-      panel reads as the same product rather than a new colour system. */
+  /** Icon tint in the bottom-nav Explore panel. Reuses the palette
+      ALL_QUICK_FEATURES already uses, so the panel reads as the same product
+      rather than a new colour system. */
   ic: string;
+  /** Icon tint in the homepage Explore strip. A separate field because the two
+      surfaces were tuned independently — four destinations differ — and
+      changing one must not silently restyle the other. */
+  homeIc: string;
 }
 
 const DESTINATIONS = {
-  businesses: { label: 'Businesses', href: '/businesses',            Icon: Building2,  desc: 'Discover companies',      ic: '#60a5fa' },
-  services:   { label: 'Services',   href: '/services',              Icon: Wrench,     desc: 'Find expert services',    ic: '#4ade80' },
-  projects:   { label: 'Projects',   href: '/projects',              Icon: Rocket,     desc: 'Explore projects',        ic: '#a78bfa' },
-  jobs:       { label: 'Jobs',       href: '/jobs',                  Icon: Briefcase,  desc: 'Find job opportunities',  ic: '#fb923c' },
-  gigs:       { label: 'Gigs',       href: '/published?tab=gig',     Icon: Zap,        desc: 'Find freelance gigs',     ic: '#facc15' },
-  people:     { label: 'People',     href: '/people',                Icon: Users,      desc: 'Connect with people',     ic: '#f472b6' },
-  trends:     { label: 'Trends',     href: '/trends',                Icon: TrendingUp, desc: 'Explore trends',          ic: '#22d3ee' },
-  articles:   { label: 'Articles',   href: '/published?tab=article', Icon: BookOpen,   desc: 'Read insights',           ic: '#93c5fd' },
+  businesses: { label: 'Businesses', href: '/businesses',            Icon: Building2,  desc: 'Discover companies',     ic: '#60a5fa', homeIc: '#34d399' },
+  services:   { label: 'Services',   href: '/services',              Icon: Wrench,     desc: 'Find expert services',   ic: '#4ade80', homeIc: '#60a5fa' },
+  projects:   { label: 'Projects',   href: '/projects',              Icon: Rocket,     desc: 'Explore projects',       ic: '#a78bfa', homeIc: '#a78bfa' },
+  jobs:       { label: 'Jobs',       href: '/jobs',                  Icon: Briefcase,  desc: 'Find job opportunities', ic: '#fb923c', homeIc: '#f59e0b' },
+  gigs:       { label: 'Gigs',       href: '/published?tab=gig',     Icon: Zap,        desc: 'Find freelance gigs',    ic: '#facc15', homeIc: '#facc15' },
+  people:     { label: 'People',     href: '/people',                Icon: Users,      desc: 'Connect with people',    ic: '#f472b6', homeIc: '#fb7185' },
+  trends:     { label: 'Trends',     href: '/trends',                Icon: TrendingUp, desc: 'Explore trends',         ic: '#22d3ee', homeIc: '#22d3ee' },
+  articles:   { label: 'Articles',   href: '/published?tab=article', Icon: BookOpen,   desc: 'Read insights',          ic: '#93c5fd', homeIc: '#93c5fd' },
 } satisfies Record<string, ExploreDestination>;
 
 /** The homepage Explore strip. */

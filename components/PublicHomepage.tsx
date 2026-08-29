@@ -5668,10 +5668,13 @@ function ExploreSection() {
           position: relative;
           width: 17px; height: 17px;
           flex-shrink: 0;
-          color: rgba(255,255,255,0.82);
-          transition: color 0.15s ease;
+          /* The colour itself is set per destination inline (homeIc). Held a
+             little back at rest so the accents read as quiet anchors rather
+             than a row of bright dots; hover lifts them to full strength. */
+          opacity: 0.85;
+          transition: opacity 0.15s ease;
         }
-        .exp-tile:hover .exp-icon { color: rgba(255,255,255,0.95); }
+        .exp-tile:hover .exp-icon { opacity: 1; }
         .exp-label {
           position: relative;
           font-size: 12px;
@@ -5759,7 +5762,9 @@ function ExploreSection() {
           {EXPLORE_ITEMS.map((it) => (
             <Link key={it.label} href={it.href} className="exp-tile" aria-label={it.label}>
               <span className="exp-sheen" aria-hidden="true" />
-              <it.Icon className="exp-icon" aria-hidden="true" />
+              {/* Only the ICON carries the accent — the tile keeps its dark
+                  surface, border and label exactly as before. */}
+              <it.Icon className="exp-icon" style={{ color: it.homeIc }} aria-hidden="true" />
               <span className="exp-label">{it.label}</span>
             </Link>
           ))}

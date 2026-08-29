@@ -116,9 +116,16 @@ const WASH_AMBER = '245,158,11';
 /* The corner accent, matched to the Explore tiles.
 
    Same geometry the blurred circle had: centred 24px in from the right edge
-   and 16px up from the bottom, fading out by ~84px. The alphas are the ones
-   exploreWash() uses in lib/explore-destinations.ts, so the two surfaces read
-   as one accent language rather than two tunings of the same idea.
+   and 16px up from the bottom, fading out by ~84px.
+
+   The alphas are NOT exploreWash()'s, even though both washes should read at
+   the same strength — because equal alpha does not mean equal presence here.
+   An Explore pill is 40px tall and takes a 44px radial, so the wash fills most
+   of it and 13% is plainly visible. These cards are 124px tall and take an
+   84px radial in one corner, spreading the same 13% over several times the
+   area against a near-black surface, where it vanished. Raising the peak to
+   30% is what makes the two LOOK alike; matching the numbers is what made
+   them look different.
 
    ONE set of alphas, not one per theme. An earlier attempt keyed the strength
    off `.dark`, which was the wrong hook twice over: the rule never matched on
@@ -131,9 +138,9 @@ const WASH_CSS = `
   .hh-wash {
     background-image: radial-gradient(
       84px 84px at calc(100% - 24px) calc(100% - 16px),
-      rgba(var(--wash-rgb),0.13) 0%,
-      rgba(var(--wash-rgb),0.106) 38%,
-      rgba(var(--wash-rgb),0.043) 62%,
+      rgba(var(--wash-rgb),0.30) 0%,
+      rgba(var(--wash-rgb),0.24) 38%,
+      rgba(var(--wash-rgb),0.10) 62%,
       transparent 78%);
   }
 `;

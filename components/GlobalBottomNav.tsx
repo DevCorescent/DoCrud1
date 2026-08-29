@@ -4,23 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import {
+  ArrowUp,
   Globe,
   Home,
   MessageSquare,
   Users,
 } from 'lucide-react';
-
-/* ── Recents icon ────────────────────────────────────────────────── */
-function RecentsIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <rect x="2"  y="4"    width="6" height="9"   rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-      <rect x="10" y="2"    width="6" height="11"  rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-      <rect x="2"  y="14.5" width="6" height="1.5" rx="0.75" fill="currentColor" fillOpacity="0.5"/>
-      <rect x="10" y="14.5" width="6" height="1.5" rx="0.75" fill="currentColor" fillOpacity="0.5"/>
-    </svg>
-  );
-}
+import { BOTTOM_NAV_EXPLORE } from '@/lib/explore-destinations';
 
 /* ── Pages where the nav is hidden ──────────────────────────────── */
 const EXCLUDED = [
@@ -38,10 +28,25 @@ export default function GlobalBottomNav() {
   const [inChat,  setInChat]  = useState(false);
   /* Unread badge count, from the endpoint the app already exposes. */
   const [unread, setUnread] = useState(0);
+  /* Explore panel. Purely local UI state — opening it fetches nothing and
+     renders nothing but the static destination list. */
+  const [exploreOpen, setExploreOpen] = useState(false);
   const lastY     = useRef(0);
   const ticking   = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
+
+  /* Escape closes the panel. Bound only while it is open, so the app carries no
+     idle key listener. */
+  useEffect(() => {
+    if (!exploreOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExploreOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [exploreOpen]);
+
+  /* Navigating away closes it — otherwise it would still be open on arrival. */
+  useEffect(() => { setExploreOpen(false); }, [pathname]);
 
 
   /* ── scroll-hide / scroll-show ──
@@ -278,7 +283,170 @@ export default function GlobalBottomNav() {
           margin-top: 1px;
           transition: opacity 0.14s ease, background 0.14s ease;
         }
+
+        /* ── Explore ──────────────────────────────────────────────────
+           The centre control is distinguished by SHAPE, not colour: the same
+           icon box the other items use, with a hairline border. */
+        .gnb-explore-icon {
+          border: 1px solid rgba(255,255,255,0.14);
+          background: rgba(255,255,255,0.05);
+          color: rgba(255,255,255,0.62);
+        }
+        .gnb-explore[aria-expanded="true"] .gnb-explore-icon {
+          border-color: rgba(167,139,250,0.40);
+          background: rgba(167,139,250,0.16);
+          color: #a78bfa;
+        }
+        /* The arrow turns to point back down when the panel is open. */
+        .gnb-explore-icon svg { transition: transform 0.22s cubic-bezier(0.22,1,0.36,1); }
+        .gnb-explore-icon.is-open svg { transform: rotate(180deg); }
+
+        /* Backdrop sits BELOW the bar and the panel, so both stay interactive.
+           Opacity only — no blur, which would cost a full-screen filter pass. */
+        .gnb-scrim {
+          position: fixed;
+          inset: 0;
+          z-index: 998;
+          background: rgba(0,0,0,0.42);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 220ms ease;
+        }
+        .gnb-scrim.is-open { opacity: 1; pointer-events: auto; }
+
+        /* Panel: fixed, so opening it cannot reflow or shift the page. Height
+           is capped at ~25vh and it animates on transform/opacity only. */
+        .gnb-explore-panel {
+          position: fixed;
+          left: 50%;
+          /* The bar is bottom:18px, height:62px — its top edge is at 80px.
+             92px leaves a consistent 12px gap, and matching the bar's own
+             (inset-free) positioning keeps the two aligned on every device. */
+          bottom: 92px;
+          z-index: 999;
+          width: min(680px, calc(100vw - 24px));
+          max-height: 25vh;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+
+          background: rgba(0,0,0,0.86);
+          backdrop-filter: blur(28px) saturate(180%);
+          -webkit-backdrop-filter: blur(28px) saturate(180%);
+          border: 1px solid rgba(255,255,255,0.09);
+          border-radius: 24px;
+          box-shadow:
+            0 8px 32px rgba(0,0,0,0.55),
+            0 2px 8px rgba(0,0,0,0.30),
+            inset 0 1px 0 rgba(255,255,255,0.07);
+
+          padding: 12px;
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+          transform: translateX(-50%) translateY(14px) scale(0.98);
+          transition:
+            transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+            opacity 180ms ease,
+            visibility 0s linear 260ms;
+          will-change: transform, opacity;
+        }
+        .gnb-explore-panel.is-open {
+          opacity: 1;
+          visibility: visible;
+          pointer-events: auto;
+          transform: translateX(-50%) translateY(0) scale(1);
+          transition:
+            transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+            opacity 200ms ease,
+            visibility 0s;
+        }
+
+        .gnb-explore-head {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 2px 6px 10px;
+        }
+        .gnb-explore-title {
+          font-size: 10px; font-weight: 700;
+          letter-spacing: 0.16em; text-transform: uppercase;
+          color: rgba(255,255,255,0.35);
+        }
+        .gnb-explore-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 6px;
+        }
+        /* Two columns only where three would squeeze the labels. */
+        @media (max-width: 359px) { .gnb-explore-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        /* One compact row when the width genuinely allows it. */
+        @media (min-width: 560px) { .gnb-explore-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+
+        .gnb-explore-link {
+          display: flex; flex-direction: column;
+          align-items: center; justify-content: center; gap: 6px;
+          min-height: 62px;                 /* comfortably past a 44px target */
+          padding: 8px 4px;
+          border-radius: 14px;
+          border: 1px solid rgba(255,255,255,0.06);
+          background: rgba(255,255,255,0.025);
+          color: rgba(255,255,255,0.62);
+          text-decoration: none;
+          -webkit-tap-highlight-color: transparent;
+          transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        .gnb-explore-link:hover {
+          background: rgba(255,255,255,0.06);
+          border-color: rgba(255,255,255,0.12);
+          color: rgba(255,255,255,0.92);
+        }
+        .gnb-explore-link:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+        .gnb-explore-label {
+          font-size: 10px; font-weight: 600; line-height: 1;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          max-width: 100%;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .gnb-explore-panel, .gnb-scrim, .gnb-explore-icon svg { transition: none; }
+        }
       `}</style>
+
+      {/* Clicking anywhere outside closes. Sits under the bar and the panel so
+          both remain clickable while it is up. */}
+      <div
+        className={`gnb-scrim${exploreOpen ? ' is-open' : ''}`}
+        onClick={() => setExploreOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* Explore panel — static links only. Opening it makes no request and
+          mounts no data component. It stays in the DOM so the open/close
+          animation runs on transform and opacity rather than on mount. */}
+      <div
+        id="gnb-explore-panel"
+        className={`gnb-explore-panel${exploreOpen ? ' is-open' : ''}`}
+        role="group"
+        aria-label="Explore Docrud"
+        aria-hidden={!exploreOpen}
+      >
+        <div className="gnb-explore-head">
+          <span className="gnb-explore-title">Explore Docrud</span>
+        </div>
+        <div className="gnb-explore-grid">
+          {BOTTOM_NAV_EXPLORE.map((item) => (
+            <a
+              key={item.label}
+              href={item.href}
+              className="gnb-explore-link"
+              /* Not focusable while closed, so keyboard order is unaffected. */
+              tabIndex={exploreOpen ? 0 : -1}
+              onClick={() => setExploreOpen(false)}
+            >
+              <item.Icon width={18} height={18} aria-hidden />
+              <span className="gnb-explore-label">{item.label}</span>
+            </a>
+          ))}
+        </div>
+      </div>
 
       <nav className={`gnb-bar${visible ? '' : ' gnb-hidden'}`} role="navigation" aria-label="Main navigation">
 
@@ -312,20 +480,24 @@ export default function GlobalBottomNav() {
           );
         })()}
 
-        {/* Recents */}
-        {(() => {
-          const active = pathname.startsWith('/recents');
-          const color  = active ? '#a78bfa' : 'rgba(255,255,255,0.50)';
-          return (
-            <a href="/recents" className="gnb-item" aria-label="Recents" aria-current={active ? 'page' : undefined}>
-              <span className="gnb-icon" style={{ color, background: active ? 'rgba(167,139,250,0.18)' : 'transparent' }}>
-                <RecentsIcon size={19} />
-              </span>
-              <span className="gnb-label" style={{ color }}>Recents</span>
-              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#a78bfa' }} />
-            </a>
-          );
-        })()}
+        {/* Explore — replaces Recents. A button, not a link: it toggles the
+            panel above rather than navigating anywhere. */}
+        <button
+          type="button"
+          className="gnb-item gnb-explore"
+          onClick={() => setExploreOpen((open) => !open)}
+          aria-label={exploreOpen ? 'Close Explore' : 'Open Explore'}
+          aria-expanded={exploreOpen}
+          aria-controls="gnb-explore-panel"
+        >
+          <span className={`gnb-icon gnb-explore-icon${exploreOpen ? ' is-open' : ''}`}>
+            <ArrowUp width={19} height={19} />
+          </span>
+          <span className="gnb-label" style={{ color: exploreOpen ? '#a78bfa' : 'rgba(255,255,255,0.50)' }}>
+            Explore
+          </span>
+          <span className="gnb-dot" style={{ opacity: exploreOpen ? 1 : 0, background: '#a78bfa' }} />
+        </button>
 
         {/* People */}
         {(() => {

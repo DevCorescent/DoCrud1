@@ -106,6 +106,7 @@ import { AssistantResultCardView } from '@/components/home-chat/AssistantResultC
 import type { DocumentHistory } from '@/types/document';
 import type { AssistantResultCard, DocumentQuickAction, UploadedDocument } from '@/types/doc-assistant';
 import { fireSearchEvent, SEARCH_CONTEXTS } from '@/lib/search-tracking';
+import { EXPLORE_DESTINATIONS } from '@/lib/explore-destinations';
 
 // Heavy modal components — loaded only when first opened, not part of the initial bundle
 const QuickFileEditorDialog = dynamic(() => import('@/components/QuickFileEditorDialog'), { ssr: false });
@@ -5606,15 +5607,9 @@ type AdBanner = {
    The profile-completion announcement that used to share this row is gone:
    HomeHighlights above carries the one Profile Score prompt now, so the
    number is not shown twice. */
-const EXPLORE_ITEMS: Array<{ label: string; href: string; Icon: LucideIcon }> = [
-  { label: 'Businesses', href: '/businesses',        Icon: Building2 },
-  { label: 'Services',   href: '/services',          Icon: Wrench    },
-  { label: 'Projects',   href: '/projects',          Icon: Rocket    },
-  { label: 'Jobs',       href: '/jobs',              Icon: Briefcase },
-  { label: 'Gigs',       href: '/published?tab=gig', Icon: Zap       },
-  { label: 'People',     href: '/people',            Icon: Users     },
-  { label: 'Trends',     href: '/trends',            Icon: TrendingUp },
-];
+/* Shared with the bottom navigation's Explore panel — see
+   lib/explore-destinations.ts. Defined once so the two surfaces cannot drift. */
+const EXPLORE_ITEMS = EXPLORE_DESTINATIONS;
 
 function ExploreSection() {
   return (

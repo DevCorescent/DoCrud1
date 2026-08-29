@@ -31,7 +31,6 @@ import { useSession } from 'next-auth/react';
 import { ArrowRight, Users } from 'lucide-react';
 import { profileStatusStyle } from '@/lib/profile-score';
 import { cachedJson } from '@/lib/client/request-cache';
-import AnimatedWelcomeCharacter from '@/components/home/AnimatedWelcomeCharacter';
 
 export type HomeGreetingConfig = {
   subtitle: string;
@@ -48,6 +47,11 @@ const CARD = 'rounded-[20px] border border-white/[0.07] bg-white/[0.025]';
    remaining three take the freed width instead of leaving a hole. */
 const ROW_4 = 'lg:grid-cols-[minmax(300px,1.55fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(280px,1.35fr)]';
 const ROW_3 = 'lg:grid-cols-[minmax(300px,1.9fr)_minmax(180px,1fr)_minmax(180px,1fr)]';
+
+/* The greeting artwork. A raster asset rather than the animated SVG character
+   this replaced: the approved illustration is a 3D render, which markup cannot
+   reproduce. Overridable per deployment via greeting.illustrationUrl. */
+const WELCOME_ILLUSTRATION = '/homepage/welcome-illustration.png';
 
 /** Where each tile sends you: the matched set itself, never the full listing. */
 const RECOMMENDED_JOBS_HREF = '/jobs?recommended=1';
@@ -256,22 +260,24 @@ export default function HomeHighlights({
           <p className="mt-1.5 text-[13px] leading-relaxed text-white/45">{subtitle}</p>
         </div>
 
-        {/* An uploaded illustration still wins; the animated character is the
-            default.
+        {/* An uploaded illustration still wins; WELCOME_ILLUSTRATION is the
+            default. It replaced the animated SVG character, which could not
+            express a 3D render — so the artwork is a real asset, not markup.
+
+            One <img> serves both branches: only the src differs, so the box,
+            the loading behaviour and the sizing cannot drift apart.
 
             Mobile and tablet keep the ORIGINAL box exactly, so the card cannot
-            gain height or shift where space is tight. Only from lg — where the
-            card is wide and the left column is nowhere near full — does the
-            character grow to read at roughly 40% of the card, which is the one
-            place the reference asks for it. */}
-        {greeting?.illustrationUrl
-          ? <img src={greeting.illustrationUrl} alt="" aria-hidden loading="lazy" decoding="async"
-              className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px] lg:h-[88px]" />
-          /* Deliberately SMALLER at lg than at sm: on desktop this card shares
-             one row with three others, and the tallest item sets the row
-             height. A 150px illustration would make the whole strip 150px
-             tall for the sake of decoration. */
-          : <AnimatedWelcomeCharacter className="h-[86px] w-[108px] shrink-0 sm:h-[104px] sm:w-[130px] lg:h-[88px] lg:w-[112px]" />}
+            gain height or shift where space is tight. Deliberately SMALLER at
+            lg than at sm: on desktop this card shares one row with three
+            others and the tallest item sets the row height, so a 150px
+            illustration would make the whole strip 150px tall for the sake of
+            decoration. */}
+        <img
+          src={greeting?.illustrationUrl || WELCOME_ILLUSTRATION}
+          alt="" aria-hidden loading="lazy" decoding="async"
+          className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px] lg:h-[88px]"
+        />
 
         <Link href={RECOMMENDED_PEOPLE_HREF} aria-label="People you may know"
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.06] text-white/55 transition hover:text-white/90 sm:right-4 sm:top-4">

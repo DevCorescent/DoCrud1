@@ -2716,6 +2716,11 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
               exposed on small screens as a single row: a FIXED Publish button,
               a divider, then every category inside an infinite marquee that also
               follows cursor/touch drag in either direction. */}
+          {/* DISABLED — the whole mobile category-chip row is commented out.
+              A JSX block comment cannot wrap it, because the style body below
+              contains CSS comments whose terminator would end it early.
+              A false-guarded block is the JSX-safe equivalent: nothing renders. */}
+          {false && (
           <div className="lg:hidden shrink-0 flex items-center py-3 pl-1 sm:pl-7 min-w-0">
             <style>{`
               /* Plain native horizontal scroller: one row, no duplicated list,
@@ -2771,6 +2776,7 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
               </div>
             </div>
           </div>
+          )}
 
           {/* feed cards */}
           <div className="flex-1 overflow-y-auto px-0 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

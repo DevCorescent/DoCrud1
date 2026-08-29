@@ -1556,23 +1556,14 @@ function PostForm({
           )}
           {postImages.length > 0 && (
             <div className="mt-3 grid grid-cols-3 gap-2">
-              {postImages.map((img, i) => {
-                const url = URL.createObjectURL(img);
-                return (
-                  <div key={i} className="relative group aspect-square rounded-xl overflow-hidden border border-white/[0.10]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt="" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setPostImages(prev => prev.filter((_, j) => j !== i))}
-                      className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white/80 opacity-0 group-hover:opacity-100 transition hover:bg-black/90 hover:text-white text-[10px]"
-                      aria-label="Remove image"
-                    >
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-                );
-              })}
+              {postImages.map((img, i) => (
+                <PostImageTile
+                  key={`${img.name}-${img.size}-${img.lastModified}-${i}`}
+                  file={img}
+                  index={i}
+                  onRemove={() => setPostImages(prev => prev.filter((_, j) => j !== i))}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -2798,7 +2789,9 @@ function ThumbnailSection({
               /* ── preview ── */
               <div className="group relative overflow-hidden rounded-xl border border-white/[0.10]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={uploadPreview} alt="Cover preview" className="h-44 w-full object-cover" />
+                {/* contain, not cover: this preview exists so the uploader can
+                    confirm what they picked — a crop defeats it. */}
+                <img src={uploadPreview} alt="Cover preview" className="max-h-64 w-full object-contain bg-black/25" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
                 <div className="absolute bottom-3 left-3 right-24">
                   <p className="truncate text-[11px] font-semibold text-white/80">{thumbnailFile?.name}</p>
@@ -2870,7 +2863,7 @@ function ThumbnailSection({
                   <img
                     src={thumbnailUrlInput.trim()}
                     alt="Cover preview"
-                    className="h-44 w-full object-cover"
+                    className="max-h-64 w-full object-contain bg-black/25"
                     onError={() => setUrlError(true)}
                     onLoad={() => setUrlError(false)}
                   />
@@ -2939,6 +2932,123 @@ function IdentityAvatar({ src, name, className = 'h-9 w-9' }: { src?: string | n
  * a fresh blob URL each time and never revoking any of them — the browser held
  * every one for the life of the page.
  */
+/**
+ * One selected post image in the composer grid.
+ *
+ * A square crop is right for a GRID chip — that is how the feed shows a
+ * multi-image post — so the full picture is reached by clicking it, which opens
+ * the uncropped viewer.
+ *
+ * It is a component rather than inline JSX for a reason: the grid previously
+ * called `URL.createObjectURL(img)` inside its map, minting a fresh blob URL on
+ * every render and revoking none of them. `useObjectUrl` creates one per file
+ * and revokes it on unmount, so the browser decodes each image once.
+ */
+function PostImageTile({
+  file, index, onRemove,
+}: {
+  file: File; index: number; onRemove: () => void;
+}) {
+  const url = useObjectUrl(file);
+  const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div className="relative group aspect-square rounded-xl overflow-hidden border border-white/[0.10]">
+      {url && !failed ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={`View image ${index + 1} full size`}
+          className="block h-full w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt=""
+            onError={() => setFailed(true)}
+            className="w-full h-full object-cover"
+          />
+        </button>
+      ) : (
+        /* A file that cannot be decoded shows a calm placeholder instead of a
+           broken-image icon, so one bad file never wrecks the grid. */
+        <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 bg-white/[0.03] px-2 text-center">
+          <ImageIcon className="h-4 w-4 text-white/25" />
+          <p className="w-full truncate text-[10px] text-white/35">{file.name}</p>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white/80 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition hover:bg-black/90 hover:text-white text-[10px]"
+        aria-label={`Remove image ${index + 1}`}
+      >
+        <X className="h-2.5 w-2.5" />
+      </button>
+
+      {open && url && (
+        <FullImageViewer src={url} alt={file.name} onClose={() => setOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+/* ─── full-image viewer ───────────────────────────────────────────────────
+   Composer thumbnails are deliberately cropped squares — that IS how the feed
+   grid shows them. This is how the WHOLE image stays reachable: click any
+   thumbnail and it opens uncropped on a dark backdrop.
+
+   No dependency, no animation, no editing. Escape and an outside click close
+   it, and the close button takes focus on open so a keyboard user is never
+   stranded behind the backdrop. */
+function FullImageViewer({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    closeRef.current?.focus();
+    /* The page behind must not scroll while the viewer is up. */
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Full image"
+      onClick={onClose}
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4"
+    >
+      <button
+        ref={closeRef}
+        type="button"
+        onClick={onClose}
+        aria-label="Close image"
+        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.06] text-white/70 transition hover:bg-white/[0.12] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        onClick={(e) => e.stopPropagation()}
+        /* contain + viewport caps: the entire image, never cropped, never
+           larger than the screen, aspect ratio untouched. */
+        className="max-h-[92vh] max-w-[92vw] object-contain"
+      />
+    </div>
+  );
+}
+
 function useObjectUrl(file: File | null | undefined): string | null {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -2965,6 +3075,7 @@ function MediaTile({ file, badge, onRemove, oversizeLimit }: {
   const url = useObjectUrl(file);
   const isImage = file.type.startsWith('image/');
   const oversize = oversizeLimit !== undefined && file.size > oversizeLimit;
+  const [viewing, setViewing] = useState(false);
 
   return (
     <div className="group relative">
@@ -2974,8 +3085,17 @@ function MediaTile({ file, badge, onRemove, oversizeLimit }: {
         }`}
       >
         {isImage && url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={file.name} className="h-full w-full object-cover" />
+          /* Square chip, like the feed's own attachment grid — clicking opens
+             the whole image rather than leaving it cropped. */
+          <button
+            type="button"
+            onClick={() => setViewing(true)}
+            aria-label={`View ${file.name} full size`}
+            className="block h-full w-full cursor-zoom-in focus-visible:outline focus-visible:outline-2 focus-visible:outline-white/60"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt={file.name} className="h-full w-full object-cover" />
+          </button>
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 bg-white/[0.03] px-2 text-center">
             <FileText className="h-5 w-5 text-white/30" />
@@ -3007,6 +3127,9 @@ function MediaTile({ file, badge, onRemove, oversizeLimit }: {
         <p className="mt-1 text-[10px] leading-snug text-red-400/90">
           Over {formatBytes(oversizeLimit!)} — remove or replace to publish.
         </p>
+      )}
+      {viewing && url && (
+        <FullImageViewer src={url} alt={file.name} onClose={() => setViewing(false)} />
       )}
     </div>
   );
@@ -3150,8 +3273,19 @@ function PublishPreviewCard({
       aria-label="Preview of your publication"
     >
       {cover && (
+        /* The feed renders a cover as `w-full h-auto` — the whole image, not a
+           crop. This preview used a fixed 160px box with object-cover, so it
+           showed a slice of the image and misrepresented what publishing would
+           produce. Natural height with a cap matches the feed and keeps a very
+           tall image from taking over the column. */
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={cover} alt="" className="h-40 w-full object-cover" />
+        <img
+          src={cover}
+          alt=""
+          className="w-full h-auto max-h-[420px] object-contain bg-black/20"
+          loading="lazy"
+          decoding="async"
+        />
       )}
       <div className="p-4">
         {/* Author row — the same hierarchy the real feed cards use. */}

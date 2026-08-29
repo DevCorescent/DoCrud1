@@ -18,6 +18,7 @@
     "test:homepage-counts": "tsx scripts/homepage-counts.selftest.ts",
     "test:corpus-cache": "tsx scripts/corpus-cache.selftest.ts",
     "test:recommend-profile": "tsx scripts/recommend-profile.selftest.ts",
+    "test:recommended-view": "tsx scripts/recommended-view.selftest.ts",
     "test:ranking-parity": "tsx scripts/ranking-parity.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
     "db:init": "node scripts/db-init.mjs",

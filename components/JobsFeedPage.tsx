@@ -310,6 +310,13 @@ export default function JobsFeedPage() {
   const [all, setAll] = useState<JobSummary[]>([]);
   const [recommended, setRecommended] = useState<JobSummary[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  /* The recommendation request has its own state. `state` above tracks the
+     all-jobs list, which in recommended mode supplies NOTHING the page renders
+     — it resolves in milliseconds while ranking can take far longer, so the
+     page reported "ready" with an empty recommendation set and rendered "No
+     jobs found" over data that was still in flight. That was the 149 → 0 bug. */
+  const [recState, setRecState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [recReloadKey, setRecReloadKey] = useState(0);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -334,17 +341,29 @@ export default function JobsFeedPage() {
   // Session-scoped recommendations — signed-out/no-profile viewers get [] (hidden).
   useEffect(() => {
     let active = true;
+    setRecState('loading');
     /* scope=recommended returns every matched role rather than the row's worth,
-       which is what the recommended-only view needs to render in full. */
+       which is what the recommended-only view needs to render in full. It is
+       the SAME endpoint and the same per-viewer cache the homepage count reads,
+       so the two can never disagree about what this viewer matched. */
     const url = recommendedOnly
       ? '/api/recommendations/jobs?scope=recommended'
       : '/api/recommendations/jobs';
     fetch(url, { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : { jobs: [] }))
-      .then((d) => { if (active) setRecommended((Array.isArray(d?.jobs) ? (d.jobs as JobSummary[]) : []).filter((j) => typeof j.matchScore === 'number')); })
-      .catch(() => { /* best-effort */ });
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('recommendations-failed'))))
+      .then((d) => {
+        if (!active) return;
+        setRecommended((Array.isArray(d?.jobs) ? (d.jobs as JobSummary[]) : [])
+          .filter((j) => typeof j.matchScore === 'number'));
+        setRecState('ready');
+      })
+      .catch(() => {
+        /* A failure must read as a failure. Leaving this silent is what made a
+           broken request look like "you have no matches". */
+        if (active) setRecState('error');
+      });
     return () => { active = false; };
-  }, [recommendedOnly]);
+  }, [recommendedOnly, recReloadKey]);
 
   /* ⌘K focus */
   useEffect(() => {
@@ -417,7 +436,10 @@ export default function JobsFeedPage() {
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const loading = state === 'loading';
+  /* In recommended mode the page is driven by the recommendation request; in
+     normal mode by the all-jobs list. Reading the wrong one is the whole bug. */
+  const loading = recommendedOnly ? recState === 'loading' : state === 'loading';
+  const errored = recommendedOnly ? recState === 'error' : state === 'error';
   const isSearching = filters.search.trim().length > 0;
   const companies = useMemo(() => new Set(all.map((j) => (j.organizationName || '').toLowerCase()).filter(Boolean)).size, [all]);
   const remoteCount = useMemo(() => all.filter((j) => j.workMode === 'remote').length, [all]);
@@ -657,17 +679,20 @@ export default function JobsFeedPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
               {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
             </div>
-          ) : state === 'error' ? (
+          ) : errored ? (
             <div className="flex flex-col items-center justify-center py-36 text-center">
               <div className="h-18 w-18 rounded-[22px] border border-white/[0.07] flex items-center justify-center mb-6"
                 style={{ background: 'rgba(255,255,255,0.025)', boxShadow: '0 0 0 1px rgba(255,255,255,0.04)' }}>
                 <Briefcase className="h-9 w-9" style={{ color: 'rgba(255,255,255,0.15)' }} />
               </div>
-              <p className="text-[17px] font-bold text-white/42 mb-2">Couldn&apos;t load jobs</p>
+              <p className="text-[17px] font-bold text-white/42 mb-2">
+                {recommendedOnly ? 'Couldn\u2019t load recommendations' : 'Couldn\u2019t load jobs'}
+              </p>
               <p className="text-[13.5px] text-white/22 mb-7 max-w-xs leading-relaxed">
                 Something went wrong. Try again in a moment.
               </p>
-              <button onClick={() => load()}
+              {/* Retries whichever request actually failed. */}
+              <button onClick={() => (recommendedOnly ? setRecReloadKey((k) => k + 1) : load())}
                 className="h-10 px-7 rounded-[13px] border border-white/[0.10] bg-white/[0.04] text-[13.5px] font-semibold text-white/52 hover:bg-white/[0.08] hover:text-white/72 transition-all">
                 Try again
               </button>

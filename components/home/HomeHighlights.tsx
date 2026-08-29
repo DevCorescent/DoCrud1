@@ -118,24 +118,29 @@ const StatTile = memo(StatTileBase);
 const WASH_EMERALD = '16,185,129';
 const WASH_AMBER = '245,158,11';
 
-/* The corner accent, in both themes.
-   Same geometry the blurred circle had: centred 24px in from the right edge and
-   16px up from the bottom, fading out by ~84px. Only the ALPHAS differ.
+/* The corner accent. Same geometry the blurred circle had: centred 24px in
+   from the right edge and 16px up from the bottom, fading out by ~84px.
 
-   Light and dark cannot share one set. 13% emerald sits on a pale surface with
-   plenty of contrast to spare, but the dark card is near-black, so the same
-   13% lands within a couple of levels of the background and the wash simply
-   disappears. The dark alphas are raised to about 2.3x so the accent reads at
-   a comparable strength against its own surface — it is the same wash, not a
-   brighter one, and the dark card underneath stays clearly visible. */
-const washGradient = (a0: number, a1: number, a2: number) =>
-  `radial-gradient(84px 84px at calc(100% - 24px) calc(100% - 16px),`
-  + ` rgba(var(--wash-rgb),${a0}) 0%, rgba(var(--wash-rgb),${a1}) 38%,`
-  + ` rgba(var(--wash-rgb),${a2}) 62%, transparent 78%)`;
-
+   ONE set of alphas, not one per theme. An earlier attempt keyed the strength
+   off `.dark`, which was the wrong hook twice over: the rule never matched on
+   a default first paint (the server renders data-ui-mode="light" and adds no
+   `.dark` class until ThemeController runs on mount), and even when it did
+   match it was answering the wrong question. This card does not have a light
+   variant — `bg-white/[0.025]` over `text-white` is its surface in every
+   theme — so the background the wash has to survive is always near-black, and
+   the original 13% landed within a couple of levels of it and disappeared.
+   These alphas are ~2.3x that, tuned against the dark card the wash actually
+   sits on. The card underneath stays clearly visible; it is the same wash
+   read at its intended strength, not a brighter one. */
 const WASH_CSS = `
-  .hh-wash { background-image: ${washGradient(0.13, 0.105, 0.045)}; }
-  .dark .hh-wash { background-image: ${washGradient(0.30, 0.24, 0.10)}; }
+  .hh-wash {
+    background-image: radial-gradient(
+      84px 84px at calc(100% - 24px) calc(100% - 16px),
+      rgba(var(--wash-rgb),0.30) 0%,
+      rgba(var(--wash-rgb),0.24) 38%,
+      rgba(var(--wash-rgb),0.10) 62%,
+      transparent 78%);
+  }
 `;
 
 /** The score ring. Stroke colour is the shared completion band, not a new palette. */

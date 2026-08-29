@@ -326,7 +326,15 @@ export default function GlobalBottomNav() {
           bottom: 92px;
           z-index: 999;
           width: min(680px, calc(100vw - 24px));
-          max-height: 25vh;
+          /* 25vh cut the second row off on a phone, which defeats the point
+             of guaranteeing two rows. The cap is now whatever space actually
+             exists between the panel's 92px bottom offset and the top of the
+             screen, so both rows are always visible; the 460px ceiling stops
+             it stretching on a tall display. dvh is the accurate measure where
+             a mobile browser's chrome slides away — the vh line above it is
+             the fallback for engines without dvh. */
+          max-height: calc(100vh - 128px);
+          max-height: min(calc(100dvh - 128px), 460px);
           overflow-y: auto;
           overscroll-behavior: contain;
 
@@ -396,22 +404,39 @@ export default function GlobalBottomNav() {
         .gnb-explore-close:hover { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.92); }
         .gnb-explore-close:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
 
+        /* FOUR columns at every width, with no breakpoint that changes it.
+           Eight destinations over four columns is exactly two rows, and that
+           is the requirement — the old max-width: 400px rule dropped to two
+           columns, which turned the panel into four rows on precisely the
+           phones it was meant to help. Narrow screens are handled by SHRINKING
+           the cells instead (see the clamps below), never by re-flowing them.
+
+           minmax(0, 1fr) rather than a plain 1fr is what lets a column go narrower
+           than its longest word; without it "Businesses" would force the track
+           wider and push the grid into horizontal overflow. */
         .gnb-explore-grid {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
-          gap: 8px;
+          /* Every dimension below scales with the viewport between a 320px
+             phone and the panel's 680px cap, so the two rows fit without a
+             breakpoint anywhere in between. */
+          gap: clamp(4px, 1.8vw, 8px);
         }
-        /* Two columns where four would crush the blurbs. */
-        @media (max-width: 400px) { .gnb-explore-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
         .gnb-explore-link {
           display: flex; flex-direction: column;
-          align-items: flex-start; justify-content: flex-start; gap: 6px;
-          /* 78px keeps the card comfortably past a 44px touch target while
-             letting two rows of eight fit inside the 25vh cap on desktop. */
-          min-height: 78px;
-          padding: 10px;
-          border-radius: 16px;
+          align-items: flex-start; justify-content: flex-start;
+          gap: clamp(3px, 1.2vw, 6px);
+          /* The floor stays past a 44px touch target even on the narrowest
+             phone; the ceiling is the original 78px, so nothing changes from
+             400px up. */
+          min-height: clamp(62px, 19vw, 78px);
+          padding: clamp(7px, 2.4vw, 10px);
+          /* A four-column track on a 320px screen is ~63px wide, which is
+             narrower than "Businesses" or "opportunities" — without this the
+             word would spill past the rounded corner rather than wrap. */
+          overflow-wrap: anywhere;
+          border-radius: clamp(12px, 4vw, 16px);
           border: 1px solid rgba(255,255,255,0.06);
           background: rgba(255,255,255,0.025);
           color: rgba(255,255,255,0.92);
@@ -426,13 +451,22 @@ export default function GlobalBottomNav() {
         .gnb-explore-link:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
 
         .gnb-explore-label {
-          font-size: 13px; font-weight: 700; line-height: 1.15;
+          font-size: clamp(10px, 3.1vw, 13px);
+          font-weight: 700; line-height: 1.15;
           letter-spacing: -0.01em;
           color: rgba(255,255,255,0.92);
         }
+        /* Capped at two lines: the blurbs are a nicety, and letting one run to
+           three lines on a narrow screen would set the height of its whole
+           row and unbalance the grid. */
         .gnb-explore-desc {
-          font-size: 11px; line-height: 1.3;
+          font-size: clamp(8.5px, 2.6vw, 11px);
+          line-height: 1.3;
           color: rgba(255,255,255,0.34);
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
 
         @media (prefers-reduced-motion: reduce) {

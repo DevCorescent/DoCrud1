@@ -109,6 +109,21 @@ function StatTileBase({
    primitive, so the comparison is exact and needs no useCallback. */
 const StatTile = memo(StatTileBase);
 
+/* `--wash-rgb` takes bare channels, but the profile bands in
+   lib/profile-score.ts are hex — so the score card's accent is converted here
+   rather than duplicated as a second palette. A band colour that changes with
+   the percentage then changes the card's glow with it, automatically. */
+const channels = (hex: string) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return '255,255,255';
+  const n = parseInt(m[1], 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+};
+
+/* The greeting has no metric of its own to colour, so it takes the Docrud
+   gold the Explore heading already uses — the brand tone, not a fifth accent. */
+const WASH_BRAND = '206,151,96';
+
 /* Just the channels — the gradient that consumes them is WASH_CSS below. */
 const WASH_EMERALD = '16,185,129';
 const WASH_AMBER = '245,158,11';
@@ -277,7 +292,10 @@ export default function HomeHighlights({
       <style>{WASH_CSS}</style>
 
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
-      <div className={`relative flex items-center gap-3 overflow-hidden p-4 sm:p-5 ${CARD}`}>
+      <div
+        className={`hh-wash relative flex items-center gap-3 overflow-hidden p-4 sm:p-5 ${CARD}`}
+        style={{ '--wash-rgb': WASH_BRAND } as CSSProperties}
+      >
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-[19px] font-bold tracking-[-0.02em] text-white sm:text-[21px]">
             Hey, {firstName} <span aria-hidden>👋</span>
@@ -337,8 +355,14 @@ export default function HomeHighlights({
           "Edit Profile" is gone — two buttons pointing at the same profile was
           the bulk of this card's height, and "Improve score" is the one that
           says what to do. */}
+      {/* The glow is keyed to bandStyle.ring — the SAME colour the ring and the
+          "Improve score" link already use — so at 55% the card reads gold and
+          at 80%+ it turns green with the band, without a palette of its own. */}
       {showScoreCard && (
-      <div className={`flex items-center gap-4 p-4 sm:gap-5 sm:p-5 ${CARD}`}>
+      <div
+        className={`hh-wash flex items-center gap-4 p-4 sm:gap-5 sm:p-5 ${CARD}`}
+        style={{ '--wash-rgb': channels(bandStyle.ring) } as CSSProperties}
+      >
         <ScoreRing score={score} colour={bandStyle.ring} />
 
         <div className="min-w-0 flex-1">

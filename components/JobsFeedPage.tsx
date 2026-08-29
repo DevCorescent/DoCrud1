@@ -35,6 +35,7 @@ import { JobSummaryCard, type JobSummary } from '@/components/jobs/JobSummaryCar
 /* ─── constants ──────────────────────────────────────────────────────── */
 const PAGE_SIZE = 24;
 const POST_HREF = '/jobs/post';
+const MY_JOBS_HREF = '/jobs/my';
 const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract', 'internship', 'freelance'] as const;
 const WORK_MODES = ['remote', 'hybrid', 'onsite'] as const;
 const EXPERIENCE_LEVELS = ['entry', 'associate', 'mid', 'senior', 'lead'] as const;
@@ -519,6 +520,12 @@ export default function JobsFeedPage() {
               </span>
             </div>
           )}
+
+          {/* Manage what you posted — same header group as the post action. */}
+          <Link href={MY_JOBS_HREF}
+            className="hidden sm:flex shrink-0 items-center gap-1.5 h-9 px-3.5 rounded-[10px] text-[12.5px] font-semibold border border-white/[0.08] bg-white/[0.04] text-white/48 hover:text-white/72 hover:bg-white/[0.08] transition-all">
+            <Briefcase className="h-3.5 w-3.5" /> My Jobs
+          </Link>
 
           {/* Primary action */}
           <Link href={POST_HREF}

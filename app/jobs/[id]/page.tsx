@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import JobDetailPage from '@/components/jobs/JobDetailPage';
 import { buildPageMetadata, buildJobPostingSchema, buildBreadcrumbSchema, jsonLd, metaDesc } from '@/lib/seo';
-import { getPublishedHiringJobById } from '@/lib/server/hiring';
+import { getPublishedHiringJobById, userOwnsHiringJob } from '@/lib/server/hiring';
+import { getAuthSession } from '@/lib/server/auth';
+import { getStoredUsers } from '@/lib/server/auth';
 import { getPublicAppBaseUrl } from '@/lib/url';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +54,21 @@ export default async function PublicHiringJobDetailPage({ params }: { params: { 
 
   if (!job) notFound();
 
+  /* Ownership is decided on the SERVER from the session, so the owner-only
+     controls cannot be revealed by editing client state — and the API re-checks
+     ownership on every write regardless of what the UI shows. */
+  let isOwner = false;
+  try {
+    const session = await getAuthSession();
+    if (session?.user?.email) {
+      const users = await getStoredUsers();
+      const viewer = users.find(
+        (entry) => entry.email.toLowerCase() === session.user!.email!.toLowerCase(),
+      );
+      if (viewer) isOwner = userOwnsHiringJob(viewer, job);
+    }
+  } catch { /* a session lookup failure simply means no owner controls */ }
+
   const jobSchema = buildJobPostingSchema({
     title: job.title,
     description: metaDesc(job.description ?? job.title, 5000),
@@ -80,7 +97,7 @@ export default async function PublicHiringJobDetailPage({ params }: { params: { 
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbSchema) }}
       />
-      <JobDetailPage job={job} />
+      <JobDetailPage job={job} isOwner={isOwner} />
     </>
   );
 }

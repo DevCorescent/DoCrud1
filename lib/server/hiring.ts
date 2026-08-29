@@ -7,8 +7,9 @@ import {
 import { invalidateRecommendationCaches } from '@/lib/server/recommendation-cache';
 import { invalidateHiringCompanies } from '@/lib/server/hiring-companies';
 import {
-  countPublishedJobs, mirrorPublishedJobs, selectPublishedCompanyNames,
-  selectPublishedJobDocById, selectPublishedJobListDocs,
+  countPublishedJobs, mirrorPublishedJobs, readHiringCorpusVersion,
+  selectPublishedCompanyNames, selectPublishedJobDocById, selectPublishedJobListDocs,
+  type CorpusVersion,
 } from '@/lib/server/db/hiring-jobs-collection';
 
 function jobOwnerId(user: User) {
@@ -89,8 +90,22 @@ export async function getHiringJobs() {
    visible immediately in the process that created it. Across several server
    instances a new posting can lag by at most TTL, which is the same window
    the feed already tolerated. */
-type PublishedCache = { value: HiringJobPosting[]; ts: number };
-const PUBLISHED_TTL = 15_000;
+type PublishedCache = { value: HiringJobPosting[]; ts: number; version: CorpusVersion | null };
+
+/**
+ * How long the corpus is trusted without asking whether it changed.
+ *
+ * Not a lifetime — a probe interval. Past it, a ~50-byte version query decides
+ * whether to reuse or reload, so the corpus stays warm indefinitely while jobs
+ * are unchanged and still picks up a job posted on ANOTHER instance within one
+ * window. The previous 15 s value was a hard expiry, which re-read 2.7 MB every
+ * 15 s even when nothing had changed.
+ */
+const PUBLISHED_PROBE_INTERVAL = 30_000;
+/* Freshness ceiling. If the probe cannot answer (Mongo unreachable, an older
+   deployment without the collection), the corpus is rebuilt rather than
+   trusted indefinitely. */
+const PUBLISHED_MAX_AGE = 10 * 60_000;
 let publishedCache: PublishedCache | null = null;
 /* Concurrent callers during a cold read share ONE read instead of each firing
    their own 2.7 MB fetch — the same coalescing the app_state reader uses. */
@@ -106,7 +121,9 @@ export function invalidatePublishedHiringJobs() {
 
 /** The full list IF it is already cached. Never reads storage. */
 function peekPublishedHiringJobs(): HiringJobPosting[] | null {
-  return publishedCache && Date.now() - publishedCache.ts < PUBLISHED_TTL ? publishedCache.value : null;
+  return publishedCache && Date.now() - publishedCache.ts < PUBLISHED_PROBE_INTERVAL
+    ? publishedCache.value
+    : null;
 }
 
 async function readPublishedHiringJobs(): Promise<HiringJobPosting[]> {
@@ -120,19 +137,43 @@ async function readPublishedHiringJobs(): Promise<HiringJobPosting[]> {
   return [...jobs.filter((job) => job.status === 'published'), ...business];
 }
 
+const sameVersion = (a: CorpusVersion | null, b: CorpusVersion | null) =>
+  a !== null && b !== null && a.count === b.count && a.maxUpdatedAt === b.maxUpdatedAt;
+
 export async function getPublishedHiringJobs(): Promise<HiringJobPosting[]> {
-  if (publishedCache && Date.now() - publishedCache.ts < PUBLISHED_TTL) {
-    return publishedCache.value;
+  const age = publishedCache ? Date.now() - publishedCache.ts : Infinity;
+
+  // Inside the probe interval the corpus is used as-is.
+  if (publishedCache && age < PUBLISHED_PROBE_INTERVAL) return publishedCache.value;
+
+  /* Past it, ask cheaply whether anything changed. Confirming an unchanged
+     corpus costs ~50 bytes instead of re-reading 2.7 MB, so a warm process
+     keeps serving from memory for as long as the job set is stable. */
+  if (publishedCache && age < PUBLISHED_MAX_AGE) {
+    const current = await readHiringCorpusVersion().catch(() => null);
+    if (sameVersion(current, publishedCache.version)) {
+      publishedCache = { ...publishedCache, ts: Date.now() };
+      return publishedCache.value;
+    }
   }
+
+  /* Single-flight: concurrent callers on a cold process share ONE read rather
+     than each firing their own 2.7 MB fetch. */
   if (publishedInFlight) return publishedInFlight;
 
   publishedInFlight = readPublishedHiringJobs()
-    .then((value) => {
-      publishedCache = { value, ts: Date.now() };
+    .then(async (value) => {
+      /* The version is captured AFTER the read, so a write that lands during
+         the read shows as a difference at the next probe rather than being
+         silently absorbed. */
+      const version = await readHiringCorpusVersion().catch(() => null);
+      publishedCache = { value, ts: Date.now(), version };
       publishedInFlight = null;
       return value;
     })
     .catch((error) => {
+      /* A failed load is never cached, and never becomes an empty corpus — the
+         previous value (if any) stays and the next caller retries. */
       publishedInFlight = null;
       throw error;
     });
@@ -165,7 +206,7 @@ let namesCache: NamesCache | null = null;
 
 /** Every published posting as a listing card — see toPublicHiringJobListItem. */
 export async function getPublishedHiringJobList(): Promise<PublicHiringJobListItem[]> {
-  if (listCache && Date.now() - listCache.ts < PUBLISHED_TTL) return listCache.value;
+  if (listCache && Date.now() - listCache.ts < PUBLISHED_PROBE_INTERVAL) return listCache.value;
 
   // If the full list is already in memory, projecting again would be wasted work.
   const warm = peekPublishedHiringJobs();
@@ -196,7 +237,7 @@ export async function getPublishedHiringJobList(): Promise<PublicHiringJobListIt
 
 /** The employer name of every published posting — the marquee's whole input. */
 export async function getPublishedHiringJobCompanyNames(): Promise<string[]> {
-  if (namesCache && Date.now() - namesCache.ts < PUBLISHED_TTL) return namesCache.value;
+  if (namesCache && Date.now() - namesCache.ts < PUBLISHED_PROBE_INTERVAL) return namesCache.value;
 
   const warm = peekPublishedHiringJobs();
   if (warm) {

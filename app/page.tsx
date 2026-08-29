@@ -3,10 +3,11 @@ import { cookies } from 'next/headers';
 import NextDynamic from 'next/dynamic';
 import { buildPageMetadata } from '@/lib/seo';
 import { getThemeSettings } from '@/lib/server/settings';
-import { getAuthSession } from '@/lib/server/auth';
+import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { peekHiringCompanies } from '@/lib/server/hiring-companies';
+import { seedViewerCounts } from '@/lib/server/recommendation-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +71,24 @@ export default async function Home() {
     ? { name: session.user.name ?? null, email: session.user.email ?? null }
     : null;
 
+  /* The two headline counts, seeded from the LAST computed values for this
+     viewer — never recomputed here. Producing them means running the
+     personalised ranking, which is tens of seconds on a cold job cache and must
+     never sit in front of a server render; `seedViewerCounts` only ever reads
+     what a recommendation route already worked out.
+
+     A null simply means "not known cheaply yet", and the card fetches as it
+     always did. Keyed by this session's user id, so one viewer's numbers can
+     never seed another's page. */
+  /* Keyed with the SAME resolver the recommendation routes use. Keying on
+     `session.user.id` alone would silently miss for any session where that
+     field is absent — the routes fall back to a stored-user lookup, and a
+     mismatched key means the seed never hits. */
+  const viewerId = session?.user ? await resolveSessionUserId(session).catch(() => null) : null;
+  const seededCounts = viewerId
+    ? await seedViewerCounts(viewerId).catch(() => ({ jobs: null, people: null }))
+    : { jobs: null, people: null };
+
   return (
     <PublicHomepage
       softwareName={themeSettings.softwareName}
@@ -78,6 +97,8 @@ export default async function Home() {
       initialHpConfig={hpConfig}
       initialCompanies={initialCompanies}
       initialViewer={initialViewer}
+      initialJobCount={seededCounts.jobs}
+      initialPeopleCount={seededCounts.people}
     />
   );
 }

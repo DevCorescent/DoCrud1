@@ -21,7 +21,7 @@ import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getStoredUsers, type StoredUser } from '@/lib/server/users';
 import { getAllProfiles, getFollowing } from '@/lib/server/user-profiles';
 import { getFeedConfig } from '@/lib/server/feed-config';
-import { registerRecommendationCache } from '@/lib/server/recommendation-cache';
+import { registerRecommendationCache, rememberViewerCount } from '@/lib/server/recommendation-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -240,6 +240,8 @@ export async function GET(request: Request) {
       : { people, total: scored.length };
 
     cache.set(cacheKey, { payload, ts: Date.now() });
+    /* Same seed the jobs route writes — see lib/server/recommendation-cache.ts. */
+    rememberViewerCount(meId, 'people', payload.total);
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[recommendations/people] GET error', error);

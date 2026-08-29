@@ -165,6 +165,11 @@ interface PublicHomepageProps {
   /* Who is signed in, resolved on the server. Lets the summary section start
      its count requests on mount instead of after the client session call. */
   initialViewer?: { name: string | null; email: string | null } | null;
+  /* Last known personalised totals for this viewer, so the summary cards can
+     render their numbers with the first paint instead of after a round trip.
+     Null means unknown — the card fetches, exactly as before. */
+  initialJobCount?: number | null;
+  initialPeopleCount?: number | null;
 }
 
 type ChatMessage = {
@@ -6069,6 +6074,8 @@ function NewHomepageContent({
   hpConfig = null,
   initialCompanies = null,
   initialViewer = null,
+  initialJobCount = null,
+  initialPeopleCount = null,
   guestMode = false,
 }: {
   softwareName: string;
@@ -6092,6 +6099,9 @@ function NewHomepageContent({
   initialCompanies?: HPHiringCompany[] | null;
   /** Server-resolved viewer; see PublicHomepageProps. */
   initialViewer?: { name: string | null; email: string | null } | null;
+  /** Server-seeded headline counts; see PublicHomepageProps. */
+  initialJobCount?: number | null;
+  initialPeopleCount?: number | null;
   guestMode?: boolean;
 }) {
   const { data: nhcSession } = useSession();
@@ -6377,7 +6387,12 @@ function NewHomepageContent({
         {/* ── Greeting + Jobs/Connections matches + profile score ── */}
         {hpSections.homeHighlights && (
           <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
-            <HomeHighlights greeting={hpConfig?.greeting ?? null} initialViewer={initialViewer} />
+            <HomeHighlights
+              greeting={hpConfig?.greeting ?? null}
+              initialViewer={initialViewer}
+              initialJobCount={initialJobCount}
+              initialPeopleCount={initialPeopleCount}
+            />
           </div>
         )}
 
@@ -7019,6 +7034,7 @@ function DdriveIconTile({ style }: { style?: React.CSSProperties }) {
 export default function PublicHomepage({
   softwareName, accentLabel, guestMode = false,
   initialHpConfig = null, initialCompanies = null, initialViewer = null,
+  initialJobCount = null, initialPeopleCount = null,
 }: PublicHomepageProps) {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
@@ -8458,6 +8474,8 @@ export default function PublicHomepage({
                   hpConfig={hpConfig}
                   initialCompanies={initialCompanies}
                   initialViewer={initialViewer}
+                  initialJobCount={initialJobCount}
+                  initialPeopleCount={initialPeopleCount}
                   guestMode={guestMode}
                 />
               ) : (

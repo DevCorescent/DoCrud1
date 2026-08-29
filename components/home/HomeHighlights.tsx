@@ -113,19 +113,16 @@ const StatTile = memo(StatTileBase);
 const WASH_EMERALD = '16,185,129';
 const WASH_AMBER = '245,158,11';
 
-/* The corner accent, matched to the Explore tiles.
+/* The corner accent: a bottom-right glow with concentric rings rising out of
+   it, built to the approved reference.
 
-   Same geometry the blurred circle had: centred 24px in from the right edge
-   and 16px up from the bottom, fading out by ~84px.
-
-   The alphas are NOT exploreWash()'s, even though both washes should read at
-   the same strength — because equal alpha does not mean equal presence here.
-   An Explore pill is 40px tall and takes a 44px radial, so the wash fills most
-   of it and 13% is plainly visible. These cards are 124px tall and take an
-   84px radial in one corner, spreading the same 13% over several times the
-   area against a near-black surface, where it vanished. Raising the peak to
-   30% is what makes the two LOOK alike; matching the numbers is what made
-   them look different.
+   Two layers, because one cannot do both jobs. The GLOW is a plain radial on
+   the element's own background-image, anchored at the corner rather than
+   inset from it — the light source is the corner itself. The RINGS are a
+   repeating-radial-gradient on an ::after, since a repeating gradient tiles
+   forever and would march evenly across the whole card; the mask is what
+   fades them out with distance so they read as ripples from the corner and
+   not as a pattern. Both share the corner as origin, so they stay one object.
 
    ONE set of alphas, not one per theme. An earlier attempt keyed the strength
    off `.dark`, which was the wrong hook twice over: the rule never matched on
@@ -133,16 +130,37 @@ const WASH_AMBER = '245,158,11';
    `.dark` class until ThemeController runs on mount), and even when it did
    match it was answering the wrong question — this card has no light variant.
    `bg-white/[0.025]` over `text-white` is its surface in every theme, so one
-   wash covers both and the card underneath stays clearly dark. */
+   accent covers both and the card underneath stays clearly dark.
+
+   `overflow: hidden` is what keeps the rings inside the 20px radius, and the
+   z-index rule is what keeps the count and its caption above them — an
+   absolutely positioned ::after otherwise paints over static children. */
 const WASH_CSS = `
   .hh-wash {
+    position: relative;
+    overflow: hidden;
     background-image: radial-gradient(
-      84px 84px at calc(100% - 24px) calc(100% - 16px),
-      rgba(var(--wash-rgb),0.30) 0%,
-      rgba(var(--wash-rgb),0.24) 38%,
-      rgba(var(--wash-rgb),0.10) 62%,
-      transparent 78%);
+      circle at 100% 100%,
+      rgba(var(--wash-rgb),0.55) 0%,
+      rgba(var(--wash-rgb),0.30) 26%,
+      rgba(var(--wash-rgb),0.13) 46%,
+      rgba(var(--wash-rgb),0.04) 62%,
+      transparent 76%);
   }
+  .hh-wash::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: repeating-radial-gradient(
+      circle at 100% 100%,
+      transparent 0 42px,
+      rgba(var(--wash-rgb),0.34) 42px 43.5px,
+      transparent 43.5px 84px);
+    -webkit-mask-image: radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
+    mask-image: radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
+  }
+  .hh-wash > * { position: relative; z-index: 1; }
 `;
 
 /** The score ring. Stroke colour is the shared completion band, not a new palette. */

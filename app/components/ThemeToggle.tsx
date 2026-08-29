@@ -1,15 +1,22 @@
 'use client';
 
 /**
- * Segmented Light / Dark theme toggle.
+ * Light / Dark theme toggle, in two shapes.
  *
- * A clean, accessible control that REUSES the existing color-mode mechanism
- * (app/components/ThemeController: applyColorMode / getStoredColorMode). It is a
- * controlled component — the caller owns the ColorMode state and persists via
+ * `compact` is ONE button that flips the mode on a single click — what the
+ * desktop nav wants, where the control sits in a row of 32px circular icon
+ * buttons and a segmented pair with two words was simply too large for that
+ * row. The default segmented pair stays for the mobile appearance menu, which
+ * has the width for it and reads better as an explicit choice.
+ *
+ * Both shapes REUSE the existing color-mode mechanism
+ * (app/components/ThemeController: applyColorMode / getStoredColorMode). This is
+ * a controlled component — the caller owns the ColorMode state and persists via
  * applyColorMode — so it introduces no second theme system and no storage of
- * its own. Radiogroup semantics + roving tabindex give proper keyboard support
- * (Tab to the group, ← / → to switch), and selection is conveyed by aria-checked
- * and an icon+label, never by colour alone.
+ * its own. The segmented shape gets radiogroup semantics + roving tabindex for
+ * keyboard support (Tab to the group, ← / → to switch); the compact shape is a
+ * switch. Either way state is conveyed by aria-checked and an icon or label,
+ * never by colour alone.
  */
 import type { KeyboardEvent } from 'react';
 import { Moon, Sun } from 'lucide-react';
@@ -24,10 +31,13 @@ export function ThemeToggle({
   value,
   onChange,
   className = '',
+  compact = false,
 }: {
   value: ColorMode;
   onChange: (mode: ColorMode) => void;
   className?: string;
+  /** Single icon button that flips the mode per click, sized for a nav row. */
+  compact?: boolean;
 }) {
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -35,6 +45,31 @@ export function ThemeToggle({
       onChange(value === 'dark' ? 'light' : 'dark');
     }
   };
+
+  /* One button, not a radiogroup: with a single control there is nothing to
+     move between, so a switch with its own state is the honest semantic. The
+     label names the DESTINATION ("Switch to light mode") because that is what
+     the click does — naming the current mode reads as a status, not an
+     action. */
+  if (compact) {
+    const next: ColorMode = value === 'dark' ? 'light' : 'dark';
+    const Icon = value === 'dark' ? Moon : Sun;
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value === 'dark'}
+        aria-label={`Switch to ${next} mode`}
+        title={`Switch to ${next} mode`}
+        onClick={() => onChange(next)}
+        /* Geometry copied from the notification bell beside it, so the nav row
+           keeps one button size rather than gaining a third. */
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/50 transition active:scale-95 hover:bg-white/[0.09] hover:text-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${className}`}
+      >
+        <Icon className="h-[15px] w-[15px]" aria-hidden />
+      </button>
+    );
+  }
 
   return (
     <div

@@ -911,8 +911,10 @@ useEffect(() => {
           </div>
         )}
 
-        {/* Theme toggle — segmented Light / Dark */}
-        <ThemeToggle value={colorMode} onChange={setMode} className="hidden shrink-0 sm:inline-flex" />
+        {/* Theme toggle — one click, one icon, matching the bell beside it.
+            The segmented Light / Dark pair is still used in the mobile
+            appearance menu below, which has room to spell both out. */}
+        <ThemeToggle compact value={colorMode} onChange={setMode} className="hidden sm:flex" />
 
         {/* Profile avatar — authenticated users only */}
         {isAuthenticated && !guestMode && (

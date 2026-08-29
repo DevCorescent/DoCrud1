@@ -66,3 +66,25 @@ export const BOTTOM_NAV_EXPLORE: ExploreDestination[] = [
   DESTINATIONS.trends,
   DESTINATIONS.articles,
 ];
+
+/**
+ * The accent wash behind one Explore tile.
+ *
+ * Same stop profile and alphas as the Jobs / Connections cards, so the strip
+ * reads as the same surface family. The RADIUS is the one thing adapted: those
+ * cards are ~124px tall and use an 84px radial, which on a 40px pill would
+ * cover the whole button — the opposite of subtle. Scaled to the pill, the wash
+ * stays a corner hint and the dark surface stays clearly visible.
+ *
+ * Derived from `homeIc` so the tile's icon and its wash can never drift apart —
+ * one colour per destination, written once.
+ */
+export function exploreWash(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return 'none';
+  const n = parseInt(m[1], 16);
+  const rgb = `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+  return `radial-gradient(44px 44px at calc(100% - 16px) calc(100% - 8px),`
+    + ` rgba(${rgb},0.13) 0%, rgba(${rgb},0.106) 38%,`
+    + ` rgba(${rgb},0.043) 62%, transparent 78%)`;
+}

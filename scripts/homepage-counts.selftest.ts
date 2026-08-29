@@ -66,6 +66,29 @@ async function main() {
   check('peekViewerCounts returns in-process data only',
     peekViewerCounts('user-a')?.jobs === 150 && peekViewerCounts('user-zzz') === null);
 
+  /* ── Profile Score card visibility ──
+     The card is REMOVED from the tree at 100%, not hidden, and the desktop row
+     drops from four columns to three so no empty column is left behind. These
+     mirror the predicate and template choice in HomeHighlights. */
+  const ROW_4 = 'lg:grid-cols-[minmax(300px,1.55fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(280px,1.35fr)]';
+  const ROW_3 = 'lg:grid-cols-[minmax(300px,1.9fr)_minmax(180px,1fr)_minmax(180px,1fr)]';
+  const showScoreCard = (score: number | null) => score === null || score < 100;
+  const rowTemplate = (score: number | null) => (showScoreCard(score) ? ROW_4 : ROW_3);
+  const columns = (t: string) => (t.match(/minmax\(/g) ?? []).length;
+
+  check('score 55 → Profile Score renders', showScoreCard(55));
+  check('score 99 → Profile Score renders', showScoreCard(99));
+  check('score 100 → Profile Score is NOT rendered', !showScoreCard(100));
+  check('score 0 → Profile Score renders', showScoreCard(0));
+  check('score still loading (null) → card stays, so the row does not jump',
+    showScoreCard(null));
+
+  check('below 100 the desktop row has FOUR columns', columns(rowTemplate(55)) === 4);
+  check('at 100 the desktop row has THREE columns — no empty fourth',
+    columns(rowTemplate(100)) === 3);
+  check('the three remaining columns take the freed width',
+    rowTemplate(100).includes('1.9fr') && rowTemplate(55).includes('1.55fr'));
+
   /* ── clearing recommendation caches must not erase the seeds ──
      Otherwise a job posting would blank every homepage number until each
      viewer's ranking recomputed — the exact flash this feature removes. */

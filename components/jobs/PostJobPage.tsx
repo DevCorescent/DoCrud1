@@ -20,9 +20,9 @@
  * /people nor /jobs uses it.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Briefcase, Check, Loader2 } from 'lucide-react';
 import { EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, EXPERIENCE_LABELS } from '@/lib/jobs-ui';
 
@@ -89,11 +89,50 @@ function Section({ title, caption, children }: { title: string; caption?: string
 
 export default function PostJobPage() {
   const router = useRouter();
+  /* ?edit=<jobId> reuses this same composer to update an existing posting — the
+     same form, the same POST /api/hiring/jobs, just carrying an id. The server
+     refuses the write unless the session user owns that job, so arriving here
+     with someone else's id yields a 403 rather than an edit. */
+  const editId = useSearchParams()?.get('edit') ?? '';
+  const [loadingJob, setLoadingJob] = useState(Boolean(editId));
   const [jobForm, setJobForm] = useState<JobForm>(emptyJob);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState('');
   const [savingJob, setSavingJob] = useState(false);
   const [posted, setPosted] = useState<{ id: string; title: string; status: string } | null>(null);
+
+  /* Loads the posting being edited from the endpoint that already scopes jobs
+     to the viewer, so a job the user cannot manage never reaches the form. */
+  useEffect(() => {
+    if (!editId) return;
+    let active = true;
+    fetch('/api/hiring/jobs', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Array<Record<string, unknown>>) => {
+        if (!active) return;
+        const found = Array.isArray(list) ? list.find((j) => j?.id === editId) : null;
+        if (!found) { setFormError('That job could not be loaded for editing.'); return; }
+        const lines = (v: unknown) => (Array.isArray(v) ? v.join('\n') : '');
+        setJobForm({
+          title: String(found.title ?? ''),
+          department: String(found.department ?? ''),
+          location: String(found.location ?? ''),
+          employmentType: String(found.employmentType ?? 'full_time'),
+          workMode: String(found.workMode ?? 'hybrid'),
+          experienceLevel: String(found.experienceLevel ?? 'associate'),
+          description: String(found.description ?? ''),
+          responsibilities: lines(found.responsibilities),
+          requirements: lines(found.requirements),
+          preferredSkills: lines(found.preferredSkills),
+          minimumAtsScore: String(found.minimumAtsScore ?? '72'),
+          requiredDocuments: lines(found.requiredDocuments),
+          status: String(found.status ?? 'published'),
+        });
+      })
+      .catch(() => { if (active) setFormError('That job could not be loaded for editing.'); })
+      .finally(() => { if (active) setLoadingJob(false); });
+    return () => { active = false; };
+  }, [editId]);
 
   const set = <K extends keyof JobForm>(key: K, value: JobForm[K]) => {
     setJobForm((prev) => ({ ...prev, [key]: value }));
@@ -123,6 +162,9 @@ export default function PostJobPage() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          /* On an edit the id travels with the payload; ownership is still
+             decided server-side from the session, never from this request. */
+          ...(editId ? { id: editId } : {}),
           ...jobForm,
           minimumAtsScore: Number(jobForm.minimumAtsScore || 0),
           responsibilities: jobForm.responsibilities.split('\n').map((item) => item.trim()).filter(Boolean),

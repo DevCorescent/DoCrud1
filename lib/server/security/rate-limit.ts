@@ -54,6 +54,13 @@ export const RATE_POLICIES = {
   otpVerifyIp:            { limit: 20, windowMs: 10 * MIN },
   superadminLoginAccount: { limit: 3,  windowMs: 15 * MIN },
   superadminLoginIp:      { limit: 10, windowMs: 15 * MIN },
+  /* Job posting is open to every authenticated member, so creation is an abuse
+     surface. Ten new postings an hour is far above what a genuine poster needs
+     and far below what makes spamming worthwhile; the IP ceiling catches one
+     actor cycling through accounts. Deliberately generous, because a blocked
+     legitimate poster is a worse outcome than a slow spammer. */
+  jobPostAccount:         { limit: 10, windowMs: 60 * MIN },
+  jobPostIp:              { limit: 30, windowMs: 60 * MIN },
 } as const satisfies Record<string, RatePolicy>;
 
 export type RatePolicyName = keyof typeof RATE_POLICIES;

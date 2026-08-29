@@ -38,6 +38,10 @@ const MAX_COMPANIES = 24;
  * immediately and the browser fetches as before. A cold 2.7 MB job read must
  * never sit on the path to first byte.
  */
+export function invalidateHiringCompanies() {
+  derived = null;
+}
+
 export function peekHiringCompanies(): HiringCompany[] | null {
   if (derived && Date.now() - derived.ts < CACHE_TTL) return derived.value;
   return null;

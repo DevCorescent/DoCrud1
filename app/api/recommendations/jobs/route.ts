@@ -14,6 +14,7 @@ import { getPublishedHiringJobs } from '@/lib/server/hiring';
 import { getFeedConfig } from '@/lib/server/feed-config';
 import { buildRecProfile, hasProfileSignals, isRecommended, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
 import { isValidApplyUrl } from '@/lib/jobs-ui';
+import { registerRecommendationCache } from '@/lib/server/recommendation-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,8 @@ export const dynamic = 'force-dynamic';
 type CachedRecs = { payload: { jobs: unknown[]; total: number }; ts: number };
 const CACHE_TTL = 60_000;
 const cache = new Map<string, CachedRecs>();
+/* Registered so a job write can clear it — see lib/server/recommendation-cache.ts. */
+registerRecommendationCache(cache);
 
 export async function GET(request: Request) {
   try {

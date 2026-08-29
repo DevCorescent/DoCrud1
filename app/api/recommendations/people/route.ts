@@ -21,6 +21,7 @@ import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getStoredUsers, type StoredUser } from '@/lib/server/users';
 import { getAllProfiles, getFollowing } from '@/lib/server/user-profiles';
 import { getFeedConfig } from '@/lib/server/feed-config';
+import { registerRecommendationCache } from '@/lib/server/recommendation-cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +31,8 @@ const CACHE_TTL = 60_000;
 
 type Cached = { payload: unknown; ts: number };
 const cache = new Map<string, Cached>();
+/* Registered so a job write can clear it — see lib/server/recommendation-cache.ts. */
+registerRecommendationCache(cache);
 
 export type PersonRecommendation = {
   userId: string;

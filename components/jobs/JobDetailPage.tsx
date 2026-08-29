@@ -24,8 +24,8 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
   ArrowLeft, ArrowRight, ArrowUpRight, Bookmark, BookmarkCheck, Briefcase, Check,
-  Copy, Facebook, FileText, Link2, Linkedin, Loader2, MapPin, Paperclip, Share2,
-  Twitter, Upload, X, Zap,
+  Copy, EyeOff, Facebook, FileText, Link2, Linkedin, Loader2, MapPin, Paperclip,
+  PencilLine, Share2, Twitter, Upload, X, Zap,
 } from 'lucide-react';
 import { HiringJobPosting } from '@/types/document';
 import {
@@ -390,7 +390,16 @@ function JobActionBar({
   );
 }
 
-export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
+export default function JobDetailPage({
+  job,
+  isOwner = false,
+}: {
+  job: HiringJobPosting;
+  /* Decided on the server from the session. The controls it reveals are a
+     convenience only — every write re-checks ownership server-side, so showing
+     them can never be the thing that authorises an edit. */
+  isOwner?: boolean;
+}) {
   const router = useRouter();
   const { data: session, status } = useSession();
 
@@ -547,6 +556,27 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
 
   const scrollToApply = () => applyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+  /* Takes the posting out of the public feed. The server re-verifies ownership,
+     so a non-owner reaching this endpoint gets a 403 whatever the UI showed. */
+  const [unpublishing, setUnpublishing] = useState(false);
+  const unpublishJob = async () => {
+    if (unpublishing) return;
+    setUnpublishing(true);
+    setError('');
+    try {
+      const response = await fetch(`/api/hiring/jobs?id=${encodeURIComponent(job.id)}&mode=unpublish`, {
+        method: 'DELETE',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error || 'Unable to unpublish this job.');
+      router.push('/jobs');
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to unpublish this job.');
+      setUnpublishing(false);
+    }
+  };
+
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#0A0A0C] text-white">
       <style>{`.no-sb::-webkit-scrollbar{display:none}.no-sb{scrollbar-width:none}`}</style>
@@ -638,6 +668,21 @@ export default function JobDetailPage({ job }: { job: HiringJobPosting }) {
               <button type="button" onClick={scrollToApply} className={`${APPLY_BTN} w-full sm:w-auto`}>
                 {applied ? 'View Application' : 'Apply Now'} <ArrowRight className="h-3.5 w-3.5" />
               </button>
+            )}
+            {isOwner && (
+              <>
+                <Link href={`/jobs/post?edit=${encodeURIComponent(job.id)}`}
+                  className={`${GHOST_BTN} w-full sm:w-auto`}>
+                  <PencilLine className="h-3.5 w-3.5" /> Edit job
+                </Link>
+                <button type="button" onClick={unpublishJob} disabled={unpublishing}
+                  className={`${GHOST_BTN} w-full sm:w-auto`}>
+                  {unpublishing
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <EyeOff className="h-3.5 w-3.5" />}
+                  Unpublish
+                </button>
+              </>
             )}
             <JobActionBar jobId={job.id} title={job.title} company={company}
               shareUrl={shareUrl} postedAt={job.createdAt} onNote={setShareNote} />

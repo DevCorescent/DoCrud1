@@ -4,6 +4,8 @@ import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/serv
 import {
   selectPublishedJobCompanyNames, selectPublishedJobListRows, selectPublishedJobRowById,
 } from '@/lib/server/db/hiring-jobs-rows';
+import { invalidateRecommendationCaches } from '@/lib/server/recommendation-cache';
+import { invalidateHiringCompanies } from '@/lib/server/hiring-companies';
 import {
   countPublishedJobs, mirrorPublishedJobs, selectPublishedCompanyNames,
   selectPublishedJobDocById, selectPublishedJobListDocs,
@@ -339,8 +341,13 @@ export async function saveHiringJobs(jobs: HiringJobPosting[]) {
   }
 
   // Every write path funnels through here, so this is the one place the
-  // published cache can go stale — and the one place it is cleared.
+  // job caches can go stale — and the one place they are cleared.
   invalidatePublishedHiringJobs();
+  /* A new or changed posting can change anyone's matches and the marquee's
+     employer list, so those derived caches are dropped too. Without this a job
+     posted now stayed invisible to recommendations until the entry aged out. */
+  invalidateRecommendationCaches();
+  invalidateHiringCompanies();
 }
 
 export async function getHiringApplications() {
@@ -351,22 +358,80 @@ export async function saveHiringApplications(applications: HiringJobApplication[
   await writeJsonFile(hiringApplicationsPath, applications);
 }
 
+/**
+ * Who may edit or delete an existing job.
+ *
+ * WHY THIS EXISTS: `upsertHiringJob` accepts `payload.id` and rewrites that
+ * record with the caller as owner. Nothing checked that the caller owned it, so
+ * anyone able to reach the endpoint could overwrite — and take ownership of —
+ * any posting by guessing an id. That was survivable only because the route was
+ * gated to business workspaces; it is not survivable now that individuals can
+ * post, so the check lives here, applied to EVERY caller including the ones
+ * that could already post.
+ *
+ * Ownership is whichever of the two existing fields matches:
+ *   · `organizationId` — the workspace that owns it (business/client/member);
+ *   · `createdByUserId` — the person who created it (individual posters).
+ * Admins keep their existing moderation reach. Nothing is trusted from the
+ * request body; the actor always comes from the session.
+ */
+export function userOwnsHiringJob(actor: User, job: HiringJobPosting): boolean {
+  if (actor.role === 'admin') return true;
+  if (job.createdByUserId && job.createdByUserId === actor.id) return true;
+  return Boolean(job.organizationId) && job.organizationId === jobOwnerId(actor);
+}
+
+export type JobOwnershipResult =
+  | { ok: true; job: HiringJobPosting }
+  | { ok: false; status: 403 | 404; error: string };
+
+/** Loads a job and confirms the actor may manage it. */
+export async function assertCanManageHiringJob(
+  actor: User,
+  jobId: string,
+): Promise<JobOwnershipResult> {
+  const jobs = await getHiringJobs();
+  const job = jobs.find((entry) => entry.id === jobId);
+  /* A job the actor may not touch is reported as 403 rather than 404: the id
+     came from them, so its existence is not a secret worth protecting, and a
+     404 here would be misleading during debugging. */
+  if (!job) return { ok: false, status: 404, error: 'Job not found.' };
+  if (!userOwnsHiringJob(actor, job)) {
+    return { ok: false, status: 403, error: 'You can only manage jobs you posted.' };
+  }
+  return { ok: true, job };
+}
+
 export async function upsertHiringJob(
   actor: User,
   payload: Partial<HiringJobPosting> & { title: string; description: string; minimumAtsScore: number },
 ) {
   const jobs = await getHiringJobs();
   const now = new Date().toISOString();
-  const ownerId = jobOwnerId(actor);
-  const ownerName = jobOwnerName(actor);
   const jobId = payload.id || `job-${Date.now()}`;
+
+  /* EDITING: the caller must already own the record. Without this, passing an
+     arbitrary `id` rewrote someone else's posting and transferred ownership to
+     the caller. Throwing here covers every caller — the Hiring Desk and the
+     marketplace composer alike — rather than trusting each route to remember. */
+  const existing = payload.id ? jobs.find((entry) => entry.id === payload.id) : undefined;
+  if (payload.id && !existing) throw new Error('Job not found.');
+  if (existing && !userOwnsHiringJob(actor, existing)) {
+    throw new Error('You can only manage jobs you posted.');
+  }
+
+  /* Ownership fields are always derived from the SESSION actor, never from the
+     payload — and on an edit the original owner is preserved, so an admin
+     moderating a posting cannot accidentally reassign it to themselves. */
+  const ownerId = existing?.organizationId ?? jobOwnerId(actor);
+  const ownerName = existing?.organizationName ?? jobOwnerName(actor);
 
   const nextJob: HiringJobPosting = {
     id: jobId,
     organizationId: ownerId,
     organizationName: ownerName,
-    createdByUserId: actor.id,
-    createdByEmail: actor.email,
+    createdByUserId: existing?.createdByUserId ?? actor.id,
+    createdByEmail: existing?.createdByEmail ?? actor.email,
     title: payload.title.trim(),
     department: payload.department?.trim() || undefined,
     location: payload.location?.trim() || undefined,
@@ -384,7 +449,7 @@ export async function upsertHiringJob(
     minimumAtsScore: Math.max(0, Math.min(100, Math.round(Number(payload.minimumAtsScore) || 0))),
     status: payload.status || 'draft',
     shareUrl: `/jobs/${jobId}`,
-    createdAt: payload.id ? jobs.find((entry) => entry.id === payload.id)?.createdAt || now : now,
+    createdAt: existing?.createdAt || now,
     updatedAt: now,
   };
 
@@ -396,13 +461,49 @@ export async function upsertHiringJob(
   return nextJob;
 }
 
+/**
+ * Removes a job the actor owns, or takes it out of the feed.
+ *
+ * `unpublish` flips status to 'draft' so the posting survives for its owner and
+ * its applications keep resolving; `delete` removes the record entirely. Both
+ * go through the same ownership gate, and both write via saveHiringJobs so
+ * every job cache is invalidated exactly as a create would.
+ */
+export async function removeHiringJob(
+  actor: User,
+  jobId: string,
+  mode: 'unpublish' | 'delete',
+): Promise<JobOwnershipResult> {
+  const permission = await assertCanManageHiringJob(actor, jobId);
+  if (!permission.ok) return permission;
+
+  const jobs = await getHiringJobs();
+  const next = mode === 'delete'
+    ? jobs.filter((job) => job.id !== jobId)
+    : jobs.map((job) => (
+      job.id === jobId ? { ...job, status: 'draft' as const, updatedAt: new Date().toISOString() } : job
+    ));
+
+  await saveHiringJobs(next);
+  return { ok: true, job: permission.job };
+}
+
 export async function getVisibleHiringJobsForUser(user: User) {
   const jobs = await getHiringJobs();
   if (user.role === 'admin') return jobs;
   if (user.accountType === 'business' || user.role === 'client' || user.role === 'member') {
     return jobs.filter((job) => job.organizationId === jobOwnerId(user));
   }
-  return jobs.filter((job) => job.status === 'published');
+  /* An individual sees every published job PLUS their own, whatever its status —
+     otherwise someone who posted a draft could never find it again. Only their
+     own unpublished rows are added; nobody else's drafts become visible. */
+  return jobs.filter((job) => job.status === 'published' || job.createdByUserId === user.id);
+}
+
+/** Just the jobs this user posted — what a "My Jobs" surface lists. */
+export async function getHiringJobsPostedByUser(user: User) {
+  const jobs = await getHiringJobs();
+  return jobs.filter((job) => userOwnsHiringJob(user, job) && job.createdByUserId === user.id);
 }
 
 /** Business Page ids the user owns — used to authorize access to applications on their page jobs. */
@@ -427,7 +528,18 @@ export async function getVisibleHiringApplicationsForUser(user: User) {
       (application) => application.organizationId === ownerId || pageIds.has(application.organizationId),
     );
   }
-  return applications.filter((application) => application.candidateUserId === user.id);
+  /* An individual sees the applications they submitted AND the applications
+     made to jobs they posted — otherwise posting a job would give them no way
+     to read its responses. Scoped by the jobs they actually own, so no other
+     poster's applications are exposed. */
+  const myJobIds = new Set(
+    (await getHiringJobs())
+      .filter((job) => job.createdByUserId === user.id)
+      .map((job) => job.id),
+  );
+  return applications.filter(
+    (application) => application.candidateUserId === user.id || myJobIds.has(application.jobId),
+  );
 }
 
 /** True when the user is authorized to review/act on a specific application (own hiring job or own page job). */

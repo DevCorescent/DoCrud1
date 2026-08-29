@@ -129,20 +129,40 @@ function ScoreRing({ score, colour }: { score: number | null; colour: string }) 
   );
 }
 
-export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingConfig | null }) {
+export default function HomeHighlights({
+  greeting,
+  initialViewer = null,
+}: {
+  greeting?: HomeGreetingConfig | null;
+  /* Who is signed in, resolved by the SERVER component that rendered the page.
+     Without it this section had to wait for next-auth's client-side
+     /api/auth/session round trip before `status` became 'authenticated' and the
+     count requests were even allowed to start — a whole extra hop sitting in
+     front of both numbers. With it, the requests fire on mount. */
+  initialViewer?: { name: string | null; email: string | null } | null;
+}) {
   const { data: session, status } = useSession();
+
+  /* The server's answer wins while the client session resolves; once it has,
+     they agree. Never invented: absent server data falls back to useSession
+     exactly as before. */
+  const signedIn = initialViewer !== null || status === 'authenticated';
 
   const [jobCount, setJobCount] = useState<number | null>(null);
   const [peopleCount, setPeopleCount] = useState<number | null>(null);
   const [score, setScore] = useState<number | null>(null);
 
   const firstName = useMemo(() => {
-    const name = session?.user?.name?.trim() || session?.user?.email?.split('@')[0] || '';
+    const name = session?.user?.name?.trim()
+      || initialViewer?.name?.trim()
+      || session?.user?.email?.split('@')[0]
+      || initialViewer?.email?.split('@')[0]
+      || '';
     return name.split(/\s+/)[0] || 'there';
-  }, [session?.user?.email, session?.user?.name]);
+  }, [session?.user?.email, session?.user?.name, initialViewer]);
 
   useEffect(() => {
-    if (status !== 'authenticated') return;
+    if (!signedIn) return;
     let active = true;
 
     /* Shared with the nav avatar ring (/api/me/badge) and the recommended-jobs
@@ -162,17 +182,17 @@ export default function HomeHighlights({ greeting }: { greeting?: HomeGreetingCo
     load('/api/me/badge', 'profileScore', setScore);
 
     return () => { active = false; };
-  }, [status]);
+  }, [signedIn]);
 
   // Signed out there is no "your" anything to report; the section stays hidden.
-  if (status !== 'authenticated') return null;
+  if (!signedIn) return null;
 
   const bandStyle = profileStatusStyle(score ?? 0);
   const word = BAND_WORD[bandStyle.band] ?? 'In progress';
   const subtitle = greeting?.subtitle?.trim() || "We've found some jobs and connections for you.";
 
   return (
-    <section aria-label="Your Docrud summary" className="flex w-full min-w-0 flex-col gap-2.5">
+    <section aria-label="Your Docrud summary" className="flex w-full min-w-0 flex-col gap-2.5 px-2 sm:px-3">
 
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
       <div className={`relative flex items-center gap-3 overflow-hidden p-4 sm:p-5 ${CARD}`}>

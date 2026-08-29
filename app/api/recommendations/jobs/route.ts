@@ -13,6 +13,7 @@ import { getProfileFields } from '@/lib/server/user-profiles';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
 import { getFeedConfig } from '@/lib/server/feed-config';
 import { buildRecProfile, hasProfileSignals, isRecommended, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
+import { mergeResumeSignals } from '@/lib/server/recommend-profile';
 import { isValidApplyUrl } from '@/lib/jobs-ui';
 import { registerRecommendationCache, rememberViewerCount } from '@/lib/server/recommendation-cache';
 
@@ -56,14 +57,23 @@ export async function GET(request: Request) {
     const [jobs, fields] = await Promise.all([
       getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>),
       meId
-        ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests']).catch(() => null)
+        /* resumeFiles joins the projection so an uploaded CV can fill in
+           signals the member never typed — see lib/server/recommend-profile.ts.
+           It is the same single read, one field wider. */
+        ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles']).catch(() => null)
         : Promise.resolve(null),
     ]);
     if (!Array.isArray(jobs) || jobs.length === 0) {
       return NextResponse.json({ jobs: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
-    const profile = buildRecProfile((fields ?? {}) as Parameters<typeof buildRecProfile>[0]);
+    /* Profile first, parsed resume second. The scorer is unchanged; it is
+       simply given a fuller description of the viewer. */
+    const signals = mergeResumeSignals(
+      fields as Parameters<typeof mergeResumeSignals>[0],
+      (fields as { resumeFiles?: Parameters<typeof mergeResumeSignals>[1] })?.resumeFiles,
+    );
+    const profile = buildRecProfile(signals as Parameters<typeof buildRecProfile>[0]);
     const showMatch = hasProfileSignals(profile);
     const now = Date.now();
 

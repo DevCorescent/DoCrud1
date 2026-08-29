@@ -7,6 +7,7 @@ import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { peekHiringCompanies } from '@/lib/server/hiring-companies';
+import { getPublishedHiringJobs } from '@/lib/server/hiring';
 import { seedViewerCounts } from '@/lib/server/recommendation-cache';
 
 export const dynamic = 'force-dynamic';
@@ -62,6 +63,15 @@ export default async function Home() {
      cold means reading the whole 2.7 MB job store, which must never sit on the
      path to first byte; null simply lets the browser fetch it as before. */
   const initialCompanies = peekHiringCompanies();
+
+  /* Start the job corpus loading, but DO NOT await it.
+     On a cold process the corpus is a multi-megabyte read, and the browser's
+     recommendation request arrives a second or two after hydration. Kicking the
+     load off here means that request joins an already-running load through the
+     existing single-flight instead of starting from zero. Deliberately not
+     awaited and deliberately caught: the homepage must never wait on ranking,
+     and a failure here is simply a cache that stays cold. */
+  void getPublishedHiringJobs().catch(() => undefined);
 
   /* The session is already resolved here. Passing the viewer down means the
      summary section does not have to wait for next-auth's client-side

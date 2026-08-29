@@ -29,28 +29,48 @@ export const dynamic = 'force-dynamic';
    set are different payloads. Session-scoped by construction: a signed-out
    viewer is keyed 'anon' and can never be served another member's data. Same
    one-minute window and same shape the people route already uses. */
-type CachedRecs = { payload: { jobs: unknown[]; total: number }; ts: number };
+type RecsPayload = { jobs: unknown[]; total: number };
+type CachedRecs = { payload: RecsPayload; ts: number };
+
+/** Inside this window the cached answer is served as-is. */
 const CACHE_TTL = 60_000;
+/**
+ * Past CACHE_TTL but inside this window the cached answer is STILL served —
+ * immediately — while a single background pass refreshes it.
+ *
+ * Why: an expired entry used to mean the caller waited for a full recompute.
+ * Measured, that is ~560 ms with a warm corpus and tens of seconds with a cold
+ * one, and it lands on a real person opening the page. The result served is one
+ * this same code computed minutes ago with the same algorithm, so nothing about
+ * ranking changes — only who waits for it. A job write clears the cache
+ * outright (see recommendation-cache.ts), so a genuinely new posting is never
+ * hidden behind staleness.
+ */
+const STALE_TTL = 10 * 60_000;
+
 const cache = new Map<string, CachedRecs>();
 /* Registered so a job write can clear it — see lib/server/recommendation-cache.ts. */
 registerRecommendationCache(cache);
 
-export async function GET(request: Request) {
-  try {
-    const scope = new URL(request.url).searchParams.get('scope') === 'recommended' ? 'recommended' : 'row';
+/**
+ * Background refreshes in flight, keyed exactly like the cache.
+ *
+ * Single-flight: twenty stale requests trigger ONE recompute, not twenty. A
+ * failed refresh removes its entry so the next request may retry, and never
+ * poisons the cached value that is still being served.
+ */
+const refreshing = new Map<string, Promise<void>>();
 
-    // Viewer signals from the stored profile — never client-supplied.
-    const session = await getAuthSession().catch(() => null);
-    const meId = session?.user ? await resolveSessionUserId(session).catch(() => null) : null;
-
-    const cacheKey = `${meId ?? 'anon'}:${scope}`;
-    const hit = cache.get(cacheKey);
-    if (hit && Date.now() - hit.ts < CACHE_TTL) {
-      return NextResponse.json(hit.payload, { headers: { 'Cache-Control': 'no-store' } });
-    }
-
+/**
+ * The ranking pass. Identical to what the route always did — extracted only so
+ * a background refresh can run it without duplicating a line of logic.
+ */
+async function computeRecommendations(
+  meId: string | null,
+  scope: 'row' | 'recommended',
+): Promise<RecsPayload> {
     const config = await getFeedConfig();
-    if (!config.jobs.enabled) return NextResponse.json({ jobs: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
+    if (!config.jobs.enabled) return { jobs: [], total: 0 };
 
     /* The job list and the viewer's profile are independent reads; they were
        being awaited one after the other. */
@@ -63,9 +83,7 @@ export async function GET(request: Request) {
         ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles']).catch(() => null)
         : Promise.resolve(null),
     ]);
-    if (!Array.isArray(jobs) || jobs.length === 0) {
-      return NextResponse.json({ jobs: [], total: 0 }, { headers: { 'Cache-Control': 'no-store' } });
-    }
+    if (!Array.isArray(jobs) || jobs.length === 0) return { jobs: [], total: 0 };
 
     /* Profile first, parsed resume second. The scorer is unchanged; it is
        simply given a fuller description of the viewer. */
@@ -128,11 +146,47 @@ export async function GET(request: Request) {
       ? recommended.map((s) => s.job)
       : scored.slice(0, config.jobs.maxCards).map((s) => s.job);
 
-    const payload = { jobs: list, total };
-    cache.set(cacheKey, { payload, ts: Date.now() });
+    const payload: RecsPayload = { jobs: list, total };
+    cache.set(`${meId ?? 'anon'}:${scope}`, { payload, ts: Date.now() });
     /* Remembered so the homepage can render this number on the NEXT server
        render without re-running the ranking that produced it. */
     if (meId) rememberViewerCount(meId, 'jobs', total);
+    return payload;
+}
+
+export async function GET(request: Request) {
+  try {
+    const scope = new URL(request.url).searchParams.get('scope') === 'recommended' ? 'recommended' : 'row';
+
+    // Viewer signals from the stored profile — never client-supplied.
+    const session = await getAuthSession().catch(() => null);
+    const meId = session?.user ? await resolveSessionUserId(session).catch(() => null) : null;
+
+    const cacheKey = `${meId ?? 'anon'}:${scope}`;
+    const hit = cache.get(cacheKey);
+    const age = hit ? Date.now() - hit.ts : Infinity;
+
+    // Fresh — serve it.
+    if (hit && age < CACHE_TTL) {
+      return NextResponse.json(hit.payload, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    /* Stale but usable — serve it NOW and refresh behind the response, so the
+       person waiting gets last minute's answer instead of this minute's delay.
+       Single-flighted, so concurrent stale readers share one recompute. */
+    if (hit && age < STALE_TTL) {
+      if (!refreshing.has(cacheKey)) {
+        const run = computeRecommendations(meId, scope)
+          .then(() => undefined)
+          .catch((error) => { console.error('[recommendations/jobs] background refresh failed', error); })
+          .finally(() => { refreshing.delete(cacheKey); });
+        refreshing.set(cacheKey, run);
+      }
+      return NextResponse.json(hit.payload, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    // Nothing usable cached — this caller has to wait for the real thing.
+    const payload = await computeRecommendations(meId, scope);
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[recommendations/jobs] GET error', error);

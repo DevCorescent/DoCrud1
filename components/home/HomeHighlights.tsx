@@ -40,6 +40,15 @@ export type HomeGreetingConfig = {
 
 const CARD = 'rounded-[20px] border border-white/[0.07] bg-white/[0.025]';
 
+/* Desktop puts all four cards on ONE row. Two literal templates rather than a
+   built string, because Tailwind only emits arbitrary values it can see in the
+   source — a template assembled at runtime would produce no CSS.
+
+   The second is used when the profile is complete and its card is gone: the
+   remaining three take the freed width instead of leaving a hole. */
+const ROW_4 = 'lg:grid-cols-[minmax(300px,1.55fr)_minmax(170px,0.8fr)_minmax(170px,0.8fr)_minmax(280px,1.35fr)]';
+const ROW_3 = 'lg:grid-cols-[minmax(300px,1.9fr)_minmax(180px,1fr)_minmax(180px,1fr)]';
+
 /** Where each tile sends you: the matched set itself, never the full listing. */
 const RECOMMENDED_JOBS_HREF = '/jobs?recommended=1';
 const RECOMMENDED_PEOPLE_HREF = '/people?recommended=1';
@@ -199,12 +208,23 @@ export default function HomeHighlights({
   // Signed out there is no "your" anything to report; the section stays hidden.
   if (!signedIn) return null;
 
+  /* A complete profile has nothing to improve, so its card is not rendered at
+     all and the row rebalances to three. `null` means the score has not loaded
+     yet — the card stays, because hiding then reappearing would jump the
+     layout. */
+  const showScoreCard = score === null || score < 100;
+
   const bandStyle = profileStatusStyle(score ?? 0);
   const word = BAND_WORD[bandStyle.band] ?? 'In progress';
   const subtitle = greeting?.subtitle?.trim() || "We've found some jobs and connections for you.";
 
   return (
-    <section aria-label="Your Docrud summary" className="flex w-full min-w-0 flex-col gap-2.5 px-2 sm:px-3">
+    /* Mobile/tablet stack; from lg the four cards share one grid row.
+       `items-stretch` is what gives them equal height without a fixed value. */
+    <section
+      aria-label="Your Docrud summary"
+      className={`flex w-full min-w-0 flex-col gap-2.5 px-2 sm:px-3 lg:grid lg:items-stretch lg:gap-2.5 ${showScoreCard ? ROW_4 : ROW_3}`}
+    >
 
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
       <div className={`relative flex items-center gap-3 overflow-hidden p-4 sm:p-5 ${CARD}`}>
@@ -225,8 +245,12 @@ export default function HomeHighlights({
             place the reference asks for it. */}
         {greeting?.illustrationUrl
           ? <img src={greeting.illustrationUrl} alt="" aria-hidden loading="lazy" decoding="async"
-              className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px] lg:h-[150px]" />
-          : <AnimatedWelcomeCharacter className="h-[86px] w-[108px] shrink-0 sm:h-[104px] sm:w-[130px] lg:h-[150px] lg:w-[190px]" />}
+              className="h-[86px] w-auto shrink-0 object-contain sm:h-[104px] lg:h-[88px]" />
+          /* Deliberately SMALLER at lg than at sm: on desktop this card shares
+             one row with three others, and the tallest item sets the row
+             height. A 150px illustration would make the whole strip 150px
+             tall for the sake of decoration. */
+          : <AnimatedWelcomeCharacter className="h-[86px] w-[108px] shrink-0 sm:h-[104px] sm:w-[130px] lg:h-[88px] lg:w-[112px]" />}
 
         <Link href={RECOMMENDED_PEOPLE_HREF} aria-label="People you may know"
           className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.06] text-white/55 transition hover:text-white/90 sm:right-4 sm:top-4">
@@ -235,7 +259,10 @@ export default function HomeHighlights({
       </div>
 
       {/* ── Match counts ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-2.5">
+      {/* `lg:contents` dissolves this wrapper so its two cards become direct
+          grid items of the row above — the nesting is exactly what forced them
+          onto their own line. Below lg it stays a normal two-up grid. */}
+      <div className="grid grid-cols-2 gap-2.5 lg:contents">
         <StatTile
           href={RECOMMENDED_JOBS_HREF}
           label="Jobs"
@@ -257,6 +284,7 @@ export default function HomeHighlights({
           "Edit Profile" is gone — two buttons pointing at the same profile was
           the bulk of this card's height, and "Improve score" is the one that
           says what to do. */}
+      {showScoreCard && (
       <div className={`flex items-center gap-4 p-4 sm:gap-5 sm:p-5 ${CARD}`}>
         <ScoreRing score={score} colour={bandStyle.ring} />
 
@@ -282,6 +310,7 @@ export default function HomeHighlights({
           </Link>
         </div>
       </div>
+      )}
     </section>
   );
 }

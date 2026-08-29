@@ -6372,9 +6372,15 @@ function NewHomepageContent({
           document.body
         )}
 
-        {/* ── Top companies marquee — Super Admin owns the list and the logos ── */}
+        {/* ── Top companies marquee — Super Admin owns the list and the logos ──
+            Full bleed: the negative margins cancel the content column's own
+            horizontal padding (px-0 sm:px-6 lg:px-10 xl:px-12) exactly, so the
+            row runs edge to edge instead of stopping at the text gutter. No
+            `w-full` here on purpose — a block element's auto width plus
+            negative margins is what widens the box; `width:100%` would keep the
+            parent's width and simply overhang to one side. */}
         {hpSections.trustedCompanies && hpConfig?.trustedCompanies && (
-          <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
+          <div className="min-w-0 sm:-mx-6 lg:-mx-10 xl:-mx-12" style={{ marginBottom: 16 }}>
             <TrustedCompanies
               label={hpConfig.trustedCompanies.label}
               items={hpConfig.trustedCompanies.items ?? []}

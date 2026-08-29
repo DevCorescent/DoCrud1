@@ -9,6 +9,7 @@ import {
   Home,
   MessageSquare,
   Users,
+  X,
 } from 'lucide-react';
 import { BOTTOM_NAV_EXPLORE } from '@/lib/explore-destinations';
 
@@ -339,7 +340,7 @@ export default function GlobalBottomNav() {
             0 2px 8px rgba(0,0,0,0.30),
             inset 0 1px 0 rgba(255,255,255,0.07);
 
-          padding: 12px;
+          padding: 10px 12px 12px;
           opacity: 0;
           visibility: hidden;
           pointer-events: none;
@@ -361,48 +362,77 @@ export default function GlobalBottomNav() {
             visibility 0s;
         }
 
+        /* Sheet grabber, as in the reference. */
+        .gnb-explore-grabber {
+          display: block;
+          width: 36px; height: 4px;
+          margin: 0 auto 10px;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.16);
+        }
+
         .gnb-explore-head {
           display: flex; align-items: center; justify-content: space-between;
-          padding: 2px 6px 10px;
+          gap: 8px;
+          padding: 0 4px 10px;
         }
         .gnb-explore-title {
-          font-size: 10px; font-weight: 700;
-          letter-spacing: 0.16em; text-transform: uppercase;
-          color: rgba(255,255,255,0.35);
+          font-size: 14px; font-weight: 700;
+          letter-spacing: -0.01em;
+          color: rgba(255,255,255,0.92);
         }
+        .gnb-explore-close {
+          display: flex; align-items: center; justify-content: center;
+          width: 30px; height: 30px;
+          flex-shrink: 0;
+          border-radius: 999px;
+          border: 1px solid rgba(255,255,255,0.10);
+          background: rgba(255,255,255,0.05);
+          color: rgba(255,255,255,0.55);
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        .gnb-explore-close:hover { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.92); }
+        .gnb-explore-close:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+
         .gnb-explore-grid {
           display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 6px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 8px;
         }
-        /* Two columns only where three would squeeze the labels. */
-        @media (max-width: 359px) { .gnb-explore-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-        /* One compact row when the width genuinely allows it. */
-        @media (min-width: 560px) { .gnb-explore-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+        /* Two columns where four would crush the blurbs. */
+        @media (max-width: 400px) { .gnb-explore-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
         .gnb-explore-link {
           display: flex; flex-direction: column;
-          align-items: center; justify-content: center; gap: 6px;
-          min-height: 62px;                 /* comfortably past a 44px target */
-          padding: 8px 4px;
-          border-radius: 14px;
+          align-items: flex-start; justify-content: flex-start; gap: 6px;
+          /* 78px keeps the card comfortably past a 44px touch target while
+             letting two rows of eight fit inside the 25vh cap on desktop. */
+          min-height: 78px;
+          padding: 10px;
+          border-radius: 16px;
           border: 1px solid rgba(255,255,255,0.06);
           background: rgba(255,255,255,0.025);
-          color: rgba(255,255,255,0.62);
+          color: rgba(255,255,255,0.92);
           text-decoration: none;
           -webkit-tap-highlight-color: transparent;
-          transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+          transition: background 0.15s ease, border-color 0.15s ease;
         }
         .gnb-explore-link:hover {
           background: rgba(255,255,255,0.06);
           border-color: rgba(255,255,255,0.12);
-          color: rgba(255,255,255,0.92);
         }
         .gnb-explore-link:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+
         .gnb-explore-label {
-          font-size: 10px; font-weight: 600; line-height: 1;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          max-width: 100%;
+          font-size: 13px; font-weight: 700; line-height: 1.15;
+          letter-spacing: -0.01em;
+          color: rgba(255,255,255,0.92);
+        }
+        .gnb-explore-desc {
+          font-size: 11px; line-height: 1.3;
+          color: rgba(255,255,255,0.34);
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -425,12 +455,25 @@ export default function GlobalBottomNav() {
         id="gnb-explore-panel"
         className={`gnb-explore-panel${exploreOpen ? ' is-open' : ''}`}
         role="group"
-        aria-label="Explore Docrud"
+        aria-label="Explore DoCrud"
         aria-hidden={!exploreOpen}
       >
+        {/* Sheet grabber — the affordance the panel reads as. Decorative. */}
+        <span className="gnb-explore-grabber" aria-hidden="true" />
+
         <div className="gnb-explore-head">
-          <span className="gnb-explore-title">Explore Docrud</span>
+          <span className="gnb-explore-title">Explore DoCrud</span>
+          <button
+            type="button"
+            className="gnb-explore-close"
+            onClick={() => setExploreOpen(false)}
+            aria-label="Close Explore"
+            tabIndex={exploreOpen ? 0 : -1}
+          >
+            <X width={15} height={15} />
+          </button>
         </div>
+
         <div className="gnb-explore-grid">
           {BOTTOM_NAV_EXPLORE.map((item) => (
             <a
@@ -441,8 +484,9 @@ export default function GlobalBottomNav() {
               tabIndex={exploreOpen ? 0 : -1}
               onClick={() => setExploreOpen(false)}
             >
-              <item.Icon width={18} height={18} aria-hidden />
+              <item.Icon width={20} height={20} style={{ color: item.ic }} aria-hidden />
               <span className="gnb-explore-label">{item.label}</span>
+              <span className="gnb-explore-desc">{item.desc}</span>
             </a>
           ))}
         </div>

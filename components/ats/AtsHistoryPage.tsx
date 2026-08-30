@@ -16,7 +16,7 @@ import {
   displayScore, errorMessageForStatus, formatHistoryDate, NETWORK_ERROR_MESSAGE,
   scoreTone, TONE_CLASSES, type AtsApiResponse,
 } from './ats-view-model';
-import { AtsResults } from './AtsResults';
+import AtsResultsModal from './AtsResultsModal';
 
 const PANEL = 'rounded-2xl border border-slate-200 bg-white dark:border-white/[0.08] dark:bg-white/[0.03]';
 const MUTED = 'text-slate-600 dark:text-white/45';
@@ -172,11 +172,11 @@ export default function AtsHistoryPage() {
                     <div className="flex shrink-0 items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => (openId === row.id ? setOpenId(null) : void open(row.id))}
-                        aria-expanded={openId === row.id}
+                        onClick={() => void open(row.id)}
+                        aria-haspopup="dialog"
                         className="rounded-xl border border-slate-300 px-3 py-2 text-[12.5px] font-semibold transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.12] dark:hover:bg-white/[0.06]"
                       >
-                        {openId === row.id ? 'Hide report' : 'Open report'}
+                        Open report
                       </button>
                       <button
                         type="button"
@@ -189,21 +189,26 @@ export default function AtsHistoryPage() {
                     </div>
                   </div>
 
-                  {openId === row.id && (
-                    <div className="mt-4 border-t border-slate-200 pt-2 dark:border-white/[0.07]">
-                      {openLoading && (
-                        <p className={`flex items-center gap-2 py-4 text-[13px] ${MUTED}`}>
-                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading report…
-                        </p>
-                      )}
-                      {openReport && <AtsResults result={openReport} />}
-                    </div>
+                  {/* A saved report opens in the SAME dialog the evaluator
+                      uses, so a stored report and a fresh one are presented
+                      identically. Only the loading line stays inline. */}
+                  {openId === row.id && openLoading && (
+                    <p className={`mt-3 flex items-center gap-2 border-t border-slate-200 pt-3 text-[13px] dark:border-white/[0.07] ${MUTED}`}>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Loading report…
+                    </p>
                   )}
                 </li>
               );
             })}
           </ul>
         )}
+
+        <AtsResultsModal
+          open={Boolean(openReport)}
+          result={openReport}
+          jobTitle={rows.find((r) => r.id === openId)?.jobTitle}
+          onClose={() => { setOpenId(null); setOpenReport(null); }}
+        />
 
         {total > PAGE_SIZE && (
           <div className="mt-5 flex items-center justify-between gap-3">

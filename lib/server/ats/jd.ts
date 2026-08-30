@@ -59,14 +59,53 @@ function splitSentences(text: string): string[] {
     .filter(Boolean);
 }
 
+/* A job title is a short phrase. These bounds are what separate "the posting
+   led with its title" from "the posting is one long paragraph". */
+const MAX_TITLE_CHARS = 80;
+const MAX_TITLE_WORDS = 12;
+
+/**
+ * The job title a posting leads with, when it leads with one.
+ *
+ * The caller's `jobTitle` is always preferred. This fallback exists for the
+ * common case of a posting whose first line IS its title.
+ *
+ * IT MUST BE BOUNDED. The previous version took `fullText.split('\n')[0]`
+ * unconditionally, so a job description pasted as a single paragraph — which is
+ * how most people paste from a job board — made the ENTIRE posting the title.
+ * That title was then displayed in the report and quoted verbatim inside an
+ * action-plan recommendation, producing a "recommendation" hundreds of
+ * characters long containing the whole JD.
+ *
+ * When no plausible title can be read, this returns '' rather than a guess: an
+ * unknown title is a fact the scorer already handles, whereas a wrong one
+ * silently corrupts title alignment.
+ */
+function deriveTitle(fullText: string): string {
+  const firstLine = normalizeWhitespace(fullText.split('\n').find((l) => l.trim()) ?? '');
+  if (!firstLine) return '';
+
+  const plausible = (candidate: string) =>
+    candidate.length > 0
+    && candidate.length <= MAX_TITLE_CHARS
+    && candidate.split(/\s+/).length <= MAX_TITLE_WORDS;
+
+  if (plausible(firstLine)) return firstLine;
+
+  /* A long first line may still OPEN with the title, e.g.
+     "Senior Backend Engineer - We are looking for...". Try its leading clause,
+     but only accept it if it looks like a title on its own. */
+  const clause = normalizeWhitespace(firstLine.split(/\s[–—|]\s|\s-\s|[.:;]\s/)[0] ?? '');
+  return plausible(clause) ? clause : '';
+}
+
 const DEGREE_RE = /\b(bachelor'?s?|master'?s?|b\.?tech|b\.?e\b|b\.?sc|bca|m\.?tech|m\.?sc|mca|mba|ph\.?d|doctorate|degree|diploma)\b[^.;\n]*/i;
 
 export function normalizeJd(jobDescription: string, jobTitle = ''): NormalizedJd {
   const fullText = normalizeWhitespace(jobDescription);
   const sentences = splitSentences(fullText);
 
-  /* Title: the caller's, or the first line if the posting leads with it. */
-  const title = normalizeWhitespace(jobTitle) || normalizeWhitespace(fullText.split('\n')[0] ?? '');
+  const title = normalizeWhitespace(jobTitle) || deriveTitle(fullText);
 
   /* One requirement per canonical skill, keeping the STRONGEST importance seen.
      A skill named in both "Requirements" and "nice to have" is a requirement. */

@@ -25,6 +25,7 @@ import { Briefcase, MapPin } from 'lucide-react';
 import { getCompanyLogo } from '@/lib/company-logos';
 import { companyHue } from '@/lib/jobs-ui';
 import { cachedJson } from '@/lib/client/request-cache';
+import { getJobMatchLabel, jobMatchTokenClasses } from '@/lib/job-match-tone';
 
 type PublicJob = {
   id: string;
@@ -138,8 +139,11 @@ export default function RecommendedJobs() {
             className="flex min-w-0 flex-col rounded-2xl border border-white/[0.08] bg-[#141416] p-3 transition-colors hover:border-white/[0.14]"
           >
             {typeof j.matchScore === 'number' && j.matchScore > 0 && (
-              <span className="mb-1.5 inline-flex w-fit items-center rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+              /* Same tone scale as the job cards, from the same helper, so one
+                 role cannot read as two different strengths on two surfaces. */
+              <span className={`mb-1.5 inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[10px] font-bold ${jobMatchTokenClasses(j.matchScore)}`}>
                 {j.matchScore}% match
+                <span className="sr-only"> — {getJobMatchLabel(j.matchScore)}</span>
               </span>
             )}
             <span className="line-clamp-2 text-[12.5px] font-bold text-white/90">{j.title || 'Open role'}</span>

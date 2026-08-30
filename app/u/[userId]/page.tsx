@@ -23,6 +23,7 @@ import {
   calculateProfileScore, PROFILE_COMPLETION_CTA,
   type ProfileScoreResult, type ProfileSectionResult,
 } from '@/lib/profile-score';
+import ProfileAtsSection from '@/components/ats/ProfileAtsSection';
 import {
   ArrowLeft,
   BarChart3,
@@ -2117,7 +2118,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                       <p className="text-[10.5px] text-white/30 mt-0.5">
                         {idx === 0 && <span className="text-emerald-400/70 font-medium">Latest · </span>}
                         {new Date(entry.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        {entry.atsScore && <span className="ml-1.5">· ATS {entry.atsScore.grade}</span>}
+                        {entry.atsScore && <span className="ml-1.5">· Quality {entry.atsScore.grade}</span>}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -2148,6 +2149,21 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                 ))}
               </div>
             )}
+
+            {/* ATS — reads existing data only. Resume quality comes from the
+                score already stored at upload time, and the latest job match
+                from this member's own saved reports. Nothing is evaluated on
+                page load, and a resume upload never triggers a job match:
+                a match needs a job description, which the profile has none of. */}
+            <ProfileAtsSection
+              resumeFiles={(form.resumeFiles ?? []).map((entry) => ({
+                id: entry.id,
+                fileName: entry.fileName,
+                uploadedAt: entry.uploadedAt,
+                atsScore: entry.atsScore ?? null,
+              }))}
+              onUploadClick={() => resumeSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            />
           </section>
 
           {/* Basic */}

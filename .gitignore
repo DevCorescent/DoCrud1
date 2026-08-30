@@ -8,6 +8,7 @@ tmp-logo-extract
 .env.local
 .env.*
 data/history.json
+data/ats-reports.json
 data/mail-settings.json
 data/mail-campaigns.json
 data/mail-policies.json

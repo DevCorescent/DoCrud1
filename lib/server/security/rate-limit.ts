@@ -61,6 +61,15 @@ export const RATE_POLICIES = {
      legitimate poster is a worse outcome than a slow spammer. */
   jobPostAccount:         { limit: 10, windowMs: 60 * MIN },
   jobPostIp:              { limit: 30, windowMs: 60 * MIN },
+  /* ATS evaluation is pure CPU — no model call and no external service — so the
+     ceiling protects the server's own time rather than a paid API. Thirty an
+     hour is far above tailoring one resume to a handful of postings, which is
+     the real workflow, and far below what makes scripted enumeration of job
+     descriptions worthwhile. Uploads are limited harder because parsing a PDF
+     is the expensive half of the flow. */
+  atsEvaluateAccount:     { limit: 30, windowMs: 60 * MIN },
+  atsEvaluateIp:          { limit: 90, windowMs: 60 * MIN },
+  atsUploadAccount:       { limit: 20, windowMs: 60 * MIN },
 } as const satisfies Record<string, RatePolicy>;
 
 export type RatePolicyName = keyof typeof RATE_POLICIES;

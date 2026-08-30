@@ -16,6 +16,18 @@
  *
  * Only fields that exist are rendered — a role with no requirements shows no
  * Requirements section rather than an empty one. Nothing is invented.
+ *
+ * THEMING: this view renders in BOTH themes. It previously hardcoded the
+ * marketplace's dark tokens, so a member on the light theme read a black page.
+ * /jobs and /people remain dark-only — converting them is not this task — so
+ * this page deliberately differs from its siblings in light mode. Apply keeps
+ * its emerald, which already reads on a light ground as well as a dark one.
+ *
+ * LAYOUT: from lg the page is two columns — the role's content on the left, a
+ * sticky rail on the right carrying Apply, the metadata and the poster. Below
+ * lg it is one column in the same reading order. The single narrow column it
+ * used at every width pushed Apply below a long description on a wide screen,
+ * which is the one place it should never be.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -38,13 +50,27 @@ type ResumeFile = { id: string; fileName: string; url: string; uploadedAt: strin
 type UploadedFile = { url: string; fileName: string };
 type AppliedState = { id: string; status: string; appliedAt: string } | null;
 
-const PANEL = 'rounded-2xl border border-white/[0.07] bg-white/[0.02]';
+/* One definition per surface, each carrying a light value and a dark one. */
+const PANEL = 'rounded-2xl border border-slate-200 bg-white dark:border-white/[0.07] dark:bg-white/[0.02]';
+const MUTED = 'text-slate-600 dark:text-white/45';
+const FAINT = 'text-slate-500 dark:text-white/30';
+const HEADING = 'text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35';
 const INPUT =
-  'w-full rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-[13px] text-white placeholder:text-white/20 outline-none transition-colors focus:border-white/20 focus:bg-white/[0.06]';
+  'w-full rounded-[10px] border px-3 py-2.5 text-[13px] outline-none transition-colors '
+  + 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 '
+  + 'focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:border-sky-500 '
+  + 'dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-white/20 '
+  + 'dark:focus-visible:border-white/20 dark:focus-visible:bg-white/[0.06]';
 const GHOST_BTN =
-  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] border border-white/[0.10] bg-white/[0.04] px-5 text-[13px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/85';
+  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] border px-5 text-[13px] font-semibold transition '
+  + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 '
+  + 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 '
+  + 'dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white/85';
 const PRIMARY_BTN =
-  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] bg-white px-5 text-[13px] font-bold text-[#0A0A0C] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] px-5 text-[13px] font-bold transition '
+  + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 '
+  + 'bg-slate-900 text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 '
+  + 'dark:bg-white dark:text-[#020617] dark:hover:bg-white/90';
 /* Apply is emerald-on-white-text so the button and its label stay legible on a
    light ground as well as this dark one — a white pill vanishes on white.
    Emerald is already the jobs accent, so no new colour is introduced. */
@@ -61,7 +87,7 @@ function CompanyLogo({ company }: { company: string }) {
 
   if (logo && !failed) {
     return (
-      <div className={`${box} flex items-center justify-center border border-white/[0.08] bg-white/[0.05]`}>
+      <div className={`${box} flex items-center justify-center border border-slate-200 bg-slate-100 dark:border-white/[0.08] dark:bg-white/[0.05]`}>
         <img src={logo.src} alt={`${logo.name} logo`} width={64} height={64}
           loading="lazy" decoding="async" onError={() => setFailed(true)}
           className="h-full w-full object-contain p-2" />
@@ -88,11 +114,11 @@ function ListSection({ title, items }: { title: string; items?: string[] }) {
   const real = (items ?? []).filter(Boolean);
   if (real.length === 0) return null;
   return (
-    <section className="border-t border-white/[0.06] px-5 py-6 sm:px-6">
-      <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">{title}</h2>
+    <section className="border-t border-slate-200 dark:border-white/[0.06] px-5 py-6 sm:px-6">
+      <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">{title}</h2>
       <ul className="mt-3.5 flex flex-col gap-2">
         {real.map((item) => (
-          <li key={item} className="flex gap-2.5 text-[13.5px] leading-relaxed text-white/60">
+          <li key={item} className="flex gap-2.5 text-[13.5px] leading-relaxed text-slate-700 dark:text-white/60">
             <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-emerald-400/70" />
             <span className="min-w-0">{item}</span>
           </li>
@@ -122,7 +148,65 @@ const BULLET_RE = /^\s*(?:[-–—•*·▪◦]|\(?\d{1,2}[.)])\s+/;
 /** "Stipend: ₹15,000 /month" — a short label, then a real value on one line. */
 const FACT_RE = /^([A-Za-z][A-Za-z0-9 /&()'.+-]{1,34}):\s*(\S.*)$/;
 
-function parseDescription(raw: string): DescBlock[] {
+/**
+ * Turn a scraped description into readable plain text.
+ *
+ * Many imported postings arrive with their HTML entity-encoded, so the stored
+ * value literally reads `&lt;p&gt;Razorpay is...&lt;/p&gt;`. Rendered as-is
+ * that is a wall of `&lt;p&gt;` noise around the employer's words, which is
+ * the single worst readability problem on this page.
+ *
+ * The markup is removed, never executed. Entities are decoded with a fixed
+ * table (no DOM, no innerHTML), block-level tags become line breaks so the
+ * existing paragraph/bullet parser can do its job, and every remaining tag is
+ * dropped. The output is a STRING that React renders as text — there is no
+ * path here by which a posting's markup becomes live HTML.
+ *
+ * The employer's words are untouched; only their markup is.
+ */
+const ENTITIES: Record<string, string> = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'",
+  '&apos;': "'", '&nbsp;': ' ', '&ndash;': '-', '&mdash;': '—',
+  '&rsquo;': '\u2019', '&lsquo;': '\u2018', '&ldquo;': '\u201c', '&rdquo;': '\u201d',
+  '&hellip;': '…', '&bull;': '•', '&middot;': '·', '&eacute;': 'é',
+};
+
+function decodeEntities(value: string): string {
+  return value
+    .replace(/&(amp|lt|gt|quot|#39|apos|nbsp|ndash|mdash|rsquo|lsquo|ldquo|rdquo|hellip|bull|middot|eacute);/g,
+      (match) => ENTITIES[match] ?? match)
+    .replace(/&#(\d{2,5});/g, (_m, code) => {
+      const point = Number(code);
+      return point > 0 && point < 0x110000 ? String.fromCodePoint(point) : '';
+    });
+}
+
+export function stripDescriptionMarkup(raw: string): string {
+  /* Decoded TWICE on purpose: these values are commonly double-encoded, so one
+     pass leaves `&lt;p&gt;` as a literal `<p>` that the tag strip must still
+     remove. Decoding cannot make markup executable — nothing is ever assigned
+     to innerHTML. */
+  let text = decodeEntities(decodeEntities(raw));
+  if (!/<[a-z!/][^>]*>/i.test(text)) return raw;
+
+  text = text
+    /* Anything whose CONTENT is not readable prose goes entirely. */
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
+    /* Block boundaries become line breaks, so paragraphs survive as paragraphs. */
+    .replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6]|\/tr)\s*\/?>/gi, '\n')
+    .replace(/<\s*(p|div|h[1-6]|tr)\b[^>]*>/gi, '\n')
+    /* List items keep their bullet so the parser still sees a list. */
+    .replace(/<\s*li\b[^>]*>/gi, '\n• ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
+}
+
+function parseDescription(input: string): DescBlock[] {
+  const raw = stripDescriptionMarkup(input);
   const lines = raw
     .split(/\r?\n/)
     // A single line carrying inline bullets is really several bullet lines.
@@ -187,7 +271,7 @@ function JobDescription({ description }: { description: string }) {
       {blocks.map((block, i) => {
         if (block.kind === 'heading') {
           return (
-            <h3 key={`h-${i}`} className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/45 first:mt-0">
+            <h3 key={`h-${i}`} className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-white/45 first:mt-0">
               {block.text}
             </h3>
           );
@@ -196,8 +280,8 @@ function JobDescription({ description }: { description: string }) {
           return (
             <ul key={`l-${i}`} className="flex flex-col gap-2">
               {block.items.map((item, j) => (
-                <li key={`${i}-${j}`} className="flex gap-2.5 text-[13.5px] leading-relaxed text-white/60">
-                  <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-white/25" />
+                <li key={`${i}-${j}`} className="flex gap-2.5 text-[13.5px] leading-relaxed text-slate-700 dark:text-white/60">
+                  <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-slate-400 dark:bg-white/25" />
                   <span className="min-w-0">{item}</span>
                 </li>
               ))}
@@ -208,16 +292,16 @@ function JobDescription({ description }: { description: string }) {
           return (
             <dl key={`f-${i}`} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {block.items.map((item, j) => (
-                <div key={`${i}-${j}`} className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
-                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/25">{item.label}</dt>
-                  <dd className="mt-1 text-[12.5px] font-semibold text-white/70">{item.value}</dd>
+                <div key={`${i}-${j}`} className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.03] px-3 py-2.5">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-white/25">{item.label}</dt>
+                  <dd className="mt-1 text-[12.5px] font-semibold text-slate-700 dark:text-white/70">{item.value}</dd>
                 </div>
               ))}
             </dl>
           );
         }
         return (
-          <p key={`p-${i}`} className="text-[13.5px] leading-relaxed text-white/60">{block.text}</p>
+          <p key={`p-${i}`} className="text-[13.5px] leading-relaxed text-slate-700 dark:text-white/60">{block.text}</p>
         );
       })}
     </div>
@@ -369,7 +453,7 @@ function JobActionBar({
 
         {menuOpen && (
           <div role="menu" aria-label="Share this job"
-            className="absolute right-0 top-[calc(100%+8px)] z-40 w-60 overflow-hidden rounded-[13px] border border-white/[0.10] bg-[#111114] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.55)]">
+            className="absolute right-0 top-[calc(100%+8px)] z-40 w-60 overflow-hidden rounded-[13px] border border-slate-300 dark:border-white/[0.10] bg-[#111114] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.55)]">
             {channels.map(({ key, label, icon, href }) => (
               <a key={key} role="menuitem" href={href} target="_blank" rel="noopener noreferrer"
                 onClick={() => setMenuOpen(false)} className={MENU_ITEM}>
@@ -578,23 +662,23 @@ export default function JobDetailPage({
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#0A0A0C] text-white">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0A0A0C] dark:">
       <style>{`.no-sb::-webkit-scrollbar{display:none}.no-sb{scrollbar-width:none}`}</style>
 
       {/* ══ Header ═══════════════════════════════════════════════════════ */}
-      <header className="shrink-0 z-30 border-b border-white/[0.06]"
-        style={{ height: 56, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px) saturate(180%)' }}>
+      <header className="shrink-0 z-30 border-b border-slate-200 dark:border-white/[0.06]"
+        style={{ height: 56, backdropFilter: 'blur(20px) saturate(180%)' }}>
         <div className="h-full px-3 sm:px-5 lg:px-8 flex items-center gap-3">
           <button onClick={() => router.back()} aria-label="Back"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-white/48 hover:text-white hover:bg-white/[0.08] transition-all">
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.04] text-slate-600 dark:text-white/48 hover:text-white hover:bg-white/[0.08] transition-all">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <Link href="/jobs" className="truncate text-[15px] font-bold tracking-[-0.01em] text-white hover:text-white/80">
+          <Link href="/jobs" className="truncate text-[15px] font-bold tracking-[-0.01em] hover:text-slate-700 dark:hover:text-white/80">
             Jobs
           </Link>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <button type="button" onClick={shareJob}
-              className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-3.5 text-[12.5px] font-semibold text-white/48 transition-all hover:bg-white/[0.08] hover:text-white/72">
+              className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.04] px-3.5 text-[12.5px] font-semibold text-slate-600 dark:text-white/48 transition-all hover:bg-white/[0.08] hover:text-white/72">
               <Share2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Share</span>
             </button>
             {externalApply ? (
@@ -618,7 +702,7 @@ export default function JobDetailPage({
           <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-indigo-500/[0.05] blur-[160px]" />
         </div>
 
-        <div className="mx-auto w-full max-w-3xl px-3 pb-20 pt-7 sm:px-5 lg:px-8">
+        <div className="mx-auto w-full max-w-6xl px-3 pb-20 pt-7 sm:px-5 lg:px-8">
 
           {shareNote && (
             <div role="status" className="mb-4 flex items-center gap-2 rounded-[12px] border border-emerald-500/25 bg-emerald-500/[0.07] px-3.5 py-2.5 text-[12.5px] font-medium text-emerald-200/90">
@@ -630,34 +714,38 @@ export default function JobDetailPage({
           <div className="flex items-start gap-4">
             <CompanyLogo company={company} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-white/45">
-                {company}{source && <span className="text-white/28"> · via {source}</span>}
+              <p className="truncate text-[13px] font-semibold text-slate-600 dark:text-white/45">
+                {company}{source && <span className="text-slate-500 dark:text-white/28"> · via {source}</span>}
               </p>
-              <h1 className="mt-1 text-[22px] font-bold leading-tight tracking-[-0.02em] text-white sm:text-[26px]">
+              <h1 className="mt-1 text-[22px] font-bold leading-tight tracking-[-0.02em] sm:text-[26px]">
                 {job.title}
               </h1>
               {locationLabel && (
-                <p className="mt-2 flex items-center gap-1.5 text-[13px] text-white/35">
+                <p className="mt-2 flex items-center gap-1.5 text-[13px] text-slate-500 dark:text-white/35">
                   <MapPin className="h-3.5 w-3.5 shrink-0" /> <span className="min-w-0">{locationLabel}</span>
                 </p>
               )}
             </div>
           </div>
 
-          {/* ── Meta ─────────────────────────────────────────────────── */}
-          {meta.length > 0 && (
-            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {meta.map((m) => (
-                <div key={m.label} className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2.5">
-                  <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-white/25">{m.label}</p>
-                  <p className="mt-1 truncate text-[12.5px] font-semibold text-white/70">{m.value}</p>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* ── Two columns from lg ──────────────────────────────────────
+              The role reads on the left; Apply, the metadata and the poster
+              sit in a sticky rail on the right so the primary action stays in
+              view however long the description runs. Below lg the rail simply
+              comes first, which keeps Apply near the top on a phone. */}
+          <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-7">
+
+          {/* ══ Rail ═══════════════════════════════════════════════════ */}
+          {/* `lg:!sticky` rather than `lg:sticky`: app/globals.css carries an
+              unmediated `.dark aside, .dark header, .dark main { position:
+              relative }`, which outranks Tailwind's `.lg\:sticky` and silently
+              un-sticks this rail in dark mode only — measured in Chrome. The
+              important modifier is confined to this one utility; changing the
+              global rule would touch every page that relies on it. */}
+          <aside className="order-first flex flex-col gap-3 lg:order-last lg:!sticky lg:top-4">
 
           {/* ── Actions ──────────────────────────────────────────────── */}
-          <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center lg:flex-col lg:items-stretch">
             {externalApply ? (
               <a href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow"
                 aria-label={`Apply for ${job.title} at ${company} on the original source`}
@@ -689,16 +777,56 @@ export default function JobDetailPage({
           </div>
 
           {externalApply && (
-            <p className="mt-2.5 text-[11.5px] text-white/22">
+            <p className={`text-[11.5px] ${FAINT}`}>
               Applications for this role are handled by {source || 'the employer'} on their own site.
             </p>
           )}
 
+          {/* ── Job metadata ─────────────────────────────────────────── */}
+          {meta.length > 0 && (
+            <div className={`${PANEL} p-4`}>
+              <h2 className={HEADING}>Job details</h2>
+              <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3 lg:grid-cols-1">
+                {meta.map((m) => (
+                  <div key={m.label} className="min-w-0">
+                    <dt className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] ${FAINT}`}>{m.label}</dt>
+                    <dd className="mt-0.5 truncate text-[12.5px] font-semibold text-slate-800 dark:text-white/70">{m.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
+
+          {/* ── Who posted this ──────────────────────────────────────────
+              Named honestly: `organizationName` is the poster's own name when
+              an individual posts, so calling every poster a "company" would
+              misrepresent a person. `department` is the only company-shaped
+              field the schema carries, so it is the one signal used. */}
+          <div className={`${PANEL} p-4`}>
+            <h2 className={HEADING}>Posted by</h2>
+            <div className="mt-3 flex items-center gap-3">
+              <CompanyLogo company={company} />
+              <div className="min-w-0">
+                <p className="truncate text-[13.5px] font-bold">{company}</p>
+                <p className={`mt-0.5 truncate text-[11.5px] ${MUTED}`}>
+                  {job.department?.trim() ? job.department.trim() : 'Employer'}
+                  {source && ` · via ${source}`}
+                </p>
+                {posted && <p className={`mt-0.5 text-[11.5px] ${FAINT}`}>{posted}</p>}
+              </div>
+            </div>
+          </div>
+
+          </aside>
+
+          {/* ══ Main column ════════════════════════════════════════════ */}
+          <div className="min-w-0">
+
           {/* ── Role content ─────────────────────────────────────────── */}
-          <div className={`mt-6 overflow-hidden ${PANEL}`}>
+          <div className={`overflow-hidden ${PANEL}`}>
             {job.description && (
               <section className="px-5 py-6 sm:px-6">
-                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Job description</h2>
+                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Job description</h2>
                 <JobDescription description={job.description} />
               </section>
             )}
@@ -706,11 +834,11 @@ export default function JobDetailPage({
             <ListSection title="Requirements" items={job.requirements} />
 
             {(job.preferredSkills ?? []).filter(Boolean).length > 0 && (
-              <section className="border-t border-white/[0.06] px-5 py-6 sm:px-6">
-                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Preferred skills</h2>
+              <section className="border-t border-slate-200 dark:border-white/[0.06] px-5 py-6 sm:px-6">
+                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Preferred skills</h2>
                 <div className="mt-3.5 flex flex-wrap gap-1.5">
                   {job.preferredSkills.filter(Boolean).map((s) => (
-                    <span key={s} className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[11.5px] font-medium text-white/50">{s}</span>
+                    <span key={s} className="rounded-full border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.03] px-2.5 py-1 text-[11.5px] font-medium text-slate-600 dark:text-white/50">{s}</span>
                   ))}
                 </div>
               </section>
@@ -720,11 +848,11 @@ export default function JobDetailPage({
           {/* ── Native application ───────────────────────────────────── */}
           {!externalApply && (
             <div id="apply" ref={applyRef} className={`mt-6 overflow-hidden scroll-mt-4 ${PANEL}`}>
-              <div className="border-b border-white/[0.06] px-5 py-5 sm:px-6">
-                <h2 className="text-[15px] font-bold tracking-[-0.01em] text-white">
+              <div className="border-b border-slate-200 dark:border-white/[0.06] px-5 py-5 sm:px-6">
+                <h2 className="text-[15px] font-bold tracking-[-0.01em] ">
                   {applied ? 'Your application' : 'Apply on Docrud'}
                 </h2>
-                <p className="mt-1 text-[12.5px] text-white/32">
+                <p className="mt-1 text-[12.5px] /32">
                   {applied
                     ? `Sent to ${company}. The team reviews applications from their Hiring Desk.`
                     : `Your application goes straight to ${company}.`}
@@ -738,14 +866,14 @@ export default function JobDetailPage({
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/[0.12] px-3 py-1 text-[11.5px] font-bold text-emerald-300">
                       <Check className="h-3.5 w-3.5" /> Already applied
                     </span>
-                    <span className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold capitalize text-white/55">
+                    <span className="rounded-full border border-slate-300 dark:border-white/[0.10] bg-slate-50 dark:bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold capitalize text-slate-600 dark:text-white/55">
                       Status: {applied.status}
                     </span>
                     {applied.appliedAt && (
-                      <span className="text-[11.5px] text-white/25">Applied {formatPosted(applied.appliedAt) || 'recently'}</span>
+                      <span className="text-[11.5px] text-slate-400 dark:text-white/25">Applied {formatPosted(applied.appliedAt) || 'recently'}</span>
                     )}
                   </div>
-                  <p className="mt-3.5 text-[12.5px] leading-relaxed text-white/32">
+                  <p className="mt-3.5 text-[12.5px] leading-relaxed /32">
                     You can track this application from your workspace. Applying again would not create a second
                     application for this role.
                   </p>
@@ -755,13 +883,13 @@ export default function JobDetailPage({
                 </div>
               ) : signedOut ? (
                 <div className="px-5 py-6 sm:px-6">
-                  <p className="text-[13px] text-white/40">Sign in to apply with your Docrud profile and resume.</p>
+                  <p className="text-[13px] text-slate-500 dark:text-white/40">Sign in to apply with your Docrud profile and resume.</p>
                   <Link href={`/login?next=${encodeURIComponent(`/jobs/${job.id}`)}`} className={`${PRIMARY_BTN} mt-4 w-full sm:w-auto`}>
                     Login to apply <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               ) : !isCandidate ? (
-                <div className="px-5 py-6 text-[13px] text-white/40 sm:px-6">
+                <div className="px-5 py-6 text-[13px] text-slate-500 dark:text-white/40 sm:px-6">
                   Company workspaces review applications rather than submit them. Sign in with an individual account to apply.
                 </div>
               ) : (
@@ -769,13 +897,13 @@ export default function JobDetailPage({
 
                   {/* Profile — prefilled, not retyped */}
                   <section>
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Your profile</h3>
-                    <div className="mt-3 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3.5 py-3">
-                      <p className="truncate text-[13px] font-semibold text-white/75">{session?.user?.name}</p>
-                      <p className="truncate text-[12px] text-white/35">{session?.user?.email}</p>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Your profile</h3>
+                    <div className="mt-3 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.03] px-3.5 py-3">
+                      <p className="truncate text-[13px] font-semibold /75">{session?.user?.name}</p>
+                      <p className="truncate text-[12px] text-slate-500 dark:text-white/35">{session?.user?.email}</p>
                     </div>
-                    <label htmlFor="apply-phone" className="mt-3 mb-1.5 block text-[11.5px] font-semibold text-white/55">
-                      Phone <span className="font-medium text-white/25">(optional)</span>
+                    <label htmlFor="apply-phone" className="mt-3 mb-1.5 block text-[11.5px] font-semibold text-slate-600 dark:text-white/55">
+                      Phone <span className="font-medium text-slate-400 dark:text-white/25">(optional)</span>
                     </label>
                     <input id="apply-phone" value={phone} onChange={(e) => setPhone(e.target.value)}
                       inputMode="tel" placeholder="+91…" className={INPUT} />
@@ -783,7 +911,7 @@ export default function JobDetailPage({
 
                   {/* Resume */}
                   <section>
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">Resume</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Resume</h3>
                     <div className="mt-3 flex flex-col gap-2">
                       {profileResumes.map((r) => (
                         <label key={r.id}
@@ -793,9 +921,9 @@ export default function JobDetailPage({
                           <input type="radio" name="resume" value={r.id}
                             checked={resumeChoice === r.id} onChange={() => setResumeChoice(r.id)}
                             className="h-3.5 w-3.5 shrink-0 accent-white" />
-                          <FileText className="h-4 w-4 shrink-0 text-white/30" />
-                          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-white/70">{r.fileName}</span>
-                          <span className="shrink-0 text-[10.5px] text-white/22">on your profile</span>
+                          <FileText className="h-4 w-4 shrink-0 text-slate-500 dark:text-white/30" />
+                          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-700 dark:text-white/70">{r.fileName}</span>
+                          <span className="shrink-0 text-[10.5px] text-slate-400 dark:text-white/22">on your profile</span>
                         </label>
                       ))}
 
@@ -806,8 +934,8 @@ export default function JobDetailPage({
                         <input type="radio" name="resume" value="upload"
                           checked={resumeChoice === 'upload'} onChange={() => setResumeChoice('upload')}
                           className="h-3.5 w-3.5 shrink-0 accent-white" />
-                        <Upload className="h-4 w-4 shrink-0 text-white/30" />
-                        <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-white/70">
+                        <Upload className="h-4 w-4 shrink-0 text-slate-500 dark:text-white/30" />
+                        <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-slate-700 dark:text-white/70">
                           {uploadedResume ? uploadedResume.fileName : 'Upload a different resume'}
                         </span>
                       </label>
@@ -825,19 +953,19 @@ export default function JobDetailPage({
                             }}
                           />
                           <label htmlFor="resume-file"
-                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.04] px-3.5 py-1.5 text-[11.5px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/85">
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/[0.10] bg-slate-50 dark:bg-white/[0.04] px-3.5 py-1.5 text-[11.5px] font-semibold text-slate-600 dark:text-white/55 transition hover:bg-white/[0.08] hover:text-white/85">
                             {busyField === 'resume'
                               ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
                               : <><Paperclip className="h-3.5 w-3.5" /> {uploadedResume ? 'Replace file' : 'Choose file'}</>}
                           </label>
-                          <p className="mt-1.5 text-[11px] text-white/22">
+                          <p className="mt-1.5 text-[11px] text-slate-400 dark:text-white/22">
                             PDF, Word or text, up to 10 MB. Used for this application only — your profile resume stays as it is.
                           </p>
                         </div>
                       )}
 
                       {profileResumes.length === 0 && resumeChoice !== 'upload' && (
-                        <p className="text-[11.5px] text-white/25">
+                        <p className="text-[11.5px] text-slate-400 dark:text-white/25">
                           No resume on your profile yet — upload one above to apply.
                         </p>
                       )}
@@ -847,7 +975,7 @@ export default function JobDetailPage({
                   {/* Documents the job actually asked for */}
                   {requiredDocs.length > 0 && (
                     <section>
-                      <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">
+                      <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">
                         Requested documents
                       </h3>
                       <div className="mt-3 flex flex-col gap-2">
@@ -855,15 +983,15 @@ export default function JobDetailPage({
                           const file = docs[label];
                           const id = `doc-${i}`;
                           return (
-                            <div key={label} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-white/[0.07] bg-white/[0.02] px-3.5 py-3">
-                              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-white/70">{label}</span>
+                            <div key={label} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-200 dark:border-white/[0.07] bg-white dark:bg-white/[0.02] px-3.5 py-3">
+                              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-700 dark:text-white/70">{label}</span>
                               {file ? (
                                 <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-emerald-300/80">
                                   <Check className="h-3.5 w-3.5 shrink-0" />
                                   <span className="min-w-0 truncate">{file.fileName}</span>
                                   <button type="button" aria-label={`Remove ${label}`}
                                     onClick={() => setDocs((prev) => { const n = { ...prev }; delete n[label]; return n; })}
-                                    className="shrink-0 text-white/30 hover:text-white/70"><X className="h-3.5 w-3.5" /></button>
+                                    className="shrink-0 text-slate-500 dark:text-white/30 hover:text-white/70"><X className="h-3.5 w-3.5" /></button>
                                 </span>
                               ) : (
                                 <>
@@ -876,7 +1004,7 @@ export default function JobDetailPage({
                                       if (result) setDocs((prev) => ({ ...prev, [label]: result }));
                                     }} />
                                   <label htmlFor={id}
-                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/85">
+                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/[0.10] bg-slate-50 dark:bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold text-slate-600 dark:text-white/55 transition hover:bg-white/[0.08] hover:text-white/85">
                                     {busyField === label
                                       ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
                                       : <><Paperclip className="h-3.5 w-3.5" /> Attach</>}
@@ -892,8 +1020,8 @@ export default function JobDetailPage({
 
                   {/* Optional message */}
                   <section>
-                    <label htmlFor="cover-letter" className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/35">
-                      Message <span className="font-semibold normal-case tracking-normal text-white/25">(optional)</span>
+                    <label htmlFor="cover-letter" className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">
+                      Message <span className="font-semibold normal-case tracking-normal text-slate-400 dark:text-white/25">(optional)</span>
                     </label>
                     <textarea id="cover-letter" rows={4} value={coverLetter}
                       onChange={(e) => setCoverLetter(e.target.value)}
@@ -908,7 +1036,7 @@ export default function JobDetailPage({
                   )}
 
                   <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-[11px] text-white/22">
+                    <p className="text-[11px] text-slate-400 dark:text-white/22">
                       {missingDocs.length > 0
                         ? `Still needed: ${missingDocs.join(', ')}`
                         : !resumeReady ? 'Choose a resume to continue.' : 'Your profile, resume and attachments are sent together.'}
@@ -924,10 +1052,18 @@ export default function JobDetailPage({
             </div>
           )}
 
-          <div className="mt-6 flex items-center gap-2 text-[11.5px] text-white/22">
-            <Briefcase className="h-3.5 w-3.5" />
-            <Link href="/jobs" className="hover:text-white/50">Back to all jobs</Link>
+          <div className={`mt-6 flex items-center gap-2 text-[11.5px] ${FAINT}`}>
+            <Briefcase className="h-3.5 w-3.5" aria-hidden />
+            <Link
+              href="/jobs"
+              className="underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            >
+              Back to all jobs
+            </Link>
           </div>
+
+          </div>{/* main column */}
+          </div>{/* two-column grid */}
         </div>
       </main>
     </div>

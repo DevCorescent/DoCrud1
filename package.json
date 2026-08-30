@@ -26,6 +26,7 @@
     "test:ats-phase8": "tsx scripts/ats-phase8.selftest.ts",
     "test:ats-hardening": "tsx scripts/ats-hardening.selftest.ts",
     "test:ats-profile": "tsx scripts/ats-profile.selftest.ts",
+    "test:ats-modal": "tsx scripts/ats-modal.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:indexes": "node scripts/db-indexes.mjs",

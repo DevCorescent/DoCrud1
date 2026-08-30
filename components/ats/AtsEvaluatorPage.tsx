@@ -25,7 +25,8 @@ import {
   uploadErrorMessageForStatus,
   type AtsApiResponse,
 } from './ats-view-model';
-import { AtsResults } from './AtsResults';
+import AtsResultsModal from './AtsResultsModal';
+import { displayScore, scoreTone, TONE_CLASSES } from './ats-view-model';
 import { RESUME_ACCEPT_ATTRIBUTE } from '@/lib/ats-upload-limits';
 
 /** One card surface, defined once, theme-aware. Not five variants of a box. */
@@ -52,6 +53,12 @@ export default function AtsEvaluatorPage() {
   const [jobDescription, setJobDescription] = useState('');
 
   const [result, setResult] = useState<AtsApiResponse | null>(null);
+  /* The report opens in a dialog rather than inline. Kept separate from
+     `result` so closing the dialog keeps the result available behind the
+     compact card, instead of throwing away an analysis the user just ran. */
+  const [reportOpen, setReportOpen] = useState(false);
+  /* Focus returns here when the dialog closes. */
+  const analyzeRef = useRef<HTMLButtonElement>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
 
@@ -124,6 +131,7 @@ export default function AtsEvaluatorPage() {
         return;
       }
       setResult((await response.json()) as AtsApiResponse);
+      setReportOpen(true);
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return;
       setError(NETWORK_ERROR_MESSAGE);
@@ -164,6 +172,7 @@ export default function AtsEvaluatorPage() {
     inFlight.current = null;
     setRunning(false);
     setResult(null);
+    setReportOpen(false);
     setError('');
     setUploadError('');
   }, []);
@@ -359,6 +368,7 @@ export default function AtsEvaluatorPage() {
         <div className="mt-5 flex flex-wrap items-center gap-3">
           <button
             type="button"
+            ref={analyzeRef}
             onClick={analyze}
             disabled={!ready}
             className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-2.5 text-[13px] font-bold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-[#020617] dark:hover:bg-white/90 dark:focus-visible:ring-offset-[#08080b]"
@@ -410,11 +420,34 @@ export default function AtsEvaluatorPage() {
           </section>
         )}
 
+        {/* A compact summary stays on the page; the full report lives in the
+            dialog. The page after an analysis is now the form plus one card,
+            not the form plus a metre of report. */}
         {result && (
           <div className={running ? 'pointer-events-none opacity-60 transition-opacity' : 'transition-opacity'}>
-            <AtsResults result={result} />
+            <ResultCard
+              result={result}
+              jobTitle={jobTitle.trim() || result.alignment.jdTitle}
+              resumeName={uploaded?.fileName ?? resumes.find((r) => r.id === resumeId)?.fileName ?? null}
+              onOpen={() => setReportOpen(true)}
+            />
           </div>
         )}
+
+        <AtsResultsModal
+          open={reportOpen}
+          result={result}
+          jobTitle={jobTitle.trim() || result?.alignment.jdTitle || undefined}
+          onClose={() => { setReportOpen(false); analyzeRef.current?.focus(); }}
+          footer={
+            <Link
+              href="/ats/history"
+              className="inline-flex items-center justify-center rounded-xl border border-slate-300 px-4 py-2 text-[12.5px] font-semibold transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.12] dark:hover:bg-white/[0.06]"
+            >
+              View History
+            </Link>
+          }
+        />
       </div>
     </main>
   );
@@ -431,5 +464,80 @@ function LoadingSkeleton() {
         <div className={`${PANEL} h-56 animate-pulse`} />
       </div>
     </div>
+  );
+}
+
+/**
+ * The compact result, shown on the page after an analysis.
+ *
+ * Reports the headline numbers and nothing more: the score, its band, what was
+ * compared, and the three module scores. Everything else is one click away in
+ * the dialog. Every figure comes from the API response — the only arithmetic
+ * here is Math.round for display, as everywhere else in this feature.
+ */
+function ResultCard({
+  result, jobTitle, resumeName, onOpen,
+}: {
+  result: AtsApiResponse;
+  jobTitle: string;
+  resumeName: string | null;
+  onOpen: () => void;
+}) {
+  const tone = scoreTone(result.score);
+  const { breakdown } = result;
+
+  return (
+    <section className={`${PANEL} mt-6 p-5`} aria-label="Latest ATS result">
+      <p className={LABEL}>ATS match</p>
+
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-baseline gap-3">
+          <span className={`text-[38px] font-bold leading-none tabular-nums ${TONE_CLASSES[tone].text}`}>
+            {displayScore(result.score)}<span className="text-[18px]">%</span>
+          </span>
+          {/* The band is a word, not a hue: the status must survive both a
+              colourblind reader and a screen reader. */}
+          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11.5px] font-bold ${TONE_CLASSES[tone].chip}`}>
+            {result.label}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-[12.5px] font-bold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:bg-white dark:text-[#020617] dark:hover:bg-white/90"
+        >
+          View Full Analysis
+        </button>
+      </div>
+
+      <div className="mt-3 min-w-0">
+        {jobTitle && <p className="truncate text-[13px] font-semibold">{jobTitle}</p>}
+        <p className={`mt-0.5 truncate text-[12px] ${MUTED}`}>
+          {resumeName ? `Resume: ${resumeName}` : 'Resume: pasted for this evaluation'}
+        </p>
+      </div>
+
+      <dl className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-200 pt-3 sm:grid-cols-3 dark:border-white/[0.07]">
+        {([
+          ['Keyword', breakdown.keyword.score],
+          ['Impact', breakdown.experience.score],
+          ['Alignment', breakdown.alignment.score],
+        ] as const).map(([label, score]) => (
+          <div key={label} className="flex items-baseline justify-between gap-2 sm:block">
+            <dt className={LABEL}>{label}</dt>
+            <dd className={`text-[16px] font-bold tabular-nums sm:mt-1 ${TONE_CLASSES[scoreTone(score)].text}`}>
+              {score}<span className={`ml-1 text-[11px] font-semibold ${MUTED}`}>/ 100</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {breakdown.parsingCap.applied && (
+        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11.5px] text-amber-700 dark:text-amber-300">
+          Score capped at {breakdown.parsingCap.cap} because of resume structure — open the full analysis for details.
+        </p>
+      )}
+    </section>
   );
 }

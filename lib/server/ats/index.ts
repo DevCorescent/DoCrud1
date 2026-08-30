@@ -193,8 +193,14 @@ function buildActionPlan(
     });
   }
   if (alignment.titleScore < 55 && alignment.jdTitle) {
+    /* Clipped as a second line of defence. jd.ts already refuses to derive an
+       implausible title, but a CALLER-SUPPLIED jobTitle is untrusted text and a
+       recommendation must stay a sentence, never a pasted document. */
+    const target = alignment.jdTitle.length > 60
+      ? `${alignment.jdTitle.slice(0, 57).trimEnd()}…`
+      : alignment.jdTitle;
     candidates.push({
-      text: `Align your headline with the target role ("${alignment.jdTitle}") where your experience honestly supports it — your closest current title reads as ${alignment.bestResumeTitle ?? 'unrelated'}.`,
+      text: `Align your headline with the target role ("${target}") where your experience honestly supports it — your closest current title reads as ${alignment.bestResumeTitle ?? 'unrelated'}.`,
       value: 55 - alignment.titleScore,
     });
   }

@@ -28,18 +28,13 @@ export type AtsMatchStatus = AtsKeywordRow['status'];
    `label` exists so the status is never carried by colour alone — a
    red/green distinction is invisible to a red-green colourblind reader, and
    unreadable to a screen reader. */
-export type ScoreTone = 'red' | 'yellow' | 'blue' | 'green';
-
-export function scoreTone(score: number): ScoreTone {
-  if (score < 25) return 'red';
-  if (score < 50) return 'yellow';
-  if (score < 75) return 'blue';
-  return 'green';
-}
-
-export const TONE_LABEL: Record<ScoreTone, string> = {
-  red: 'Poor', yellow: 'Weak', blue: 'Competitive', green: 'Strong',
-};
+/* The band boundaries and their words now live in lib/score-tone.ts, because
+   the job-recommendation badges read a percentage the same way. Re-exported
+   rather than reimplemented: two copies of "where does blue become green" is
+   exactly the kind of thing that silently drifts. The ATS-specific classes
+   below stay here — only the thresholds are shared. */
+export { toneForScore as scoreTone, TONE_LABEL, type ScoreTone } from '@/lib/score-tone';
+import { toneForScore as scoreTone, type ScoreTone } from '@/lib/score-tone';
 
 /** Tailwind classes per tone. Light values first, dark after, in both themes. */
 export const TONE_CLASSES: Record<ScoreTone, { text: string; ring: string; chip: string }> = {

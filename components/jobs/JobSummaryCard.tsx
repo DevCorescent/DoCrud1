@@ -29,6 +29,7 @@ import {
 } from '@/lib/jobs-ui';
 import { getCompanyLogo } from '@/lib/company-logos';
 import { isIndiaRelevant } from '@/lib/server/job-scraper/india';
+import { getJobMatchLabel, jobMatchTokenClasses } from '@/lib/job-match-tone';
 
 export type JobSummary = {
   id: string;
@@ -132,8 +133,13 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
                   {job.title}
                 </h3>
                 {hasMatch && (
-                  <span className="shrink-0 rounded-full border border-emerald-500/25 bg-emerald-500/[0.12] px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                  /* The hue tracks the job-match score (lib/job-match-tone.ts);
+                     the percentage itself is unchanged and still the primary
+                     signal. The band word is available to assistive tech so
+                     the status never rests on colour alone. */
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${jobMatchTokenClasses(job.matchScore as number)}`}>
                     {job.matchScore}% Match
+                    <span className="sr-only"> — {getJobMatchLabel(job.matchScore as number)} match</span>
                   </span>
                 )}
               </div>

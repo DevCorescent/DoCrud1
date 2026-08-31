@@ -256,9 +256,11 @@ function main() {
     COMPOSE.includes("(['desktop', 'mobile', 'text'] as const)"));
   check('the preview states it is an approximation',
     COMPOSE.includes('not a guarantee of how every client'));
+  /* The nav grows each phase; what must hold is that Compose is mounted and
+     is one of the mail views. */
   check('compose is mounted in the Mail Center',
     PANEL.includes('<MailCompose />')
-    && PANEL.includes("useState<'overview' | 'compose' | 'outbox' | 'health'>"));
+    && /const \[view, setView\] = useState<[^>]*'compose'[^>]*>/.test(PANEL));
   /* Phase 5 delivered recipients and sending, so the old "not yet" note is
      gone. What must remain true is that nothing unbuilt is stubbed. */
   check('nothing unbuilt is stubbed',

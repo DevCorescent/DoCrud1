@@ -131,7 +131,13 @@ function main() {
   check('the endpoint is super-admin guarded',
     HEALTH_API.includes('getSuperAdminSessionFromRequest')
     && HEALTH_API.includes("{ error: 'Unauthorized' }, { status: 401 }"));
-  check('a forced re-check is opt-in', HEALTH_API.includes("searchParams.get('force') === '1'"));
+  check('a forced re-check is opt-in', HEALTH_API.includes("params.get('force') === '1'"));
+  /* The dashboard must not open an SMTP connection to paint. */
+  check('a cached-only mode exists so the overview never blocks on SMTP',
+    HEALTH_API.includes("params.get('provider') === 'cached'")
+    && PROVIDER.includes('export function getCachedProviderHealth'));
+  check('an unchecked provider is reported as unknown, not healthy',
+    HEALTH_API.includes("(cachedOnly ? 'unknown' : 'unconfigured')"));
   check('application health is reported separately from provider health',
     HEALTH_API.includes('application:') && HEALTH_API.includes('provider: health?.status'));
   check('failures are grouped by classified cause',
@@ -197,8 +203,10 @@ function main() {
   check('compose is a real section, not a placeholder',
     navDecl.includes("'compose'") && ADMIN2.includes('<MailCompose />'));
   check('every figure comes from the real health endpoint',
-    OVERVIEW.includes("fetch('/api/super-admin/mail/health'")
+    OVERVIEW.includes("fetch('/api/super-admin/mail/health?provider=cached'")
     && !/const \w+ = \[\s*\{ *label/.test(OVERVIEW));
+  check('an unchecked provider is stated rather than implied healthy',
+    OVERVIEW.includes('Mail provider not checked yet'));
   check('the overview reads campaign state, not guesses',
     HEALTH_API.includes('getMailCampaigns()') && OVERVIEW.includes('campaigns.scheduled'));
   check('pending retries are surfaced',

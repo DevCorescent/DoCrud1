@@ -23,7 +23,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface Props {
-  /** Initial HTML. Only read on mount; the editor owns the DOM after that. */
+  /** Current HTML. External changes re-seed the canvas; the editor's own
+      edits do not, so the caret is never disturbed mid-word. */
   value: string;
   onChange: (html: string) => void;
   disabled?: boolean;
@@ -70,17 +71,29 @@ export default function RichEmailEditor({ value, onChange, disabled }: Props) {
   const [btnText, setBtnText] = useState('');
   const [btnUrl, setBtnUrl] = useState('');
 
-  /* Seed once. Re-writing innerHTML on every value change would fight the
-     caret and lose the user's position mid-word. */
+  /** The last HTML this editor emitted, so its own edits are not re-seeded. */
+  const lastEmitted = useRef<string>('');
+
+  /* Seeding only on mount loses content that arrives later — a draft loaded
+     asynchronously mounted the editor with an empty value and never caught up.
+     Re-seeding on EVERY value change is equally wrong: it would rewrite
+     innerHTML on each keystroke and drop the caret mid-word.
+     So: re-seed only when the incoming value differs from what this editor
+     last produced, i.e. when the change came from outside. */
   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) {
-      ref.current.innerHTML = value || '';
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const next = value || '';
+    if (!ref.current) return;
+    if (next === lastEmitted.current) return;      // our own edit, echoed back
+    if (ref.current.innerHTML === next) return;    // already correct
+    ref.current.innerHTML = next;
+    lastEmitted.current = next;
+  }, [value]);
 
   const emit = useCallback(() => {
-    if (ref.current) onChange(ref.current.innerHTML);
+    if (!ref.current) return;
+    const html = ref.current.innerHTML;
+    lastEmitted.current = html;
+    onChange(html);
   }, [onChange]);
 
   /* Opening a dialog moves focus out of the editor and the selection is lost,

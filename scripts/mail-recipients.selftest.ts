@@ -318,8 +318,12 @@ async function main() {
     COMPOSE.includes('setStaleWarning') && COMPOSE.includes('The audience changed since you previewed it'));
   check('the confirm button states the real number',
     COMPOSE.includes('Confirm & send to ${(confirmCount ?? resolution.final).toLocaleString()} recipients'));
+  /* The guard is a ref, not state: browser QA showed that two clicks in one
+     tick both read the old `phase` and both created a campaign. */
   check('a second click cannot queue two campaigns',
-    COMPOSE.includes("if (phase === 'sending' || !segment) return;"));
+    COMPOSE.includes('if (sendingRef.current || !segment) return;')
+    && COMPOSE.includes('sendingRef.current = true;')
+    && COMPOSE.includes('sendingRef.current = false;'));
   check('sending posts the definition, not recipients',
     COMPOSE.includes('/* The DEFINITION, never a recipient list or a count. */')
     && !COMPOSE.includes('recipients: resolution'));

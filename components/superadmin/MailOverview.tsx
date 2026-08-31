@@ -102,7 +102,9 @@ export default function MailOverview({ onOpenTab }: { onOpenTab?: (tab: string) 
     if (refresh) setRefreshing(true); else setLoading(true);
     setError('');
     try {
-      const r = await fetch('/api/super-admin/mail/health', { cache: 'no-store' });
+      /* `provider=cached` avoids a ~5.5s SMTP handshake on first paint. The
+         Health tab performs the live check when an admin asks for it. */
+      const r = await fetch('/api/super-admin/mail/health?provider=cached', { cache: 'no-store' });
       if (!r.ok) {
         setError(r.status === 401 ? 'Session expired — sign in again.' : 'Could not load mail overview.');
         return;
@@ -129,10 +131,29 @@ export default function MailOverview({ onOpenTab }: { onOpenTab?: (tab: string) 
 
   const { stats, campaigns, provider } = health;
   const providerBroken = provider?.status === 'unavailable' || provider?.status === 'degraded';
+  /* No check has run yet in this process. Saying nothing would read as
+     healthy, so it is stated. */
+  const providerUnknown = !provider;
 
   return (
     <div className="space-y-4">
       {/* Delivery is either possible or it is not; say so before anything else. */}
+      {providerUnknown && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3">
+          <p className="text-[13px] font-semibold text-zinc-300">
+            <span aria-hidden>○ </span>Mail provider not checked yet
+          </p>
+          <p className="mt-1 text-[12px] text-zinc-500">
+            Provider status is not shown here because checking it opens a live connection.
+          </p>
+          {onOpenTab && (
+            <button type="button" onClick={() => onOpenTab('health')} className={`${BTN} mt-2`}>
+              Check mail health
+            </button>
+          )}
+        </div>
+      )}
+
       {providerBroken && (
         <div role="alert" className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-3">
           <p className="text-[13px] font-bold text-rose-300">

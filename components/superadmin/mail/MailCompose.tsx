@@ -53,12 +53,23 @@ interface TestOutcome {
   retryable?: boolean | null;
 }
 
-export default function MailCompose() {
+export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
+  draftId?: string | null;
+  onDraftSaved?: () => void;
+} = {}) {
   const [subject, setSubject] = useState('');
   const [preheader, setPreheader] = useState('');
   const [replyTo, setReplyTo] = useState('');
   const [html, setHtml] = useState('');
-  const [draftId, setDraftId] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(initialDraftId ?? null);
+  /** Server revision this editor is based on; sent with every save. */
+  const [revision, setRevision] = useState<number | null>(null);
+  const [loadingDraft, setLoadingDraft] = useState(Boolean(initialDraftId));
+  const [autosaveState, setAutosaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  /* Monotonic id per save request. A response from an older request is
+     discarded — request ORDER is not a safe proxy for recency. */
+  const saveSeq = useRef(0);
+  const savingRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('editing');
   const [error, setError] = useState('');
@@ -90,10 +101,40 @@ export default function MailCompose() {
     } catch { return 'Asia/Kolkata'; }
   });
 
+  /* React state updates are asynchronous, so two clicks in the same tick both
+     read the old `phase` and both post. Browser QA caught exactly that: a
+     double-click created TWO campaigns. A ref flips synchronously. */
+  const sendingRef = useRef(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmCount, setConfirmCount] = useState<number | null>(null);
   const [staleWarning, setStaleWarning] = useState('');
   const [sendResult, setSendResult] = useState<string>('');
+
+  useEffect(() => {
+    if (!initialDraftId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/super-admin/mail/drafts?id=${encodeURIComponent(initialDraftId)}`,
+          { cache: 'no-store' });
+        const data = await r.json().catch(() => null);
+        if (!r.ok || cancelled) { if (!cancelled) setError(data?.error || 'Unable to load draft.'); return; }
+        const d = data.draft;
+        setSubject(d.subject ?? ''); setHtml(d.html ?? '');
+        setPreheader(d.preheader ?? ''); setReplyTo(d.replyTo ?? '');
+        setRevision(d.revision ?? null);
+        if (d.audience) setSegment(d.audience as Segment);
+        if (d.scheduleAt) { setScheduleMode('later'); setScheduleAt(d.scheduleAt); }
+        if (d.scheduleTimezone) setTimezone(d.scheduleTimezone);
+        setSavedSnapshot(JSON.stringify({
+          subject: d.subject ?? '', preheader: d.preheader ?? '',
+          replyTo: d.replyTo ?? '', html: d.html ?? '',
+        }));
+      } catch { if (!cancelled) setError('Could not reach the server.'); }
+      finally { if (!cancelled) setLoadingDraft(false); }
+    })();
+    return () => { cancelled = true; };
+  }, [initialDraftId]);
 
   const busy = phase !== 'editing';
   const snapshot = useMemo(
@@ -111,25 +152,82 @@ export default function MailCompose() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [dirty]);
 
-  const saveDraft = useCallback(async () => {
-    if (busy) return;
-    if (!subject.trim()) { setError('A subject is required before saving.'); return; }
-    setPhase('saving'); setError(''); setNotice('');
+  /**
+   * The single save path, shared by autosave and the button.
+   *
+   * `silent` distinguishes a background autosave from an explicit save: only
+   * the latter shows a notice, and only the latter reports "a subject is
+   * required" as an error the admin must act on.
+   */
+  const persistDraft = useCallback(async (silent: boolean) => {
+    if (savingRef.current) return false;   // synchronous: state updates too late
+    if (!subject.trim()) {
+      if (!silent) setError('A subject is required before saving.');
+      return false;
+    }
+    savingRef.current = true;
+    const seq = ++saveSeq.current;
+    const attempted = snapshot;
+    setAutosaveState('saving');
+    if (!silent) { setPhase('saving'); setError(''); setNotice(''); }
     try {
       const r = await fetch('/api/super-admin/mail/drafts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: draftId, subject, html, preheader, replyTo }),
+        body: JSON.stringify({
+          id: draftId, subject, html, preheader, replyTo,
+          audience: segment ?? undefined,
+          scheduleAt: scheduleMode === 'later' ? scheduleAt : undefined,
+          scheduleTimezone: scheduleMode === 'later' ? timezone : undefined,
+          revision: revision ?? undefined,
+        }),
       });
       const data = await r.json().catch(() => null);
-      if (!r.ok) { setError(data?.error || 'Unable to save draft.'); return; }
+      /* A response from a superseded request must not touch state — otherwise
+         a slow save can restore older content over a newer one. */
+      if (seq !== saveSeq.current) return false;
+
+      if (r.status === 409) {
+        setAutosaveState('failed');
+        setError('This draft was changed elsewhere. Reload it before saving again.');
+        return false;
+      }
+      if (!r.ok) {
+        setAutosaveState('failed');
+        /* Never show "Saved" when the server refused. */
+        if (!silent) setError(data?.error || 'Unable to save draft.');
+        return false;
+      }
       setDraftId(data.draft.id);
+      setRevision(data.draft.revision ?? null);
       setSavedAt(new Date());
-      setSavedSnapshot(snapshot);
-      setNotice('Draft saved.');
-    } catch { setError('Could not reach the server.'); }
-    finally { setPhase('editing'); }
-  }, [busy, subject, html, preheader, replyTo, draftId, snapshot]);
+      setSavedSnapshot(attempted);
+      setAutosaveState('saved');
+      if (!silent) setNotice('Draft saved.');
+      onDraftSaved?.();
+      return true;
+    } catch {
+      if (seq === saveSeq.current) {
+        setAutosaveState('failed');
+        if (!silent) setError('Could not reach the server.');
+      }
+      return false;
+    } finally {
+      savingRef.current = false;
+      if (!silent) setPhase('editing');
+    }
+  }, [subject, html, preheader, replyTo, draftId, snapshot, segment,
+      scheduleMode, scheduleAt, timezone, revision, onDraftSaved]);
+
+  const saveDraft = useCallback(() => persistDraft(false), [persistDraft]);
+
+  /* Autosave: debounced, and only when something actually changed. Firing per
+     keystroke would be a request per character. */
+  useEffect(() => {
+    if (!dirty || !subject.trim() || loadingDraft) return undefined;
+    const t = setTimeout(() => { void persistDraft(true); }, 1200);
+    return () => clearTimeout(t);
+  }, [dirty, subject, loadingDraft, persistDraft]);
 
   /* Preview asks the SERVER for the sanitized body, so what is shown is what
      would actually be sent — not a second rendering path that could differ. */
@@ -216,7 +314,8 @@ export default function MailCompose() {
   }, [busy, segment, resolution]);
 
   const confirmSend = useCallback(async () => {
-    if (phase === 'sending' || !segment) return; // a second click must not queue twice
+    if (sendingRef.current || !segment) return; // a second click must not queue twice
+    sendingRef.current = true;
     setPhase('sending'); setError('');
     try {
       const r = await fetch('/api/super-admin/mail', {
@@ -245,8 +344,8 @@ export default function MailCompose() {
           + 'Delivery runs in the background; check the outbox for results.');
       setConfirming(false);
     } catch { setError('Could not reach the server.'); }
-    finally { setPhase('editing'); }
-  }, [phase, segment, subject, html, scheduleMode, scheduleAt, timezone]);
+    finally { sendingRef.current = false; setPhase('editing'); }
+  }, [segment, subject, html, scheduleMode, scheduleAt, timezone]);
 
   const subjectOver = subject.length > SUBJECT_MAX;
 
@@ -260,9 +359,13 @@ export default function MailCompose() {
           </p>
         </div>
         <span aria-live="polite" className="text-[12px]">
-          {phase === 'saving' ? <span className="text-zinc-400">Saving…</span>
+          {/* "Saved" is never shown when the server refused the write. */}
+          {autosaveState === 'saving' || phase === 'saving'
+            ? <span className="text-zinc-400">Saving…</span>
+            : autosaveState === 'failed'
+              ? <span className="text-rose-400">Save failed — your changes are not stored</span>
             : dirty ? <span className="text-amber-400">Unsaved changes</span>
-            : savedAt ? <span className="text-emerald-400">Draft saved {savedAt.toLocaleTimeString()}</span>
+            : savedAt ? <span className="text-emerald-400">Saved {savedAt.toLocaleTimeString()}</span>
             : null}
         </span>
       </div>

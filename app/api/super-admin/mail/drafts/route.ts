@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
 import {
   getMailDrafts, getMailDraftById, saveMailDraft, deleteMailDraft,
+  duplicateMailDraft, DraftConflictError,
 } from '@/lib/server/mail-drafts';
 
 export const runtime = 'nodejs';
@@ -32,11 +33,27 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ draft });
     }
     /* The list omits bodies: it feeds a picker, not an editor. */
-    const drafts = (await getMailDrafts()).map((d) => ({
-      id: d.id, subject: d.subject, updatedAt: d.updatedAt, updatedBy: d.updatedBy,
-      hasAttachments: Boolean(d.attachments?.length),
-    }));
-    return NextResponse.json({ drafts });
+    const params = new URL(req.url).searchParams;
+    const search = (params.get('q') ?? '').trim().toLowerCase();
+    const page = Math.max(1, Number(params.get('page')) || 1);
+    const PAGE_SIZE = 20;
+
+    let all = await getMailDrafts();
+    if (search) all = all.filter((d) => d.subject.toLowerCase().includes(search));
+
+    const total = all.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const start = (page - 1) * PAGE_SIZE;
+
+    return NextResponse.json({
+      drafts: all.slice(start, start + PAGE_SIZE).map((d) => ({
+        id: d.id, subject: d.subject, updatedAt: d.updatedAt, updatedBy: d.updatedBy,
+        createdAt: d.createdAt, createdBy: d.createdBy, revision: d.revision,
+        hasAttachments: Boolean(d.attachments?.length),
+        audienceMode: (d.audience as { mode?: string } | undefined)?.mode ?? null,
+      })),
+      total, page, totalPages,
+    });
   } catch {
     return NextResponse.json({ error: 'Unable to load drafts.' }, { status: 500 });
   }
@@ -49,6 +66,18 @@ export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
   try { body = await req.json(); }
   catch { return NextResponse.json({ error: 'Request body must be valid JSON.' }, { status: 400 }); }
+
+  if (body.action === 'duplicate') {
+    const sourceId = String(body.id ?? '');
+    if (!sourceId) return NextResponse.json({ error: 'A draft id is required.' }, { status: 400 });
+    const copy = await duplicateMailDraft(sourceId, session.email || 'super-admin');
+    if (!copy) return NextResponse.json({ error: 'Draft not found.' }, { status: 404 });
+    await appendSuperAdminAudit({
+      action: 'mail.draft.duplicated', targetType: 'mail_draft', targetId: copy.id,
+      details: { copiedFrom: sourceId },
+    }).catch(() => {});
+    return NextResponse.json({ draft: copy });
+  }
 
   const subject = String(body.subject ?? '').trim();
   if (!subject) {
@@ -68,6 +97,9 @@ export async function POST(req: NextRequest) {
       attachments: Array.isArray(body.attachments)
         ? (body.attachments as never[]).slice(0, 10) : undefined,
       audience: body.audience,
+      scheduleAt: typeof body.scheduleAt === 'string' ? body.scheduleAt : undefined,
+      scheduleTimezone: typeof body.scheduleTimezone === 'string' ? body.scheduleTimezone : undefined,
+      baseRevision: typeof body.revision === 'number' ? body.revision : undefined,
       /* Session identity, never the payload. */
       actor: session.email || 'super-admin',
     });
@@ -85,6 +117,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ draft });
   } catch (error) {
+    /* A stale write is a conflict, not a server fault. The current draft is
+       returned so the client can reconcile instead of guessing. */
+    if (error instanceof DraftConflictError) {
+      return NextResponse.json(
+        { error: error.message, conflict: true, draft: error.current }, { status: 409 });
+    }
     console.error('[super-admin/mail/drafts]', error);
     return NextResponse.json({ error: 'Unable to save draft.' }, { status: 500 });
   }

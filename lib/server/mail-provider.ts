@@ -314,6 +314,22 @@ export async function getProviderHealth(force = false): Promise<ProviderHealth> 
   return health;
 }
 
+/**
+ * The last known health, WITHOUT opening a connection.
+ *
+ * A `verify()` is a real SMTP handshake — measured at ~5.5s against the
+ * current provider — so a dashboard that waits for one shows a spinner for
+ * five seconds before its first paint. Screens that merely display provider
+ * status use this and render immediately; the Health tab, where an admin has
+ * actually asked, performs the live check.
+ *
+ * Returns null when no check has run yet in this process, which callers must
+ * present as "not checked" rather than as healthy.
+ */
+export function getCachedProviderHealth(): ProviderHealth | null {
+  return cached ? cached.health : null;
+}
+
 /* ── The active provider ───────────────────────────────────────────────────
 
    One instance, so the pooled transport is shared. This is the seam a second

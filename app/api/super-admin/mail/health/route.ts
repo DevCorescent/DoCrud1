@@ -17,7 +17,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest } from '@/lib/server/super-admin-auth';
 import { getEmailOutbox } from '@/lib/server/email-outbox';
 import { getMailCampaigns } from '@/lib/server/mail-campaigns';
-import { getProviderHealth, classifyMailError } from '@/lib/server/mail-provider';
+import {
+  getProviderHealth, getCachedProviderHealth, classifyMailError,
+} from '@/lib/server/mail-provider';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,11 +31,18 @@ export async function GET(req: NextRequest) {
 
   /* `force` is the "Check provider" button: it opens a real connection rather
      than reusing the 30s cache. */
-  const force = new URL(req.url).searchParams.get('force') === '1';
+  const params = new URL(req.url).searchParams;
+  const force = params.get('force') === '1';
+  /* `cached` skips the SMTP handshake entirely. The Overview uses it so the
+     dashboard paints immediately instead of waiting ~5.5s for a connection
+     nobody asked it to make. */
+  const cachedOnly = params.get('provider') === 'cached';
 
   try {
     const [health, outbox, campaigns] = await Promise.all([
-      getProviderHealth(force).catch(() => null),
+      cachedOnly
+        ? Promise.resolve(getCachedProviderHealth())
+        : getProviderHealth(force).catch(() => null),
       getEmailOutbox(500).catch(() => []),
       getMailCampaigns().catch(() => []),
     ]);
@@ -73,7 +82,9 @@ export async function GET(req: NextRequest) {
         application: 'healthy',
         database: 'healthy',
         queue: 'healthy',
-        provider: health?.status ?? 'unconfigured',
+        /* Null means "not checked in this process yet" — reporting that as
+           unconfigured would be a guess presented as a fact. */
+        provider: health?.status ?? (cachedOnly ? 'unknown' : 'unconfigured'),
       },
       stats: {
         sentToday: today.filter((e) => e.status === 'sent').length,

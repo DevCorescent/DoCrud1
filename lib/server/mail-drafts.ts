@@ -42,6 +42,16 @@ export interface MailDraft {
   attachments?: MailDraftAttachment[];
   /** Opaque to this module; the recipient picker owns its shape (Phase 5). */
   audience?: unknown;
+  /* Scheduling INTENT only. A draft never executes: nothing reads this except
+     the composer, and only an explicit Send/Schedule creates a campaign. */
+  scheduleAt?: string;
+  scheduleTimezone?: string;
+  /**
+   * Incremented on every write. Autosave sends the revision it last saw, and a
+   * write built on a stale revision is refused — otherwise a slow request can
+   * land after a fast one and silently restore older content.
+   */
+  revision: number;
   createdBy: string;
   updatedBy: string;
   createdAt: string;
@@ -69,6 +79,16 @@ export async function getMailDraftById(id: string): Promise<MailDraft | null> {
   return (await getMailDrafts()).find((d) => d.id === id) ?? null;
 }
 
+/** Raised when a save is built on a revision that is no longer current. */
+export class DraftConflictError extends Error {
+  readonly current: MailDraft;
+  constructor(current: MailDraft) {
+    super('This draft was modified by a newer save.');
+    this.name = 'DraftConflictError';
+    this.current = current;
+  }
+}
+
 export interface SaveDraftInput {
   id?: string;
   subject: string;
@@ -79,6 +99,10 @@ export interface SaveDraftInput {
   bcc?: string[];
   attachments?: MailDraftAttachment[];
   audience?: unknown;
+  scheduleAt?: string;
+  scheduleTimezone?: string;
+  /** The revision this edit was based on. Omit only when creating. */
+  baseRevision?: number;
   actor: string;
 }
 
@@ -97,6 +121,14 @@ export async function saveMailDraft(input: SaveDraftInput): Promise<MailDraft> {
     const drafts = Array.isArray(state?.drafts) ? state.drafts : [];
     const existing = input.id ? drafts.find((d) => d.id === input.id) : undefined;
 
+    /* Reject an edit built on an older revision. Request ORDER is not a safe
+       proxy for recency: two autosaves in flight can complete in either order,
+       and the slower one carries the older content. */
+    if (existing && typeof input.baseRevision === 'number'
+        && input.baseRevision !== existing.revision) {
+      throw new DraftConflictError(existing);
+    }
+
     const record: MailDraft = {
       id: existing?.id ?? input.id ?? createDraftId(),
       subject: String(input.subject ?? '').trim().slice(0, 300),
@@ -109,6 +141,9 @@ export async function saveMailDraft(input: SaveDraftInput): Promise<MailDraft> {
       bcc: input.bcc?.filter(Boolean).slice(0, 50),
       attachments: input.attachments?.slice(0, 10),
       audience: input.audience,
+      scheduleAt: input.scheduleAt || undefined,
+      scheduleTimezone: input.scheduleTimezone || undefined,
+      revision: (existing?.revision ?? 0) + 1,
       createdBy: existing?.createdBy ?? input.actor,
       updatedBy: input.actor,
       createdAt: existing?.createdAt ?? now,
@@ -129,5 +164,24 @@ export async function deleteMailDraft(id: string): Promise<void> {
     const state = await readJsonFile<DraftState>(mailDraftsPath, fallback);
     const drafts = Array.isArray(state?.drafts) ? state.drafts : [];
     await writeJsonFile(mailDraftsPath, { drafts: drafts.filter((d) => d.id !== id) });
+  });
+}
+
+/** Copy a draft. Never carries send state — a duplicate cannot deliver. */
+export async function duplicateMailDraft(id: string, actor: string): Promise<MailDraft | null> {
+  const source = await getMailDraftById(id);
+  if (!source) return null;
+  return saveMailDraft({
+    subject: `${source.subject} (copy)`,
+    html: source.html,
+    preheader: source.preheader,
+    replyTo: source.replyTo,
+    cc: source.cc,
+    bcc: source.bcc,
+    attachments: source.attachments,
+    audience: source.audience,
+    /* Scheduling intent is deliberately NOT copied: a duplicate should not
+       inherit a time someone chose for a different message. */
+    actor,
   });
 }

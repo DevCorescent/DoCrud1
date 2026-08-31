@@ -259,8 +259,12 @@ function main() {
   check('compose is mounted in the Mail Center',
     PANEL.includes('<MailCompose />')
     && PANEL.includes("useState<'overview' | 'compose' | 'outbox' | 'health'>"));
-  check('unbuilt phases are stated rather than stubbed',
-    COMPOSE.includes('are not part of this screen yet') && !COMPOSE.includes('Coming soon'));
+  /* Phase 5 delivered recipients and sending, so the old "not yet" note is
+     gone. What must remain true is that nothing unbuilt is stubbed. */
+  check('nothing unbuilt is stubbed',
+    !COMPOSE.includes('Coming soon') && !COMPOSE.includes('Not implemented'));
+  check('recipients and sending are now real, not placeholders',
+    COMPOSE.includes('<RecipientPicker') && COMPOSE.includes('const confirmSend'));
 
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);
   if (failures > 0) process.exit(1);

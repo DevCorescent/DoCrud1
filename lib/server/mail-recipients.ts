@@ -151,56 +151,151 @@ async function loadUsers(): Promise<Array<{ raw: Record<string, unknown>; user: 
  * Always call this on the server immediately before sending; never trust a
  * count the browser produced earlier.
  */
-export async function resolveRecipients(segment: MailSegment): Promise<RecipientResolution> {
-  const rows = await loadUsers();
+/** Why one candidate did or did not make the final list. */
+export type RecipientOutcome = 'included' | 'excluded' | 'invalid';
 
-  let matched: RecipientUser[] = [];
+export interface RecipientRow {
+  name: string;
+  email: string;
+  organizationName?: string;
+  role: string;
+  isActive: boolean;
+  outcome: RecipientOutcome;
+  /** Plain-language reason, shown to the admin. */
+  reason: string;
+}
+
+/**
+ * The single pass that decides each candidate's fate.
+ *
+ * Both the counts and the per-recipient table are derived from this, so the
+ * number on the confirmation screen and the rows behind "View recipients"
+ * cannot drift apart — which they would if each were computed separately.
+ */
+function classifyRecipients(matched: RecipientUser[], mode: MailAudienceMode) {
+  const seen = new Set<string>();
+  const rows: RecipientRow[] = [];
+  const emails: string[] = [];
+
+  for (const u of matched) {
+    let outcome: RecipientOutcome = 'included';
+    let reason = 'Will receive this email';
+
+    if (mode !== 'manual' && !u.isActive) {
+      outcome = 'excluded'; reason = 'Account is inactive';
+    } else if (!u.email) {
+      outcome = 'excluded'; reason = 'No email address on the account';
+    } else if (!isValidEmail(u.email)) {
+      outcome = 'invalid'; reason = 'Not a valid email address';
+    } else if (seen.has(u.email)) {
+      outcome = 'excluded'; reason = 'Duplicate of another recipient';
+    }
+
+    if (outcome === 'included') {
+      seen.add(u.email);
+      if (emails.length < MAX_RECIPIENTS) emails.push(u.email);
+      else { outcome = 'excluded'; reason = `Beyond the ${MAX_RECIPIENTS.toLocaleString()} recipient limit`; }
+    }
+
+    rows.push({
+      name: u.name, email: u.email, organizationName: u.organizationName,
+      role: u.role, isActive: u.isActive, outcome, reason,
+    });
+  }
+
+  return { rows, emails };
+}
+
+/** The candidates a segment matches, before deliverability filtering. */
+async function matchedFor(segment: MailSegment): Promise<RecipientUser[]> {
   if (segment.mode === 'manual') {
-    matched = (segment.emails ?? []).map((e, i) => ({
+    return (segment.emails ?? []).map((e, i) => ({
       id: `manual-${i}`,
       email: String(e ?? '').trim().toLowerCase(),
       name: '', role: '', accountType: 'unknown' as const,
       isActive: true, createdAt: '',
     }));
-  } else {
-    matched = rows
-      .filter(({ raw, user }) => matchesSegment(user, segment) && matchesLoginFilter(raw, segment))
-      .map(({ user }) => user);
   }
+  const rows = await loadUsers();
+  return rows
+    .filter(({ raw, user }) => matchesSegment(user, segment) && matchesLoginFilter(raw, segment))
+    .map(({ user }) => user);
+}
 
-  const selected = matched.length;
-  const seen = new Set<string>();
-  const emails: string[] = [];
-  const sample: RecipientUser[] = [];
-  const invalidSamples: string[] = [];
-  let excluded = 0;
-  let invalid = 0;
-
-  for (const u of matched) {
-    /* An inactive account is excluded from user-store sends, but a manually
-       typed address is the admin's explicit choice and is kept. */
-    if (segment.mode !== 'manual' && !u.isActive) { excluded += 1; continue; }
-    if (!u.email) { excluded += 1; continue; }
-    if (!isValidEmail(u.email)) {
-      invalid += 1;
-      if (invalidSamples.length < 10) invalidSamples.push(u.email);
-      continue;
-    }
-    if (seen.has(u.email)) { excluded += 1; continue; } // duplicate
-    seen.add(u.email);
-    if (emails.length < MAX_RECIPIENTS) emails.push(u.email);
-    if (sample.length < 8) sample.push(u);
-  }
+/**
+ * Resolve a segment into the addresses that would actually be mailed.
+ *
+ * Always call this on the server immediately before sending; never trust a
+ * count the browser produced earlier.
+ */
+export async function resolveRecipients(segment: MailSegment): Promise<RecipientResolution> {
+  const matched = await matchedFor(segment);
+  const { rows, emails } = classifyRecipients(matched, segment.mode);
 
   return {
-    selected,
-    excluded,
-    invalid,
+    selected: matched.length,
+    excluded: rows.filter((r) => r.outcome === 'excluded').length,
+    invalid: rows.filter((r) => r.outcome === 'invalid').length,
     final: emails.length,
     emails,
-    sample,
-    invalidSamples,
+    sample: matched.filter((u) => emails.includes(u.email)).slice(0, 8),
+    invalidSamples: rows.filter((r) => r.outcome === 'invalid').slice(0, 10).map((r) => r.email),
   };
+}
+
+/**
+ * The per-recipient table behind "View recipients", paginated.
+ *
+ * Returns only display fields — never the whole user record.
+ */
+export async function previewRecipientRows(
+  segment: MailSegment,
+  opts: { page?: number; pageSize?: number; outcome?: RecipientOutcome } = {},
+): Promise<{ rows: RecipientRow[]; total: number; page: number; pageSize: number; totalPages: number }> {
+  const pageSize = Math.min(Math.max(opts.pageSize ?? 25, 1), 100);
+  const page = Math.max(opts.page ?? 1, 1);
+
+  const matched = await matchedFor(segment);
+  const { rows } = classifyRecipients(matched, segment.mode);
+  const filtered = opts.outcome ? rows.filter((r) => r.outcome === opts.outcome) : rows;
+
+  const start = (page - 1) * pageSize;
+  return {
+    rows: filtered.slice(start, start + pageSize),
+    total: filtered.length,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)),
+  };
+}
+
+/**
+ * A short human description of who a segment targets.
+ *
+ * Stored on the campaign and written to the audit log, so a record of "who was
+ * this sent to" survives even though the recipient list itself is deliberately
+ * not frozen.
+ */
+export function describeSegment(segment: MailSegment): string {
+  switch (segment.mode) {
+    case 'all': return 'Everyone';
+    case 'individuals': return 'All individual accounts';
+    case 'businesses': return 'All business accounts';
+    case 'selected': return `${(segment.userIds ?? []).length} selected user(s)`;
+    case 'manual': return `${(segment.emails ?? []).length} manually entered address(es)`;
+    case 'filtered': {
+      const f = segment.filters ?? {};
+      const parts: string[] = [];
+      if (f.accountType) parts.push(`account type = ${f.accountType}`);
+      if (f.status) parts.push(`status = ${f.status}`);
+      if (f.role) parts.push(`role = ${f.role}`);
+      if (f.createdWithinDays) parts.push(`registered within ${f.createdWithinDays} days`);
+      if (f.hasLoggedIn) parts.push(`has logged in = ${f.hasLoggedIn}`);
+      if (f.search) parts.push(`matching "${f.search}"`);
+      return parts.length ? `Filtered: ${parts.join(', ')}` : 'Filtered: no conditions';
+    }
+    default: return 'Unknown audience';
+  }
 }
 
 /* ── Browsing users for the recipient picker ──────────────────────────────

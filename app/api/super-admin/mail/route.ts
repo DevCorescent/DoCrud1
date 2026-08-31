@@ -3,7 +3,10 @@ import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/se
 import {
   getMailCampaigns, upsertMailCampaign, createCampaignId,
 } from '@/lib/server/mail-campaigns';
-import { resolveRecipients, type MailSegment } from '@/lib/server/mail-recipients';
+import {
+  resolveRecipients, describeSegment, type MailSegment,
+} from '@/lib/server/mail-recipients';
+import { zonedTimeToUtc, SUPPORTED_TIMEZONES } from '@/lib/email/schedule-time';
 import { getEmailOutbox } from '@/lib/server/email-outbox';
 
 async function guard(req: NextRequest) {
@@ -108,10 +111,26 @@ export async function POST(req: NextRequest) {
       }
 
       /* Scheduled campaigns are picked up by /api/cron/mail, so they send with
-         no browser open. An immediate send is simply one that is already due. */
-      const when = scheduleAt ? new Date(scheduleAt) : new Date();
-      if (Number.isNaN(when.getTime())) {
-        return NextResponse.json({ error: 'Invalid schedule time.' }, { status: 400 });
+         no browser open. An immediate send is simply one that is already due.
+
+         The wall-clock time is interpreted in the ADMIN'S stated timezone, not
+         the server's and not the browser's. "6am tomorrow" means 6am where the
+         admin is; assuming UTC would silently send at 11:30am IST. */
+      const timezone = typeof data?.timezone === 'string' ? data.timezone : '';
+      let when: Date;
+      if (scheduleAt) {
+        if (timezone && !SUPPORTED_TIMEZONES.includes(timezone)) {
+          return NextResponse.json({ error: 'Unsupported timezone.' }, { status: 400 });
+        }
+        const converted = timezone
+          ? zonedTimeToUtc(String(scheduleAt), timezone)
+          : new Date(String(scheduleAt));
+        if (!converted || Number.isNaN(converted.getTime())) {
+          return NextResponse.json({ error: 'Invalid schedule time.' }, { status: 400 });
+        }
+        when = converted;
+      } else {
+        when = new Date();
       }
 
       const campaign = await upsertMailCampaign({
@@ -121,6 +140,13 @@ export async function POST(req: NextRequest) {
         text: String(textBody || subject),
         html: String(htmlBody),
         audience: { mode: 'segment', segment: resolvedSegment },
+        /* The DEFINITION is stored, never a frozen recipient list: a campaign
+           scheduled for tomorrow must mail whoever matches tomorrow. The
+           description and the preview count are kept alongside it so the audit
+           trail records what the admin was told at the time. */
+        audienceDescription: describeSegment(resolvedSegment),
+        audiencePreviewCount: recipients.final,
+        scheduleTimezone: timezone || undefined,
         sendAt: when.toISOString(),
         status: 'scheduled',
         createdAt: new Date().toISOString(),
@@ -135,10 +161,12 @@ export async function POST(req: NextRequest) {
         details: {
           subject,
           audience: resolvedSegment.mode,
+          audienceDescription: describeSegment(resolvedSegment),
           recipientCount: recipients.final,
           excluded: recipients.excluded,
           invalid: recipients.invalid,
           scheduledFor: campaign.sendAt,
+          timezone: timezone || 'server default',
         },
         ip: req.headers.get('x-forwarded-for') || undefined,
       });
@@ -151,7 +179,9 @@ export async function POST(req: NextRequest) {
         queued: recipients.final,
         excluded: recipients.excluded,
         invalid: recipients.invalid,
+        audienceDescription: describeSegment(resolvedSegment),
         scheduledFor: campaign.sendAt,
+        timezone: timezone || undefined,
       });
     }
 

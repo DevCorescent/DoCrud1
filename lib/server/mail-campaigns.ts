@@ -69,6 +69,14 @@ export type MailCampaign = {
   claimedAt?: string;
   /** Recipients still pending retry, plus permanently failed ones. */
   deliveries?: MailDelivery[];
+  /* Audience provenance. The DEFINITION lives in `audience`; these record what
+     the admin was shown when they approved the send, so the audit trail is
+     meaningful even though the recipient list is deliberately re-resolved at
+     execution time. */
+  audienceDescription?: string;
+  audiencePreviewCount?: number;
+  /** The timezone the admin scheduled in, kept for display. */
+  scheduleTimezone?: string;
   /** How many delivery passes this campaign has run. */
   passes?: number;
   progress?: {

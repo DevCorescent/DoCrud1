@@ -23,6 +23,10 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RichEmailEditor from '@/components/superadmin/mail/RichEmailEditor';
+import RecipientPicker, {
+  type Segment, type Resolution,
+} from '@/components/superadmin/mail/RecipientPicker';
+import { SUPPORTED_TIMEZONES } from '@/lib/email/schedule-time';
 
 const CARD = 'rounded-xl border border-zinc-800 bg-zinc-900/60 p-4';
 const LABEL = 'mb-1 block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500';
@@ -40,7 +44,7 @@ const BTN_PRIMARY =
 
 const SUBJECT_MAX = 200;
 
-type Phase = 'editing' | 'saving' | 'testing' | 'previewing';
+type Phase = 'editing' | 'saving' | 'testing' | 'previewing' | 'confirming' | 'sending';
 
 interface TestOutcome {
   ok: boolean;
@@ -70,6 +74,26 @@ export default function MailCompose() {
 
   const [testTo, setTestTo] = useState('');
   const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
+
+  /* The audience DEFINITION plus the count the server last reported for it.
+     The count is display-only — it is never sent back as an input. */
+  const [segment, setSegment] = useState<Segment | null>(null);
+  const [resolution, setResolution] = useState<Resolution | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+
+  const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [timezone, setTimezone] = useState(() => {
+    try {
+      const guess = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      return SUPPORTED_TIMEZONES.includes(guess) ? guess : 'Asia/Kolkata';
+    } catch { return 'Asia/Kolkata'; }
+  });
+
+  const [confirming, setConfirming] = useState(false);
+  const [confirmCount, setConfirmCount] = useState<number | null>(null);
+  const [staleWarning, setStaleWarning] = useState('');
+  const [sendResult, setSendResult] = useState<string>('');
 
   const busy = phase !== 'editing';
   const snapshot = useMemo(
@@ -156,6 +180,74 @@ export default function MailCompose() {
     finally { setPhase('editing'); }
   }, [busy, testTo]);
 
+  /**
+   * Open the confirmation screen — after RE-RESOLVING the audience.
+   *
+   * The count shown when the picker was used may be minutes old, and users
+   * sign up and deactivate in between. Confirming against a stale number is
+   * how an admin approves "1,284" and sends to something else.
+   */
+  const openConfirm = useCallback(async () => {
+    if (busy || !segment) return;
+    setPhase('confirming'); setError(''); setStaleWarning(''); setSendResult('');
+    try {
+      const r = await fetch('/api/super-admin/mail/recipients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segment }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) { setError(data?.error || 'Unable to resolve recipients.'); return; }
+      if (data.final === 0) {
+        setError('No valid recipients found. This audience cannot be sent to.');
+        return;
+      }
+      if (resolution && data.final !== resolution.final) {
+        setStaleWarning(
+          `The audience changed since you previewed it — was ${resolution.final.toLocaleString()}, `
+          + `now ${Number(data.final).toLocaleString()}. Review before sending.`,
+        );
+      }
+      setResolution(data);
+      setConfirmCount(data.final);
+      setConfirming(true);
+    } catch { setError('Could not reach the server.'); }
+    finally { setPhase('editing'); }
+  }, [busy, segment, resolution]);
+
+  const confirmSend = useCallback(async () => {
+    if (phase === 'sending' || !segment) return; // a second click must not queue twice
+    setPhase('sending'); setError('');
+    try {
+      const r = await fetch('/api/super-admin/mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send_broadcast',
+          data: {
+            subject,
+            htmlBody: html,
+            /* The DEFINITION, never a recipient list or a count. */
+            segment,
+            scheduleAt: scheduleMode === 'later' ? scheduleAt : undefined,
+            timezone: scheduleMode === 'later' ? timezone : undefined,
+          },
+        }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) { setError(data?.error || 'Unable to create the campaign.'); return; }
+      /* "Queued", not "sent": delivery happens in the background and may still
+         fail at the provider. */
+      setSendResult(scheduleMode === 'later'
+        ? `Campaign scheduled for ${new Date(data.scheduledFor).toLocaleString()} `
+          + `(${data.timezone ?? 'server time'}) — ${data.queued.toLocaleString()} recipients.`
+        : `Campaign queued for ${data.queued.toLocaleString()} recipients. `
+          + 'Delivery runs in the background; check the outbox for results.');
+      setConfirming(false);
+    } catch { setError('Could not reach the server.'); }
+    finally { setPhase('editing'); }
+  }, [phase, segment, subject, html, scheduleMode, scheduleAt, timezone]);
+
   const subjectOver = subject.length > SUBJECT_MAX;
 
   return (
@@ -231,6 +323,71 @@ export default function MailCompose() {
         </div>
       </section>
 
+      {/* ── Recipients ── */}
+      <section className={CARD}>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className={LABEL}>Recipients</p>
+            {segment && resolution ? (
+              <>
+                <p className="text-[13px] text-zinc-200">{resolution.description}</p>
+                <p className="mt-0.5 text-[12px] text-zinc-400">
+                  <span className="font-bold text-emerald-400">
+                    {resolution.final.toLocaleString()}
+                  </span>{' '}
+                  final recipient{resolution.final === 1 ? '' : 's'}
+                  {' · '}{resolution.excluded.toLocaleString()} excluded
+                  {' · '}{resolution.invalid.toLocaleString()} invalid
+                </p>
+              </>
+            ) : (
+              <p className="text-[13px] text-zinc-500">No audience chosen yet.</p>
+            )}
+          </div>
+          <button type="button" onClick={() => setShowPicker(true)} className={BTN}>
+            {segment ? 'Change' : 'Choose recipients'}
+          </button>
+        </div>
+        <p className={HINT}>
+          Counts come from the server. The audience is stored as a definition and re-resolved when
+          the campaign runs, so a scheduled email reaches whoever matches at that time.
+        </p>
+      </section>
+
+      {/* ── Schedule ── */}
+      <section className={CARD}>
+        <p className={LABEL}>Delivery</p>
+        <div className="flex flex-wrap gap-4">
+          {(['now', 'later'] as const).map((m) => (
+            <label key={m} className="flex items-center gap-2 text-[13px] text-zinc-200">
+              <input type="radio" name="schedule-mode" checked={scheduleMode === m}
+                onChange={() => setScheduleMode(m)} className="h-4 w-4 accent-amber-500" />
+              {m === 'now' ? 'Send now' : 'Schedule'}
+            </label>
+          ))}
+        </div>
+        {scheduleMode === 'later' && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className={LABEL} htmlFor="mc-when">Date and time</label>
+              <input id="mc-when" type="datetime-local" className={INPUT} value={scheduleAt}
+                onChange={(e) => setScheduleAt(e.target.value)} />
+            </div>
+            <div>
+              <label className={LABEL} htmlFor="mc-tz">Timezone</label>
+              <select id="mc-tz" className={INPUT} value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}>
+                {SUPPORTED_TIMEZONES.map((z) => <option key={z} value={z}>{z}</option>)}
+              </select>
+            </div>
+            <p className={`${HINT} sm:col-span-2`}>
+              The time is interpreted in the timezone you choose, not the server&rsquo;s. Scheduled
+              campaigns are sent by the server, so the browser can be closed.
+            </p>
+          </div>
+        )}
+      </section>
+
       {/* ── Body ── */}
       <section className={CARD}>
         <p className={LABEL}>Content</p>
@@ -286,15 +443,87 @@ export default function MailCompose() {
             {phase === 'previewing' ? 'Building…' : 'Preview'}
           </button>
           <button type="button" onClick={() => void saveDraft()} disabled={busy || !subject.trim()}
-            className={BTN_PRIMARY}>
+            className={BTN}>
             {phase === 'saving' ? 'Saving…' : 'Save draft'}
+          </button>
+          <button type="button" onClick={() => void openConfirm()}
+            disabled={busy || !segment || !subject.trim() || !html.trim()}
+            title={!segment ? 'Choose recipients first' : undefined}
+            className={BTN_PRIMARY}>
+            {phase === 'confirming' ? 'Checking audience…'
+              : scheduleMode === 'later' ? 'Review & schedule' : 'Review & send'}
           </button>
         </div>
       </div>
-      <p className={HINT}>
-        Choosing recipients and sending or scheduling a campaign are not part of this screen yet.
-        A draft saved here is what those steps will use.
-      </p>
+      {sendResult && (
+        <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300">
+          {sendResult}
+        </p>
+      )}
+
+      {showPicker && (
+        <RecipientPicker
+          initial={segment}
+          onCancel={() => setShowPicker(false)}
+          onApply={(seg, res) => {
+            setSegment(seg); setResolution(res); setShowPicker(false); setStaleWarning('');
+          }}
+        />
+      )}
+
+      {/* ── Confirmation: the count is re-resolved before this opens ── */}
+      {confirming && resolution && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setConfirming(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Review and send"
+            className="w-full max-w-lg space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-zinc-100">Review &amp; send</h3>
+
+            {staleWarning && (
+              <p role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+                {staleWarning}
+              </p>
+            )}
+
+            <dl className="space-y-1.5 text-[12px]">
+              {[
+                ['Subject', subject || '(none)'],
+                ['Audience', resolution.description],
+                ['Final recipients', `${(confirmCount ?? resolution.final).toLocaleString()}`],
+                ['Excluded', `${resolution.excluded.toLocaleString()}`],
+                ['Invalid', `${resolution.invalid.toLocaleString()}`],
+                ['Delivery', scheduleMode === 'later'
+                  ? `${scheduleAt || '(no time set)'} · ${timezone}`
+                  : 'Send now'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-3">
+                  <dt className="text-zinc-500">{k}</dt>
+                  <dd className="min-w-0 break-words text-right text-zinc-200">{v}</dd>
+                </div>
+              ))}
+            </dl>
+
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+              You are about to email {(confirmCount ?? resolution.final).toLocaleString()} recipient
+              {(confirmCount ?? resolution.final) === 1 ? '' : 's'}. This cannot be undone.
+            </p>
+
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setConfirming(false)} className={BTN}>Back</button>
+              <button type="button" onClick={() => void confirmSend()}
+                disabled={phase === 'sending'
+                  || (scheduleMode === 'later' && !scheduleAt)}
+                className={BTN_PRIMARY}>
+                {phase === 'sending' ? 'Working…'
+                  : scheduleMode === 'later'
+                    ? `Schedule for ${(confirmCount ?? resolution.final).toLocaleString()} recipients`
+                    : `Confirm & send to ${(confirmCount ?? resolution.final).toLocaleString()} recipients`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Preview ── */}
       {showPreview && (

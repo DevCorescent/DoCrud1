@@ -1,4 +1,6 @@
-import { emailOutboxPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
+import {
+  emailOutboxPath, readJsonFile, writeJsonFile, withStorageLock,
+} from '@/lib/server/storage';
 import { getDbPool } from '@/lib/server/database';
 import {
   selectEmailOutboxRowById,
@@ -37,6 +39,27 @@ type OutboxState = {
 
 const fallback: OutboxState = { events: [] };
 
+/* ── Serialising local-file mutations ──────────────────────────────────────
+
+   THE BUG THIS FIXES: appending is a read-modify-write over the whole
+   document, with an `await` between the read and the write. The campaign send
+   loop runs four recipients at a time, so four appends would all read the same
+   array, each build `[theirEvent, ...sameOldEvents]`, and the last write would
+   win — three events silently lost. Observed in testing: a campaign correctly
+   recorded `failed: 2` while the outbox contained one row.
+
+   That is unacceptable for an audit trail, and reducing concurrency to 1 would
+   fix the symptom by making sending four times slower.
+
+   The lock is the shared per-path helper, so appends and updates serialise
+   against each other. The Mongo path does not use it at all — it upserts
+   individual rows and was never affected. */
+const OUTBOX_LOCK = 'email-outbox';
+
+function withOutboxLock<T>(operation: () => Promise<T>): Promise<T> {
+  return withStorageLock(OUTBOX_LOCK, operation);
+}
+
 function safeString(value: unknown) {
   return String(value ?? '').trim();
 }
@@ -63,10 +86,14 @@ export async function appendEmailOutboxEvent(event: OutboundEmailEvent) {
     await trimEmailOutboxRows(2000);
     return;
   }
-  const state = await readJsonFile<OutboxState>(emailOutboxPath, fallback);
-  const events = Array.isArray(state?.events) ? state.events : [];
-  const next = [event, ...events].slice(0, 2000);
-  await writeJsonFile(emailOutboxPath, { events: next });
+  return withOutboxLock(async () => {
+    const state = await readJsonFile<OutboxState>(emailOutboxPath, fallback);
+    const events = Array.isArray(state?.events) ? state.events : [];
+    /* Re-appending an id that already exists would duplicate the row. */
+    const deduped = events.filter((ev) => ev.id !== event.id);
+    const next = [event, ...deduped].slice(0, 2000);
+    await writeJsonFile(emailOutboxPath, { events: next });
+  });
 }
 
 export async function updateEmailOutboxEvent(id: string, updater: (event: OutboundEmailEvent) => OutboundEmailEvent) {
@@ -76,10 +103,14 @@ export async function updateEmailOutboxEvent(id: string, updater: (event: Outbou
     await upsertEmailOutboxRow(updater(existing));
     return;
   }
-  const state = await readJsonFile<OutboxState>(emailOutboxPath, fallback);
-  const events = Array.isArray(state?.events) ? state.events : [];
-  const next = events.map((ev) => (ev.id === id ? updater(ev) : ev));
-  await writeJsonFile(emailOutboxPath, { events: next });
+  /* Shares the chain with append: an update racing an append would otherwise
+     drop whichever wrote first, and tracking pixels fire concurrently. */
+  return withOutboxLock(async () => {
+    const state = await readJsonFile<OutboxState>(emailOutboxPath, fallback);
+    const events = Array.isArray(state?.events) ? state.events : [];
+    const next = events.map((ev) => (ev.id === id ? updater(ev) : ev));
+    await writeJsonFile(emailOutboxPath, { events: next });
+  });
 }
 
 export async function markEmailOpened(id: string) {

@@ -1,6 +1,8 @@
 import { getDbPool } from '@/lib/server/database';
 import { getStoredUsersFromRepository } from '@/lib/server/repositories';
-import { readJsonFile, writeJsonFile, mailCampaignsPath } from '@/lib/server/storage';
+import {
+  readJsonFile, writeJsonFile, mailCampaignsPath, withStorageLock,
+} from '@/lib/server/storage';
 import { sendTrackedMail } from '@/lib/server/mailer';
 import { resolveRecipients, type MailSegment } from '@/lib/server/mail-recipients';
 import {
@@ -67,6 +69,14 @@ export type MailCampaign = {
   claimedAt?: string;
   /** Recipients still pending retry, plus permanently failed ones. */
   deliveries?: MailDelivery[];
+  /* Audience provenance. The DEFINITION lives in `audience`; these record what
+     the admin was shown when they approved the send, so the audit trail is
+     meaningful even though the recipient list is deliberately re-resolved at
+     execution time. */
+  audienceDescription?: string;
+  audiencePreviewCount?: number;
+  /** The timezone the admin scheduled in, kept for display. */
+  scheduleTimezone?: string;
   /** How many delivery passes this campaign has run. */
   passes?: number;
   progress?: {
@@ -99,7 +109,10 @@ export async function getMailCampaignById(id: string): Promise<MailCampaign | nu
   return campaigns.find((c) => c.id === id) ?? null;
 }
 
-export async function upsertMailCampaign(next: MailCampaign) {
+const CAMPAIGN_LOCK = 'mail-campaigns';
+
+/** The unlocked write. Only call this while already holding CAMPAIGN_LOCK. */
+async function writeCampaign(next: MailCampaign) {
   const state = await readJsonFile<CampaignState>(mailCampaignsPath, fallback);
   const campaigns = Array.isArray(state?.campaigns) ? state.campaigns : [];
   const idx = campaigns.findIndex((c) => c.id === next.id);
@@ -110,6 +123,10 @@ export async function upsertMailCampaign(next: MailCampaign) {
     : [record, ...campaigns];
   await writeJsonFile(mailCampaignsPath, { campaigns: updated.slice(0, 500) });
   return record;
+}
+
+export async function upsertMailCampaign(next: MailCampaign) {
+  return withStorageLock(CAMPAIGN_LOCK, () => writeCampaign(next));
 }
 
 export async function deleteMailCampaign(id: string) {
@@ -190,32 +207,38 @@ export class CampaignAlreadyClaimedError extends Error {
  * campaign again, to every recipient.
  */
 async function claimCampaign(id: string, token: string): Promise<MailCampaign> {
-  const campaign = await getMailCampaignById(id);
-  if (!campaign) throw new Error('Campaign not found');
-  if (campaign.status === 'cancelled') throw new Error('Campaign is cancelled');
-  if (!CLAIMABLE.includes(campaign.status)) throw new CampaignAlreadyClaimedError(id);
+  /* Read, decide and write inside ONE critical section.
 
-  await upsertMailCampaign({
-    ...campaign,
-    status: 'sending',
-    claimToken: token,
-    claimedAt: new Date().toISOString(),
-    lastError: undefined,
+     This used to read, write, then re-read and compare tokens — which made
+     correctness depend on how two concurrent writes happened to interleave.
+     It worked only by accident of timing, and making writes atomic
+     (temp-file + rename) changed that timing enough that BOTH workers began
+     winning the claim, doubling every recipient. Holding the lock across the
+     read and the write removes the interleaving entirely.
+
+     The token is still written and verified, because this lock is per-process
+     and two serverless instances can still race; the verify is the remaining
+     cross-instance guard. */
+  return withStorageLock(CAMPAIGN_LOCK, async () => {
+    const campaign = await getMailCampaignById(id);
+    if (!campaign) throw new Error('Campaign not found');
+    if (campaign.status === 'cancelled') throw new Error('Campaign is cancelled');
+    if (!CLAIMABLE.includes(campaign.status)) throw new CampaignAlreadyClaimedError(id);
+
+    await writeCampaign({
+      ...campaign,
+      status: 'sending',
+      claimToken: token,
+      claimedAt: new Date().toISOString(),
+      lastError: undefined,
+    });
+
+    const confirmed = await getMailCampaignById(id);
+    if (!confirmed || confirmed.claimToken !== token) throw new CampaignAlreadyClaimedError(id);
+    return confirmed;
   });
-
-  const confirmed = await getMailCampaignById(id);
-  if (!confirmed || confirmed.claimToken !== token) throw new CampaignAlreadyClaimedError(id);
-  return confirmed;
 }
 
-/**
- * The function used to deliver one message.
- *
- * It exists as a parameter purely so the scheduling logic — claiming, failure
- * accounting, the guarantee that a campaign is never sent twice — can be tested
- * without a mail provider. Production never passes it, so there is still
- * exactly one send path: `sendTrackedMail`.
- */
 export type CampaignMailSender = typeof sendTrackedMail;
 
 export async function sendMailCampaign(

@@ -67,6 +67,7 @@ export const mentionDeliveriesPath = path.join(dataDir, 'mention-deliveries.json
 export const homepageConfigPath = path.join(dataDir, 'homepage-config.json');
 /* Super Admin SEO Manager settings. Same three-tier resolution as its peers:
    row adapter -> app_state (MongoDB) -> local JSON in development. */
+export const mailDraftsPath = path.join(dataDir, 'mail-drafts.json');
 export const seoSettingsPath = path.join(dataDir, 'seo-settings.json');
 /* The staged copy an admin is editing. The PUBLISHED file above is the only
    thing the public site ever reads, so a draft can be saved and previewed
@@ -249,6 +250,31 @@ export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T>
   }
 }
 
+/* ── Per-path serialisation ────────────────────────────────────────────────
+
+   Read-modify-write over a whole JSON document is not safe to run
+   concurrently: two callers read the same state, both compute a new version
+   from it, and the second write erases the first. Every store built on
+   `readJsonFile`/`writeJsonFile` has this shape.
+
+   `withStorageLock` serialises operations that share a key, so a read and its
+   dependent write cannot interleave with another caller's. It is per-process
+   and deliberately simple; it does not coordinate across serverless instances,
+   which is why callers that need cross-instance safety (campaign claiming)
+   still verify what they wrote. */
+const storageLocks = new Map<string, Promise<unknown>>();
+
+export function withStorageLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  const previous = storageLocks.get(key) ?? Promise.resolve();
+  /* `.then(op, op)` so a rejected predecessor still releases the lock. */
+  const run = previous.then(operation, operation);
+  storageLocks.set(key, run.then(() => undefined, () => undefined));
+  return run;
+}
+
+/** Monotonic per-process counter, so concurrent temp files never collide. */
+let tmpCounter = 0;
+
 export async function writeJsonFile<T>(filePath: string, data: T) {
   if (getDbPool()) {
     const adapter = getDbAdapters().get(filePath);
@@ -275,7 +301,26 @@ export async function writeJsonFile<T>(filePath: string, data: T) {
 
   try {
     await ensureDirectory(filePath);
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+    /* Write to a sibling temp file and rename over the target. `rename` is
+       atomic within a filesystem, so a crash or restart mid-write leaves the
+       previous complete file rather than a truncated one — and a truncated
+       file would parse-fail, fall back to empty, and be overwritten with
+       nothing on the next write. The temp file is in the same directory so
+       the rename never crosses a filesystem boundary. */
+    /* The suffix must be unique PER CALL, not per millisecond: two concurrent
+       writes to the same path in the same millisecond would otherwise pick the
+       same temp name, and whichever renamed second would fail with ENOENT
+       because the first had already moved the file away. */
+    tmpCounter += 1;
+    const tmpPath = `${filePath}.${process.pid}.${Date.now()}.${tmpCounter.toString(36)}`
+      + `${Math.random().toString(36).slice(2, 8)}.tmp`;
+    try {
+      await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf8');
+      await fs.rename(tmpPath, filePath);
+    } catch (error) {
+      await fs.unlink(tmpPath).catch(() => {});
+      throw error;
+    }
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error) {
       const code = String(error.code);

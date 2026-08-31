@@ -4,6 +4,10 @@ import SponsoredAdsTab from '@/components/superadmin/SponsoredAdsTab';
 import JobsTab from '@/components/superadmin/JobsTab';
 import SeoTab from '@/components/superadmin/SeoTab';
 import MailHealthPanel from '@/components/superadmin/MailHealthPanel';
+import MailOverview from '@/components/superadmin/MailOverview';
+import MailCompose from '@/components/superadmin/mail/MailCompose';
+import MailCampaigns from '@/components/superadmin/mail/MailCampaigns';
+import MailDrafts from '@/components/superadmin/mail/MailDrafts';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { profileStatusStyle } from '@/lib/profile-score';
@@ -1910,8 +1914,6 @@ function PlansTab() {
     if (res.ok) { setMsg('Deleted'); load(); setTimeout(() => setMsg(''), 2000); }
   }
 
-  if (loading) return <Loader />;
-
   return (
     <div className="space-y-5">
       <SectionHeader title="Plans & Billing" sub="Manage subscription plans and pricing"
@@ -2330,13 +2332,15 @@ function DocumentsTab() {
 // MAIL TAB
 // ══════════════════════════════════════════════════════════════════════
 function MailTab() {
-  const [data, setData] = useState<{ campaigns: Record<string, unknown>[]; recentOutbox: Record<string, unknown>[]; stats: Record<string, number> } | null>(null);
-  const [loading, setLoading] = useState(true);
+  /* Each sub-view fetches what it needs, so the tab no longer pulls a
+     dashboard payload it does not render. */
   const [composing, setComposing] = useState(false);
   const [broadcast, setBroadcast] = useState({ subject: '', htmlBody: '', audience: 'all' });
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
-  const [view, setView] = useState<'health' | 'overview' | 'outbox'>('health');
+  /* Only sections that are actually implemented appear here. An unbuilt tab
+     showing "coming soon" would be worse than not offering it. */
+  const [view, setView] = useState<'overview' | 'compose' | 'drafts' | 'campaigns' | 'outbox' | 'health'>('overview');
   const [outbox, setOutbox] = useState<Record<string, unknown>[]>([]);
   /* Mass mail is irreversible, so it takes two deliberate steps: resolve the
      real recipient count on the server, show it, then require a second click. */
@@ -2347,11 +2351,6 @@ function MailTab() {
   } | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
-
-  useEffect(() => {
-    setLoading(true);
-    fetch('/api/super-admin/mail').then((r) => r.json()).then(setData).catch(console.error).finally(() => setLoading(false));
-  }, []);
 
   async function loadOutbox() {
     setView('outbox');
@@ -2398,8 +2397,6 @@ function MailTab() {
     finally { setSending(false); setTimeout(() => setMsg(''), 8000); }
   }
 
-  if (loading) return <Loader />;
-
   return (
     <div className="space-y-5">
       <SectionHeader title="Mail Center" sub="Broadcasts, campaigns, and outbox"
@@ -2408,45 +2405,29 @@ function MailTab() {
       {msg && <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{msg}</div>}
 
       <div className="flex gap-1">
-        {(['health', 'overview', 'outbox'] as const).map((v) => (
-          <button key={v} onClick={() => v === 'outbox' ? loadOutbox() : setView('overview')} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all capitalize ${view === v ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}>{v}</button>
+        {(['overview', 'compose', 'drafts', 'campaigns', 'outbox', 'health'] as const).map((v) => (
+          /* Was `setView('overview')` — a leftover from when this row had two
+             tabs, which made Compose, Campaigns and Health unreachable: every
+             click bounced back to Overview. */
+          <button key={v} onClick={() => { setView(v); if (v === 'outbox') void loadOutbox(); }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all capitalize ${view === v ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}>{v}</button>
         ))}
       </div>
 
-      {/* Delivery health leads, so a provider outage is visible before anyone
-          composes a campaign that cannot be delivered. */}
+      {/* The real dashboard: volume, campaign state and recent failures, all
+          read from the outbox and campaign records. */}
+      {view === 'overview' && <MailOverview onOpenTab={(t) => setView(t as 'health')} />}
+
+      {view === 'compose' && <MailCompose />}
+
+      {view === 'drafts' && <MailDrafts />}
+
+      {view === 'campaigns' && <MailCampaigns />}
+
       {view === 'health' && <MailHealthPanel />}
 
-      {view === 'overview' && data && (
-        <>
-          <div className="grid grid-cols-3 gap-4">
-            {[['Total Sent', data.stats.totalSent, 'text-emerald-400'], ['Failed', data.stats.totalFailed, 'text-red-400'], ['Campaigns', data.stats.totalCampaigns, 'text-amber-400']].map(([k, v, c]) => (
-              <div key={k as string} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 text-center">
-                <div className={`text-2xl font-bold ${c}`}>{v}</div>
-                <div className="text-xs text-zinc-500 mt-1">{k}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl">
-            <div className="px-5 py-4 border-b border-zinc-800 text-sm font-medium text-white">Recent Outbox</div>
-            <div className="divide-y divide-zinc-800/50">
-              {data.recentOutbox.length === 0 && <div className="px-5 py-8 text-center text-zinc-600 text-sm">No emails sent yet</div>}
-              {data.recentOutbox.map((e, i) => (
-                <div key={i} className="px-5 py-3 flex items-center gap-3 text-sm">
-                  <span className={badge(String(e.status || ''))}>{String(e.status)}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-zinc-300 truncate">{String(e.subject || '—')}</div>
-                    <div className="text-xs text-zinc-500 truncate">To: {String(e.to || '—')}</div>
-                  </div>
-                  <div className="text-xs text-zinc-600 flex-shrink-0">{ago(String(e.createdAt || ''))}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
+      {/* The previous inline overview (three counters plus a recent-outbox
+          list) is replaced by MailOverview above, which reads the same data
+          plus campaign state and classified failures. */}
       {view === 'outbox' && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
           <table className="w-full text-sm">
@@ -2582,8 +2563,6 @@ function ContentTab() {
     setSaving(false);
     if (res.ok) { setMsg('Saved'); setTimeout(() => setMsg(''), 2000); } else setMsg('Failed');
   }
-
-  if (loading) return <Loader />;
 
   const editableFields = Object.entries(form).filter(([k]) => !['id', 'updatedAt', 'createdAt'].includes(k));
 
@@ -4312,8 +4291,6 @@ function IntegrationsTab() {
     else setMsg(d.error || 'Failed');
     setTimeout(() => setMsg(''), 3000);
   }
-
-  if (loading) return <Loader />;
 
   const envStatus = data?.envStatus as Record<string, boolean> || {};
   const webhooks = (data?.webhooks as Record<string, unknown>[]) || [];

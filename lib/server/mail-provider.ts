@@ -21,7 +21,7 @@
  * through an account the provider has switched off.
  */
 import type { Transporter } from 'nodemailer';
-import { getCachedTransporter } from '@/lib/server/mailer';
+import { getCachedTransporter } from '@/lib/server/smtp-transport';
 import { getMailSettings } from '@/lib/server/settings';
 
 /* ── Failure classification ─────────────────────────────────────────────── */
@@ -211,8 +211,29 @@ export interface ProviderHealth {
   failure?: MailFailure;
 }
 
+/** One outbound message, already rendered and tracked by the mailer. */
+export interface MailMessage {
+  from: string;
+  to: string;
+  cc?: string;
+  bcc?: string;
+  replyTo?: string;
+  subject: string;
+  text: string;
+  html: string;
+  attachments?: Array<{ filename: string; content: Buffer; contentType?: string }>;
+}
+
+export interface MailSendResult {
+  messageId?: string;
+  /** Which provider actually accepted it — useful once there is more than one. */
+  provider: string;
+}
+
 export interface MailProvider {
   readonly name: string;
+  /** Hand one message to the provider. Throws on rejection. */
+  send(message: MailMessage): Promise<MailSendResult>;
   /** Confirm the provider will accept mail right now. */
   verify(): Promise<ProviderHealth>;
 }
@@ -222,6 +243,25 @@ export class SmtpMailProvider implements MailProvider {
   readonly name: string;
 
   constructor(name = 'SMTP') { this.name = name; }
+
+  async send(message: MailMessage): Promise<MailSendResult> {
+    /* The same pooled transport the health check uses. Errors propagate
+       unchanged so the caller can classify them — swallowing one here would
+       turn a rejection into a silent success. */
+    const transporter = (await getCachedTransporter()) as Transporter;
+    const info = await transporter.sendMail({
+      from: message.from,
+      to: message.to,
+      cc: message.cc,
+      bcc: message.bcc,
+      replyTo: message.replyTo,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      attachments: message.attachments,
+    });
+    return { messageId: info.messageId, provider: this.name };
+  }
 
   async verify(): Promise<ProviderHealth> {
     const settings = await getMailSettings();
@@ -272,4 +312,37 @@ export async function getProviderHealth(force = false): Promise<ProviderHealth> 
   const health = await new SmtpMailProvider('SMTP').verify();
   cached = { health, at: Date.now() };
   return health;
+}
+
+/**
+ * The last known health, WITHOUT opening a connection.
+ *
+ * A `verify()` is a real SMTP handshake — measured at ~5.5s against the
+ * current provider — so a dashboard that waits for one shows a spinner for
+ * five seconds before its first paint. Screens that merely display provider
+ * status use this and render immediately; the Health tab, where an admin has
+ * actually asked, performs the live check.
+ *
+ * Returns null when no check has run yet in this process, which callers must
+ * present as "not checked" rather than as healthy.
+ */
+export function getCachedProviderHealth(): ProviderHealth | null {
+  return cached ? cached.health : null;
+}
+
+/* ── The active provider ───────────────────────────────────────────────────
+
+   One instance, so the pooled transport is shared. This is the seam a second
+   provider would slot into later; today there is exactly one, and nothing here
+   silently reroutes mail. */
+let activeProvider: MailProvider | null = null;
+
+export function getMailProvider(): MailProvider {
+  if (!activeProvider) activeProvider = new SmtpMailProvider('SMTP');
+  return activeProvider;
+}
+
+/** Test seam: substitute a provider, or pass null to restore the default. */
+export function setMailProviderForTesting(provider: MailProvider | null): void {
+  activeProvider = provider;
 }

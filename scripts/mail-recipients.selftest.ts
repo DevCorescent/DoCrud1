@@ -14,8 +14,12 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import {
   matchesSegment, extractVariables, unknownVariables, renderVariables,
+  resolveRecipients, previewRecipientRows, describeSegment,
   SUPPORTED_VARIABLES, type RecipientUser, type MailSegment,
 } from '@/lib/server/mail-recipients';
+
+/* Async checks are collected and awaited before the summary is printed. */
+const pending: Promise<void>[] = [];
 
 let checks = 0;
 let failures = 0;
@@ -31,6 +35,10 @@ const ENGINE = read('lib/server/mail-recipients.ts');
 const ROUTE = read('app/api/super-admin/mail/route.ts');
 const CAMPAIGNS = read('lib/server/mail-campaigns.ts');
 const PANEL = read('components/SuperAdminPanel.tsx');
+const RECIP_API = read('app/api/super-admin/mail/recipients/route.ts');
+const PICKER = read('components/superadmin/mail/RecipientPicker.tsx');
+const COMPOSE = read('components/superadmin/mail/MailCompose.tsx');
+const TZ = read('lib/email/schedule-time.ts');
 
 /** Source assertions must look at code, not at comments describing old code. */
 const code = (src: string) =>
@@ -46,7 +54,7 @@ const user = (over: Partial<RecipientUser> = {}): RecipientUser => ({
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 
-function main() {
+async function main() {
   console.log('\n── 1. Segment matching ──');
 
   check('all matches everyone', matchesSegment(user(), { mode: 'all' }));
@@ -136,18 +144,53 @@ function main() {
 
   console.log('\n── 5. Deduplication and invalid addresses ──');
 
-  check('duplicates are excluded, not counted as deliverable',
-    ENGINE.includes('if (seen.has(u.email)) { excluded += 1; continue; }'));
-  check('invalid addresses are counted separately from exclusions',
-    ENGINE.includes('invalid += 1') && ENGINE.includes('excluded += 1'));
+  /* Behavioural rather than source-string: manual mode needs no user store, so
+     dedup and validation can be exercised for real. */
   check('address validation reuses the existing validator',
     ENGINE.includes("from '@/lib/server/security'") && ENGINE.includes('isValidEmail'));
-  check('inactive users are excluded from user-store sends',
-    ENGINE.includes("segment.mode !== 'manual' && !u.isActive"));
   check('a hard recipient ceiling exists', ENGINE.includes('MAX_RECIPIENTS = 25_000'));
-  check('the resolution reports the full attrition breakdown',
-    ENGINE.includes('selected,') && ENGINE.includes('excluded,')
-    && ENGINE.includes('invalid,') && ENGINE.includes('final: emails.length'));
+  pending.push((async () => {
+    const r = await resolveRecipients({
+      mode: 'manual',
+      emails: ['a@example.com', 'A@example.com', 'b@example.com', 'not-an-email', ''],
+    });
+    check('duplicates are excluded, not counted as deliverable',
+      r.excluded >= 1 && r.final === 2, JSON.stringify(r.emails));
+    check('case-different duplicates are caught', !r.emails.includes('A@example.com'));
+    check('invalid addresses are counted separately from exclusions',
+      r.invalid === 1 && r.excluded >= 1, `invalid ${r.invalid} excluded ${r.excluded}`);
+    check('an invalid address is reported back, not silently dropped',
+      r.invalidSamples.includes('not-an-email'));
+    check('the resolution reports the full attrition breakdown',
+      r.selected === 5 && typeof r.excluded === 'number'
+      && typeof r.invalid === 'number' && r.final === 2);
+
+    /* Rows and counts come from one pass, so they must agree exactly. */
+    const rows = await previewRecipientRows({
+      mode: 'manual',
+      emails: ['a@example.com', 'A@example.com', 'b@example.com', 'not-an-email', ''],
+    });
+    check('the per-recipient rows agree with the counts',
+      rows.rows.filter((x) => x.outcome === 'included').length === r.final
+      && rows.rows.filter((x) => x.outcome === 'invalid').length === r.invalid);
+    check('every row carries a plain-language reason',
+      rows.rows.every((x) => typeof x.reason === 'string' && x.reason.length > 0));
+    check('an excluded recipient is never described as failed',
+      rows.rows.every((x) => !/failed/i.test(x.reason)));
+    check('rows can be filtered to one outcome',
+      (await previewRecipientRows({ mode: 'manual', emails: ['x@y.com', 'bad'] },
+        { outcome: 'invalid' })).rows.every((x) => x.outcome === 'invalid'));
+    check('row pages are capped',
+      (await previewRecipientRows({ mode: 'manual', emails: ['a@b.com'] },
+        { pageSize: 5000 })).pageSize === 100);
+  })());
+
+  check('a segment can be described for the audit trail',
+    describeSegment({ mode: 'all' }) === 'Everyone'
+    && describeSegment({ mode: 'filtered', filters: { role: 'admin', status: 'active' } })
+      .includes('role = admin'));
+  check('inactive users are excluded from user-store sends',
+    ENGINE.includes("mode !== 'manual' && !u.isActive"));
 
   console.log('\n── 6. The broadcast no longer lies ──');
 
@@ -213,8 +256,108 @@ function main() {
   check('the preview returns only names and addresses, not full user records',
     ROUTE.includes('sample: r.sample.map((u) => ({ name: u.name, email: u.email, accountType: u.accountType }))'));
 
+  await Promise.all(pending);
+
+  console.log('\n── 9. Recipient API: the server is the authority ──');
+
+  check('both verbs are guarded',
+    (RECIP_API.match(/const session = await guard\(req\);/g) ?? []).length === 2
+    && (RECIP_API.match(/{ error: 'Unauthorized' }, { status: 401 }/g) ?? []).length === 2);
+  /* The single most important rule of this phase. */
+  check('no recipient count is accepted from the client',
+    !/body\.(final|count|recipientCount|total)/.test(RECIP_API));
+  check('the segment is coerced field by field, not spread',
+    RECIP_API.includes('function readSegment') && !RECIP_API.includes('...body.segment'));
+  check('an unknown audience mode is rejected',
+    RECIP_API.includes("modes.includes(mode)") && RECIP_API.includes("'A valid audience type is required.'"));
+  check('filter values are constrained, not passed through',
+    RECIP_API.includes("filters.accountType === 'business'")
+    && RECIP_API.includes('Math.min(3650'));
+  check('id and address lists are capped', (RECIP_API.match(/slice\(0, 5000\)/g) ?? []).length === 2);
+  check('resolved addresses are never returned to the browser',
+    !RECIP_API.includes('emails: resolution.emails'));
+  check('search is paginated server-side',
+    RECIP_API.includes('searchRecipientUsers({') && RECIP_API.includes('pageSize: 25'));
+  check('rows are opt-in, not always computed',
+    RECIP_API.includes('body.includeRows === true'));
+  /* 0 and "could not compute" are different states. */
+  check('a resolution failure is an error, not zero recipients',
+    RECIP_API.includes("'Unable to resolve recipients.'") && !RECIP_API.includes('final: 0'));
+
+  console.log('\n── 10. The picker chooses a definition, not a list ──');
+
+  check('the picker posts a segment',
+    PICKER.includes('JSON.stringify({ segment, includeRows: withRows })'));
+  check('the picker never posts a count', !/final:\s*\d/.test(PICKER));
+  check('selections survive paging',
+    PICKER.includes('useState<Map<string, UserRow>>') && PICKER.includes('new Map(prev)'));
+  check('changing the audience clears the old count',
+    PICKER.includes('setResolution(null); setRows(null); }, [segment])'));
+  check('applying requires a resolved, non-empty audience',
+    PICKER.includes('const canApply = Boolean(resolution && resolution.final > 0)'));
+  check('an empty audience is called out',
+    PICKER.includes('No valid recipients found.'));
+  check('excluded recipients are not described as failures',
+    PICKER.includes('They are not failed recipients.'));
+  check('invalid addresses are shown, not silently dropped',
+    PICKER.includes('resolution.invalidSamples.join'));
+  check('only real filters are offered',
+    PICKER.includes('Location filters are absent'));
+  check('all four counts are displayed',
+    PICKER.includes("['Matched'") && PICKER.includes("['Excluded'")
+    && PICKER.includes("['Invalid'") && PICKER.includes("['Final'"));
+  check('inputs and checkboxes are labelled',
+    PICKER.includes('aria-label={`Select ${u.name || u.email}`}') && PICKER.includes('<legend'));
+
+  console.log('\n── 11. Send safety ──');
+
+  /* The count on the confirmation screen must be freshly resolved. */
+  check('the audience is re-resolved before the confirmation opens',
+    COMPOSE.includes('const openConfirm') && COMPOSE.includes("fetch('/api/super-admin/mail/recipients'"));
+  check('a changed count warns instead of proceeding silently',
+    COMPOSE.includes('setStaleWarning') && COMPOSE.includes('The audience changed since you previewed it'));
+  check('the confirm button states the real number',
+    COMPOSE.includes('Confirm & send to ${(confirmCount ?? resolution.final).toLocaleString()} recipients'));
+  /* The guard is a ref, not state: browser QA showed that two clicks in one
+     tick both read the old `phase` and both created a campaign. */
+  check('a second click cannot queue two campaigns',
+    COMPOSE.includes('if (sendingRef.current || !segment) return;')
+    && COMPOSE.includes('sendingRef.current = true;')
+    && COMPOSE.includes('sendingRef.current = false;'));
+  check('sending posts the definition, not recipients',
+    COMPOSE.includes('/* The DEFINITION, never a recipient list or a count. */')
+    && !COMPOSE.includes('recipients: resolution'));
+  check('the browser never loops over recipients',
+    !COMPOSE.includes('for (const recipient') && !COMPOSE.includes('.map((r) => fetch'));
+  check('the result says queued, not sent',
+    COMPOSE.includes('Campaign queued for') && !COMPOSE.includes('Email sent successfully'));
+  check('zero recipients blocks the send',
+    COMPOSE.includes('No valid recipients found. This audience cannot be sent to.'));
+
+  console.log('\n── 12. Scheduling and timezone ──');
+
+  check('a timezone allow-list exists', TZ.includes('SUPPORTED_TIMEZONES'));
+  check('UTC is not silently assumed',
+    ROUTE.includes('zonedTimeToUtc(String(scheduleAt), timezone)')
+    && ROUTE.includes('assuming UTC would silently send'));
+  check('an unsupported timezone is rejected', ROUTE.includes("'Unsupported timezone.'"));
+  check('the timezone is stored with the campaign', ROUTE.includes('scheduleTimezone: timezone'));
+  /* A frozen list would mail yesterday's audience. */
+  check('the segment definition is stored, not a frozen recipient list',
+    ROUTE.includes("audience: { mode: 'segment', segment: resolvedSegment }")
+    && ROUTE.includes('never a frozen recipient list'));
+  check('the audience description is retained for audit',
+    ROUTE.includes('audienceDescription: describeSegment(resolvedSegment)'));
+  check('the preview count is retained for audit',
+    ROUTE.includes('audiencePreviewCount: recipients.final'));
+  check('the audit entry records audience and timezone',
+    ROUTE.includes("audienceDescription: describeSegment(resolvedSegment),")
+    && ROUTE.includes("timezone: timezone || 'server default'"));
+  check('the UI offers a timezone and explains it',
+    COMPOSE.includes('SUPPORTED_TIMEZONES.map') && COMPOSE.includes('not the server'));
+
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);
   if (failures > 0) process.exit(1);
 }
 
-main();
+main().catch((err) => { console.error(err); process.exit(1); });

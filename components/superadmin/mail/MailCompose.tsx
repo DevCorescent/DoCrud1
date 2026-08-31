@@ -23,6 +23,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RichEmailEditor from '@/components/superadmin/mail/RichEmailEditor';
+import EmailPreviewDialog from '@/components/superadmin/mail/EmailPreviewDialog';
+import TestSendDialog from '@/components/superadmin/mail/TestSendDialog';
 import RecipientPicker, {
   type Segment, type Resolution,
 } from '@/components/superadmin/mail/RecipientPicker';
@@ -44,14 +46,11 @@ const BTN_PRIMARY =
 
 const SUBJECT_MAX = 200;
 
-type Phase = 'editing' | 'saving' | 'testing' | 'previewing' | 'confirming' | 'sending';
+/* 'testing' and 'previewing' are gone: preview and test send are self-
+   contained dialogs that own their own busy state, so the composer no longer
+   has to model them. */
+type Phase = 'editing' | 'saving' | 'confirming' | 'sending';
 
-interface TestOutcome {
-  ok: boolean;
-  message: string;
-  detail?: string;
-  retryable?: boolean | null;
-}
 
 export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
   draftId?: string | null;
@@ -78,19 +77,24 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
   /** The last state written to the server, for a truthful dirty flag. */
   const [savedSnapshot, setSavedSnapshot] = useState('');
 
+  /* Both dialogs read the CURRENT editor state through props, so there is
+     nothing to keep in sync and no stale copy to preview or send. */
   const [showPreview, setShowPreview] = useState(false);
-  const [previewHtml, setPreviewHtml] = useState('');
-  const [previewText, setPreviewText] = useState('');
-  const [previewMode, setPreviewMode] = useState<'desktop' | 'mobile' | 'text'>('desktop');
-
-  const [testTo, setTestTo] = useState('');
-  const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
+  const [showTest, setShowTest] = useState(false);
 
   /* The audience DEFINITION plus the count the server last reported for it.
      The count is display-only — it is never sent back as an input. */
   const [segment, setSegment] = useState<Segment | null>(null);
   const [resolution, setResolution] = useState<Resolution | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+
+  /* Template chooser. Using a template COPIES its content into this draft —
+     no live link is kept, so editing the template later cannot rewrite an
+     email that has already been sent. */
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string; subject: string; category: string }[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [pendingTemplate, setPendingTemplate] = useState<string | null>(null);
 
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
   const [scheduleAt, setScheduleAt] = useState('');
@@ -229,54 +233,10 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
     return () => clearTimeout(t);
   }, [dirty, subject, loadingDraft, persistDraft]);
 
-  /* Preview asks the SERVER for the sanitized body, so what is shown is what
-     would actually be sent — not a second rendering path that could differ. */
-  const openPreview = useCallback(async () => {
-    if (busy) return;
-    setPhase('previewing'); setError('');
-    try {
-      const r = await fetch('/api/super-admin/mail/preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html, subject }),
-      });
-      const data = await r.json().catch(() => null);
-      if (!r.ok) { setError(data?.error || 'Unable to build preview.'); return; }
-      setPreviewHtml(data.html);
-      setPreviewText(data.text);
-      setShowPreview(true);
-    } catch { setError('Could not reach the server.'); }
-    finally { setPhase('editing'); }
-  }, [busy, html, subject]);
-
-  const sendTest = useCallback(async () => {
-    if (busy) return;
-    if (!testTo.trim()) { setError('Enter a test recipient.'); return; }
-    setPhase('testing'); setError(''); setTestOutcome(null);
-    try {
-      const r = await fetch('/api/super-admin/mail/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient: testTo.trim() }),
-      });
-      const data = await r.json().catch(() => null);
-      if (r.ok && data?.ok) {
-        setTestOutcome({ ok: true, message: 'The provider accepted the test message.' });
-      } else {
-        /* The provider's own answer, verbatim. Never rounded up to success. */
-        setTestOutcome({
-          ok: false,
-          message: data?.stage === 'verify'
-            ? 'Mail delivery unavailable — the provider refused the connection.'
-            : 'The provider rejected the test message.',
-          detail: [data?.providerCode ? `SMTP ${data.providerCode}` : null, data?.error, data?.hint]
-            .filter(Boolean).join(' · '),
-          retryable: data?.retryable ?? null,
-        });
-      }
-    } catch { setError('Could not reach the server.'); }
-    finally { setPhase('editing'); }
-  }, [busy, testTo]);
+  /* Preview and test send are the shared dialogs. Compose used to own a
+     preview fetch of its own, and its "Send test" posted to the SMTP
+     diagnostic endpoint - which ignored this editor completely and mailed a
+     fixed connection-test message instead of the email being written. */
 
   /**
    * Open the confirmation screen — after RE-RESOLVING the audience.
@@ -346,6 +306,38 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
     } catch { setError('Could not reach the server.'); }
     finally { sendingRef.current = false; setPhase('editing'); }
   }, [segment, subject, html, scheduleMode, scheduleAt, timezone]);
+
+  const openTemplates = useCallback(async () => {
+    setShowTemplates(true); setTemplatesLoading(true); setError('');
+    try {
+      /* Archived templates are deliberately excluded from new campaigns. */
+      const r = await fetch('/api/super-admin/mail/templates?status=active&page=1',
+        { cache: 'no-store' });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) { setError(data?.error || 'Unable to load templates.'); return; }
+      setTemplates(data.templates);
+    } catch { setError('Could not reach the server.'); }
+    finally { setTemplatesLoading(false); }
+  }, []);
+
+  const applyTemplate = useCallback(async (id: string) => {
+    setTemplatesLoading(true); setError('');
+    try {
+      const r = await fetch(`/api/super-admin/mail/templates?id=${encodeURIComponent(id)}`,
+        { cache: 'no-store' });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) { setError(data?.error || 'Template not found.'); return; }
+      const t = data.template;
+      /* A copy, not a reference. */
+      setSubject(t.subject ?? '');
+      setHtml(t.html ?? '');
+      setPreheader(t.preheader ?? '');
+      setShowTemplates(false);
+      setPendingTemplate(null);
+      setNotice('Template content copied into this email. Edits here do not change the template.');
+    } catch { setError('Could not reach the server.'); }
+    finally { setTemplatesLoading(false); }
+  }, []);
 
   const subjectOver = subject.length > SUBJECT_MAX;
 
@@ -441,6 +433,8 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
                   final recipient{resolution.final === 1 ? '' : 's'}
                   {' · '}{resolution.excluded.toLocaleString()} excluded
                   {' · '}{resolution.invalid.toLocaleString()} invalid
+                  {resolution.suppressed
+                    ? ` · ${resolution.suppressed.toLocaleString()} suppressed` : ''}
                 </p>
               </>
             ) : (
@@ -500,39 +494,17 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
       {/* ── Test send ── */}
       <section className={CARD}>
         <p className={LABEL}>Send a test</p>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-0 flex-1">
-            <label className="sr-only" htmlFor="mc-test">Test recipient</label>
-            <input id="mc-test" className={INPUT} value={testTo} type="email"
-              onChange={(e) => setTestTo(e.target.value)} placeholder="you@example.com" />
-          </div>
-          <button type="button" onClick={() => void sendTest()} disabled={busy || !testTo.trim()}
-            className={BTN}>
-            {phase === 'testing' ? 'Sending…' : 'Send test'}
-          </button>
-        </div>
         <p className={HINT}>
-          Goes through the real mail pipeline and is recorded in the outbox. It is sent only to the
-          address above — never to a campaign audience.
+          Sends the subject and body exactly as they stand in this editor, including unsaved
+          changes, through the real mail pipeline. It is recorded in the outbox and goes only to the
+          single address you enter — never to a campaign audience.
         </p>
-        {testOutcome && (
-          <div role="status" className={`mt-2 rounded-lg border px-3 py-2 text-[12px] ${
-            testOutcome.ok ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-              : 'border-rose-500/40 bg-rose-500/10 text-rose-300'}`}>
-            <p className="font-semibold">{testOutcome.message}</p>
-            {testOutcome.detail && <p className="mt-1 break-words text-zinc-300">{testOutcome.detail}</p>}
-            {testOutcome.retryable === false && (
-              <p className="mt-1 text-zinc-400">
-                This failure is permanent — retrying will not help until it is fixed at the provider.
-              </p>
-            )}
-            {testOutcome.ok && (
-              <p className="mt-1 text-zinc-400">
-                Accepted by the provider. That is not confirmation it reached the inbox.
-              </p>
-            )}
-          </div>
-        )}
+        <button type="button" onClick={() => setShowTest(true)}
+          disabled={busy || !subject.trim() || !html.trim()}
+          title={!subject.trim() || !html.trim() ? 'Add a subject and a body first' : undefined}
+          className={`${BTN} mt-2`}>
+          Send test…
+        </button>
       </section>
 
       {/* ── Actions ── */}
@@ -541,9 +513,12 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
           {dirty ? 'You have unsaved changes.' : 'All changes saved.'}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => void openPreview()} disabled={busy || !html.trim()}
+          <button type="button" onClick={() => void openTemplates()} disabled={busy} className={BTN}>
+            Use template
+          </button>
+          <button type="button" onClick={() => setShowPreview(true)} disabled={busy || !html.trim()}
             className={BTN}>
-            {phase === 'previewing' ? 'Building…' : 'Preview'}
+            Preview
           </button>
           <button type="button" onClick={() => void saveDraft()} disabled={busy || !subject.trim()}
             className={BTN}>
@@ -562,6 +537,63 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
         <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-300">
           {sendResult}
         </p>
+      )}
+
+      {showTemplates && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => { setShowTemplates(false); setPendingTemplate(null); }}>
+          <div role="dialog" aria-modal="true" aria-label="Choose a template"
+            className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-zinc-800 bg-zinc-900"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-zinc-800 px-4 py-3">
+              <h3 className="text-sm font-semibold text-zinc-100">Use a template</h3>
+              <p className={HINT}>
+                The template&rsquo;s content is copied into this email. Later edits to the template
+                do not affect what you send from here.
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {templatesLoading && <p className="text-[12px] text-zinc-500" aria-live="polite">Loading…</p>}
+              {!templatesLoading && templates.length === 0 && (
+                <p className="text-[12px] text-zinc-500">No active templates yet.</p>
+              )}
+              {!templatesLoading && templates.map((t) => (
+                <button key={t.id} type="button"
+                  onClick={() => {
+                    /* Replacing unsaved work needs a deliberate confirmation. */
+                    if (subject.trim() || html.trim()) setPendingTemplate(t.id);
+                    else void applyTemplate(t.id);
+                  }}
+                  className="mb-1 block w-full rounded-lg border border-zinc-800 p-2.5 text-left hover:bg-zinc-800/50">
+                  <span className="block truncate text-[13px] text-zinc-100">{t.name}</span>
+                  <span className="block truncate text-[11px] text-zinc-500">{t.subject}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end border-t border-zinc-800 px-4 py-3">
+              <button type="button" onClick={() => setShowTemplates(false)} className={BTN}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingTemplate && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPendingTemplate(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Replace content"
+            className="w-full max-w-md space-y-3 rounded-2xl border border-zinc-800 bg-zinc-900 p-5"
+            onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-zinc-100">Replace current content?</h3>
+            <p className="text-[12px] text-zinc-300">
+              This email already has a subject or body. Using the template will overwrite them.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setPendingTemplate(null)} className={BTN}>Cancel</button>
+              <button type="button" onClick={() => void applyTemplate(pendingTemplate)}
+                className={BTN_PRIMARY}>Replace</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showPicker && (
@@ -596,6 +628,9 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
                 ['Final recipients', `${(confirmCount ?? resolution.final).toLocaleString()}`],
                 ['Excluded', `${resolution.excluded.toLocaleString()}`],
                 ['Invalid', `${resolution.invalid.toLocaleString()}`],
+                /* Shown on the confirmation screen too: the admin approving a
+                   send should see that some recipients opted out. */
+                ['Suppressed', `${(resolution.suppressed ?? 0).toLocaleString()}`],
                 ['Delivery', scheduleMode === 'later'
                   ? `${scheduleAt || '(no time set)'} · ${timezone}`
                   : 'Send now'],
@@ -628,50 +663,25 @@ export default function MailCompose({ draftId: initialDraftId, onDraftSaved }: {
         </div>
       )}
 
-      {/* ── Preview ── */}
-      {showPreview && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setShowPreview(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Email preview"
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl border border-zinc-800 bg-zinc-900"
-            onClick={(e) => e.stopPropagation()}>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800 px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-zinc-100">{subject || '(no subject)'}</p>
-                <p className="truncate text-[11px] text-zinc-500">{preheader}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                {(['desktop', 'mobile', 'text'] as const).map((m) => (
-                  <button key={m} type="button" onClick={() => setPreviewMode(m)}
-                    aria-pressed={previewMode === m}
-                    className={`rounded-md px-2.5 py-1 text-[12px] capitalize transition ${
-                      previewMode === m ? 'bg-amber-500 font-semibold text-zinc-950' : 'text-zinc-400 hover:bg-zinc-800'}`}>
-                    {m}
-                  </button>
-                ))}
-                <button type="button" onClick={() => setShowPreview(false)}
-                  className="ml-1 rounded-md px-2.5 py-1 text-[12px] text-zinc-400 hover:bg-zinc-800">
-                  Close
-                </button>
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-950 p-4">
-              {previewMode === 'text' ? (
-                <pre className="whitespace-pre-wrap break-words text-[12px] text-zinc-300">{previewText}</pre>
-              ) : (
-                <div className={`mx-auto bg-white p-4 text-black ${previewMode === 'mobile' ? 'max-w-[390px]' : 'max-w-[640px]'}`}>
-                  {/* Server-sanitized HTML — the same bytes that would be sent. */}
-                  <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
-                </div>
-              )}
-            </div>
-            <p className="border-t border-zinc-800 px-4 py-2 text-[11px] text-zinc-500">
-              Rendered from the server-sanitized body. Real clients vary — this is an approximation
-              of layout, not a guarantee of how every client will display it.
-            </p>
-          </div>
-        </div>
-      )}
+      <EmailPreviewDialog
+        open={showPreview}
+        onClose={() => setShowPreview(false)}
+        source={draftId ? 'draft' : 'compose'}
+        subject={subject}
+        html={html}
+        preheader={preheader}
+      />
+
+      <TestSendDialog
+        open={showTest}
+        onClose={() => setShowTest(false)}
+        source={draftId ? 'draft' : 'compose'}
+        subject={subject}
+        html={html}
+        preheader={preheader}
+        contextLabel={subject || '(no subject)'}
+      />
+
     </div>
   );
 }

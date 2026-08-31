@@ -8,6 +8,7 @@
  *  4. Owner  → "Rejected"  — with admin notes so they can fix & resubmit
  */
 import { sendTrackedMail } from '@/lib/server/mailer';
+import { resolveSystemEmail } from '@/lib/server/system-emails';
 import { buildEmailChrome, escapeHtmlLite } from '@/lib/server/email-chrome';
 import { getPublicAppBaseUrl } from '@/lib/url';
 import { getSuperAdminEmail } from '@/lib/server/super-admin-auth';
@@ -111,13 +112,21 @@ export async function sendVerificationSubmittedEmail(opts: {
     `,
   });
 
-  await sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('business_verification_submitted', {
+    firstName: (ownerName || 'there').split(' ')[0],
+    businessName,
+  }).catch(() => null);
+
+await sendTrackedMail({
     policyKey: 'business_verification',
     typeLabel: 'system',
     to: ownerEmail,
-    subject: `Verification request received — ${businessName}`,
-    text: `Hi ${ownerName}, we received your business verification request for ${businessName}. We'll review it within 2–3 business days and email you with the result.`,
-    html,
+    subject: configured?.subject ?? `Verification request received — ${businessName}`,
+    text: configured?.text ?? `Hi ${ownerName}, we received your business verification request for ${businessName}. We'll review it within 2–3 business days and email you with the result.`,
+    html: configured?.html ?? html,
     preheader: `Verification request received for ${businessName}`,
     origin: base,
   });
@@ -235,13 +244,21 @@ export async function sendVerificationApprovedEmail(opts: {
     `,
   });
 
-  await sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('business_verification_approved', {
+    firstName: (ownerName || 'there').split(' ')[0],
+    businessName,
+  }).catch(() => null);
+
+await sendTrackedMail({
     policyKey: 'business_verification',
     typeLabel: 'system',
     to: ownerEmail,
-    subject: `🎉 ${businessName} is now Verified on Docrud`,
-    text: `Congratulations ${ownerName}! ${businessName} has been verified on Docrud. Your verified badge is now live on your business profile.${adminNotes ? `\n\nNote from our team: ${adminNotes}` : ''}`,
-    html,
+    subject: configured?.subject ?? `🎉 ${businessName} is now Verified on Docrud`,
+    text: configured?.text ?? `Congratulations ${ownerName}! ${businessName} has been verified on Docrud. Your verified badge is now live on your business profile.${adminNotes ? `\n\nNote from our team: ${adminNotes}` : ''}`,
+    html: configured?.html ?? html,
     preheader: `${businessName} is now verified on Docrud`,
     origin: base,
   });
@@ -308,13 +325,22 @@ export async function sendVerificationRejectedEmail(opts: {
     `,
   });
 
-  await sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('business_verification_rejected', {
+    firstName: (ownerName || 'there').split(' ')[0],
+    businessName,
+    reason: adminNotes || 'No additional details were provided.',
+  }).catch(() => null);
+
+await sendTrackedMail({
     policyKey: 'business_verification',
     typeLabel: 'system',
     to: ownerEmail,
-    subject: `Verification update for ${businessName} — action required`,
-    text: `Hi ${ownerName}, your verification request for ${businessName} could not be approved at this time.\n\nFeedback: ${adminNotes || 'Please ensure all details match your official business registration.'}\n\nVisit your business page to resubmit: ${businessUrl}`,
-    html,
+    subject: configured?.subject ?? `Verification update for ${businessName} — action required`,
+    text: configured?.text ?? `Hi ${ownerName}, your verification request for ${businessName} could not be approved at this time.\n\nFeedback: ${adminNotes || 'Please ensure all details match your official business registration.'}\n\nVisit your business page to resubmit: ${businessUrl}`,
+    html: configured?.html ?? html,
     preheader: `Your verification for ${businessName} needs attention`,
     origin: base,
   });

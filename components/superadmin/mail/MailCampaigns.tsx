@@ -19,6 +19,8 @@
  *    something retrying cannot fix.
  */
 import { useCallback, useEffect, useState } from 'react';
+import EmailPreviewDialog from '@/components/superadmin/mail/EmailPreviewDialog';
+import TestSendDialog from '@/components/superadmin/mail/TestSendDialog';
 
 interface CampaignRow {
   id: string; title: string; subject: string; status: string;
@@ -93,6 +95,8 @@ export default function MailCampaigns() {
   const [notice, setNotice] = useState('');
 
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showTest, setShowTest] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [acting, setActing] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState<CampaignRow | null>(null);
@@ -280,12 +284,41 @@ export default function MailCampaigns() {
         {c.html && (
           <section className={CARD}>
             <p className={LABEL}>Email content</p>
-            <div className="mt-2 max-h-72 overflow-y-auto bg-white p-3 text-black">
-              {/* Stored HTML was sanitized on the way in. */}
-              <div dangerouslySetInnerHTML={{ __html: c.html }} />
+            <p className={HINT}>
+              This is the campaign&apos;s OWN stored content. Editing the template it came from
+              cannot change it — a sent or scheduled campaign is immutable.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" onClick={() => setShowPreview(true)} className={BTN}>
+                Preview
+              </button>
+              <button type="button" onClick={() => setShowTest(true)} className={BTN}>
+                Send test…
+              </button>
             </div>
           </section>
         )}
+
+        {/* The campaign's stored content, rendered by the same server pipeline
+            that would send it - including the audience size, resolved on the
+            server, and the warning that a send cannot be recalled. */}
+        <EmailPreviewDialog
+          open={showPreview && Boolean(c.html)}
+          onClose={() => setShowPreview(false)}
+          source="campaign"
+          subject={c.subject}
+          html={c.html ?? ''}
+          campaignId={c.id}
+        />
+
+        <TestSendDialog
+          open={showTest && Boolean(c.html)}
+          onClose={() => setShowTest(false)}
+          source="campaign"
+          subject={c.subject}
+          html={c.html ?? ''}
+          contextLabel={c.title}
+        />
 
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void act(c.id, 'duplicate')} disabled={acting}

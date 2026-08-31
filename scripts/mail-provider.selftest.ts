@@ -13,6 +13,7 @@ import {
   classifyMailError, nextRetryAt, MAX_DELIVERY_ATTEMPTS,
 } from '@/lib/server/mail-provider';
 
+import { rate as sharedRate } from '@/lib/email/mail-metrics';
 let checks = 0;
 let failures = 0;
 function check(label: string, ok: boolean, detail = '') {
@@ -144,8 +145,13 @@ function main() {
     HEALTH_API.includes('classifyMailError') && HEALTH_API.includes('failureGroups'));
   check('the rate is named acceptance, not delivery',
     HEALTH_API.includes('acceptanceRate') && !HEALTH_API.includes('deliveryRate'));
+  /* The inline ternary became the shared `rate()` helper, so this asserts the
+     property BEHAVIOURALLY - the helper really does return null for an empty
+     denominator - and that the route uses it rather than hand-rolling one. */
   check('an unmeasurable rate is null, not zero',
-    HEALTH_API.includes('attempted > 0 ?') && HEALTH_API.includes(': null'));
+    HEALTH_API.includes('acceptanceRate: rate(')
+    && HEALTH_API.includes("from '@/lib/email/mail-metrics'")
+    && sharedRate(0, 0) === null && sharedRate(0, 5) === 0);
   check('no secret is exposed',
     !/SMTP_PASSWORD|MONGODB_URI|CRON_SECRET/.test(HEALTH_API));
   check('internal errors are logged, not returned',
@@ -197,9 +203,12 @@ function main() {
   /* Anchored on the mail view declaration specifically — an unrelated
      `useState<'overview' | …>` elsewhere in the panel matches a bare search. */
   const navDecl = (/const \[view, setView\] = useState<[^>]*'compose'[^>]*>\([^)]*\)/.exec(ADMIN2) ?? [''])[0];
-  check('no unimplemented tab is advertised',
-    !ADMIN2.includes('Coming soon')
-    && !/'templates'|'analytics'|'settings'|'recipients'/.test(navDecl));
+  /* Same reasoning as above: assert every nav entry is mounted, rather than
+     naming sections that later phases legitimately implement. */
+  check('no placeholder tab is advertised', !ADMIN2.includes('Coming soon'));
+  check('every mail nav entry has a mounted component',
+    (navDecl.match(/'[a-z]+'/g) ?? []).every((m) =>
+      ADMIN2.includes(`view === ${m}`)), navDecl);
   check('compose is a real section, not a placeholder',
     navDecl.includes("'compose'") && ADMIN2.includes('<MailCompose />'));
   check('every figure comes from the real health endpoint',

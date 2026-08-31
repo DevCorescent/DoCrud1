@@ -4,6 +4,7 @@
  */
 
 import { sendTrackedMail } from '@/lib/server/mailer';
+import { resolveSystemEmail } from '@/lib/server/system-emails';
 import { buildEmailChrome, escapeHtmlLite } from '@/lib/server/email-chrome';
 import { getPublicAppBaseUrl } from '@/lib/url';
 
@@ -83,14 +84,27 @@ export async function sendAccountActionOtpEmail(opts: {
     bodyHtml,
   });
 
+  /* Presentation may come from the published system-email configuration.
+     `resolveSystemEmail` returns null for every failure mode, so the built-in
+     content below stays the guaranteed path — an editing mistake must never
+     stop an account-action code arriving. The OTP, its expiry and the action
+     itself are still decided by the caller. */
+  const configured = await resolveSystemEmail('account_action_otp', {
+    otp,
+    firstName: (name || 'there').split(' ')[0],
+    action: actionWord,
+    expiresAt: expireTime,
+  }).catch(() => null);
+
   return sendTrackedMail({
     policyKey: 'otp_verification',
     typeLabel: 'system',
     to,
-    subject: `${otp} — Your Docrud ${actionBig} OTP`,
+    subject: configured?.subject ?? `${otp} — Your Docrud ${actionBig} OTP`,
     preheader: `OTP: ${otp} — Use this to ${actionWord} your Docrud account.`,
-    text: `Your Docrud ${actionBig} OTP is: ${otp}\nValid until ${expireTime}.\nDo not share this with anyone.`,
-    html,
+    text: configured?.text
+      ?? `Your Docrud ${actionBig} OTP is: ${otp}\nValid until ${expireTime}.\nDo not share this with anyone.`,
+    html: configured?.html ?? html,
     origin: origin(),
     sentBy: 'system',
     metadata: { action, userId: opts.to },
@@ -150,14 +164,22 @@ export async function sendDeactivationConfirmEmail(opts: {
     bodyHtml,
   });
 
-  return sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('account_deactivated', {
+    firstName: (name || 'there').split(' ')[0],
+    deadline: deadline ? fmt(deadline) : 'you sign in again',
+  }).catch(() => null);
+
+return sendTrackedMail({
     policyKey: 'otp_verification',
     typeLabel: 'system',
     to,
-    subject: 'Your Docrud account has been deactivated',
+    subject: configured?.subject ?? 'Your Docrud account has been deactivated',
     preheader: 'Your account is deactivated. Log in anytime to reactivate it.',
-    text: `Your Docrud account has been deactivated. ${deadline ? `It will be deleted on ${fmt(deadline)} if not reactivated.` : 'Log in anytime to reactivate.'} Visit ${origin()}/login to reactivate.`,
-    html,
+    text: configured?.text ?? `Your Docrud account has been deactivated. ${deadline ? `It will be deleted on ${fmt(deadline)} if not reactivated.` : 'Log in anytime to reactivate.'} Visit ${origin()}/login to reactivate.`,
+    html: configured?.html ?? html,
     origin: origin(),
     sentBy: 'system',
   });
@@ -218,14 +240,22 @@ export async function sendDeactivationWarningEmail(opts: {
     bodyHtml,
   });
 
-  return sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('account_deletion_warning', {
+    firstName: (name || 'there').split(' ')[0],
+    deadline: fmt(deadline),
+  }).catch(() => null);
+
+return sendTrackedMail({
     policyKey: 'otp_verification',
     typeLabel: 'system',
     to,
-    subject: '⚠️ Your Docrud account will be deleted in 7 days',
+    subject: configured?.subject ?? '⚠️ Your Docrud account will be deleted in 7 days',
     preheader: `Act now — your account will be permanently deleted on ${fmt(deadline)}.`,
-    text: `Warning: Your Docrud account will be permanently deleted on ${fmt(deadline)}. Log in now to reactivate: ${origin()}/login`,
-    html,
+    text: configured?.text ?? `Warning: Your Docrud account will be permanently deleted on ${fmt(deadline)}. Log in now to reactivate: ${origin()}/login`,
+    html: configured?.html ?? html,
     origin: origin(),
     sentBy: 'system',
   });
@@ -262,14 +292,21 @@ export async function sendAccountDeletedEmail(opts: { to: string; name: string }
     bodyHtml,
   });
 
-  return sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('account_deleted', {
+    firstName: (opts.name || 'there').split(' ')[0],
+  }).catch(() => null);
+
+return sendTrackedMail({
     policyKey: 'otp_verification',
     typeLabel: 'system',
     to: opts.to,
-    subject: 'Your Docrud account has been deleted',
+    subject: configured?.subject ?? 'Your Docrud account has been deleted',
     preheader: 'Account deletion confirmed.',
-    text: `Your Docrud account has been permanently deleted. If you change your mind, create a new account at ${origin()}/register`,
-    html,
+    text: configured?.text ?? `Your Docrud account has been permanently deleted. If you change your mind, create a new account at ${origin()}/register`,
+    html: configured?.html ?? html,
     origin: origin(),
     sentBy: 'system',
   });
@@ -308,14 +345,21 @@ export async function sendAccountReactivatedEmail(opts: { to: string; name: stri
     bodyHtml,
   });
 
-  return sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('account_reactivated', {
+    firstName: (opts.name || 'there').split(' ')[0],
+  }).catch(() => null);
+
+return sendTrackedMail({
     policyKey: 'otp_verification',
     typeLabel: 'system',
     to: opts.to,
-    subject: '✅ Your Docrud account is back!',
+    subject: configured?.subject ?? '✅ Your Docrud account is back!',
     preheader: 'Welcome back! Your account has been successfully reactivated.',
-    text: `Welcome back! Your Docrud account has been reactivated. Visit ${origin()} to continue.`,
-    html,
+    text: configured?.text ?? `Welcome back! Your Docrud account has been reactivated. Visit ${origin()} to continue.`,
+    html: configured?.html ?? html,
     origin: origin(),
     sentBy: 'system',
   });

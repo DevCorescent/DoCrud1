@@ -39,6 +39,8 @@
     "test:mail-outbox": "tsx scripts/mail-outbox.selftest.ts",
     "test:mail-compose": "tsx scripts/mail-compose.selftest.ts",
     "test:mail-drafts": "tsx scripts/mail-drafts.selftest.ts",
+    "test:mail-templates": "tsx scripts/mail-templates.selftest.ts",
+    "test:system-emails": "tsx scripts/system-emails.selftest.ts",
     "test:mail-campaigns-ui": "tsx scripts/mail-campaigns-ui.selftest.ts",
     "test:mail-recipients": "tsx scripts/mail-recipients.selftest.ts",
     "test:mail-provider": "tsx scripts/mail-provider.selftest.ts",
@@ -53,7 +55,11 @@
     "migrate-mongo-r2": "tsx scripts/migrate-mongo-images-to-r2.ts",
     "migrate-mongo-r2:dry": "tsx scripts/migrate-mongo-images-to-r2.ts --dry-run",
     "migrate-profile-r2": "tsx scripts/migrate-profile-images-to-r2.ts",
-    "migrate-profile-r2:dry": "tsx scripts/migrate-profile-images-to-r2.ts --dry-run"
+    "migrate-profile-r2:dry": "tsx scripts/migrate-profile-images-to-r2.ts --dry-run",
+    "test:mail-render": "tsx scripts/mail-render.selftest.ts",
+    "test:mail-outbox-ops": "tsx scripts/mail-outbox-ops.selftest.ts",
+    "test:mail-analytics": "tsx scripts/mail-analytics.selftest.ts",
+    "test:mail-suppression": "tsx scripts/mail-suppression.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

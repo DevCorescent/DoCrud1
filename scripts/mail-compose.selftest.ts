@@ -27,12 +27,18 @@ function check(label: string, ok: boolean, detail = '') {
 const read = (p: string) => readFileSync(path.join(process.cwd(), p), 'utf8');
 const DRAFTS_API = read('app/api/super-admin/mail/drafts/route.ts');
 const PREVIEW_API = read('app/api/super-admin/mail/preview/route.ts');
+const RENDERER = read('lib/email/render-email.ts');
 const UPLOAD_API = read('app/api/super-admin/mail/upload/route.ts');
 const TEST_API = read('app/api/super-admin/mail/test/route.ts');
 const DRAFTS_LIB = read('lib/server/mail-drafts.ts');
 const EDITOR = read('components/superadmin/mail/RichEmailEditor.tsx');
 const COMPOSE = read('components/superadmin/mail/MailCompose.tsx');
 const PANEL = read('components/SuperAdminPanel.tsx');
+/* Preview and test send are now shared components rather than composer-local
+   code, so the assertions that guarded them follow them here. */
+const PREVIEW_UI = read('components/superadmin/mail/EmailPreviewDialog.tsx');
+const TEST_UI = read('components/superadmin/mail/TestSendDialog.tsx');
+const TEST_SEND_API = read('app/api/super-admin/mail/test-send/route.ts');
 
 const clean = (html: string) => sanitizeEmailHtml(html).toLowerCase();
 
@@ -149,13 +155,28 @@ function main() {
     DRAFTS_LIB.includes('sanitizeEmailHtml(input.html)'));
   check('plain text is derived, never authored separately',
     DRAFTS_LIB.includes('text: emailHtmlToText(html)'));
+  /* Sanitization moved down into the canonical renderer, so these follow it
+     there: the preview route must go through that renderer, and the renderer
+     must use the same sanitizer the storage path uses. The property is the
+     same one - there is exactly one sanitizer - asserted a level deeper. */
   check('the preview endpoint sanitizes',
-    PREVIEW_API.includes('sanitizeEmailHtml(raw)'));
+    PREVIEW_API.includes("renderEmail(") && RENDERER.includes('sanitizeEmailHtml(rawHtml)'));
   check('preview and send share one sanitizer',
-    PREVIEW_API.includes("from '@/lib/security/email-html-sanitizer'")
-    && DRAFTS_LIB.includes("from '@/lib/security/email-html-sanitizer'"));
+    RENDERER.includes("from '@/lib/security/email-html-sanitizer'")
+    && DRAFTS_LIB.includes("from '@/lib/security/email-html-sanitizer'")
+    && !PREVIEW_API.includes('DOMPurify'));
+  /* Stronger than before: the preview no longer injects the email into the
+     admin page at all. It renders inside a sandboxed iframe with no
+     allow-scripts, so the message cannot execute against a super-admin
+     session even if the sanitizer were wrong. */
   check('the composer renders server-sanitized HTML, not its own',
-    COMPOSE.includes('__html: previewHtml') && COMPOSE.includes("fetch('/api/super-admin/mail/preview'"));
+    PREVIEW_UI.includes("fetch('/api/super-admin/mail/preview'")
+    && PREVIEW_UI.includes('sandbox=""')
+    /* The attribute, not the word: the file explains why allow-scripts is
+       absent, and matching prose would fail on its own documentation. */
+    && !/sandbox=["'][^"']*allow-scripts/.test(PREVIEW_UI)
+    && !PREVIEW_UI.includes('dangerouslySetInnerHTML')
+    && !COMPOSE.includes('dangerouslySetInnerHTML'));
   check('the client does not sanitize in place of the server',
     !COMPOSE.includes('sanitizeEmailHtml') && !EDITOR.includes('DOMPurify'));
   check('an oversized body is refused rather than parsed',
@@ -197,15 +218,33 @@ function main() {
   check('a missing recipient is refused past the verify branch',
     TEST_API.includes("'A test recipient is required.'"));
   check('the composer never sends from the browser',
-    !COMPOSE.includes('nodemailer') && COMPOSE.includes("fetch('/api/super-admin/mail/test'"));
+    !COMPOSE.includes('nodemailer') && !TEST_UI.includes('nodemailer')
+    && TEST_UI.includes("fetch('/api/super-admin/mail/test-send'"));
+  /* The bug this replaced: "Send test" posted to the SMTP diagnostic endpoint,
+     which ignored the editor and mailed a fixed connection-test message. */
+  check('a test send carries the CURRENT editor content',
+    TEST_UI.includes('JSON.stringify({ source, type, subject, html, preheader, recipient })')
+    && TEST_SEND_API.includes("String(body.subject ?? '')")
+    && TEST_SEND_API.includes("String(body.html ?? '')"));
+  check('the server re-renders rather than trusting the browser',
+    TEST_SEND_API.includes('renderEmail({') && !TEST_SEND_API.includes('body.previewHtml'));
+  check('no audience is reachable from a test send',
+    !TEST_SEND_API.includes('resolveRecipients') && !TEST_SEND_API.includes('mail-recipients'));
   /* The rule the whole project keeps returning to. */
   check('a provider rejection is never reported as success',
-    COMPOSE.includes('The provider rejected the test message.')
-    && COMPOSE.includes('Mail delivery unavailable'));
+    TEST_SEND_API.includes("'The provider rejected the test message.'")
+    && !TEST_SEND_API.includes("'Delivered")
+    && !TEST_UI.includes('Delivered'));
   check('acceptance is not described as delivery',
-    COMPOSE.includes('not confirmation it reached the inbox'));
+    TEST_UI.includes('delivery\n                is not something this panel can see')
+    || TEST_UI.includes('is not something this panel can see'));
   check('a permanent failure says retrying will not help',
-    COMPOSE.includes('retrying will not help'));
+    TEST_UI.includes("'Retrying will not help'"));
+  check('the failure classification reaches the admin',
+    TEST_SEND_API.includes('failureKind: failure.kind')
+    && TEST_SEND_API.includes('providerCode: failure.code')
+    && TEST_SEND_API.includes('retryable: failure.retryable')
+    && TEST_UI.includes('Provider code'));
 
   console.log('\n── 9. Upload safety ──');
 
@@ -247,15 +286,25 @@ function main() {
   check('leaving with unsaved work is guarded',
     COMPOSE.includes("addEventListener('beforeunload'"));
   check('duplicate submissions are prevented',
-    COMPOSE.includes('if (busy) return;') && COMPOSE.includes('disabled={busy'));
+    COMPOSE.includes('disabled={busy')
+    /* Synchronous ref, because `sending` state does not update until the next
+       render and a fast double-click would pass the disabled check twice. */
+    && TEST_UI.includes('if (busyRef.current) return;')
+    && TEST_UI.includes('busyRef.current = true;')
+    /* And a server-side window, so a repeat that does get through is collapsed. */
+    && TEST_SEND_API.includes('alreadySentRecently(key)'));
   check('a subject is required before saving',
     COMPOSE.includes('A subject is required before saving.'));
   check('the sender cannot be set from the browser',
     COMPOSE.includes('readOnly aria-readonly') && COMPOSE.includes('cannot be set here'));
   check('desktop, mobile and text previews exist',
-    COMPOSE.includes("(['desktop', 'mobile', 'text'] as const)"));
+    PREVIEW_UI.includes("const MODES: PreviewMode[] = ['desktop', 'mobile', 'text']")
+    /* Real viewports, not just a narrower div. */
+    && PREVIEW_UI.includes('desktop: 640, mobile: 390'));
   check('the preview states it is an approximation',
-    COMPOSE.includes('not a guarantee of how every client'));
+    PREVIEW_UI.includes('same pipeline that sends the email'));
+  check('plain text comes from the server, not the browser',
+    PREVIEW_UI.includes('{data.text') && !PREVIEW_UI.includes('replace(/<'));
   /* The nav grows each phase; what must hold is that Compose is mounted and
      is one of the mail views. */
   check('compose is mounted in the Mail Center',

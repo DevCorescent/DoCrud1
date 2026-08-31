@@ -10,6 +10,11 @@ import {
   type MailFailureKind,
 } from '@/lib/server/mail-provider';
 
+import { renderEmail, extractEmailVariables, resolveEmailVariables } from '@/lib/email/render-email';
+import { filterSuppressed, createUnsubscribeToken } from '@/lib/server/mail-suppression';
+import {
+  resolveRecipientUsers, recipientVariableValues, SUPPORTED_VARIABLES, type RecipientUser,
+} from '@/lib/server/mail-recipients';
 export type MailCampaignAudience =
   | { mode: 'all_users' }
   | { mode: 'role'; role: string }
@@ -83,6 +88,11 @@ export type MailCampaign = {
     total: number;
     sent: number;
     failed: number;
+    /* Recipients skipped because they are suppressed. Kept separate from
+       `failed` on purpose: nothing went wrong, nothing was attempted, and
+       nothing should be retried. Folding them into failures would make a
+       healthy send look broken and would invite someone to "fix" it. */
+    suppressed?: number;
     startedAt?: string;
     finishedAt?: string;
   };
@@ -239,6 +249,68 @@ async function claimCampaign(id: string, token: string): Promise<MailCampaign> {
   });
 }
 
+/**
+ * Every audience variable is neutral by default.
+ *
+ * A recipient whose record could not be matched must still receive readable
+ * prose, never a literal `{{firstName}}`. "there" is what the recipient engine
+ * already uses for a user with no name, so an unmatched address reads exactly
+ * like a nameless one.
+ */
+function neutralVariableValues(email: string): Record<string, string> {
+  return {
+    firstName: 'there', lastName: '', fullName: 'there',
+    email, companyName: '', role: '',
+  };
+}
+
+/**
+ * Per-recipient variable values for an audience.
+ *
+ * Only called when the content actually uses a variable: resolving an audience
+ * a second time is real work, and the overwhelming majority of campaigns are
+ * not personalised.
+ */
+async function audienceVariableValues(
+  audience: MailCampaignAudience,
+): Promise<Map<string, Record<string, string>>> {
+  const map = new Map<string, Record<string, string>>();
+  const add = (u: RecipientUser) => {
+    if (u.email) map.set(u.email, recipientVariableValues(u));
+  };
+
+  if (audience.mode === 'segment') {
+    (await resolveRecipientUsers(audience.segment)).forEach(add);
+    return map;
+  }
+
+  /* A pasted address list carries no user record, so those recipients fall
+     back to neutral values at send time. */
+  if (audience.mode === 'emails') return map;
+
+  const pool = getDbPool();
+  const fallbackUsers = await getStoredUsersFromRepository<any>([]);
+  const users = pool ? await getStoredUsersFromRepository<any>(fallbackUsers) : fallbackUsers;
+  const role = audience.mode === 'role' ? String(audience.role || '').trim().toLowerCase() : null;
+
+  for (const u of users as any[]) {
+    const email = String(u.email || '').toLowerCase();
+    if (!email) continue;
+    if (role !== null && String(u.role || '').toLowerCase() !== role) continue;
+    add({
+      id: String(u.id ?? ''),
+      email,
+      name: String(u.name ?? ''),
+      role: String(u.role ?? ''),
+      accountType: 'unknown',
+      organizationName: u.organizationName ? String(u.organizationName) : undefined,
+      isActive: u.isActive !== false,
+      createdAt: String(u.createdAt ?? ''),
+    });
+  }
+  return map;
+}
+
 export type CampaignMailSender = typeof sendTrackedMail;
 
 export async function sendMailCampaign(
@@ -271,13 +343,52 @@ export async function sendMailCampaign(
     unique = Array.from(new Set(recipients)).slice(0, 25_000);
   }
 
+  /* ── Suppression, checked HERE and nowhere earlier ──────────────────────
+     The audience was resolved seconds ago, but the preview an admin approved
+     may be minutes or days old. Someone who unsubscribed in between must be
+     protected, so the check runs immediately before sending rather than at
+     preview time - and it runs on the RETRY pass too, because a recipient who
+     opts out while a retry is pending must not receive the retry either.
+
+     A suppressed recipient is not a failure: no attempt is made, no outbox row
+     is written, and nothing is scheduled for another try. */
+  const beforeSuppression = unique.length;
+  const { eligible, suppressed } = await filterSuppressed(unique);
+  unique = eligible;
+  /* Used below when carrying delivery records forward, so a suppressed address
+     that was previously pending cannot be picked up by a later pass. */
+  const suppressedSet = new Set(suppressed);
+
   if (unique.length === 0) {
+    const everyoneSuppressed = beforeSuppression > 0;
     await upsertMailCampaign({
       ...campaign,
-      status: 'failed',
+      status: everyoneSuppressed ? 'sent' : 'failed',
       claimToken: undefined,
-      lastError: 'No recipients found for this audience.',
+      lastError: everyoneSuppressed ? undefined : 'No recipients found for this audience.',
+      deliveries: undefined,
+      progress: {
+        total: beforeSuppression,
+        sent: campaign.progress?.sent ?? 0,
+        failed: 0,
+        suppressed: suppressed.length,
+        startedAt: campaign.progress?.startedAt ?? new Date().toISOString(),
+        finishedAt: new Date().toISOString(),
+      },
     });
+    /* Every recipient being suppressed is a completed send with nothing to do,
+       not an error: throwing would mark a correctly-behaving campaign failed
+       and leave it looking like something to retry. */
+    if (everyoneSuppressed) {
+      return {
+        total: beforeSuppression,
+        sent: 0,
+        failed: 0,
+        pendingRetry: 0,
+        suppressed: suppressed.length,
+        error: undefined,
+      };
+    }
     throw new Error('No recipients found for this audience.');
   }
 
@@ -310,8 +421,18 @@ export async function sendMailCampaign(
   /* Deliveries from earlier passes that are NOT part of this one are carried
      forward untouched. */
   for (const d of campaign.deliveries ?? []) {
-    if (!unique.includes(d.to)) results.set(d.to, d);
+    /* A pending retry for someone who has since unsubscribed is dropped, not
+       carried: leaving it would mean the next pass mails them. */
+    if (!unique.includes(d.to) && !suppressedSet.has(d.to)) results.set(d.to, d);
   }
+
+  /* Only pay for audience resolution when the content is actually
+     personalised - most campaigns are not. */
+  const usesVariables = extractEmailVariables(
+    `${campaign.subject} ${campaign.html ?? ''} ${campaign.text}`).length > 0;
+  const valuesByEmail = usesVariables
+    ? await audienceVariableValues(campaign.audience).catch(() => null)
+    : null;
 
   const persist = async () => {
     const current = await getMailCampaignById(id);
@@ -333,14 +454,48 @@ export async function sendMailCampaign(
     await runLimited(unique, 4, async (to) => {
       const attempt = (attemptsFor.get(to) ?? 0) + 1;
       const lastAttemptAt = new Date().toISOString();
+      /* Personalised HERE, per recipient, through the canonical renderer -
+         the same pipeline the preview and the test send use.
+
+         Until this existed the product advertised `{{firstName}}` in the
+         template editor, validated it on save, and then mailed the literal
+         placeholder to the entire audience: the substitution function had no
+         caller outside its own test. */
+      const values = { ...neutralVariableValues(to), ...(valuesByEmail?.get(to) ?? {}) };
+      /* Per recipient, because the token IS the authorisation: one shared link
+         would let anyone who received the campaign unsubscribe anyone else. */
+      const unsubscribeUrl =
+        `${origin.replace(/\/$/, '')}/unsubscribe?token=${encodeURIComponent(createUnsubscribeToken(to))}`;
+      const unsubscribeHtml =
+        '<p style="margin-top:24px;font-size:12px;color:#64748b;">'
+        + `<a href="${unsubscribeUrl}" style="color:#64748b;">Unsubscribe from marketing emails</a>`
+        + '</p>';
+      const rendered = campaign.html
+        ? renderEmail({
+            subject: campaign.subject,
+            html: campaign.html,
+            supported: SUPPORTED_VARIABLES,
+            values,
+          })
+        : null;
       try {
         await sender({
           policyKey: 'bulk_campaign',
           typeLabel: 'system',
           to,
-          subject: campaign.subject,
-          text: campaign.text,
-          html: campaign.html,
+          subject: rendered
+            ? rendered.subject
+            : resolveEmailVariables(campaign.subject, values, { escape: false }),
+          /* The stored text alternative is authored plain text, so it is
+             substituted without HTML escaping. */
+          text: `${rendered && !campaign.text.trim()
+            ? rendered.text
+            : resolveEmailVariables(campaign.text, values, { escape: false })}`
+            + `\n\nUnsubscribe from marketing emails: ${unsubscribeUrl}`,
+          /* Every campaign message carries a way out. Marketing mail without
+             one is both a compliance problem and a reason people mark it as
+             spam instead. */
+          html: `${rendered ? rendered.bodyHtml : (campaign.html ?? '')}${unsubscribeHtml}`,
           sentBy: actorEmail || 'admin',
           origin,
           metadata: { campaignId: campaign.id, campaignTitle: campaign.title },
@@ -412,6 +567,7 @@ export async function sendMailCampaign(
           total,
           sent: totalSent,
           failed: permanentlyFailed.length,
+          suppressed: suppressed.length,
           startedAt,
           finishedAt: stillPending.length ? undefined : finishedAt,
         },
@@ -423,6 +579,7 @@ export async function sendMailCampaign(
       sent: totalSent,
       failed: permanentlyFailed.length,
       pendingRetry: stillPending.length,
+      suppressed: suppressed.length,
       error: firstError || undefined,
     };
   } catch (error) {
@@ -459,6 +616,8 @@ export interface DueCampaignResult {
   sent: number;
   failed: number;
   pendingRetry?: number;
+  /** Skipped because the recipient is suppressed. Never counted as a failure. */
+  suppressed?: number;
   /** Present on failure. Already a provider message — never a credential. */
   error?: string;
 }
@@ -508,6 +667,7 @@ export async function runDueMailCampaigns(
         sent: r.sent,
         failed: r.failed,
         pendingRetry: r.pendingRetry,
+        suppressed: r.suppressed,
         error: r.error,
       });
     } catch (err) {

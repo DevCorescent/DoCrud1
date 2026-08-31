@@ -39,6 +39,7 @@ export interface Resolution {
   selected: number;
   excluded: number;
   invalid: number;
+  suppressed: number;
   final: number;
   invalidSamples: string[];
 }
@@ -49,7 +50,7 @@ interface UserRow {
 }
 interface PreviewRow {
   name: string; email: string; organizationName?: string; role: string;
-  isActive: boolean; outcome: 'included' | 'excluded' | 'invalid'; reason: string;
+  isActive: boolean; outcome: 'included' | 'excluded' | 'invalid' | 'suppressed'; reason: string;
 }
 
 const LABEL = 'mb-1 block text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500';
@@ -388,6 +389,11 @@ export default function RecipientPicker({
                     ['Matched', resolution.selected, 'text-zinc-100'],
                     ['Excluded', resolution.excluded, resolution.excluded ? 'text-amber-400' : 'text-zinc-100'],
                     ['Invalid', resolution.invalid, resolution.invalid ? 'text-rose-400' : 'text-zinc-100'],
+                    /* Its own line, not folded into "excluded": a suppression
+                       is a person's stated choice, not a data problem an admin
+                       should try to fix. */
+                    ['Suppressed', resolution.suppressed ?? 0,
+                      resolution.suppressed ? 'text-sky-400' : 'text-zinc-100'],
                     ['Final', resolution.final, 'text-emerald-400'],
                   ].map(([label, value, tone]) => (
                     <div key={String(label)} className="rounded border border-zinc-800 bg-black/30 px-2 py-1.5">
@@ -432,7 +438,8 @@ export default function RecipientPicker({
                         <td className="max-w-[160px] truncate p-2 text-zinc-400">{r.email || '—'}</td>
                         <td className={`p-2 font-semibold capitalize ${
                           r.outcome === 'included' ? 'text-emerald-400'
-                            : r.outcome === 'invalid' ? 'text-rose-400' : 'text-amber-400'}`}>
+                            : r.outcome === 'invalid' ? 'text-rose-400'
+                              : r.outcome === 'suppressed' ? 'text-sky-400' : 'text-amber-400'}`}>
                           {r.outcome}
                         </td>
                         <td className="p-2 text-zinc-500">{r.reason}</td>

@@ -12,7 +12,7 @@ import { getMailPolicies, type MailPolicyKey } from '@/lib/server/mail-policies'
 import { buildEmailChrome, escapeHtmlLite } from '@/lib/server/email-chrome';
 /* Re-exported so existing importers of `getCachedTransporter` keep working. */
 export { getCachedTransporter } from '@/lib/server/smtp-transport';
-import { getMailProvider } from '@/lib/server/mail-provider';
+import { getMailProvider, classifyMailError } from '@/lib/server/mail-provider';
 
 type SendTrackedMailInput = {
   policyKey: MailPolicyKey;
@@ -114,15 +114,30 @@ export async function sendTrackedMail(input: SendTrackedMailInput) {
       status: 'sent',
       messageId: info.messageId,
       sentAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attempts: Number(ev.attempts || 0) + 1,
       sentBy: input.sentBy || ev.sentBy,
     }));
 
     return { skipped: false, messageId: info.messageId, outboxId };
   } catch (err) {
+    /* The classifier runs here anyway - every caller of this function
+       classifies the error it rethrows. Recording the result on the outbox row
+       means the operational console can answer "is this retryable?" without
+       re-parsing an SMTP string in the browser, and without a second copy of
+       the classification rules. */
+    const failure = classifyMailError(err);
+    const now = new Date().toISOString();
     await updateEmailOutboxEvent(outboxId, (ev) => ({
       ...ev,
       status: 'failed',
-      error: err instanceof Error ? err.message : 'Mail send failed',
+      error: failure.message,
+      failureKind: failure.kind,
+      providerCode: failure.code,
+      retryable: failure.retryable,
+      attempts: Number(ev.attempts || 0) + 1,
+      failedAt: now,
+      updatedAt: now,
     }));
     throw err;
   }

@@ -128,6 +128,10 @@ export async function POST(req: NextRequest) {
       selected: resolution.selected,
       excluded: resolution.excluded,
       invalid: resolution.invalid,
+      /* Reported separately: an admin must be able to see WHY a recipient
+         vanished from the count, and a suppression is not a data problem to
+         fix - it is a person's choice. */
+      suppressed: resolution.suppressed,
       final: resolution.final,
       invalidSamples: resolution.invalidSamples,
       /* The addresses themselves are deliberately NOT returned. */

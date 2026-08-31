@@ -8,6 +8,11 @@ import MailOverview from '@/components/superadmin/MailOverview';
 import MailCompose from '@/components/superadmin/mail/MailCompose';
 import MailCampaigns from '@/components/superadmin/mail/MailCampaigns';
 import MailDrafts from '@/components/superadmin/mail/MailDrafts';
+import MailOutbox from '@/components/superadmin/mail/MailOutbox';
+import MailAnalytics from '@/components/superadmin/mail/MailAnalytics';
+import MailSuppression from '@/components/superadmin/mail/MailSuppression';
+import MailTemplates from '@/components/superadmin/mail/MailTemplates';
+import SystemEmails from '@/components/superadmin/mail/SystemEmails';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { profileStatusStyle } from '@/lib/profile-score';
@@ -2340,8 +2345,7 @@ function MailTab() {
   const [msg, setMsg] = useState('');
   /* Only sections that are actually implemented appear here. An unbuilt tab
      showing "coming soon" would be worse than not offering it. */
-  const [view, setView] = useState<'overview' | 'compose' | 'drafts' | 'campaigns' | 'outbox' | 'health'>('overview');
-  const [outbox, setOutbox] = useState<Record<string, unknown>[]>([]);
+  const [view, setView] = useState<'overview' | 'compose' | 'drafts' | 'templates' | 'system' | 'campaigns' | 'outbox' | 'suppression' | 'analytics' | 'health'>('overview');
   /* Mass mail is irreversible, so it takes two deliberate steps: resolve the
      real recipient count on the server, show it, then require a second click. */
   const [preview, setPreview] = useState<{
@@ -2352,11 +2356,9 @@ function MailTab() {
   const [previewing, setPreviewing] = useState(false);
   const [scheduleAt, setScheduleAt] = useState('');
 
-  async function loadOutbox() {
-    setView('outbox');
-    const d = await fetch('/api/super-admin/mail?view=outbox&limit=100').then((r) => r.json()).catch(() => ({ outbox: [] }));
-    setOutbox(d.outbox || []);
-  }
+  /* The outbox used to be fetched here - 100 rows, unfiltered, sorted and
+     rendered inline. MailOutbox now owns its own server-paged, server-filtered
+     data, so there is nothing for the panel to load. */
 
   async function loadPreview() {
     if (!broadcast.subject || !broadcast.htmlBody) { setMsg('Subject and body required'); return; }
@@ -2405,11 +2407,11 @@ function MailTab() {
       {msg && <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{msg}</div>}
 
       <div className="flex gap-1">
-        {(['overview', 'compose', 'drafts', 'campaigns', 'outbox', 'health'] as const).map((v) => (
+        {(['overview', 'compose', 'drafts', 'templates', 'system', 'campaigns', 'outbox', 'suppression', 'analytics', 'health'] as const).map((v) => (
           /* Was `setView('overview')` — a leftover from when this row had two
              tabs, which made Compose, Campaigns and Health unreachable: every
              click bounced back to Overview. */
-          <button key={v} onClick={() => { setView(v); if (v === 'outbox') void loadOutbox(); }} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all capitalize ${view === v ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}>{v}</button>
+          <button key={v} onClick={() => setView(v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all capitalize ${view === v ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}>{v}</button>
         ))}
       </div>
 
@@ -2421,6 +2423,10 @@ function MailTab() {
 
       {view === 'drafts' && <MailDrafts />}
 
+      {view === 'templates' && <MailTemplates />}
+
+      {view === 'system' && <SystemEmails />}
+
       {view === 'campaigns' && <MailCampaigns />}
 
       {view === 'health' && <MailHealthPanel />}
@@ -2428,23 +2434,22 @@ function MailTab() {
       {/* The previous inline overview (three counters plus a recent-outbox
           list) is replaced by MailOverview above, which reads the same data
           plus campaign state and classified failures. */}
+      {view === 'suppression' && <MailSuppression />}
+
+      {view === 'analytics' && (
+        <MailAnalytics
+          /* Following a campaign opens the EXISTING campaign screen rather
+             than duplicating campaign data into a reporting view. */
+          onOpenCampaign={() => setView('campaigns')}
+        />
+      )}
+
       {view === 'outbox' && (
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-zinc-800 text-xs text-zinc-500"><th className="text-left px-4 py-3">Status</th><th className="text-left px-4 py-3">Subject</th><th className="text-left px-4 py-3">To</th><th className="text-left px-4 py-3">Type</th><th className="text-left px-4 py-3">Date</th></tr></thead>
-            <tbody className="divide-y divide-zinc-800/50">
-              {outbox.map((e, i) => (
-                <tr key={i} className="hover:bg-zinc-800/30">
-                  <td className="px-4 py-3"><span className={badge(String(e.status || ''))}>{String(e.status)}</span></td>
-                  <td className="px-4 py-3 text-zinc-300 max-w-[200px] truncate">{String(e.subject || '—')}</td>
-                  <td className="px-4 py-3 text-zinc-500 text-xs max-w-[150px] truncate">{String(e.to || '—')}</td>
-                  <td className="px-4 py-3 text-zinc-500 text-xs">{String(e.type || '—')}</td>
-                  <td className="px-4 py-3 text-zinc-500 text-xs">{ago(String(e.createdAt || ''))}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MailOutbox
+          /* Following a record to its campaign uses the EXISTING campaign
+             screen rather than duplicating campaign data into this view. */
+          onOpenCampaign={() => setView('campaigns')}
+        />
       )}
 
       {composing && (

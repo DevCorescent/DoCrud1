@@ -76,7 +76,9 @@ export default function SuperAdminMailCenter() {
 
   type TestResult = {
     ok: boolean;
-    stage: 'verify' | 'send' | 'sent';
+    /* 'accepted', not 'sent': the provider took the message. Whether it
+       reached the inbox is not observable from here. */
+    stage: 'verify' | 'send' | 'accepted';
     message?: string;
     error?: string;
     hint?: string;
@@ -476,7 +478,7 @@ export default function SuperAdminMailCenter() {
                         : <AlertCircle className="h-5 w-5 shrink-0 text-rose-600" />}
                       <p className={`text-sm font-semibold ${testResult.ok ? 'text-emerald-900' : 'text-rose-900'}`}>
                         {testResult.ok
-                          ? testResult.stage === 'sent' ? 'Test email sent' : 'Connection verified'
+                          ? testResult.stage === 'accepted' ? 'Provider accepted the test' : 'Connection verified'
                           : testResult.stage === 'send' ? 'Send failed' : 'Connection failed'}
                       </p>
                       {testResult.elapsedMs !== undefined ? (

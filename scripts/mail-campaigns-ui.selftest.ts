@@ -164,9 +164,9 @@ function main() {
   /* Scoped to the mail nav — an unrelated Documents tab also uses 'templates'. */
   const mailNav = (/const \[view, setView\] = useState<[^>]*'campaigns'[^>]*>\([^)]*\)/.exec(PANEL) ?? [''])[0];
   /* 'drafts' joined the nav in Phase 7 and is a real section. */
-  check('no unbuilt section was added to the mail nav',
-    Boolean(mailNav) && !/'templates'|'analytics'|'settings'|'suppression'/.test(mailNav)
-    && !PANEL.includes('Coming soon'));
+  /* A deny-list of section names rots: each phase turns one of them real.
+     The durable invariant is that every nav entry has a mounted component. */
+  check('no placeholder tab is advertised', !PANEL.includes('Coming soon'));
   check('every mail nav entry has a mounted component',
     (mailNav.match(/'[a-z]+'/g) ?? []).every((m) => {
       const v = m.replace(/'/g, '');

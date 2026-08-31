@@ -68,6 +68,9 @@ export const homepageConfigPath = path.join(dataDir, 'homepage-config.json');
 /* Super Admin SEO Manager settings. Same three-tier resolution as its peers:
    row adapter -> app_state (MongoDB) -> local JSON in development. */
 export const mailDraftsPath = path.join(dataDir, 'mail-drafts.json');
+export const mailTemplatesPath = path.join(dataDir, 'mail-templates.json');
+export const systemEmailsPath = path.join(dataDir, 'system-emails.json');
+export const mailSuppressionPath = path.join(dataDir, 'mail-suppression.json');
 export const seoSettingsPath = path.join(dataDir, 'seo-settings.json');
 /* The staged copy an admin is editing. The PUBLISHED file above is the only
    thing the public site ever reads, so a draft can be saved and previewed

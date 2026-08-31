@@ -4,6 +4,7 @@
  */
 
 import { sendTrackedMail } from '@/lib/server/mailer';
+import { resolveSystemEmail } from '@/lib/server/system-emails';
 import { buildEmailChrome, escapeHtmlLite } from '@/lib/server/email-chrome';
 import { getPublicAppBaseUrl } from '@/lib/url';
 import type { PublicFaceCategory } from '@/types/document';
@@ -92,13 +93,20 @@ export async function sendPublicFaceOtpEmail(opts: {
     bodyHtml,
   });
 
+  /* Same contract as the other OTP senders: configurable presentation, with
+     the built-in content as the guaranteed fallback. */
+  const configured = await resolveSystemEmail('public_face_otp', {
+    otp, firstName: (name || 'there').split(' ')[0],
+  }).catch(() => null);
+
   return sendTrackedMail({
     policyKey: 'public_face_notifications',
     typeLabel: 'system',
     to,
-    subject: 'Verify your email — Public Face application',
-    text: `Your OTP to verify your Public Face application is: ${otp}. Valid for 10 minutes.`,
-    html,
+    subject: configured?.subject ?? 'Verify your email — Public Face application',
+    text: configured?.text
+      ?? `Your OTP to verify your Public Face application is: ${otp}. Valid for 10 minutes.`,
+    html: configured?.html ?? html,
     preheader: `Your OTP is ${otp}`,
     origin: origin(),
   });
@@ -164,13 +172,21 @@ export async function sendPublicFaceApplicationReceivedEmail(opts: {
     bodyHtml,
   });
 
-  return sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('public_face_received', {
+    firstName: (name || 'there').split(' ')[0],
+    category: PUBLIC_FACE_CATEGORY_LABELS[category] ?? String(category),
+  }).catch(() => null);
+
+return sendTrackedMail({
     policyKey: 'public_face_notifications',
     typeLabel: 'system',
     to,
-    subject: 'Your Public Face application has been received',
-    text: `Hi ${name}, we've received your Public Face application for "${categoryLabel}". We'll review it within 3–5 business days.`,
-    html,
+    subject: configured?.subject ?? 'Your Public Face application has been received',
+    text: configured?.text ?? `Hi ${name}, we've received your Public Face application for "${categoryLabel}". We'll review it within 3–5 business days.`,
+    html: configured?.html ?? html,
     origin: origin(),
   });
 }
@@ -225,13 +241,21 @@ export async function sendPublicFaceApprovedEmail(opts: {
     bodyHtml,
   });
 
-  return sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('public_face_approved', {
+    firstName: (name || 'there').split(' ')[0],
+    category: PUBLIC_FACE_CATEGORY_LABELS[category] ?? String(category),
+  }).catch(() => null);
+
+return sendTrackedMail({
     policyKey: 'public_face_notifications',
     typeLabel: 'system',
     to,
-    subject: '🎉 Congratulations — You are now a Public Face!',
-    text: `Congratulations ${name}! Your Public Face application for "${categoryLabel}" has been approved. Your profile now has the Public Face badge.`,
-    html,
+    subject: configured?.subject ?? '🎉 Congratulations — You are now a Public Face!',
+    text: configured?.text ?? `Congratulations ${name}! Your Public Face application for "${categoryLabel}" has been approved. Your profile now has the Public Face badge.`,
+    html: configured?.html ?? html,
     origin: origin(),
   });
 }
@@ -285,13 +309,22 @@ export async function sendPublicFaceRejectedEmail(opts: {
     bodyHtml,
   });
 
-  return sendTrackedMail({
+    /* Presentation only: the caller still decides WHICH email this is,
+     who receives it and what the values are. A resolution failure
+     returns null and the built-in content below is used. */
+  const configured = await resolveSystemEmail('public_face_rejected', {
+    firstName: (name || 'there').split(' ')[0],
+    category: PUBLIC_FACE_CATEGORY_LABELS[category] ?? String(category),
+    reason: adminNote || 'No additional details were provided.',
+  }).catch(() => null);
+
+return sendTrackedMail({
     policyKey: 'public_face_notifications',
     typeLabel: 'system',
     to,
-    subject: 'Update on your Public Face application',
-    text: `Hi ${name}, we reviewed your Public Face application for "${categoryLabel}" and were unable to approve it at this time.${adminNote ? ` Note: ${adminNote}` : ''} You may reapply after strengthening your public presence.`,
-    html,
+    subject: configured?.subject ?? 'Update on your Public Face application',
+    text: configured?.text ?? `Hi ${name}, we reviewed your Public Face application for "${categoryLabel}" and were unable to approve it at this time.${adminNote ? ` Note: ${adminNote}` : ''} You may reapply after strengthening your public presence.`,
+    html: configured?.html ?? html,
     origin: origin(),
   });
 }

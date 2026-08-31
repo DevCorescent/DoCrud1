@@ -66,8 +66,15 @@ const SELECT_CLASS = `${INPUT_CLASS} cursor-pointer appearance-none pr-8`;
 const ERROR_INPUT_CLASS = 'border-rose-500 bg-rose-50 dark:border-rose-500/40 dark:bg-rose-500/[0.04]';
 const PANEL = 'rounded-2xl border border-slate-200 bg-white dark:border-white/[0.07] dark:bg-white/[0.02]';
 const MUTED = 'text-slate-600 dark:text-white/40';
+/* `bg-[#ffffff]` rather than `bg-white`: app/globals.css has
+   `:root[data-ui-mode='dark'] body a[class~='bg-white'] { color: rgb(2 6 23) !important }`,
+   a rule meant to keep dark text legible on solid-white CTAs. It matches the
+   EXACT token, so a ghost link that is white in light mode and translucent in
+   dark mode was forced to near-black text on a near-black bar — measured at
+   1.02:1, i.e. invisible. The arbitrary value is the same colour and matches
+   neither that rule nor the `[class*='bg-white']` background rule's intent. */
 const BTN_GHOST =
-  'inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-slate-300 bg-white px-3.5 text-[12.5px] font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/60 dark:hover:bg-white/[0.08] dark:hover:text-white';
+  'inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-slate-300 bg-[#ffffff] px-3.5 text-[12.5px] font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/60 dark:hover:bg-white/[0.08] dark:hover:text-white';
 
 function Field({
   id, label, hint, error, required, children,
@@ -77,7 +84,7 @@ function Field({
 }) {
   return (
     <div className="min-w-0">
-      <label htmlFor={id} className="mb-1.5 block text-[11.5px] font-semibold text-slate-700 dark:text-white/55">
+      <label htmlFor={id} className="mb-1 block text-[11.5px] font-semibold text-slate-700 dark:text-white/55">
         {label}
         {/* The word, not just an asterisk: a lone * is a convention a first-time
             poster has to infer, and a screen reader announces it as "star". */}
@@ -89,22 +96,25 @@ function Field({
       </label>
       {children}
       {error ? (
-        <p id={`${id}-error`} role="alert" className="mt-1.5 text-[11.5px] font-medium text-rose-600 dark:text-rose-300/85">
+        <p id={`${id}-error`} role="alert" className="mt-1 text-[11.5px] font-medium text-rose-600 dark:text-rose-300/85">
           {error}
         </p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1.5 text-[11px] text-slate-500 dark:text-white/25">{hint}</p>
+        <p id={`${id}-hint`} className="mt-1 text-[11px] text-slate-500 dark:text-white/25">{hint}</p>
       ) : null}
     </div>
   );
 }
 
 function Section({ title, caption, children }: { title: string; caption?: string; children: React.ReactNode }) {
+  /* Section rhythm: ~20px between major sections, ~14px between related
+     controls. Tightened from py-6/gap-4 — that spacing was the single largest
+     contributor to the page's height, ahead of the fields themselves. */
   return (
-    <section className="border-t border-slate-200 px-4 py-5 first:border-t-0 sm:px-6 sm:py-6 dark:border-white/[0.06]">
+    <section className="border-t border-slate-200 px-4 py-4 first:border-t-0 sm:px-5 sm:py-5 dark:border-white/[0.06]">
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">{title}</p>
-      {caption && <p className="mt-1 text-[12px] text-slate-500 dark:text-white/28">{caption}</p>}
-      <div className="mt-4 flex flex-col gap-4">{children}</div>
+      {caption && <p className="mt-0.5 text-[12px] text-slate-500 dark:text-white/28">{caption}</p>}
+      <div className="mt-3 flex flex-col gap-3.5">{children}</div>
     </section>
   );
 }
@@ -126,6 +136,14 @@ export default function PostJobPage() {
   /* Who this job will be posted as. Read once from the profile endpoint the
      app already uses — the poster is never typed, so it cannot be misstated. */
   const [poster, setPoster] = useState<JobPreviewPoster | null>(null);
+
+  /* Escape closes the preview dialog, wherever focus happens to be. */
+  useEffect(() => {
+    if (!showPreview) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowPreview(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showPreview]);
 
   useEffect(() => {
     let active = true;
@@ -266,7 +284,7 @@ export default function PostJobPage() {
           <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-indigo-500/[0.05] blur-[160px]" />
         </div>
 
-        <div className="mx-auto w-full max-w-3xl px-3 pb-16 pt-8 sm:px-5 sm:pt-10 lg:px-8">
+        <div className="mx-auto w-full max-w-4xl px-3 pb-10 pt-5 sm:px-5 sm:pt-6 lg:px-8">
 
           {posted ? (
             /* ── Success ─────────────────────────────────────────────── */
@@ -303,36 +321,39 @@ export default function PostJobPage() {
           ) : (
             <>
               {/* ── Title ──────────────────────────────────────────────── */}
-              <div className="mb-5 flex flex-wrap items-start justify-between gap-3 sm:mb-7">
+              {/* One compact line, not a hero: the title and its one-line
+                  explanation, with Preview beside them. */}
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <h1 className="text-[22px] font-bold tracking-[-0.02em] sm:text-[26px]">
+                  <h1 className="text-[19px] font-bold tracking-[-0.02em] sm:text-[22px]">
                     {editId ? 'Edit job' : 'Post a job'}
                   </h1>
-                  <p className={`mt-1.5 text-[13.5px] leading-relaxed ${MUTED}`}>
-                    Find the right person for your role. Published roles appear in the Jobs feed.
+                  <p className={`mt-0.5 text-[12.5px] ${MUTED}`}>
+                    Published roles appear in the Jobs feed.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowPreview((v) => !v)}
-                  aria-pressed={showPreview}
-                  className={`h-9 shrink-0 ${BTN_GHOST}`}
-                >
-                  {showPreview
-                    ? <><EyeOff className="h-3.5 w-3.5" aria-hidden /> Hide preview</>
-                    : <><Eye className="h-3.5 w-3.5" aria-hidden /> Preview</>}
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(true)}
+                    aria-haspopup="dialog"
+                    className={`h-9 ${BTN_GHOST}`}
+                  >
+                    <Eye className="h-3.5 w-3.5" aria-hidden /> Preview
+                  </button>
+                  <Link href="/jobs/my" className={`h-9 ${BTN_GHOST}`}>My Jobs</Link>
+                </div>
               </div>
 
               {/* Who the job is posted as. Shown so nobody discovers after
                   publishing that their own name is on the listing, and stated
                   as an individual rather than dressed up as a company. */}
               {poster && (
-                <div className={`${PANEL} mb-4 flex items-center gap-2.5 px-4 py-3`}>
+                <div className={`${PANEL} mb-3 flex items-center gap-2.5 px-3.5 py-2`}>
                   {poster.avatarUrl
-                    ? <img src={poster.avatarUrl} alt="" aria-hidden className="h-8 w-8 shrink-0 rounded-full object-cover" />
+                    ? <img src={poster.avatarUrl} alt="" aria-hidden className="h-7 w-7 shrink-0 rounded-full object-cover" />
                     : (
-                      <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[12px] font-bold text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white/50">
+                      <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-[11px] font-bold text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white/50">
                         {poster.name.trim().charAt(0).toUpperCase() || '?'}
                       </span>
                     )}
@@ -350,15 +371,9 @@ export default function PostJobPage() {
                 </div>
               )}
 
-              {showPreview && (
-                <div className="mb-4">
-                  <JobPostPreview data={jobForm} poster={poster} />
-                </div>
-              )}
-
               {formError && (
                 <div role="alert"
-                  className="mb-5 rounded-[14px] border border-rose-500/40 bg-rose-50 px-4 py-3 text-[12.5px] font-medium text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/[0.07] dark:text-rose-200/90">
+                  className="mb-3 rounded-[14px] border border-rose-500/40 bg-rose-50 px-4 py-3 text-[12.5px] font-medium text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/[0.07] dark:text-rose-200/90">
                   {formError}
                 </div>
               )}
@@ -381,7 +396,7 @@ export default function PostJobPage() {
                     />
                   </Field>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <Field id="job-department" label="Department">
                       <input id="job-department" value={jobForm.department}
                         onChange={(e) => set('department', e.target.value)}
@@ -394,7 +409,8 @@ export default function PostJobPage() {
                     </Field>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  {/* Three short selects share one row from lg; two from sm. */}
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <Field id="job-employment" label="Employment type">
                       <select id="job-employment" value={jobForm.employmentType}
                         onChange={(e) => set('employmentType', e.target.value)} className={SELECT_CLASS}>
@@ -411,16 +427,15 @@ export default function PostJobPage() {
                         ))}
                       </select>
                     </Field>
+                    <Field id="job-experience" label="Experience level">
+                      <select id="job-experience" value={jobForm.experienceLevel}
+                        onChange={(e) => set('experienceLevel', e.target.value)} className={SELECT_CLASS}>
+                        {Object.entries(EXPERIENCE_LABELS).map(([v, label]) => (
+                          <option key={v} value={v} style={{ background: '#111116' }}>{label}</option>
+                        ))}
+                      </select>
+                    </Field>
                   </div>
-
-                  <Field id="job-experience" label="Experience level">
-                    <select id="job-experience" value={jobForm.experienceLevel}
-                      onChange={(e) => set('experienceLevel', e.target.value)} className={SELECT_CLASS}>
-                      {Object.entries(EXPERIENCE_LABELS).map(([v, label]) => (
-                        <option key={v} value={v} style={{ background: '#111116' }}>{label}</option>
-                      ))}
-                    </select>
-                  </Field>
                 </Section>
 
                 <Section title="Role description" caption="What the role is and what it involves.">
@@ -429,46 +444,62 @@ export default function PostJobPage() {
                       id="job-description" value={jobForm.description}
                       onChange={(e) => set('description', e.target.value)}
                       placeholder="Role overview"
-                      rows={5}
+                      rows={5} style={{ minHeight: 150 }}
                       aria-invalid={!!errors.description}
                       aria-describedby={errors.description ? 'job-description-error' : undefined}
-                      className={`${TEXTAREA_CLASS} min-h-[120px] ${errors.description ? ERROR_INPUT_CLASS : ''}`}
+                      className={`${TEXTAREA_CLASS}${errors.description ? ERROR_INPUT_CLASS : ''}`}
                     />
                   </Field>
 
-                  <Field id="job-responsibilities" label="Responsibilities" hint="One per line.">
-                    <textarea id="job-responsibilities" value={jobForm.responsibilities}
-                      onChange={(e) => set('responsibilities', e.target.value)}
-                      rows={4} placeholder={'Ship and own frontend features\nPartner with design on the marketplace surface'}
-                      className={`${TEXTAREA_CLASS} min-h-[96px]`} />
-                  </Field>
+                  {/* Paired from lg. These four are the tallest controls on the
+                      page, so pairing them removes roughly two textareas' worth
+                      of height without shortening any single one. */}
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <Field id="job-responsibilities" label="Responsibilities" hint="One per line.">
+                      <textarea id="job-responsibilities" value={jobForm.responsibilities}
+                        onChange={(e) => set('responsibilities', e.target.value)}
+                        rows={4} style={{ minHeight: 120 }}
+                        placeholder={'Ship and own frontend features\nPartner with design on the marketplace surface'}
+                        className={TEXTAREA_CLASS} />
+                    </Field>
 
-                  <Field id="job-requirements" label="Requirements" hint="One per line.">
-                    <textarea id="job-requirements" value={jobForm.requirements}
-                      onChange={(e) => set('requirements', e.target.value)}
-                      rows={4} placeholder={'4+ years building production React\nStrong TypeScript fundamentals'}
-                      className={`${TEXTAREA_CLASS} min-h-[96px]`} />
-                  </Field>
+                    <Field id="job-requirements" label="Requirements" hint="One per line.">
+                      <textarea id="job-requirements" value={jobForm.requirements}
+                        onChange={(e) => set('requirements', e.target.value)}
+                        rows={4} style={{ minHeight: 120 }}
+                        placeholder={'4+ years building production React\nStrong TypeScript fundamentals'}
+                        className={TEXTAREA_CLASS} />
+                    </Field>
+                  </div>
 
-                  <Field id="job-skills" label="Preferred skills" hint="One per line — these show as tags on the job card.">
-                    <textarea id="job-skills" value={jobForm.preferredSkills}
-                      onChange={(e) => set('preferredSkills', e.target.value)}
-                      rows={3} placeholder={'React\nTypeScript\nNext.js'}
-                      className={`${TEXTAREA_CLASS} min-h-[80px]`} />
-                  </Field>
-                </Section>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <Field id="job-skills" label="Preferred skills" hint="One per line — these show as tags on the job card.">
+                      <textarea id="job-skills" value={jobForm.preferredSkills}
+                        onChange={(e) => set('preferredSkills', e.target.value)}
+                        rows={3} style={{ minHeight: 105 }}
+                        placeholder={'React\nTypeScript\nNext.js'}
+                        className={TEXTAREA_CLASS} />
+                    </Field>
 
-                <Section title="Application" caption="What applicants must attach. Leave empty to ask for a resume only.">
-                  <Field id="job-documents" label="Requested documents" hint="One per line — applicants cannot submit until each is attached.">
-                    <textarea id="job-documents" value={jobForm.requiredDocuments}
-                      onChange={(e) => set('requiredDocuments', e.target.value)}
-                      rows={3} placeholder={'Portfolio\nCover letter'}
-                      className={`${TEXTAREA_CLASS} min-h-[80px]`} />
-                  </Field>
+                    {/* Moved up beside Preferred skills. The old "Application"
+                        section held this one field; its caption is preserved
+                        verbatim in the hint, so no guidance is lost. */}
+                    <Field
+                      id="job-documents"
+                      label="Requested documents"
+                      hint="One per line — applicants cannot submit until each is attached. Leave empty to ask for a resume only."
+                    >
+                      <textarea id="job-documents" value={jobForm.requiredDocuments}
+                        onChange={(e) => set('requiredDocuments', e.target.value)}
+                        rows={3} style={{ minHeight: 105 }}
+                        placeholder={'Portfolio\nCover letter'}
+                        className={TEXTAREA_CLASS} />
+                    </Field>
+                  </div>
                 </Section>
 
                 <Section title="Screening" caption="Applicants below the ATS cutoff cannot submit.">
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <Field id="job-ats" label="Minimum ATS score" hint="0–100.">
                       <input id="job-ats" type="number" min="0" max="100" inputMode="numeric"
                         value={jobForm.minimumAtsScore}
@@ -486,8 +517,12 @@ export default function PostJobPage() {
                   </div>
                 </Section>
 
-                {/* ── Footer ───────────────────────────────────────────── */}
-                <div className="flex flex-col-reverse gap-2.5 border-t border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-end sm:px-6 dark:border-white/[0.06] dark:bg-white/[0.01]">
+                {/* ── Action bar ───────────────────────────────────────────
+                    Sticky to the bottom of the scrolling form, so Post Job is
+                    reachable without scrolling to the end. It sits INSIDE the
+                    form card and the page carries matching bottom padding, so
+                    it can never sit over an input. */}
+                <div className="sticky bottom-0 z-10 flex flex-col-reverse gap-2.5 border-t border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur-sm sm:flex-row sm:items-center sm:justify-end sm:px-5 dark:border-white/[0.06] dark:bg-[#0d0d10]/95">
                   {/* The outcome is announced, not only shown: a saving state
                       that is purely visual is silent to a screen reader. */}
                   <p aria-live="polite" className="sr-only">
@@ -505,12 +540,47 @@ export default function PostJobPage() {
                 </div>
               </form>
 
-              <p className={`mt-4 text-center text-[11.5px] ${MUTED}`}>
+              <p className={`mt-3 text-center text-[11.5px] ${MUTED}`}>
                 Manage posted roles, ATS cutoffs and applicants in the{' '}
                 <Link href="/workspace?tab=hiring-desk" className="font-semibold text-sky-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-300">
                   Hiring Desk
                 </Link>.
               </p>
+
+              {/* Preview as a dialog, not a second copy of the page below the
+                  form. It reads the live form state and makes no request. */}
+              {showPreview && (
+                <div
+                  className="fixed inset-0 z-[10000] flex items-start justify-center overflow-hidden p-2 sm:items-center sm:p-6"
+                  onMouseDown={(e) => { if (e.target === e.currentTarget) setShowPreview(false); }}
+                >
+                  <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm dark:bg-black/70" aria-hidden />
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="job-preview-title"
+                    className="relative flex max-h-[calc(100vh-16px)] w-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl sm:max-h-[88vh] sm:max-w-[720px] dark:border-white/[0.10] dark:bg-[#08080b]"
+                  >
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-white/[0.08]">
+                      <h2 id="job-preview-title" className="text-[15px] font-bold tracking-[-0.01em]">
+                        Preview
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => setShowPreview(false)}
+                        aria-label="Close preview"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-300 text-slate-600 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.12] dark:text-white/60 dark:hover:bg-white/[0.06]"
+                      >
+                        <EyeOff className="h-4 w-4" aria-hidden />
+                      </button>
+                    </div>
+                    {/* The dialog body is the only scrolling region. */}
+                    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-4">
+                      <JobPostPreview data={jobForm} poster={poster} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

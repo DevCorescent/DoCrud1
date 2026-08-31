@@ -220,8 +220,10 @@ function main() {
 
   console.log('\n── 9. Nothing about the backend contract moved ──');
 
-  check('the API still guards GET and PUT',
-    (API.match(/const fail = await guard\(req\);/g) ?? []).length === 2);
+  const apiVerbs = (API.match(/export async function (GET|PUT|POST|DELETE|PATCH)\(/g) ?? []).length;
+  check('every API verb is still guarded',
+    (API.match(/const fail = await guard\(req\);/g) ?? []).length === apiVerbs,
+    `${apiVerbs} verbs`);
   check('the API still returns the same keys',
     API.includes('canonicalBaseUrl') && API.includes('resolved:') && API.includes('limits:'));
   check('the canonical host still comes from deployment config',

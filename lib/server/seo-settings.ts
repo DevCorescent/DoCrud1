@@ -14,7 +14,11 @@
  * would silently repoint the entire site at a host nobody serves, with no
  * deploy gate in between. The manager displays it read-only.
  */
-import { readJsonFile, writeJsonFile, seoSettingsPath } from '@/lib/server/storage';
+import { unstable_cache } from 'next/cache';
+import {
+  readJsonFile, writeJsonFile, seoSettingsPath, seoDraftSettingsPath,
+} from '@/lib/server/storage';
+import { SEO_CACHE_TAG } from '@/lib/server/seo-cache';
 import { getPublicAppBaseUrl } from '@/lib/url';
 import { resolveSeoWith, type SeoSettings } from '@/lib/seo-resolve';
 
@@ -179,12 +183,34 @@ export function mergeSeoSettings(stored: Partial<SeoSettings> | null): SeoSettin
   };
 }
 
-/* A short in-process cache. generateMetadata() runs on every page render, and
-   this is a sub-kilobyte value that changes when an admin presses Save — the
-   same trade homepage-config.ts already makes. Cleared on write, so an admin
-   sees their change on the next request rather than up to a minute later. */
+/* ── Caching ───────────────────────────────────────────────────────────────
+
+   TWO LAYERS, for two different problems.
+
+   `unstable_cache` tagged with SEO_CACHE_TAG is the real one. It is shared
+   across serverless instances, so `revalidateTag(SEO_CACHE_TAG)` after a save
+   reaches every instance — not just the one that happened to serve the PUT.
+   Without it, an admin saving a new title would see it immediately while other
+   instances kept serving the old title for up to the TTL, which is precisely
+   the "why is production still showing the old title?" failure.
+
+   The tiny in-process memo below only avoids re-reading within a single render
+   (generateMetadata runs per request, and layout + page both read settings).
+   Its TTL is deliberately seconds, not a minute, so even a runtime that cannot
+   use the tagged cache converges quickly. */
+
+const CACHE_MS = 5_000;
 let cache: { value: SeoSettings; at: number } | null = null;
-const CACHE_MS = 60_000;
+
+const readTaggedSettings = unstable_cache(
+  async (): Promise<SeoSettings> => {
+    const stored = await readJsonFile<Partial<SeoSettings> | null>(seoSettingsPath, null)
+      .catch(() => null);
+    return mergeSeoSettings(stored);
+  },
+  ['seo-settings'],
+  { tags: [SEO_CACHE_TAG] },
+);
 
 export function invalidateSeoSettings(): void {
   cache = null;
@@ -192,9 +218,18 @@ export function invalidateSeoSettings(): void {
 
 export async function getSeoSettings(): Promise<SeoSettings> {
   if (cache && Date.now() - cache.at < CACHE_MS) return cache.value;
-  const stored = await readJsonFile<Partial<SeoSettings> | null>(seoSettingsPath, null)
-    .catch(() => null);
-  const value = mergeSeoSettings(stored);
+
+  let value: SeoSettings;
+  try {
+    value = await readTaggedSettings();
+  } catch {
+    /* unstable_cache needs a request context; outside one (a script, a test,
+       a build step) fall back to reading directly rather than failing. */
+    const stored = await readJsonFile<Partial<SeoSettings> | null>(seoSettingsPath, null)
+      .catch(() => null);
+    value = mergeSeoSettings(stored);
+  }
+
   cache = { value, at: Date.now() };
   return value;
 }
@@ -202,6 +237,95 @@ export async function getSeoSettings(): Promise<SeoSettings> {
 export async function saveSeoSettings(settings: SeoSettings): Promise<void> {
   await writeJsonFile(seoSettingsPath, settings);
   invalidateSeoSettings();
+}
+
+/* ── Draft vs published ────────────────────────────────────────────────────
+
+   `seoSettingsPath` holds the PUBLISHED settings and is the only thing the
+   public site reads. `seoDraftSettingsPath` holds what an admin is editing.
+
+   The split exists so "Save" cannot be an accidental publish: an admin can
+   stage a new title, look at the preview, and decide separately to put it in
+   front of Google. Publishing copies the draft over the published record and
+   invalidates the cache; nothing about the public read path changes. */
+
+/** Only the declared settings fields, in a stable key order. */
+function pickSettings(value: SeoSettings): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(DEFAULT_SEO_SETTINGS).sort()) {
+    out[key] = (value as unknown as Record<string, unknown>)[key];
+  }
+  return out;
+}
+
+export interface SeoDraftState {
+  draft: SeoSettings;
+  published: SeoSettings;
+  /** True when the draft differs from what production is serving. */
+  hasUnpublishedChanges: boolean;
+  draftUpdatedAt: string | null;
+  publishedAt: string | null;
+}
+
+interface StoredDraft {
+  settings: Partial<SeoSettings>;
+  updatedAt?: string;
+}
+interface PublishMeta { publishedAt?: string }
+
+export async function getSeoDraftState(): Promise<SeoDraftState> {
+  const published = await getSeoSettings();
+  const stored = await readJsonFile<StoredDraft | null>(seoDraftSettingsPath, null)
+    .catch(() => null);
+
+  /* With no draft saved yet, the draft IS the published state — the editor
+     opens showing exactly what production serves. */
+  const draft = stored?.settings ? mergeSeoSettings(stored.settings) : published;
+  const publishedMeta = await readJsonFile<(Partial<SeoSettings> & PublishMeta) | null>(
+    seoSettingsPath, null,
+  ).catch(() => null);
+
+  return {
+    draft,
+    published,
+    /* Compared over the KNOWN fields only. The published record also carries a
+       `publishedAt` stamp, and a naive whole-object compare would see that
+       extra key and report unpublished changes forever. */
+    hasUnpublishedChanges: JSON.stringify(pickSettings(draft)) !== JSON.stringify(pickSettings(published)),
+    draftUpdatedAt: stored?.updatedAt ?? null,
+    publishedAt: publishedMeta?.publishedAt ?? null,
+  };
+}
+
+export async function saveSeoDraft(settings: SeoSettings): Promise<SeoDraftState> {
+  await writeJsonFile(seoDraftSettingsPath, {
+    settings,
+    updatedAt: new Date().toISOString(),
+  });
+  return getSeoDraftState();
+}
+
+/**
+ * Put the draft in front of the public.
+ *
+ * Cache invalidation is the caller's job (it needs `revalidateTag`, which is
+ * only callable from a route handler), so this returns once the write is
+ * durable and the local memo is cleared.
+ */
+export async function publishSeoDraft(settings: SeoSettings): Promise<string> {
+  const publishedAt = new Date().toISOString();
+  await writeJsonFile(seoSettingsPath, { ...settings, publishedAt });
+  invalidateSeoSettings();
+  return publishedAt;
+}
+
+export async function discardSeoDraft(): Promise<SeoDraftState> {
+  const published = await getSeoSettings();
+  await writeJsonFile(seoDraftSettingsPath, {
+    settings: published,
+    updatedAt: new Date().toISOString(),
+  });
+  return getSeoDraftState();
 }
 
 /**

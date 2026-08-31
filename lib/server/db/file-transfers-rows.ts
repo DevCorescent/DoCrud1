@@ -8,6 +8,52 @@ function strip(doc: SecureFileTransfer & { _id?: unknown }): SecureFileTransfer 
   return rest as SecureFileTransfer;
 }
 
+/* `revokedAt` is absent on live transfers rather than null, so this asks for
+   "not set to a value" — the same thing the in-memory `!ft.revokedAt` check
+   does. Typed loosely because the driver's Filter type does not model an
+   optional string field being absent. */
+const SITEMAP_FILTER = {
+  directoryVisibility: 'public',
+  $or: [{ revokedAt: { $exists: false } }, { revokedAt: '' }],
+} as unknown as Record<string, never>;
+
+/** The only fields the public sitemap reads from a transfer. */
+export type FileTransferSitemapRow = Pick<
+  SecureFileTransfer, 'id' | 'updatedAt' | 'createdAt'
+>;
+
+/**
+ * Public, non-revoked transfers, projected to the handful of fields the
+ * sitemap needs.
+ *
+ * `selectAllFileTransferRows` returns WHOLE documents — `dataUrl` blobs
+ * included — so using it here shipped the entire file corpus over the wire to
+ * build a list of URLs. Measured at ~161s for 189 transfers, which blew the
+ * sitemap's 8s guard every time and silently dropped every /published/ URL
+ * from the sitemap. Filtering and projecting in the database fixes both the
+ * time and the missing URLs.
+ */
+export async function selectPublicFileTransferSitemapRows(
+  limit = 5000,
+): Promise<FileTransferSitemapRow[] | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+
+  const docs = await db
+    .collection<SecureFileTransfer & { _id: string }>(COL)
+    .find(
+      /* `revokedAt` is absent on live transfers rather than null, so the check
+         is "not set to a value" — matching the in-memory `!ft.revokedAt`. */
+      SITEMAP_FILTER,
+      { projection: { _id: 0, id: 1, updatedAt: 1, createdAt: 1 } },
+    )
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray();
+
+  return docs as unknown as FileTransferSitemapRow[];
+}
+
 export async function selectAllFileTransferRows(): Promise<SecureFileTransfer[]> {
   const db = await getMongoDb();
   if (!db) return [];

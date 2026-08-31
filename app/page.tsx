@@ -1,9 +1,10 @@
 ﻿import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import NextDynamic from 'next/dynamic';
 import { buildPageMetadata } from '@/lib/seo';
 import { getThemeSettings } from '@/lib/server/settings';
 import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
+import { isSearchCrawlerUserAgent } from '@/lib/search-crawler';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { peekHiringCompanies } from '@/lib/server/hiring-companies';
@@ -39,7 +40,13 @@ export default async function Home() {
     getHomepageConfig().catch(() => null),
   ]);
 
-  if (!session && !isGuest) {
+  /* The same crawler exemption the middleware applies. Without it a search
+     engine cleared the middleware gate only to be redirected here instead —
+     to /onboarding, which robots.txt disallows. Rendering the full homepage
+     for a crawler is the point: it is the content Google needs to index. */
+  const isCrawler = isSearchCrawlerUserAgent((await headers()).get('user-agent'));
+
+  if (!session && !isGuest && !isCrawler) {
     redirect('/onboarding');
   }
 

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { isSearchCrawlerUserAgent } from '@/lib/search-crawler';
 
 /* ─── Paths that unverified-but-authenticated users may still access ──────── */
 const UNVERIFIED_ALLOWED_PREFIXES = [
@@ -25,7 +26,7 @@ export async function middleware(request: NextRequest) {
       request.cookies.has('__Secure-next-auth.session-token');
     const isGuest = request.cookies.get('guestMode')?.value === '1';
 
-    if (!hasSession && !isGuest) {
+    if (!hasSession && !isGuest && !isSearchCrawlerUserAgent(request.headers.get('user-agent'))) {
       return NextResponse.redirect(new URL('/onboarding', request.url));
     }
   }

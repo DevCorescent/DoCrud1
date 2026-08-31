@@ -16,34 +16,13 @@
  */
 import { readJsonFile, writeJsonFile, seoSettingsPath } from '@/lib/server/storage';
 import { getPublicAppBaseUrl } from '@/lib/url';
+import { resolveSeoWith, type SeoSettings } from '@/lib/seo-resolve';
 
-export interface SeoSettings {
-  /* ── Global ── */
-  siteName: string;
-  siteTitle: string;
-  siteTitleFull: string;
-  siteDescription: string;
-  keywords: string[];
-  /** When false the site emits `noindex, nofollow`. Off by default. */
-  noindex: boolean;
-
-  /* ── Homepage ── */
-  homeTitle: string;
-  homeDescription: string;
-  ogTitle: string;
-  ogDescription: string;
-  ogImage: string;
-  twitterTitle: string;
-  twitterDescription: string;
-  twitterImage: string;
-
-  /* ── Branding ── */
-  logoUrl: string;
-  faviconUrl: string;
-
-  /* ── Search Console ── */
-  googleSiteVerification: string;
-}
+/* The shape and the fallback rules live in lib/seo-resolve.ts so the admin's
+   live preview can resolve them in the browser without a second copy of the
+   logic. Re-exported here so every existing import site is unchanged. */
+export type { SeoSettings, ResolvedSeo } from '@/lib/seo-resolve';
+export { TITLE_MAX, DESCRIPTION_MAX } from '@/lib/seo-resolve';
 
 /**
  * Defaults are the values app/layout.tsx hardcoded before this existed, so an
@@ -81,10 +60,6 @@ export const DEFAULT_SEO_SETTINGS: SeoSettings = {
    Every field is validated on the SERVER. The admin UI shows the same limits,
    but a client that ignores them cannot store anything the site would then
    emit into a <meta> tag. */
-
-/** Google truncates around these; they are guidance, not hard limits. */
-export const TITLE_MAX = 60;
-export const DESCRIPTION_MAX = 160;
 
 /** Hard ceilings, enforced. Long enough for any legitimate value. */
 const HARD_LIMITS: Record<string, number> = {
@@ -236,24 +211,5 @@ export async function saveSeoSettings(settings: SeoSettings): Promise<void> {
  * admin preview and the rendered <head> cannot disagree.
  */
 export function resolveSeo(settings: SeoSettings) {
-  const baseUrl = getPublicAppBaseUrl();
-  const absolute = (value: string) =>
-    !value ? '' : /^https?:\/\//i.test(value) ? value : `${baseUrl}${value.startsWith('/') ? '' : '/'}${value}`;
-
-  const title = settings.homeTitle || settings.siteTitleFull || settings.siteTitle;
-  const description = settings.homeDescription || settings.siteDescription;
-
-  return {
-    baseUrl,
-    title,
-    description,
-    ogTitle: settings.ogTitle || title,
-    ogDescription: settings.ogDescription || description,
-    ogImage: absolute(settings.ogImage || settings.logoUrl),
-    twitterTitle: settings.twitterTitle || settings.ogTitle || title,
-    twitterDescription: settings.twitterDescription || settings.ogDescription || description,
-    twitterImage: absolute(settings.twitterImage || settings.ogImage || settings.logoUrl),
-    logoUrl: absolute(settings.logoUrl),
-    faviconUrl: settings.faviconUrl,
-  };
+  return resolveSeoWith(settings, getPublicAppBaseUrl());
 }

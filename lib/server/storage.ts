@@ -65,6 +65,9 @@ export const feedConfigPath = path.join(dataDir, 'feed-config.json');
 /** Idempotency ledger for mention side effects (comment id + mentioned user). */
 export const mentionDeliveriesPath = path.join(dataDir, 'mention-deliveries.json');
 export const homepageConfigPath = path.join(dataDir, 'homepage-config.json');
+/* Super Admin SEO Manager settings. Same three-tier resolution as its peers:
+   row adapter -> app_state (MongoDB) -> local JSON in development. */
+export const seoSettingsPath = path.join(dataDir, 'seo-settings.json');
 export const webTelemetryPath = path.join(dataDir, 'web-telemetry.json');
 export const securityBlocklistPath = path.join(dataDir, 'security-blocklist.json');
 export const knowledgeBasePath = path.join(dataDir, 'knowledge-base.json');

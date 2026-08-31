@@ -1,6 +1,10 @@
 import type { MetadataRoute } from 'next';
 
-export const dynamic   = 'force-dynamic';
+/* `force-dynamic` was set alongside `revalidate` and silently defeated it:
+   forcing dynamic rendering pins revalidate to 0, so the sitemap was rebuilt
+   from scratch on EVERY request — measured at 12.8s, across ten data sources
+   including three 2,000-row listings. Removing it lets the revalidate below
+   do what its comment always said it did. */
 export const revalidate = 3600; // re-generate at most once per hour
 
 import { getCertificates } from '@/lib/server/certificates';
@@ -70,12 +74,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const productRoutes: Array<{ path: string; freq: MetadataRoute.Sitemap[0]['changeFrequency']; priority: number }> = [
     { path: '/pricing',               freq: 'weekly',  priority: 0.90 },
     { path: '/forms',                 freq: 'weekly',  priority: 0.88 },
-    { path: '/forms/builder',         freq: 'weekly',  priority: 0.82 },
+    /* /forms/builder, /pdf-editor/workspace and /docword are NOT listed: all
+       three are `Disallow`ed in app/robots.ts. Submitting a URL that robots
+       forbids is the "Submitted URL blocked by robots.txt" error in Search
+       Console — the crawler is told to fetch a page it is then told not to
+       fetch. Their public landing pages (/forms, /pdf-editor) stay. */
     { path: '/pdf-editor',            freq: 'weekly',  priority: 0.88 },
-    { path: '/pdf-editor/workspace',  freq: 'weekly',  priority: 0.78 },
     { path: '/resume-ats',            freq: 'weekly',  priority: 0.88 },
     { path: '/doxpert',               freq: 'weekly',  priority: 0.85 },
-    { path: '/docword',               freq: 'weekly',  priority: 0.80 },
     { path: '/file-directory',        freq: 'weekly',  priority: 0.75 },
     { path: '/file-transfers',        freq: 'weekly',  priority: 0.72 },
     { path: '/visualizer',            freq: 'weekly',  priority: 0.72 },

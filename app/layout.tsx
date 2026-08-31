@@ -10,6 +10,7 @@ import { PresenceProvider } from './components/PresenceProvider'
 import { TelemetryTracker } from './components/TelemetryTracker'
 import { getPublicAppBaseUrl } from '@/lib/url'
 import { policyCompany } from '@/lib/policies'
+import { getSeoSettings, resolveSeo, DEFAULT_SEO_SETTINGS } from '@/lib/server/seo-settings'
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -36,48 +37,10 @@ const googleAnalyticsId = 'G-C3WEQ82QWE'
  */
 const clarityProjectId = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID?.trim() ?? ''
 
-const siteTitle = 'Docrud';
-const siteTitleFull = 'Docrud - A right connection can change everything';
-
-const siteDescription =
-  'Docrud connects professionals, businesses, talent and opportunities in one place. Discover people, jobs, projects and businesses, and build the right connections.';
-const siteKeywords = [
-  // Platform identity
-  'Docrud',
-  'professional platform',
-  'professional networking',
-  'talent network',
-  'career platform India',
-  // Career & jobs
-  'job opportunities',
-  'job search platform',
-  'career growth',
-  'hire freelancers',
-  'gig marketplace',
-  'freelance jobs India',
-  'talent discovery',
-  // Networking
-  'professional community',
-  'business networking',
-  'industry connections',
-  'professional profiles',
-  'connect with professionals',
-  // Documents & tools
-  'document management software',
-  'pdf editor online',
-  'form builder',
-  'secure file sharing',
-  'AI document review',
-  'resume ATS checker',
-  'virtual id cards',
-  'e-certificate generator',
-  'document workflow',
-  // Broader
-  'collaboration platform',
-  'freelancer platform',
-  'professional ecosystem',
-  'opportunity marketplace',
-]
+/* The site name, title, description and keywords that used to live here are
+   now Super Admin settings — see lib/server/seo-settings.ts, whose defaults are
+   exactly these former values, so an installation that never opens the SEO
+   Manager renders what it always did. */
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -91,15 +54,35 @@ export const viewport: Viewport = {
   colorScheme: 'dark light',
 }
 
-export const metadata: Metadata = {
+/**
+ * Page metadata, from the Super Admin SEO Manager.
+ *
+ * This was a static `metadata` export built from four hardcoded constants.
+ * It is now `generateMetadata()` so the values a Super Admin saves actually
+ * reach the public <head> — an admin form that stores metadata the site never
+ * emits would be worse than no form at all.
+ *
+ * The settings read is cached in-process for a minute (lib/server/seo-settings.ts),
+ * so making this dynamic costs a sub-kilobyte lookup per minute rather than one
+ * per render. The cache is cleared on save, so an admin sees their change on
+ * the next request.
+ *
+ * The canonical HOST is deliberately not part of the editable settings — see
+ * lib/server/seo-settings.ts for why.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSeoSettings().catch(() => DEFAULT_SEO_SETTINGS);
+  const seo = resolveSeo(settings);
+
+  return {
   metadataBase,
   title: {
-    default: siteTitle,
-    template: '%s | Docrud',
+    default: seo.title,
+    template: `%s | ${settings.siteName}`,
   },
-  description: siteDescription,
-  applicationName: 'Docrud',
-  keywords: siteKeywords,
+  description: seo.description,
+  applicationName: settings.siteName,
+  keywords: settings.keywords,
   authors: [{ name: policyCompany.parentCompanyName, url: siteUrl }],
   creator: policyCompany.parentCompanyName,
   publisher: policyCompany.parentCompanyName,
@@ -119,39 +102,31 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: 'website',
-    url: siteUrl,
-    siteName: 'Docrud',
-    title: siteTitleFull,
-    description: siteDescription,
+    url: seo.baseUrl,
+    siteName: settings.siteName,
+    title: seo.ogTitle,
+    description: seo.ogDescription,
     locale: 'en_IN',
+    /* The admin's image first; the packaged square logo stays as a second
+       entry so a scraper that rejects the first still finds a valid one. */
     images: [
-      {
-        url: '/docrud-logo.png',
-        width: 2046,
-        height: 769,
-        alt: 'Docrud — Connecting Talent, Work & Opportunity',
-        type: 'image/png',
-      },
-      {
-        url: '/docrud-favicon.png',
-        width: 1024,
-        height: 1024,
-        alt: 'Docrud Logo',
-        type: 'image/png',
-      },
+      { url: seo.ogImage, alt: `${settings.siteName} social preview` },
+      { url: '/docrud-favicon.png', width: 1024, height: 1024, alt: `${settings.siteName} logo`, type: 'image/png' },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: siteTitle,
-    description: siteDescription,
-    images: ['/docrud-logo.png'],
+    title: seo.twitterTitle,
+    description: seo.twitterDescription,
+    images: [seo.twitterImage],
     creator: '@docrud',
     site: '@docrud',
   },
+  /* A single switch an admin can use to pull the whole site out of the index
+     — useful for a staging deployment sharing this codebase. Off by default. */
   robots: {
-    index: true,
-    follow: true,
+    index: !settings.noindex,
+    follow: !settings.noindex,
     nocache: false,
     googleBot: {
       index: true,
@@ -164,32 +139,42 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/docrud-favicon.png', type: 'image/png', sizes: '1024x1024' },
+      { url: settings.faviconUrl || '/docrud-favicon.png', type: 'image/png', sizes: '1024x1024' },
       { url: '/docrud-icon.png', type: 'image/png', sizes: '32x32' },
     ],
     apple: [
       { url: '/docrud-favicon.png', sizes: '1024x1024', type: 'image/png' },
     ],
-    shortcut: '/docrud-favicon.png',
+    shortcut: settings.faviconUrl || '/docrud-favicon.png',
     other: [
       { rel: 'mask-icon', url: '/docrud-favicon.png' },
     ],
   },
   manifest: '/manifest.webmanifest',
+  /* One verification block. A second, later key silently overwrote an earlier
+     spread — so the admin's value is merged HERE, where it wins, and the
+     packaged placeholder is only the fallback. */
   verification: {
-    google: 'docrud-google-site-verification',
+    google: settings.googleSiteVerification || 'docrud-google-site-verification',
   },
   other: {
     'msapplication-TileColor': '#0d0e11',
     'msapplication-TileImage': '/docrud-favicon.png',
   },
+  };
 }
 
-export default function RootLayout({
+/* Async so the Organization/WebSite structured data below reflects the saved
+   site name, logo and description rather than a second hardcoded copy. The
+   settings read is the same cached, sub-kilobyte lookup generateMetadata uses. */
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const seoSettings = await getSeoSettings().catch(() => DEFAULT_SEO_SETTINGS)
+  const seo = resolveSeo(seoSettings)
+
   const structuredData = {
     '@context': 'https://schema.org',
     '@graph': [
@@ -201,13 +186,11 @@ export default function RootLayout({
         url: siteUrl,
         logo: {
           '@type': 'ImageObject',
-          url: `${siteUrl}/docrud-favicon.png`,
-          width: 1024,
-          height: 1024,
+          url: seo.logoUrl || `${siteUrl}/docrud-favicon.png`,
         },
-        image: `${siteUrl}/docrud-logo.png`,
+        image: seo.ogImage || `${siteUrl}/docrud-logo.png`,
         email: 'sales@docrud.app',
-        description: siteDescription,
+        description: seo.description,
         foundingLocation: {
           '@type': 'Place',
           addressCountry: 'IN',
@@ -232,7 +215,7 @@ export default function RootLayout({
         url: siteUrl,
         name: 'Docrud',
         alternateName: 'Docrud — Connecting Talent, Work & Opportunity',
-        description: siteDescription,
+        description: seo.description,
         inLanguage: 'en-IN',
         publisher: {
           '@id': `${siteUrl}/#organization`,
@@ -265,7 +248,7 @@ export default function RootLayout({
         applicationSubCategory: 'Professional Networking Platform',
         operatingSystem: 'Web, iOS, Android',
         url: siteUrl,
-        description: siteDescription,
+        description: seo.description,
         image: `${siteUrl}/docrud-logo.png`,
         screenshot: `${siteUrl}/docrud-logo.png`,
         offers: [

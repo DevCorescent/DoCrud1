@@ -30,6 +30,8 @@
     "test:job-match": "tsx scripts/job-match-tone.selftest.ts",
     "test:job-post-ui": "tsx scripts/job-post-ui.selftest.ts",
     "test:job-detail-ui": "tsx scripts/job-detail-ui.selftest.ts",
+    "test:seo": "tsx scripts/seo-crawlability.selftest.ts",
+    "test:seo-settings": "tsx scripts/seo-settings.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:indexes": "node scripts/db-indexes.mjs",

@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
 import {
   getSuppressionRecords, addSuppression, removeSuppression, normalizeEmail,
+  isProtectedReason,
 } from '@/lib/server/mail-suppression';
 import { isValidEmail } from '@/lib/server/security';
 
@@ -32,7 +33,8 @@ export async function GET(req: NextRequest) {
 
   let records = await getSuppressionRecords();
   if (search) records = records.filter((r) => r.email.includes(search));
-  if (reason === 'unsubscribe' || reason === 'admin_suppressed') {
+  if (reason && ['unsubscribe', 'admin_suppressed', 'hard_bounce', 'complaint']
+    .includes(reason)) {
     records = records.filter((r) => r.reason === reason);
   }
   if (activeParam === 'true') records = records.filter((r) => r.active);
@@ -43,7 +45,13 @@ export async function GET(req: NextRequest) {
   const start = (page - 1) * PAGE_SIZE;
 
   return NextResponse.json({
-    records: records.slice(start, start + PAGE_SIZE),
+    /* `removable` is computed HERE from the same rule the store enforces, so
+       the UI cannot offer a button that the store would refuse - or hide one
+       it would allow. */
+    records: records.slice(start, start + PAGE_SIZE).map((r) => ({
+      ...r,
+      removable: r.active && !isProtectedReason(r.reason),
+    })),
     page,
     total,
     totalPages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
@@ -98,8 +106,8 @@ export async function DELETE(req: NextRequest) {
   if (!result.ok) {
     if (result.reason === 'unsubscribe_protected') {
       return NextResponse.json({
-        error: 'This person unsubscribed themselves. An administrator cannot re-enable '
-          + 'marketing email on their behalf.',
+        error: 'This address is protected: the recipient either unsubscribed or reported a '
+          + 'message as spam. An administrator cannot re-enable marketing email on their behalf.',
       }, { status: 409 });
     }
     return NextResponse.json({ error: 'No active suppression for that address.' }, { status: 404 });

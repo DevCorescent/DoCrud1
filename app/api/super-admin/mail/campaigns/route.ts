@@ -79,8 +79,20 @@ export async function GET(req: NextRequest) {
           advice: f?.advice ?? null,
           lastAttemptAt: d.lastAttemptAt ?? null,
           nextRetryAt: d.nextRetryAt ?? null,
+          /* Reported by the provider AFTER acceptance. Kept apart from
+             `failureKind`, which describes a send that never got through. */
+          providerEvent: d.providerEvent ?? null,
         };
       });
+
+      /* Counted separately from failures, because they are a different thing:
+         the provider took these messages and reported the problem later. */
+      const providerEvents = {
+        hardBounce: deliveries.filter((d) => d.providerEvent === 'hard_bounce').length,
+        softBounce: deliveries.filter((d) => d.providerEvent === 'soft_bounce').length,
+        complaint: deliveries.filter((d) => d.providerEvent === 'complaint').length,
+        suppressed: campaign.progress?.suppressed ?? 0,
+      };
 
       /* Outbox rows for this campaign, so "accepted" is evidenced rather than
          asserted. Capped — the campaign detail is not a log viewer. */
@@ -104,6 +116,7 @@ export async function GET(req: NextRequest) {
           finishedAt: campaign.progress?.finishedAt ?? null,
         },
         deliveries,
+        providerEvents,
         outbox,
       });
     }

@@ -56,6 +56,7 @@ export interface OutboxQueryFilter {
   /** true = tests only, false = production only, undefined = everything. */
   test?: boolean;
   failureKind?: string;
+  providerEvent?: string;
   providerCode?: number;
   /** Matched against recipient, subject, message id and campaign id. */
   search?: string;
@@ -82,6 +83,7 @@ export function buildOutboxQuery(filter: OutboxQueryFilter): Record<string, unkn
   if (filter.campaignId) q['metadata.campaignId'] = filter.campaignId;
   if (filter.systemEmailType) q['metadata.systemEmail'] = filter.systemEmailType;
   if (filter.failureKind) q.failureKind = filter.failureKind;
+  if (filter.providerEvent) q.providerEvent = filter.providerEvent;
   if (typeof filter.providerCode === 'number') q.providerCode = filter.providerCode;
 
   /* A test row is marked either by the metadata flag or by the row type, so

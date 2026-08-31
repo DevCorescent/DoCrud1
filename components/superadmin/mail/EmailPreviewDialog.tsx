@@ -27,6 +27,8 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { describeFetchError } from '@/lib/email/session-error';
+
 export type PreviewSource = 'compose' | 'draft' | 'template' | 'campaign' | 'system';
 export type PreviewMode = 'desktop' | 'mobile' | 'text';
 
@@ -103,7 +105,7 @@ export default function EmailPreviewDialog(props: EmailPreviewDialogProps) {
         body: JSON.stringify({ source, type, subject, html, preheader, campaignId }),
       });
       const payload = await r.json().catch(() => null);
-      if (!r.ok) { setError(payload?.error || 'Unable to build the preview.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, payload?.error, 'Unable to build the preview.')); return; }
       setData(payload as PreviewPayload);
     } catch {
       setError('Could not reach the server.');

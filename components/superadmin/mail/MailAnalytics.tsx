@@ -22,6 +22,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { describeFetchError } from '@/lib/email/session-error';
 interface Counts {
   attempted: number; accepted: number; failed: number; queued: number;
   opened: number; clicked: number; totalOpens: number; totalClicks: number;
@@ -247,7 +248,7 @@ export default function MailAnalytics({ onOpenCampaign }: {
       const r = await fetch(url, { cache: 'no-store' });
       const payload = await r.json().catch(() => null);
       if (seq !== requestSeq.current) return;
-      if (!r.ok) { setError(payload?.error || 'Unable to load analytics.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, payload?.error, 'Unable to load analytics.')); return; }
       setData(payload as Analytics);
     } catch {
       if (seq === requestSeq.current) setError('Could not reach the server.');

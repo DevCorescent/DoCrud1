@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import MailCompose from '@/components/superadmin/mail/MailCompose';
 
+import { describeFetchError } from '@/lib/email/session-error';
 interface DraftRow {
   id: string; subject: string; updatedAt: string; updatedBy: string;
   createdAt: string; createdBy: string; revision: number;
@@ -66,7 +67,7 @@ export default function MailDrafts() {
         `/api/super-admin/mail/drafts?page=${nextPage}&q=${encodeURIComponent(query)}`,
         { cache: 'no-store' });
       const data = await r.json().catch(() => null);
-      if (!r.ok) { setError(data?.error || 'Unable to load drafts.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Unable to load drafts.')); return; }
       setRows(data.drafts); setPage(data.page);
       setTotalPages(data.totalPages); setTotal(data.total);
     } catch { setError('Could not reach the server.'); }

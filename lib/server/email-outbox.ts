@@ -50,6 +50,16 @@ export type OutboundEmailEvent = {
   updatedAt?: string;
   /** When the provider refused it. */
   failedAt?: string;
+  /* ── Provider delivery events (Phase 14) ────────────────────────────────
+     What the provider reported AFTER accepting the message. Recorded on the
+     same row the send wrote, rather than in a second log: a bounce is the
+     later half of that message's story. The row's `status` is deliberately
+     left alone - the provider really did accept it, and rewriting that would
+     erase what happened at send time. */
+  providerEvent?: 'hard_bounce' | 'soft_bounce' | 'complaint';
+  providerEventAt?: string;
+  providerEventCode?: number;
+  providerEventMessage?: string;
   tracking: {
     opens: number;
     clicks: number;
@@ -154,6 +164,7 @@ export function matchesOutboxFilter(
   if (filter.campaignId && md.campaignId !== filter.campaignId) return false;
   if (filter.systemEmailType && md.systemEmail !== filter.systemEmailType) return false;
   if (filter.failureKind && ev.failureKind !== filter.failureKind) return false;
+  if (filter.providerEvent && ev.providerEvent !== filter.providerEvent) return false;
   if (typeof filter.providerCode === "number" && ev.providerCode !== filter.providerCode) {
     return false;
   }

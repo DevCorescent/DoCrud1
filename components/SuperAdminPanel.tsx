@@ -11,6 +11,7 @@ import MailDrafts from '@/components/superadmin/mail/MailDrafts';
 import MailOutbox from '@/components/superadmin/mail/MailOutbox';
 import MailAnalytics from '@/components/superadmin/mail/MailAnalytics';
 import MailSuppression from '@/components/superadmin/mail/MailSuppression';
+import MailProviderSettings from '@/components/superadmin/mail/MailProviderSettings';
 import MailTemplates from '@/components/superadmin/mail/MailTemplates';
 import SystemEmails from '@/components/superadmin/mail/SystemEmails';
 
@@ -403,11 +404,18 @@ function AreaChart({ data, color = '#f59e0b', height = 80, label = '' }: {
   const max = Math.max(...vals, 1);
   const total = data.length;
   const w = 100; const h = height;
-  const pts = vals.map((v, i) => `${(i / (total - 1)) * w}%,${h - (v / max) * (h - 4)}`).join(' ');
-  const area = `0,${h} ${pts} ${100}%,${h}`;
+  /* Numeric coordinates inside a viewBox, NOT percentages.
+     An SVG `points` attribute does not accept units, so "0%,80" was rejected
+     outright: the browser logged "Expected number" and drew nothing. The
+     viewBox gives the same responsive behaviour with values the attribute
+     actually accepts. */
+  const x = (i: number) => (total === 1 ? w / 2 : (i / (total - 1)) * w);
+  const pts = vals.map((v, i) => `${x(i).toFixed(2)},${(h - (v / max) * (h - 4)).toFixed(2)}`).join(' ');
+  const area = `0,${h} ${pts} ${w},${h}`;
   return (
     <div>
-      <svg width="100%" height={height} preserveAspectRatio="none" className="overflow-visible">
+      <svg width="100%" height={height} viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="none" className="overflow-visible">
         <polygon points={area} fill={color} fillOpacity={0.12} />
         <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
@@ -2345,7 +2353,7 @@ function MailTab() {
   const [msg, setMsg] = useState('');
   /* Only sections that are actually implemented appear here. An unbuilt tab
      showing "coming soon" would be worse than not offering it. */
-  const [view, setView] = useState<'overview' | 'compose' | 'drafts' | 'templates' | 'system' | 'campaigns' | 'outbox' | 'suppression' | 'analytics' | 'health'>('overview');
+  const [view, setView] = useState<'overview' | 'compose' | 'drafts' | 'templates' | 'system' | 'campaigns' | 'outbox' | 'suppression' | 'analytics' | 'provider' | 'health'>('overview');
   /* Mass mail is irreversible, so it takes two deliberate steps: resolve the
      real recipient count on the server, show it, then require a second click. */
   const [preview, setPreview] = useState<{
@@ -2407,7 +2415,7 @@ function MailTab() {
       {msg && <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{msg}</div>}
 
       <div className="flex gap-1">
-        {(['overview', 'compose', 'drafts', 'templates', 'system', 'campaigns', 'outbox', 'suppression', 'analytics', 'health'] as const).map((v) => (
+        {(['overview', 'compose', 'drafts', 'templates', 'system', 'campaigns', 'outbox', 'suppression', 'analytics', 'provider', 'health'] as const).map((v) => (
           /* Was `setView('overview')` — a leftover from when this row had two
              tabs, which made Compose, Campaigns and Health unreachable: every
              click bounced back to Overview. */
@@ -2435,6 +2443,8 @@ function MailTab() {
           list) is replaced by MailOverview above, which reads the same data
           plus campaign state and classified failures. */}
       {view === 'suppression' && <MailSuppression />}
+
+      {view === 'provider' && <MailProviderSettings />}
 
       {view === 'analytics' && (
         <MailAnalytics

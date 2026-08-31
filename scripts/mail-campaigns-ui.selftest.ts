@@ -137,8 +137,13 @@ function main() {
   console.log('\n── 7. States ──');
 
   /* An API failure rendered as an empty list reads as "nothing was ever sent". */
+  /* The expression became `describeFetchError`, which also turns a 401 into
+     "sign in again" instead of the raw "Unauthorized". The property is the
+     same - a failure sets an error rather than rendering an empty list - and
+     is asserted here against the shared helper. */
   check('an API failure is not rendered as an empty list',
-    UI.includes("setError(data?.error || 'Unable to load campaigns.'); return;"));
+    UI.includes("describeFetchError(r.status, data?.error, 'Unable to load campaigns.')")
+    && UI.includes("from '@/lib/email/session-error'"));
   check('empty and filtered-empty are different messages',
     UI.includes('No campaigns yet.') && UI.includes('No campaigns match your filters.'));
   check('no outbox events has its own message',

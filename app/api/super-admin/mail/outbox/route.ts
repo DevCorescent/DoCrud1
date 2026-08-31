@@ -71,6 +71,12 @@ function parseFilter(params: URLSearchParams): OutboxQueryFilter {
   const systemEmail = params.get('systemEmail');
   if (systemEmail) filter.systemEmailType = systemEmail;
 
+  const providerEvent = params.get('providerEvent');
+  if (providerEvent === 'hard_bounce' || providerEvent === 'soft_bounce'
+      || providerEvent === 'complaint') {
+    filter.providerEvent = providerEvent;
+  }
+
   const failureKind = params.get('failureKind');
   if (failureKind && FAILURE_KINDS.includes(failureKind)) filter.failureKind = failureKind;
 
@@ -147,6 +153,11 @@ async function present(ev: Awaited<ReturnType<typeof getEmailOutboxEventById>>, 
     providerCode: failure?.code ?? null,
     retryable: failure?.retryable ?? null,
     messageId: ev.messageId ?? null,
+    /* What the provider reported AFTER accepting the message. Separate from
+       `status`, which records the hand-off itself. */
+    providerEvent: ev.providerEvent ?? null,
+    providerEventAt: ev.providerEventAt ?? null,
+    providerEventCode: ev.providerEventCode ?? null,
     opens: Number(ev.tracking?.opens || 0),
     clicks: Number(ev.tracking?.clicks || 0),
   };

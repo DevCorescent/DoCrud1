@@ -9,6 +9,10 @@ import {
 import { zonedTimeToUtc, SUPPORTED_TIMEZONES } from '@/lib/email/schedule-time';
 import { getEmailOutbox } from '@/lib/server/email-outbox';
 
+import {
+  validateRecurrence, nextOccurrence, describeRecurrence, type MailRecurrence,
+} from '@/lib/email/recurrence';
+import type { RecurrenceState } from '@/lib/server/mail-campaigns';
 async function guard(req: NextRequest) {
   const s = await getSuperAdminSessionFromRequest(req);
   return s.valid ? s : null;
@@ -134,6 +138,33 @@ export async function POST(req: NextRequest) {
         when = new Date();
       }
 
+      /* ── Recurrence, if the admin asked for one ──
+         The FIRST occurrence is computed on the server from the recurrence
+         definition; a browser-supplied next-run time is never trusted, because
+         it is the single field that decides when real mail goes out. */
+      let recurrence: MailRecurrence | undefined;
+      let recurrenceState: RecurrenceState | undefined;
+      if (data?.recurrence) {
+        const validation = validateRecurrence(data.recurrence);
+        if (!validation.valid) {
+          return NextResponse.json(
+            { error: 'That repeat schedule is not valid.', errors: validation.errors },
+            { status: 400 });
+        }
+        recurrence = data.recurrence as MailRecurrence;
+        const first = nextOccurrence(recurrence, new Date());
+        if (!first) {
+          return NextResponse.json(
+            { error: 'That repeat schedule has no future occurrence.' }, { status: 400 });
+        }
+        when = first;
+        recurrenceState = {
+          status: 'active',
+          nextRunAt: first.toISOString(),
+          occurrences: [],
+        };
+      }
+
       const campaign = await upsertMailCampaign({
         id: createCampaignId(),
         title: String(subject).slice(0, 120),
@@ -150,6 +181,8 @@ export async function POST(req: NextRequest) {
         scheduleTimezone: timezone || undefined,
         sendAt: when.toISOString(),
         status: 'scheduled',
+        recurrence,
+        recurrenceState,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         createdBy: session.email,
@@ -169,6 +202,7 @@ export async function POST(req: NextRequest) {
           suppressed: recipients.suppressed,
           scheduledFor: campaign.sendAt,
           timezone: timezone || 'server default',
+          ...(recurrence ? { repeats: describeRecurrence(recurrence) } : {}),
         },
         ip: req.headers.get('x-forwarded-for') || undefined,
       });

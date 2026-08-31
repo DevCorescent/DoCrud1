@@ -27,7 +27,7 @@ import {
   describeRetry, OUTBOX_STATUS_LABEL,
 } from '@/lib/email/outbox-view';
 import { MAX_DELIVERY_ATTEMPTS } from '@/lib/server/mail-provider';
-import { getMailCampaignById } from '@/lib/server/mail-campaigns';
+import { getMailCampaignById, getMailCampaignsByIds, type MailCampaign } from '@/lib/server/mail-campaigns';
 import { getSystemEmailDefinition } from '@/lib/server/system-emails';
 
 export const runtime = 'nodejs';
@@ -102,7 +102,13 @@ function parseFilter(params: URLSearchParams): OutboxQueryFilter {
  * lives. This route reads it; it does not keep a second copy and it does not
  * schedule anything.
  */
-async function present(ev: Awaited<ReturnType<typeof getEmailOutboxEventById>>, detailed = false) {
+async function present(
+  ev: Awaited<ReturnType<typeof getEmailOutboxEventById>>,
+  detailed = false,
+  /* Preloaded campaigns for the whole page. Absent for the single-record
+     detail view, which falls back to one lookup - one row, one read. */
+  campaignsById?: Map<string, MailCampaign>,
+) {
   if (!ev) return null;
   const source = describeOutboxSource(ev);
 
@@ -112,7 +118,11 @@ async function present(ev: Awaited<ReturnType<typeof getEmailOutboxEventById>>, 
   let campaign: { id: string; title: string; status: string } | null = null;
 
   if (source.campaignId) {
-    const found = await getMailCampaignById(source.campaignId).catch(() => null);
+    /* A campaign that is not in the map (or not in the store at all) leaves
+       `campaign` null, exactly as a failed lookup did before. */
+    const found = campaignsById
+      ? campaignsById.get(source.campaignId) ?? null
+      : await getMailCampaignById(source.campaignId).catch(() => null);
     if (found) {
       campaign = { id: found.id, title: found.title, status: found.status };
       const d = (found.deliveries ?? []).find((x) => x.to === ev.to);
@@ -263,8 +273,11 @@ export async function GET(req: NextRequest) {
       const chunk = page === 1
         ? result
         : await queryEmailOutbox({ page, limit: OUTBOX_MAX_PAGE_SIZE, direction, filter });
+      const chunkCampaigns = await getMailCampaignsByIds(
+        chunk.rows.map((ev) => describeOutboxSource(ev).campaignId ?? ''),
+      ).catch(() => new Map<string, MailCampaign>());
       for (const ev of chunk.rows) {
-        const presented = await present(ev);
+        const presented = await present(ev, false, chunkCampaigns);
         if (presented) rows.push(presented as Record<string, unknown>);
       }
       more = page < chunk.totalPages;
@@ -287,8 +300,13 @@ export async function GET(req: NextRequest) {
     filter,
   });
 
+  /* ONE campaign read for the page, not one per row. */
+  const campaignsById = await getMailCampaignsByIds(
+    result.rows.map((ev) => describeOutboxSource(ev).campaignId ?? ''),
+  ).catch(() => new Map<string, MailCampaign>());
+
   const events = [];
-  for (const ev of result.rows) events.push(await present(ev));
+  for (const ev of result.rows) events.push(await present(ev, false, campaignsById));
 
   return NextResponse.json({
     events,

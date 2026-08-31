@@ -3,6 +3,7 @@
 import SponsoredAdsTab from '@/components/superadmin/SponsoredAdsTab';
 import JobsTab from '@/components/superadmin/JobsTab';
 import SeoTab from '@/components/superadmin/SeoTab';
+import MailHealthPanel from '@/components/superadmin/MailHealthPanel';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { profileStatusStyle } from '@/lib/profile-score';
@@ -2335,8 +2336,17 @@ function MailTab() {
   const [broadcast, setBroadcast] = useState({ subject: '', htmlBody: '', audience: 'all' });
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState('');
-  const [view, setView] = useState<'overview' | 'outbox'>('overview');
+  const [view, setView] = useState<'health' | 'overview' | 'outbox'>('health');
   const [outbox, setOutbox] = useState<Record<string, unknown>[]>([]);
+  /* Mass mail is irreversible, so it takes two deliberate steps: resolve the
+     real recipient count on the server, show it, then require a second click. */
+  const [preview, setPreview] = useState<{
+    selected: number; excluded: number; invalid: number; final: number;
+    sample: { name: string; email: string; accountType: string }[];
+    invalidSamples: string[];
+  } | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -2349,15 +2359,43 @@ function MailTab() {
     setOutbox(d.outbox || []);
   }
 
-  async function sendBroadcast() {
+  async function loadPreview() {
     if (!broadcast.subject || !broadcast.htmlBody) { setMsg('Subject and body required'); return; }
+    setPreviewing(true); setMsg('');
+    try {
+      const res = await fetch('/api/super-admin/mail', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'preview_recipients', data: { audience: broadcast.audience } }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setMsg(d.error || 'Could not resolve recipients'); return; }
+      setPreview(d);
+    } catch { setMsg('Could not reach the server'); }
+    finally { setPreviewing(false); }
+  }
+
+  async function confirmSend() {
+    if (sending) return; // a second click must never queue a second campaign
     setSending(true);
-    const res = await fetch('/api/super-admin/mail', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send_broadcast', data: broadcast }) });
-    const d = await res.json();
-    setSending(false);
-    setMsg(d.sent ? `Sent to ${d.sent} recipients` : d.error || 'Failed');
-    setComposing(false);
-    setTimeout(() => setMsg(''), 5000);
+    try {
+      const res = await fetch('/api/super-admin/mail', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send_broadcast',
+          data: { ...broadcast, scheduleAt: scheduleAt || undefined },
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setMsg(d.error || 'Failed'); return; }
+      /* "Queued", not "Sent": delivery happens in the background and may still
+         fail at the provider. Claiming a send here is what made the old panel
+         report success while the mailbox was suspended. */
+      setMsg(scheduleAt
+        ? `Campaign scheduled for ${new Date(d.scheduledFor).toLocaleString()} — ${d.queued} recipients`
+        : `Campaign queued for ${d.queued} recipients. Delivery runs in the background; check the outbox for results.`);
+      setComposing(false); setPreview(null); setScheduleAt('');
+    } catch { setMsg('Could not reach the server'); }
+    finally { setSending(false); setTimeout(() => setMsg(''), 8000); }
   }
 
   if (loading) return <Loader />;
@@ -2370,10 +2408,14 @@ function MailTab() {
       {msg && <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{msg}</div>}
 
       <div className="flex gap-1">
-        {(['overview', 'outbox'] as const).map((v) => (
+        {(['health', 'overview', 'outbox'] as const).map((v) => (
           <button key={v} onClick={() => v === 'outbox' ? loadOutbox() : setView('overview')} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all capitalize ${view === v ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}>{v}</button>
         ))}
       </div>
+
+      {/* Delivery health leads, so a provider outage is visible before anyone
+          composes a campaign that cannot be delivered. */}
+      {view === 'health' && <MailHealthPanel />}
 
       {view === 'overview' && data && (
         <>
@@ -2437,11 +2479,63 @@ function MailTab() {
               </select></div>
             <div><label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1">Subject</label><input value={broadcast.subject} onChange={(e) => setBroadcast({ ...broadcast, subject: e.target.value })} className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500" /></div>
             <div><label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1">HTML Body</label><textarea value={broadcast.htmlBody} onChange={(e) => setBroadcast({ ...broadcast, htmlBody: e.target.value })} rows={6} className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 resize-none font-mono text-xs" placeholder="<p>Your message…</p>" /></div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setComposing(false)} className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-300">Cancel</button>
-              <button disabled={sending} onClick={sendBroadcast} className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
-                {sending ? <><div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />Sending…</> : 'Send Broadcast'}
-              </button>
+            <div>
+              <label className="text-xs text-zinc-500 uppercase tracking-wide block mb-1">Schedule (optional)</label>
+              <input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500" />
+              <p className="text-[11px] text-zinc-500 mt-1">
+                Leave empty to queue immediately. Scheduled campaigns are sent by the server, so the
+                browser can be closed.
+              </p>
+            </div>
+
+            {/* Step 2: the real, server-resolved recipient breakdown. */}
+            {preview && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 space-y-2">
+                <p className="text-sm font-semibold text-amber-300">
+                  You are about to email {preview.final.toLocaleString()} recipient{preview.final === 1 ? '' : 's'}.
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-zinc-300 sm:grid-cols-4">
+                  <span>Matched: <b className="tabular-nums">{preview.selected.toLocaleString()}</b></span>
+                  <span>Excluded: <b className="tabular-nums">{preview.excluded.toLocaleString()}</b></span>
+                  <span>Invalid: <b className="tabular-nums">{preview.invalid.toLocaleString()}</b></span>
+                  <span>Final: <b className="tabular-nums">{preview.final.toLocaleString()}</b></span>
+                </div>
+                {preview.sample.length > 0 && (
+                  <p className="text-[11px] text-zinc-400 break-all">
+                    e.g. {preview.sample.slice(0, 3).map((u) => u.email).join(', ')}
+                  </p>
+                )}
+                {preview.invalidSamples.length > 0 && (
+                  <p className="text-[11px] text-rose-300 break-all">
+                    Invalid addresses skipped: {preview.invalidSamples.slice(0, 3).join(', ')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-end gap-3">
+              <button onClick={() => { setComposing(false); setPreview(null); }}
+                className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-300">Cancel</button>
+              {!preview ? (
+                <button disabled={previewing} onClick={loadPreview}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
+                  {previewing ? <><div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />Checking recipients…</> : 'Review recipients'}
+                </button>
+              ) : (
+                <>
+                  <button onClick={() => setPreview(null)}
+                    className="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-300">Back</button>
+                  <button disabled={sending || preview.final === 0} onClick={confirmSend}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-semibold rounded-lg transition-all flex items-center gap-2">
+                    {sending
+                      ? <><div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin" />Queueing…</>
+                      : scheduleAt
+                        ? `Schedule for ${preview.final.toLocaleString()} recipients`
+                        : `Send to ${preview.final.toLocaleString()} recipients`}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

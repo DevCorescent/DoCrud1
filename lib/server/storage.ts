@@ -68,6 +68,10 @@ export const homepageConfigPath = path.join(dataDir, 'homepage-config.json');
 /* Super Admin SEO Manager settings. Same three-tier resolution as its peers:
    row adapter -> app_state (MongoDB) -> local JSON in development. */
 export const seoSettingsPath = path.join(dataDir, 'seo-settings.json');
+/* The staged copy an admin is editing. The PUBLISHED file above is the only
+   thing the public site ever reads, so a draft can be saved and previewed
+   without touching production metadata. */
+export const seoDraftSettingsPath = path.join(dataDir, 'seo-settings-draft.json');
 export const webTelemetryPath = path.join(dataDir, 'web-telemetry.json');
 export const securityBlocklistPath = path.join(dataDir, 'security-blocklist.json');
 export const knowledgeBasePath = path.join(dataDir, 'knowledge-base.json');

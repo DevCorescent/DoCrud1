@@ -27,10 +27,18 @@ interface SitemapCheck {
 }
 interface SitemapCategory { category: string; count: number; sample: string[] }
 interface SitemapHealthReport {
-  status: 'healthy' | 'warning' | 'error';
+  status: 'healthy' | 'warning' | 'error' | 'unavailable';
   checkedAt: string;
   sitemapUrl: string; robotsUrl: string; canonicalHost: string;
+  checkedOrigin: string; isProductionCheck: boolean;
   responseMs: number | null; lastGenerated: string | null;
+  httpStatus: number | null; contentType: string | null; xmlValid: boolean;
+  robotsResponseMs: number | null; robotsHttpStatus: number | null;
+  robotsSitemapReference: string | null;
+  sitemapCount: number;
+  childSitemaps: { url: string; urls: number | null; ok: boolean }[];
+  httpUrls: number | null;
+  validationLimited: boolean; limitReason?: string;
   totalUrls: number | null; duplicateUrls: number | null; invalidUrls: number | null;
   localhostUrls: number | null; nonCanonicalHostUrls: number | null;
   robotsConflicts: number | null; privateUrls: number | null;
@@ -88,6 +96,11 @@ const STATUS_TEXT: Record<string, { word: string; tone: string; blurb: string }>
     word: 'Error', tone: 'text-rose-400',
     blurb: 'The sitemap has a problem that will stop search engines using it correctly.',
   },
+  unavailable: {
+    word: 'Unavailable', tone: 'text-zinc-300',
+    blurb: 'The public sitemap could not be reached, so its health is unknown. '
+      + 'This is not the same as the sitemap being broken.',
+  },
 };
 
 function StatCard({ value, label, tone }: { value: string; label: string; tone?: string }) {
@@ -126,6 +139,10 @@ export default function SitemapHealth() {
   const [copied, setCopied] = useState(false);
   const [openCategory, setOpenCategory] = useState<string | null>(null);
 
+  /* Validation runs ONCE when the section is first opened, then only on
+     demand. No polling: each run fetches the live sitemap and robots.txt. */
+  const [autoChecked, setAutoChecked] = useState(false);
+
   /* One cheap read: configuration and past results. No validation on mount. */
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -144,6 +161,7 @@ export default function SitemapHealth() {
 
   useEffect(() => { void load(); }, [load]);
 
+
   const validate = useCallback(async () => {
     if (validating) return; // no duplicate requests in flight
     setValidating(true); setError(''); setNotice('');
@@ -159,6 +177,12 @@ export default function SitemapHealth() {
     } catch { setError('Could not reach the server.'); }
     finally { setValidating(false); }
   }, [validating]);
+
+  useEffect(() => {
+    if (loading || autoChecked || report || validating) return;
+    setAutoChecked(true);
+    void validate();
+  }, [loading, autoChecked, report, validating, validate]);
 
   const sitemapUrl = report?.sitemapUrl || config?.sitemapUrl || '';
   const robotsUrl = report?.robotsUrl || config?.robotsUrl || '';
@@ -236,9 +260,24 @@ export default function SitemapHealth() {
         )}
       </div>
 
+      {/* A local result shown beside a production URL is a lie by proximity. */}
+      {report && !report.isProductionCheck && (
+        <p role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-200">
+          This check ran against <span className="break-all font-semibold">{report.checkedOrigin}</span>,
+          not {report.canonicalHost}. It describes the local server, not production.
+        </p>
+      )}
+
+      {/* A partial check presented as a complete one is worse than no check. */}
+      {report?.validationLimited && (
+        <p role="status" className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-200">
+          Validation was limited — {report.limitReason} These figures do not cover the whole sitemap.
+        </p>
+      )}
+
       {/* ── Quick stats ── */}
       {report && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-7">
           <StatCard value={metric(report.totalUrls)} label="Total URLs" />
           <StatCard value={metric(report.duplicateUrls)} label="Duplicates"
             tone={report.duplicateUrls ? 'text-amber-400' : undefined} />
@@ -250,6 +289,8 @@ export default function SitemapHealth() {
             tone={report.nonCanonicalHostUrls ? 'text-rose-400' : undefined} />
           <StatCard value={metric(report.robotsConflicts)} label="Robots conflicts"
             tone={report.robotsConflicts ? 'text-rose-400' : undefined} />
+          <StatCard value={metric(report.httpUrls)} label="Non-HTTPS URLs"
+            tone={report.httpUrls ? 'text-rose-400' : undefined} />
         </div>
       )}
 
@@ -278,6 +319,26 @@ export default function SitemapHealth() {
               <dt className="text-[11px] text-zinc-500">Last validated</dt>
               <dd className="text-[11px] text-zinc-300">{fmtTime(report?.checkedAt ?? null)}</dd>
             </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-[11px] text-zinc-500">HTTP status</dt>
+              <dd className="text-[11px] text-zinc-300">
+                {report?.httpStatus ? `${report.httpStatus}${report.httpStatus === 200 ? ' OK' : ''}` : 'Not available'}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-[11px] text-zinc-500">XML</dt>
+              <dd className="text-[11px] text-zinc-300">
+                {report ? (report.xmlValid ? 'Valid' : 'Invalid') : 'Not available'}
+              </dd>
+            </div>
+            {report && report.sitemapCount > 1 && (
+              <div className="flex justify-between gap-3">
+                <dt className="text-[11px] text-zinc-500">Sitemaps</dt>
+                <dd className="text-[11px] text-zinc-300">
+                  {report.sitemapCount} (index + {report.childSitemaps.length})
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between gap-3">
               <dt className="text-[11px] text-zinc-500">Response time</dt>
               <dd className="text-[11px] text-zinc-300">
@@ -309,6 +370,19 @@ export default function SitemapHealth() {
           <StateLine label="Sitemap declaration"
             ok={report ? report.sitemapDeclaredInRobots : false}
             okText="Present" badText={report ? 'Missing' : 'Not checked'} />
+          {report?.robotsSitemapReference && (
+            <p className="break-all pb-1 text-right text-[11px] text-zinc-500">
+              {report.robotsSitemapReference}
+            </p>
+          )}
+          <div className="flex items-baseline justify-between gap-3 py-1">
+            <span className="text-[12px] text-zinc-400">robots.txt response</span>
+            <span className="text-[12px] text-zinc-300">
+              {report?.robotsHttpStatus ? `${report.robotsHttpStatus}` : 'Not checked'}
+              {report?.robotsResponseMs !== null && report?.robotsResponseMs !== undefined
+                ? ` · ${report.robotsResponseMs} ms` : ''}
+            </span>
+          </div>
           <div className="flex items-baseline justify-between gap-3 py-1">
             <span className="text-[12px] text-zinc-400">Canonical host</span>
             <span className="break-all text-right text-[12px] font-semibold text-zinc-200">
@@ -365,6 +439,24 @@ export default function SitemapHealth() {
             <span className="text-[12px] font-semibold text-zinc-400">Total</span>
             <span className="text-[12px] font-bold tabular-nums text-zinc-100">{metric(report.totalUrls)}</span>
           </div>
+        </div>
+      )}
+
+      {/* ── Child sitemaps, only when the sitemap is actually an index ── */}
+      {report && report.childSitemaps.length > 0 && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+          <p className={LABEL}>Sitemap index</p>
+          <ul className="mt-1">
+            {report.childSitemaps.map((c) => (
+              <li key={c.url} className="flex items-baseline justify-between gap-3 py-1">
+                <span className="min-w-0 break-all text-[12px] text-zinc-300">{c.url}</span>
+                <span className={`shrink-0 text-[12px] font-semibold tabular-nums ${
+                  c.ok ? 'text-zinc-200' : 'text-rose-400'}`}>
+                  {c.ok ? `${c.urls} URLs` : 'Unreadable'}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

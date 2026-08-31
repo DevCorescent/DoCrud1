@@ -37,6 +37,7 @@
     "test:sitemap-health": "tsx scripts/sitemap-health.selftest.ts",
     "test:mail-cron": "tsx scripts/mail-cron.selftest.ts",
     "test:mail-recipients": "tsx scripts/mail-recipients.selftest.ts",
+    "test:mail-provider": "tsx scripts/mail-provider.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:indexes": "node scripts/db-indexes.mjs",

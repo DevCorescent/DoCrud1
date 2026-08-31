@@ -59,6 +59,7 @@ const realFetch = globalThis.fetch;
 /** Serve a fixed sitemap and robots.txt to the validator. */
 function stubFetch(opts: {
   sitemap?: string; sitemapStatus?: number; sitemapThrows?: boolean;
+  contentType?: string;
   robots?: string | null; robotsStatus?: number;
 }) {
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -67,7 +68,13 @@ function stubFetch(opts: {
       if (opts.sitemapThrows) throw new Error('connection refused');
       return new Response(opts.sitemap ?? '', {
         status: opts.sitemapStatus ?? 200,
-        headers: { date: new Date().toUTCString() },
+        headers: {
+          date: new Date().toUTCString(),
+          /* The real route serves application/xml; without this the stub would
+             fail the content-type check for reasons that have nothing to do
+             with the sitemap under test. */
+          'content-type': opts.contentType ?? 'application/xml',
+        },
       });
     }
     if (url.endsWith('/robots.txt')) {
@@ -132,9 +139,11 @@ async function main() {
 
   stubFetch({ sitemapThrows: true });
   r = await run();
-  check('an unreachable sitemap is an error', r.status === 'error');
+  /* "Could not reach production" is not the same as "production is broken". */
+  check('an unreachable sitemap is UNAVAILABLE, not error', r.status === 'unavailable', r.status);
   check('an unreachable sitemap reports no fabricated metrics',
     r.totalUrls === null && r.robotsConflicts === null);
+  check('an unreachable sitemap reports no HTTP status', r.httpStatus === null);
 
   console.log('\n── 3. URL defects ──');
 
@@ -205,6 +214,89 @@ async function main() {
   });
   r = await run();
   check('a sitemap declared on another host is a warning', r.status === 'warning');
+
+  console.log('\n── 4b. Sitemap index, limits and transport facts ──');
+
+  const child = (n: number, prefix: string) =>
+    xml(Array.from({ length: n }, (_, i) => `${HOST}${prefix}${i}`));
+
+  /* A <sitemapindex> lists sitemaps, not pages. Counting its children as URLs
+     would report "3 URLs" for a site with thousands. */
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const h = { 'content-type': 'application/xml' };
+    if (url.endsWith('/sitemap.xml')) {
+      return new Response(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<sitemap><loc>${HOST}/sitemap-jobs.xml</loc></sitemap>
+<sitemap><loc>${HOST}/sitemap-blog.xml</loc></sitemap>
+</sitemapindex>`, { status: 200, headers: h });
+    }
+    if (url.endsWith('/sitemap-jobs.xml')) return new Response(child(5, '/jobs/'), { status: 200, headers: h });
+    if (url.endsWith('/sitemap-blog.xml')) return new Response(child(3, '/blog/'), { status: 200, headers: h });
+    if (url.endsWith('/robots.txt')) return new Response(GOOD_ROBOTS, { status: 200 });
+    return new Response('', { status: 404 });
+  }) as typeof fetch;
+  r = await run();
+  check('a sitemap index aggregates its children', r.totalUrls === 8, String(r.totalUrls));
+  check('the child sitemaps are listed', r.childSitemaps.length === 2);
+  check('each child reports its own URL count',
+    r.childSitemaps.every((c) => c.ok && typeof c.urls === 'number'));
+  check('the sitemap count includes the index itself', r.sitemapCount === 3, String(r.sitemapCount));
+  check('an index of valid children is healthy', r.status === 'healthy', r.issues.join('; '));
+  check('children are classified like any other URL',
+    (r.breakdown.find((b) => b.category === 'Jobs')?.count ?? 0) === 5);
+
+  /* A child that cannot be read must not be silently dropped. */
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const h = { 'content-type': 'application/xml' };
+    if (url.endsWith('/sitemap.xml')) {
+      return new Response(
+        `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<sitemap><loc>${HOST}/sitemap-broken.xml</loc></sitemap>
+</sitemapindex>`, { status: 200, headers: h });
+    }
+    if (url.endsWith('/sitemap-broken.xml')) return new Response('', { status: 500 });
+    if (url.endsWith('/robots.txt')) return new Response(GOOD_ROBOTS, { status: 200 });
+    return new Response('', { status: 404 });
+  }) as typeof fetch;
+  r = await run();
+  check('an unreadable child sitemap is an error', r.status === 'error');
+  check('the failing child is reported', r.childSitemaps.some((c) => !c.ok));
+
+  console.log('\n── 4c. Transport facts and honesty about limits ──');
+
+  stubFetch({ sitemap: xml([`${HOST}/a`]) });
+  r = await run();
+  check('the HTTP status is surfaced', r.httpStatus === 200, String(r.httpStatus));
+  check('the content type is surfaced', String(r.contentType).includes('xml'));
+  check('xmlValid is reported', r.xmlValid === true);
+  check('robots timing is measured', typeof r.robotsResponseMs === 'number');
+  check('the robots HTTP status is surfaced', r.robotsHttpStatus === 200);
+  check('the declared sitemap reference is returned',
+    r.robotsSitemapReference === `${HOST}/sitemap.xml`);
+  check('a normal sitemap is not marked limited', r.validationLimited === false);
+
+  /* HTTP 200 alone is not proof: a rewritten route serves HTML happily. */
+  stubFetch({ sitemap: xml([`${HOST}/a`]), contentType: 'text/html; charset=utf-8' });
+  r = await run();
+  check('a 200 served as HTML is not accepted as a sitemap', r.status === 'error');
+  check('the content-type problem is named',
+    r.issues.some((i) => i.includes('not XML')));
+
+  stubFetch({ sitemap: xml([`${HOST}/a`, 'http://www.docrud.com/b']) });
+  r = await run();
+  check('plain-http URLs are counted separately', r.httpUrls === 1, String(r.httpUrls));
+  check('a plain-http URL is an error', r.status === 'error');
+
+  /* A document that is well-formed XML with the right root but the wrong
+     namespace is not a sitemap. */
+  stubFetch({ sitemap: '<?xml version="1.0"?><urlset xmlns="http://example.com/other"><url><loc>x</loc></url></urlset>' });
+  r = await run();
+  check('a wrong namespace is rejected', r.status === 'error' && r.xmlValid === false);
 
   console.log('\n── 5. Category breakdown ──');
 
@@ -278,6 +370,28 @@ async function main() {
   check('the client-trusting origin helper is never imported or called',
     !stripComments(SERVICE).includes('getOriginForRequest')
     && !stripComments(API).includes('getOriginForRequest'));
+
+  console.log('\n── 7b. Production vs local is never blurred ──');
+
+  stubFetch({ sitemap: xml([`${HOST}/a`]) });
+  r = await run();
+  check('a check against the canonical host is a production check',
+    r.isProductionCheck === true && r.checkedOrigin === HOST);
+
+  /* The trap: validating localhost and displaying the production URL beside a
+     green verdict. */
+  const local = await validateSitemap({ origin: 'http://localhost:3000' });
+  check('a check against localhost is NOT a production check', local.isProductionCheck === false);
+  check('the report states which origin was actually fetched',
+    local.checkedOrigin === 'http://localhost:3000');
+  check('the displayed sitemap URL remains the production one',
+    local.sitemapUrl === `${HOST}/sitemap.xml`);
+  check('a non-production check is called out in the results',
+    local.issues.some((i) => i.includes('not ' + HOST)), local.issues.join('; '));
+  check('a non-production check cannot be reported as healthy',
+    local.status !== 'healthy', local.status);
+  check('the UI warns when the check was not against production',
+    UI.includes('report.isProductionCheck') && UI.includes('not production'));
 
   console.log('\n── 8. API access control ──');
 
@@ -356,10 +470,32 @@ async function main() {
   check('grid children can shrink below their content width',
     (UI.match(/min-w-0/g) ?? []).length >= 4);
   check('stats and cards reflow across breakpoints',
-    UI.includes('grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6')
+    /grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-\d/.test(UI)
     && UI.includes('grid gap-3 lg:grid-cols-2'));
   check('action buttons wrap rather than overflow',
     UI.includes('flex flex-wrap items-center gap-2') || UI.includes('flex flex-wrap gap-2'));
+
+  console.log('\n── 10b. The new facts reach the UI ──');
+
+  check('the HTTP status is displayed', UI.includes('HTTP status'));
+  check('XML validity is displayed', UI.includes('report.xmlValid ?'));
+  check('non-HTTPS URLs are displayed', UI.includes("label=\"Non-HTTPS URLs\""));
+  check('robots timing and status are displayed',
+    UI.includes('robots.txt response') && UI.includes('report.robotsResponseMs'));
+  check('the declared sitemap reference is displayed',
+    UI.includes('report.robotsSitemapReference'));
+  check('child sitemaps are listed only when there are any',
+    UI.includes('report.childSitemaps.length > 0') && UI.includes('Sitemap index'));
+  check('an unreadable child is shown as unreadable', UI.includes("'Unreadable'"));
+  /* The honesty requirement for partial checks. */
+  check('a limited validation is stated, not implied complete',
+    UI.includes('report?.validationLimited') && UI.includes('do not cover the whole sitemap'));
+  check('the unavailable state has its own wording',
+    UI.includes("word: 'Unavailable'") && UI.includes('not the same as the sitemap being broken'));
+  check('validation runs once when the section opens',
+    UI.includes('setAutoChecked(true)') && UI.includes('void validate();'));
+  check('it still does not poll', !UI.includes('setInterval'));
+  check('duplicate validations are still prevented', UI.includes('if (validating) return;'));
 
   console.log('\n── 11. Integration with the existing SEO Manager ──');
 
@@ -372,9 +508,12 @@ async function main() {
     && TAB.includes('title="Social sharing"') && TAB.includes('title="Branding"'));
   check('the Search Console verification field is still editable',
     TAB.includes('id="seo-gsc"'));
-  check('the existing SEO settings API is untouched',
-    read('app/api/super-admin/seo/route.ts').includes('getSeoSettings')
-    && read('app/api/super-admin/seo/route.ts').includes('saveSeoSettings'));
+  /* Persistence still goes through the shared settings module — now via the
+     draft/publish pair rather than a direct save. */
+  const SEO_API = read('app/api/super-admin/seo/route.ts');
+  check('the SEO settings API still persists through the shared module',
+    SEO_API.includes('getSeoSettings')
+    && SEO_API.includes('saveSeoDraft') && SEO_API.includes('publishSeoDraft'));
   check('history reuses the existing audit log, not a new store',
     API.includes('appendSuperAdminAudit') && API.includes('getSuperAdminAuditLog')
     && !API.includes('writeJsonFile'));

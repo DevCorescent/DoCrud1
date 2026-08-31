@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
-import { getMailCampaigns } from '@/lib/server/mail-campaigns';
+import {
+  getMailCampaigns, upsertMailCampaign, createCampaignId,
+} from '@/lib/server/mail-campaigns';
+import { resolveRecipients, type MailSegment } from '@/lib/server/mail-recipients';
 import { getEmailOutbox } from '@/lib/server/email-outbox';
-import { sendTrackedMail } from '@/lib/server/mailer';
-import { getStoredUsers } from '@/lib/server/auth';
 
 async function guard(req: NextRequest) {
   const s = await getSuperAdminSessionFromRequest(req);
@@ -47,38 +48,111 @@ export async function POST(req: NextRequest) {
   try {
     const { action, data } = await req.json();
 
-    if (action === 'send_broadcast') {
-      const { subject, htmlBody, textBody, audience } = data || {};
-      if (!subject || !htmlBody) return NextResponse.json({ error: 'subject and htmlBody required' }, { status: 400 });
+    if (action === 'preview_recipients') {
+      /* Powers the confirmation screen. Resolving on the server means the
+         number the admin confirms is produced by the same code that will
+         choose the addresses, not by a browser-side guess. */
+      const segment: MailSegment = data?.segment ?? (
+        data?.audience === 'business' ? { mode: 'businesses' }
+          : data?.audience === 'individual' ? { mode: 'individuals' }
+          : data?.audience === 'admins' ? { mode: 'filtered', filters: { role: 'admin', status: 'active' } }
+          : { mode: 'filtered', filters: { status: 'active' } }
+      );
+      const r = await resolveRecipients(segment);
+      return NextResponse.json({
+        selected: r.selected,
+        excluded: r.excluded,
+        invalid: r.invalid,
+        final: r.final,
+        /* Names and addresses only — never the full user record. */
+        sample: r.sample.map((u) => ({ name: u.name, email: u.email, accountType: u.accountType })),
+        invalidSamples: r.invalidSamples,
+      });
+    }
 
-      const users = await getStoredUsers();
-      let targets = users.filter((u) => u.isActive && u.email);
-      if (audience === 'business') targets = targets.filter((u) => u.accountType === 'business');
-      if (audience === 'individual') targets = targets.filter((u) => u.accountType === 'individual');
-      if (audience === 'admins') targets = targets.filter((u) => u.role === 'admin');
+    if (action === 'send_broadcast') {
+      /* REWRITTEN. The previous implementation sent up to 500 messages
+         synchronously inside this request and reported success like this:
+
+             await sendTrackedMail({...}).catch(() => null);
+             sent++;
+
+         `sent` counted ATTEMPTS. Every failure was swallowed, so with the
+         mailbox suspended the panel told the admin "Sent to 500 recipients"
+         while nothing was delivered. It also silently dropped everyone past
+         the 500th, and bypassed the campaign system entirely — no claim
+         protection, so a double-click sent the whole broadcast twice.
+
+         It now creates a campaign and hands it to the scheduled runner, which
+         already has claim-based duplicate protection, honest per-recipient
+         failure accounting and retry. This request returns immediately with a
+         resolved recipient count instead of blocking on SMTP. */
+      const { subject, htmlBody, textBody, audience, segment, scheduleAt } = data || {};
+      if (!subject || !htmlBody) {
+        return NextResponse.json({ error: 'subject and htmlBody required' }, { status: 400 });
+      }
+
+      /* A segment is resolved on the server. The legacy audience strings are
+         still accepted so existing callers keep working. */
+      const resolvedSegment: MailSegment = segment ?? (
+        audience === 'business' ? { mode: 'businesses' }
+          : audience === 'individual' ? { mode: 'individuals' }
+          : audience === 'admins' ? { mode: 'filtered', filters: { role: 'admin', status: 'active' } }
+          : { mode: 'filtered', filters: { status: 'active' } }
+      );
+
+      const recipients = await resolveRecipients(resolvedSegment);
+      if (recipients.final === 0) {
+        return NextResponse.json(
+          { error: 'No deliverable recipients matched this audience.' }, { status: 400 });
+      }
+
+      /* Scheduled campaigns are picked up by /api/cron/mail, so they send with
+         no browser open. An immediate send is simply one that is already due. */
+      const when = scheduleAt ? new Date(scheduleAt) : new Date();
+      if (Number.isNaN(when.getTime())) {
+        return NextResponse.json({ error: 'Invalid schedule time.' }, { status: 400 });
+      }
+
+      const campaign = await upsertMailCampaign({
+        id: createCampaignId(),
+        title: String(subject).slice(0, 120),
+        subject: String(subject),
+        text: String(textBody || subject),
+        html: String(htmlBody),
+        audience: { mode: 'segment', segment: resolvedSegment },
+        sendAt: when.toISOString(),
+        status: 'scheduled',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: session.email,
+      });
 
       await appendSuperAdminAudit({
-        action: 'broadcast_email_sent',
-        details: { subject, audience, recipientCount: targets.length },
+        action: 'broadcast_email_queued',
+        targetType: 'campaign',
+        targetId: campaign.id,
+        details: {
+          subject,
+          audience: resolvedSegment.mode,
+          recipientCount: recipients.final,
+          excluded: recipients.excluded,
+          invalid: recipients.invalid,
+          scheduledFor: campaign.sendAt,
+        },
         ip: req.headers.get('x-forwarded-for') || undefined,
       });
 
-      // Send in batches
-      let sent = 0;
-      for (const user of targets.slice(0, 500)) {
-        await sendTrackedMail({
-          policyKey: 'bulk_campaign',
-          typeLabel: 'system',
-          to: user.email,
-          subject,
-          text: textBody || subject,
-          html: htmlBody,
-          origin: req.nextUrl.origin,
-        }).catch(() => null);
-        sent++;
-      }
-
-      return NextResponse.json({ success: true, sent });
+      return NextResponse.json({
+        success: true,
+        campaignId: campaign.id,
+        /* Deliberately NOT called `sent`: nothing has been delivered yet, and
+           the old field name is exactly what made the panel lie. */
+        queued: recipients.final,
+        excluded: recipients.excluded,
+        invalid: recipients.invalid,
+        scheduledFor: campaign.sendAt,
+      });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

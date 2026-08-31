@@ -36,6 +36,7 @@
     "test:seo-live": "tsx scripts/seo-live.selftest.ts",
     "test:sitemap-health": "tsx scripts/sitemap-health.selftest.ts",
     "test:mail-cron": "tsx scripts/mail-cron.selftest.ts",
+    "test:mail-outbox": "tsx scripts/mail-outbox.selftest.ts",
     "test:mail-recipients": "tsx scripts/mail-recipients.selftest.ts",
     "test:mail-provider": "tsx scripts/mail-provider.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",

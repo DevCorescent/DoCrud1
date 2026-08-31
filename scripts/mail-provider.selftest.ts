@@ -148,8 +148,10 @@ function main() {
   console.log('\n── 6. The UI tells the truth ──');
 
   check('delivery health is its own panel', ADMIN.includes('<MailHealthPanel />'));
-  check('health is the default Mail Center view',
-    ADMIN.includes("useState<'health' | 'overview' | 'outbox'>('health')"));
+  /* Health is no longer the landing view — the Overview is, and it surfaces a
+     provider outage at the top with a link straight to Health. */
+  check('mail health is still reachable as its own section',
+    ADMIN.includes("<MailHealthPanel />") && ADMIN.includes("view === 'health'"));
   check('provider status is stated in words, not colour alone',
     PANEL.includes("word: 'Operational'") && PANEL.includes("word: 'Unavailable'"));
   check('the provider error and its remedy are both shown',
@@ -174,6 +176,48 @@ function main() {
     PANEL.includes('Loading mail health…') && PANEL.includes('role="alert"')
     && PANEL.includes('>Retry<'));
 
+  console.log('\n── 6b. Mail Center overview ──');
+
+  const OVERVIEW = read('components/superadmin/MailOverview.tsx');
+  const ADMIN2 = read('components/SuperAdminPanel.tsx');
+
+  check('the overview is mounted in the Mail Center', ADMIN2.includes('<MailOverview'));
+  check('overview is the default view',
+    ADMIN2.includes("useState<'overview' | 'outbox' | 'health'>('overview')"));
+  /* Section 40: no placeholder tabs. Only implemented sections are offered. */
+  check('no unimplemented tab is advertised',
+    !ADMIN2.includes('Coming soon') && !/'compose'|'templates'|'analytics'/.test(
+      ADMIN2.slice(ADMIN2.indexOf("useState<'overview' | 'outbox' | 'health'>"),
+                   ADMIN2.indexOf("useState<'overview' | 'outbox' | 'health'>") + 200)));
+  check('every figure comes from the real health endpoint',
+    OVERVIEW.includes("fetch('/api/super-admin/mail/health'")
+    && !/const \w+ = \[\s*\{ *label/.test(OVERVIEW));
+  check('the overview reads campaign state, not guesses',
+    HEALTH_API.includes('getMailCampaigns()') && OVERVIEW.includes('campaigns.scheduled'));
+  check('pending retries are surfaced',
+    HEALTH_API.includes('pendingRetries') && OVERVIEW.includes('Awaiting retry'));
+  check('recent failures carry their classification',
+    HEALTH_API.includes('recentFailures') && OVERVIEW.includes('f.retryable'));
+  /* The vocabulary rule this whole project keeps returning to. */
+  check('the overview says accepted, never delivered',
+    OVERVIEW.includes('Accepted by the provider')
+    && OVERVIEW.includes('not proof of inbox') && !/\bDelivered\b/.test(OVERVIEW));
+  check('tracking limitations are disclosed',
+    OVERVIEW.includes('under-count clients that block images'));
+  check('an unmeasurable figure reads as Not available',
+    OVERVIEW.includes("'Not available'"));
+  check('a provider outage is called out above everything else',
+    OVERVIEW.includes('Mail delivery is not working')
+    && OVERVIEW.includes('this is a provider problem'));
+  check('there is no polling loop',
+    !OVERVIEW.includes('setInterval') && OVERVIEW.includes('void load(false); }, [load]'));
+  check('loading, error and retry states exist',
+    OVERVIEW.includes('Loading mail overview…') && OVERVIEW.includes('role="alert"')
+    && OVERVIEW.includes('>Retry<'));
+  check('tables scroll inside their own container', OVERVIEW.includes('overflow-x-auto'));
+  check('the superseded inline overview was removed, not left dead',
+    !ADMIN2.includes('{false && data &&') && !ADMIN2.includes('Recent Outbox'));
+
   console.log('\n── 7. Existing behaviour preserved ──');
 
   check('the outbox view still exists', ADMIN.includes("view === 'outbox'"));
@@ -185,8 +229,30 @@ function main() {
     read('lib/server/mailer.ts').includes('export async function sendTrackedMail'));
   check('TLS verification is still enabled',
     !/rejectUnauthorized:\s*false/.test(read('lib/server/mailer.ts')));
-  check('provider health does not change how mail is sent',
-    !PROVIDER.includes('sendTrackedMail(') && !PROVIDER.includes('sendMail('));
+  /* Phase 2: the provider is now the send path. What must stay true is that
+     there is still exactly ONE transport and one call into it. */
+  const MAILER = read('lib/server/mailer.ts');
+  const TRANSPORT = read('lib/server/smtp-transport.ts');
+  check('the provider exposes a send method',
+    PROVIDER.includes('send(message: MailMessage): Promise<MailSendResult>'));
+  check('there is exactly one transporter call site',
+    (PROVIDER.match(/transporter\.sendMail\(/g) ?? []).length === 1);
+  check('sendTrackedMail delivers through the provider',
+    MAILER.includes('await getMailProvider().send({')
+    && !/transporter\.sendMail\(/.test(MAILER));
+  check('only one SMTP transport exists',
+    TRANSPORT.includes('nodemailer.createTransport(')
+    && !PROVIDER.includes('nodemailer.createTransport')
+    && !MAILER.includes('nodemailer.createTransport'));
+  check('the pooled transport is preserved',
+    TRANSPORT.includes('pool: true') && TRANSPORT.includes('maxConnections: 5'));
+  check('the transport lives below both, so there is no import cycle',
+    !TRANSPORT.includes("from '@/lib/server/mailer'")
+    && !TRANSPORT.includes("from '@/lib/server/mail-provider'"));
+  check('provider errors are not swallowed before classification',
+    !PROVIDER.includes('.catch(() => null)'));
+  check('a provider can be substituted for tests',
+    PROVIDER.includes('export function setMailProviderForTesting'));
 
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);
   if (failures > 0) process.exit(1);

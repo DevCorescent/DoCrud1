@@ -503,7 +503,56 @@ async function main() {
   check('a single-point series cannot divide by zero',
     PANEL.includes('total === 1 ? w / 2'));
 
-  console.log('\n── 17. Indexes ──');
+  console.log('\n── 17. Campaign lookup is batched, not per row ──');
+
+  /* The N+1 this replaces: `getMailCampaignById` reads the WHOLE campaign
+     store on every call, and the outbox route called it once per row. A
+     25-row page referencing three campaigns performed 25 full reads - 6,951ms
+     measured, against 257ms for one batched read. */
+  const { getMailCampaignsByIds } = await import('@/lib/server/mail-campaigns');
+
+  check('a batch helper exists',
+    typeof getMailCampaignsByIds === 'function');
+  check('the route loads campaigns once per page, not once per row',
+    API.includes('const campaignsById = await getMailCampaignsByIds(')
+    && API.includes('present(ev, false, campaignsById)'));
+  check('the per-row lookup is gone from the list path',
+    !/const events = \[\];[\s\S]{0,200}getMailCampaignById/.test(API));
+  check('the export pages with a batched lookup too',
+    API.includes('const chunkCampaigns = await getMailCampaignsByIds('));
+  /* The detail view is a single row, so one lookup there is correct. */
+  check('the single-record view still resolves its campaign',
+    API.includes('await getMailCampaignById(source.campaignId).catch(() => null)'));
+
+  /* Behaviour, against the real store. */
+  const campaignFile = path.join(process.cwd(), 'data', 'mail-campaigns.json');
+  const campaignBackup = existsSync(campaignFile) ? readFileSync(campaignFile, 'utf8') : null;
+  writeFileSync(campaignFile, JSON.stringify({ campaigns: [] }));
+  const { upsertMailCampaign } = await import('@/lib/server/mail-campaigns');
+  for (const n of [1, 2]) {
+    await upsertMailCampaign({
+      id: `cmp-batch-${n}`, title: `Batch ${n}`, subject: 'S', text: 'b',
+      audience: { mode: 'emails', emails: ['a@example.com'] }, status: 'sent',
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    } as never);
+  }
+
+  const batched = await getMailCampaignsByIds(
+    ['cmp-batch-1', 'cmp-batch-1', 'cmp-batch-2', 'cmp-missing', '']);
+  check('duplicate ids are resolved once', batched.size === 2, String(batched.size));
+  check('each id maps to its own campaign',
+    batched.get('cmp-batch-1')?.title === 'Batch 1'
+    && batched.get('cmp-batch-2')?.title === 'Batch 2');
+  check('a missing id is simply absent, not an error',
+    !batched.has('cmp-missing'));
+  check('an empty or blank id list returns an empty map',
+    (await getMailCampaignsByIds([])).size === 0
+    && (await getMailCampaignsByIds([''])).size === 0);
+
+  if (campaignBackup !== null) writeFileSync(campaignFile, campaignBackup);
+  else if (existsSync(campaignFile)) unlinkSync(campaignFile);
+
+  console.log('\n── 18. Indexes ──');
 
   check('the console\'s queries are indexed',
     ROWS.includes('outbox_recent') && ROWS.includes('outbox_status_recent')

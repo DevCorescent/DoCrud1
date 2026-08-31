@@ -21,6 +21,9 @@ import {
 import { getEmailOutbox } from '@/lib/server/email-outbox';
 import { classifyMailError } from '@/lib/server/mail-provider';
 
+import {
+  validateRecurrence, nextOccurrence, describeRecurrence, type MailRecurrence,
+} from '@/lib/email/recurrence';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -49,6 +52,12 @@ function toListRow(c: MailCampaign) {
     sent: c.progress?.sent ?? null,
     failed: c.progress?.failed ?? null,
     pendingRetry: (c.deliveries ?? []).filter((d) => d.status === 'pending').length,
+    /* One-time or recurring, and the state of the schedule. */
+    isRecurring: Boolean(c.recurrence),
+    recurrenceStatus: c.recurrenceState?.status ?? null,
+    recurrenceSummary: c.recurrence ? describeRecurrence(c.recurrence) : null,
+    nextRunAt: c.recurrenceState?.nextRunAt ?? null,
+    lastRunAt: c.recurrenceState?.lastRunAt ?? null,
   };
 }
 
@@ -114,6 +123,10 @@ export async function GET(req: NextRequest) {
           audience: campaign.audience,
           startedAt: campaign.progress?.startedAt ?? null,
           finishedAt: campaign.progress?.finishedAt ?? null,
+          recurrence: campaign.recurrence ?? null,
+          /* Occurrence history is metadata; the deliveries behind each run
+             stay in the outbox, which is still the only delivery log. */
+          occurrences: campaign.recurrenceState?.occurrences ?? [],
         },
         deliveries,
         providerEvents,
@@ -176,6 +189,104 @@ export async function POST(req: NextRequest) {
   if (!campaign) return NextResponse.json({ error: 'Campaign not found.' }, { status: 404 });
 
   try {
+    /* ── Recurrence controls ────────────────────────────────────────────
+       PAUSE keeps the definition and its history but stops future
+       occurrences. RESUME recomputes the next run from NOW, so a campaign
+       paused for a month does not fire for every occurrence it missed. CANCEL
+       is permanent; the history stays visible and cron never picks it up. */
+    if (action === 'pause_recurrence' || action === 'resume_recurrence'
+        || action === 'cancel_recurrence') {
+      if (!campaign.recurrence || !campaign.recurrenceState) {
+        return NextResponse.json({ error: 'This campaign does not repeat.' }, { status: 400 });
+      }
+      const state = campaign.recurrenceState;
+      if (state.status === 'cancelled') {
+        return NextResponse.json(
+          { error: 'This recurrence was cancelled and cannot be changed.' }, { status: 409 });
+      }
+
+      let nextState = state;
+      let nextSendAt = campaign.sendAt;
+
+      if (action === 'pause_recurrence') {
+        nextState = { ...state, status: 'paused' };
+      } else if (action === 'resume_recurrence') {
+        /* From NOW, never from the paused occurrence. */
+        const next = nextOccurrence(campaign.recurrence, new Date());
+        nextState = {
+          ...state,
+          status: next ? 'active' : 'completed',
+          nextRunAt: next ? next.toISOString() : null,
+        };
+        nextSendAt = next ? next.toISOString() : undefined;
+      } else {
+        nextState = { ...state, status: 'cancelled', nextRunAt: null };
+        nextSendAt = undefined;
+      }
+
+      await upsertMailCampaign({
+        ...campaign,
+        /* A paused or cancelled recurrence must not look "scheduled": the
+           runner also checks the recurrence status, so this is belt and
+           braces rather than the only guard. */
+        status: nextState.status === 'active' ? 'scheduled' : 'cancelled',
+        sendAt: nextSendAt,
+        claimToken: undefined,
+        recurrenceState: nextState,
+      });
+      await appendSuperAdminAudit({
+        action: `mail.campaign.${action}`,
+        targetType: 'mail_campaign',
+        targetId: id,
+        details: { status: nextState.status, nextRunAt: nextState.nextRunAt ?? 'none' },
+      }).catch(() => {});
+      return NextResponse.json({
+        ok: true, recurrenceStatus: nextState.status, nextRunAt: nextState.nextRunAt ?? null,
+      });
+    }
+
+    /* Changing the schedule recomputes `nextRunAt` on the SERVER. A browser
+       supplied value is never trusted - it is the one field that decides when
+       real mail goes out. */
+    if (action === 'update_recurrence') {
+      if (!campaign.recurrence) {
+        return NextResponse.json({ error: 'This campaign does not repeat.' }, { status: 400 });
+      }
+      const validation = validateRecurrence(body.recurrence);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: 'That schedule is not valid.', errors: validation.errors }, { status: 400 });
+      }
+      const recurrence = body.recurrence as MailRecurrence;
+      const next = nextOccurrence(recurrence, new Date());
+      if (!next) {
+        return NextResponse.json(
+          { error: 'That schedule has no future occurrence.' }, { status: 400 });
+      }
+      await upsertMailCampaign({
+        ...campaign,
+        recurrence,
+        status: 'scheduled',
+        sendAt: next.toISOString(),
+        recurrenceState: {
+          /* History is preserved unchanged: editing a schedule must not
+             rewrite what past occurrences did. */
+          ...(campaign.recurrenceState ?? { status: 'active' }),
+          status: 'active',
+          nextRunAt: next.toISOString(),
+        },
+      });
+      await appendSuperAdminAudit({
+        action: 'mail.campaign.recurrence_updated',
+        targetType: 'mail_campaign',
+        targetId: id,
+        details: { schedule: describeRecurrence(recurrence), nextRunAt: next.toISOString() },
+      }).catch(() => {});
+      return NextResponse.json({
+        ok: true, nextRunAt: next.toISOString(), summary: describeRecurrence(recurrence),
+      });
+    }
+
     if (action === 'cancel') {
       /* Only before processing starts. Cancelling mid-send would leave some
          recipients mailed and the rest not, with no record of the boundary —

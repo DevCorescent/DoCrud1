@@ -5,6 +5,7 @@ import JobsTab from '@/components/superadmin/JobsTab';
 import SeoTab from '@/components/superadmin/SeoTab';
 import MailHealthPanel from '@/components/superadmin/MailHealthPanel';
 import MailOverview from '@/components/superadmin/MailOverview';
+import MailCompose from '@/components/superadmin/mail/MailCompose';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { profileStatusStyle } from '@/lib/profile-score';
@@ -2337,7 +2338,7 @@ function MailTab() {
   const [msg, setMsg] = useState('');
   /* Only sections that are actually implemented appear here. An unbuilt tab
      showing "coming soon" would be worse than not offering it. */
-  const [view, setView] = useState<'overview' | 'outbox' | 'health'>('overview');
+  const [view, setView] = useState<'overview' | 'compose' | 'outbox' | 'health'>('overview');
   const [outbox, setOutbox] = useState<Record<string, unknown>[]>([]);
   /* Mass mail is irreversible, so it takes two deliberate steps: resolve the
      real recipient count on the server, show it, then require a second click. */
@@ -2402,7 +2403,7 @@ function MailTab() {
       {msg && <div className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">{msg}</div>}
 
       <div className="flex gap-1">
-        {(['overview', 'outbox', 'health'] as const).map((v) => (
+        {(['overview', 'compose', 'outbox', 'health'] as const).map((v) => (
           <button key={v} onClick={() => v === 'outbox' ? loadOutbox() : setView('overview')} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all capitalize ${view === v ? 'bg-amber-500/20 border-amber-500/40 text-amber-400' : 'border-zinc-700 text-zinc-500 hover:text-zinc-300'}`}>{v}</button>
         ))}
       </div>
@@ -2410,6 +2411,8 @@ function MailTab() {
       {/* The real dashboard: volume, campaign state and recent failures, all
           read from the outbox and campaign records. */}
       {view === 'overview' && <MailOverview onOpenTab={(t) => setView(t as 'health')} />}
+
+      {view === 'compose' && <MailCompose />}
 
       {view === 'health' && <MailHealthPanel />}
 

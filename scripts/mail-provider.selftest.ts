@@ -182,13 +182,20 @@ function main() {
   const ADMIN2 = read('components/SuperAdminPanel.tsx');
 
   check('the overview is mounted in the Mail Center', ADMIN2.includes('<MailOverview'));
+  /* Compose joined the nav in Phase 4; Overview is still where the tab opens. */
   check('overview is the default view',
-    ADMIN2.includes("useState<'overview' | 'outbox' | 'health'>('overview')"));
+    /const \[view, setView\] = useState<[^>]*'compose'[^>]*>\('overview'\)/.test(ADMIN2));
   /* Section 40: no placeholder tabs. Only implemented sections are offered. */
+  /* Section 40: only implemented sections are offered. Compose is real now;
+     templates/analytics/settings are still absent rather than stubbed. */
+  /* Anchored on the mail view declaration specifically — an unrelated
+     `useState<'overview' | …>` elsewhere in the panel matches a bare search. */
+  const navDecl = (/const \[view, setView\] = useState<[^>]*'compose'[^>]*>\([^)]*\)/.exec(ADMIN2) ?? [''])[0];
   check('no unimplemented tab is advertised',
-    !ADMIN2.includes('Coming soon') && !/'compose'|'templates'|'analytics'/.test(
-      ADMIN2.slice(ADMIN2.indexOf("useState<'overview' | 'outbox' | 'health'>"),
-                   ADMIN2.indexOf("useState<'overview' | 'outbox' | 'health'>") + 200)));
+    !ADMIN2.includes('Coming soon')
+    && !/'templates'|'analytics'|'settings'|'recipients'/.test(navDecl));
+  check('compose is a real section, not a placeholder',
+    navDecl.includes("'compose'") && ADMIN2.includes('<MailCompose />'));
   check('every figure comes from the real health endpoint',
     OVERVIEW.includes("fetch('/api/super-admin/mail/health'")
     && !/const \w+ = \[\s*\{ *label/.test(OVERVIEW));

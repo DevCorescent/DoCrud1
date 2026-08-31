@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import nodemailer from 'nodemailer';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
 import { getMailSettings } from '@/lib/server/settings';
 import { appendEmailOutboxEvent, createOutboundEmailId } from '@/lib/server/email-outbox';
 import { isValidEmail } from '@/lib/server/security';
 import { buildEmailChrome, escapeHtmlLite } from '@/lib/server/email-chrome';
+import { getMailProvider, classifyMailError } from '@/lib/server/mail-provider';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -47,23 +47,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'SMTP auth is required but username/password are missing.' }, { status: 400 });
   }
 
-  const transporter = nodemailer.createTransport({
-    host: settings.host,
-    port: Number(settings.port),
-    secure: settings.secure,
-    auth: settings.requireAuth ? { user: settings.username, pass: settings.password } : undefined,
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 15_000,
-  } as Parameters<typeof nodemailer.createTransport>[0]);
+  /* This route used to build its OWN unpooled transport, bypassing both the
+     pooled connection and the provider seam — a second SMTP implementation
+     that could drift from the one real sends use. It now verifies and sends
+     through the same provider as everything else, so a test genuinely
+     exercises the production path. */
+  const provider = getMailProvider();
   const startedAt = Date.now();
 
   // Step 1: verify connectivity
   try {
-    await transporter.verify();
+    const health = await provider.verify();
+    if (health.status !== 'healthy') {
+      throw Object.assign(new Error(health.failure?.message ?? 'SMTP connection failed'), {
+        responseCode: health.failure?.code,
+      });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'SMTP connection failed';
-    const hint = buildHint(message, settings.host, settings.port, settings.secure);
+    /* Classified here too, so a connection-stage failure reports in the same
+       vocabulary as a send-stage one — and says whether retrying could help. */
+    const failure = classifyMailError(err);
+    const hint = failure.advice || buildHint(message, settings.host, settings.port, settings.secure);
     await appendSuperAdminAudit({
       action: 'smtp_test_failed',
       details: { error: message, host: settings.host, port: settings.port },
@@ -73,6 +78,9 @@ export async function POST(req: NextRequest) {
       ok: false,
       stage: 'verify',
       error: message,
+      failureKind: failure.kind,
+      providerCode: failure.code,
+      retryable: failure.retryable,
       hint,
       config: { host: settings.host, port: settings.port, secure: settings.secure, requireAuth: settings.requireAuth },
       elapsedMs: Date.now() - startedAt,
@@ -133,9 +141,16 @@ export async function POST(req: NextRequest) {
     `,
   });
 
+  /* Past the verify-only branch a recipient must exist. Asserting it here
+     keeps the send path honest rather than relying on a flag set 100 lines
+     earlier. */
+  if (!recipient) {
+    return NextResponse.json({ error: 'A test recipient is required.' }, { status: 400 });
+  }
+
   let messageId: string | undefined;
   try {
-    const info = await transporter.sendMail({
+    const info = await provider.send({
       from: `"${settings.fromName}" <${settings.fromEmail}>`,
       to: recipient,
       replyTo: settings.replyTo || undefined,
@@ -146,7 +161,10 @@ export async function POST(req: NextRequest) {
     messageId = info.messageId;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Send failed';
-    const hint = buildHint(message, settings.host, settings.port, settings.secure);
+    /* Same classifier the campaign path uses, so a test reports the failure in
+       the same vocabulary — and says whether retrying could ever help. */
+    const failure = classifyMailError(err);
+    const hint = failure.advice || buildHint(message, settings.host, settings.port, settings.secure);
     await appendSuperAdminAudit({
       action: 'smtp_test_send_failed',
       details: { error: message, recipient, host: settings.host },
@@ -156,6 +174,9 @@ export async function POST(req: NextRequest) {
       ok: false,
       stage: 'send',
       error: message,
+      failureKind: failure.kind,
+      providerCode: failure.code,
+      retryable: failure.retryable,
       hint,
       config: { host: settings.host, port: settings.port, secure: settings.secure },
       elapsedMs: Date.now() - startedAt,

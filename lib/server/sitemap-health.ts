@@ -53,15 +53,44 @@ export interface SitemapCategory {
 }
 
 export interface SitemapHealthReport {
-  status: 'healthy' | 'warning' | 'error';
+  /* 'unavailable' is distinct from 'error' on purpose: "we could not reach
+     production" and "production served something broken" are different
+     problems with different remedies, and collapsing them tells an admin to
+     go fix a sitemap that may be perfectly fine. */
+  status: 'healthy' | 'warning' | 'error' | 'unavailable';
   checkedAt: string;
 
+  /** The canonical PRODUCTION URLs, for display and for the Open buttons. */
   sitemapUrl: string;
   robotsUrl: string;
   canonicalHost: string;
+  /** The origin that was actually fetched. In local development this is the
+      loopback server, NOT production — and the report must say so rather than
+      showing a production URL beside a health verdict earned elsewhere. */
+  checkedOrigin: string;
+  /** True only when the validated origin is the canonical production host. */
+  isProductionCheck: boolean;
 
   /** Round-trip time for the sitemap request, in ms. null when unreachable. */
   responseMs: number | null;
+  /** HTTP status of the sitemap response. null when it could not be reached. */
+  httpStatus: number | null;
+  /** Content-Type as served. A 200 of text/html is not a sitemap. */
+  contentType: string | null;
+  /** Whether the body parsed as a sitemap document. */
+  xmlValid: boolean;
+  robotsResponseMs: number | null;
+  robotsHttpStatus: number | null;
+  /** The Sitemap: line robots.txt declares, when it has one. */
+  robotsSitemapReference: string | null;
+  /** 1 for a plain urlset; for an index, 1 + the children actually fetched. */
+  sitemapCount: number;
+  childSitemaps: Array<{ url: string; urls: number | null; ok: boolean }>;
+  /** URLs on http:// rather than https://. */
+  httpUrls: number | null;
+  /** True when a diagnostic limit stopped this being a full validation. */
+  validationLimited: boolean;
+  limitReason?: string;
   /** From the sitemap response's Date/Age headers when present. */
   lastGenerated: string | null;
 
@@ -103,6 +132,14 @@ const CATEGORY_RULES: Array<{ category: string; test: (path: string) => boolean 
   { category: 'Virtual IDs', test: (p) => p.startsWith('/id/') },
   { category: 'Docrudians rooms', test: (p) => p.startsWith('/docrudians/room/') },
 ];
+
+/* ── Diagnostic limits ─────────────────────────────────────────────────────
+   This fetches a live document, so it needs hard ceilings. Exceeding one is
+   reported as `validationLimited` rather than silently truncated: a partial
+   check presented as a complete one is worse than no check at all. */
+const MAX_BODY_BYTES = 25 * 1024 * 1024;   // 25 MB
+const MAX_CHILD_SITEMAPS = 20;
+const MAX_URLS_VALIDATED = 50_000;
 
 /** Paths that must never appear in a public sitemap. */
 const PRIVATE_PREFIXES = [
@@ -155,6 +192,10 @@ async function fetchText(url: string, timeoutMs = 15_000) {
       ok: res.ok,
       status: res.status,
       body,
+      /* Byte length, not character count — a multi-byte document is bigger
+         than its string length suggests. */
+      bytes: Buffer.byteLength(body, 'utf8'),
+      contentType: res.headers.get('content-type'),
       ms: Date.now() - started,
       date: res.headers.get('date'),
       age: res.headers.get('age'),
@@ -185,6 +226,11 @@ function parseSitemapUrls(xml: string): { urls: string[]; isIndex: boolean } | n
 
   const root = doc.documentElement.nodeName.toLowerCase();
   if (root !== 'urlset' && root !== 'sitemapindex') return null;
+
+  /* A document can be well-formed XML with the right root and still not be a
+     sitemap. The namespace is what makes it one to a crawler. */
+  const ns = doc.documentElement.getAttribute('xmlns') || '';
+  if (ns && !ns.includes('sitemaps.org/schemas/sitemap')) return null;
 
   const locs = doc.getElementsByTagName('loc');
   const urls: string[] = [];
@@ -222,7 +268,19 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
     sitemapUrl: `${canonicalHost}/sitemap.xml`,
     robotsUrl: `${canonicalHost}/robots.txt`,
     canonicalHost,
+    checkedOrigin: origin,
+    isProductionCheck: origin === canonicalHost,
     responseMs: null,
+    httpStatus: null,
+    contentType: null,
+    xmlValid: false,
+    robotsResponseMs: null,
+    robotsHttpStatus: null,
+    robotsSitemapReference: null,
+    sitemapCount: 1,
+    childSitemaps: [],
+    httpUrls: null,
+    validationLimited: false,
     lastGenerated: null,
     totalUrls: null,
     duplicateUrls: null,
@@ -247,15 +305,24 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
   try {
     sitemapRes = await fetchText(sitemapUrl);
   } catch (err) {
+    /* Could not reach production at all: DNS, refusal, timeout. That is not
+       the same as a broken sitemap, and must not be reported as one. */
     add('reachable', 'Sitemap is reachable', 'fail',
       err instanceof Error && err.name === 'AbortError'
         ? 'The sitemap request timed out.'
         : 'The sitemap could not be fetched.');
-    return { ...base, status: 'error' };
+    return { ...base, status: 'unavailable' };
   }
 
   base.responseMs = sitemapRes.ms;
+  base.httpStatus = sitemapRes.status;
+  base.contentType = sitemapRes.contentType;
   base.lastGenerated = sitemapRes.date;
+
+  if (sitemapRes.bytes > MAX_BODY_BYTES) {
+    base.validationLimited = true;
+    base.limitReason = `The sitemap is larger than the ${Math.round(MAX_BODY_BYTES / 1024 / 1024)} MB diagnostic limit.`;
+  }
 
   if (!sitemapRes.ok) {
     add('reachable', 'Sitemap is reachable', 'fail',
@@ -263,6 +330,13 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
     return { ...base, status: 'error' };
   }
   add('reachable', 'Sitemap is reachable', 'pass');
+
+  /* HTTP 200 alone proves nothing: a rewritten route happily returns 200 with
+     an HTML error page. */
+  const ct = (sitemapRes.contentType || '').toLowerCase();
+  add('content-type', 'Sitemap is served as XML',
+    !ct || ct.includes('xml') ? 'pass' : 'fail',
+    ct && !ct.includes('xml') ? `The sitemap is served as ${ct}, not XML.` : undefined);
 
   /* ── 2. Valid XML ── */
   const parsed = parseSitemapUrls(sitemapRes.body);
@@ -273,7 +347,58 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
   }
   add('xml', 'Sitemap is valid XML', 'pass');
 
-  const urls = parsed.urls;
+  base.xmlValid = true;
+
+  let urls = parsed.urls;
+
+  /* A <sitemapindex> lists other sitemaps, not pages. Counting its children as
+     "502 URLs" would be flatly wrong, so the children are fetched and their
+     URLs aggregated — bounded, and never recursing further than one level. */
+  if (parsed.isIndex) {
+    const children = urls.slice(0, MAX_CHILD_SITEMAPS);
+    if (urls.length > MAX_CHILD_SITEMAPS) {
+      base.validationLimited = true;
+      base.limitReason = `Only the first ${MAX_CHILD_SITEMAPS} of ${urls.length} child sitemaps were validated.`;
+    }
+
+    const collected: string[] = [];
+    for (const childUrl of children) {
+      try {
+        const childRes = await fetchText(childUrl, 10_000);
+        if (!childRes.ok) {
+          base.childSitemaps.push({ url: childUrl, urls: null, ok: false });
+          continue;
+        }
+        const childParsed = parseSitemapUrls(childRes.body);
+        if (!childParsed) {
+          base.childSitemaps.push({ url: childUrl, urls: null, ok: false });
+          continue;
+        }
+        /* One level only. A child that is itself an index is reported rather
+           than followed, which is what stops a malicious or looping sitemap
+           from driving unbounded fetches. */
+        collected.push(...childParsed.urls);
+        base.childSitemaps.push({ url: childUrl, urls: childParsed.urls.length, ok: true });
+      } catch {
+        base.childSitemaps.push({ url: childUrl, urls: null, ok: false });
+      }
+    }
+
+    base.sitemapCount = 1 + base.childSitemaps.length;
+    urls = collected;
+
+    const brokenChildren = base.childSitemaps.filter((c) => !c.ok).length;
+    add('child-sitemaps', 'All child sitemaps are valid',
+      brokenChildren === 0 ? 'pass' : 'fail',
+      brokenChildren ? `${brokenChildren} child sitemap(s) could not be read.` : undefined);
+  }
+
+  if (urls.length > MAX_URLS_VALIDATED) {
+    base.validationLimited = true;
+    base.limitReason = `Only the first ${MAX_URLS_VALIDATED.toLocaleString()} of ${urls.length.toLocaleString()} URLs were validated.`;
+    urls = urls.slice(0, MAX_URLS_VALIDATED);
+  }
+
   base.totalUrls = urls.length;
 
   if (urls.length === 0) {
@@ -290,6 +415,7 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
   let nonCanonical = 0;
   let schemeMismatch = 0;
   let wwwVariant = 0;
+  let httpUrls = 0;
   let privateUrls = 0;
   const paths: string[] = [];
 
@@ -302,6 +428,8 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
     let u: URL;
     try { u = new URL(raw); } catch { invalid += 1; continue; }
     if (u.protocol !== 'http:' && u.protocol !== 'https:') { invalid += 1; continue; }
+
+    if (u.protocol === 'http:') httpUrls += 1;
 
     const host = u.hostname.toLowerCase();
     if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')) localhost += 1;
@@ -330,6 +458,7 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
   base.localhostUrls = localhost;
   base.nonCanonicalHostUrls = nonCanonical;
   base.schemeMismatches = schemeMismatch;
+  base.httpUrls = httpUrls;
   base.wwwVariantUrls = wwwVariant;
   base.privateUrls = privateUrls;
 
@@ -344,6 +473,8 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
       ? `${nonCanonical} URL(s) do not use ${canonicalHost}`
         + (wwwVariant ? ` (${wwwVariant} are www/non-www variants).` : '.')
       : undefined);
+  add('https', 'All URLs use HTTPS', httpUrls === 0 ? 'pass' : 'fail',
+    httpUrls ? `${httpUrls} URL(s) are served over plain http.` : undefined);
   add('scheme', 'HTTP/HTTPS is consistent', schemeMismatch === 0 ? 'pass' : 'fail',
     schemeMismatch ? `${schemeMismatch} URL(s) use a different scheme to the canonical host.` : undefined);
   add('private', 'No private or admin URLs', privateUrls === 0 ? 'pass' : 'fail',
@@ -366,6 +497,8 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
   let robotsBody = '';
   try {
     const robotsRes = await fetchText(robotsUrl, 10_000);
+    base.robotsResponseMs = robotsRes.ms;
+    base.robotsHttpStatus = robotsRes.status;
     if (robotsRes.ok) { robotsBody = robotsRes.body; base.robotsAvailable = true; }
   } catch { /* handled below */ }
 
@@ -377,6 +510,7 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
 
     const declared = /^\s*sitemap:\s*(\S+)/im.exec(robotsBody);
     base.sitemapDeclaredInRobots = Boolean(declared);
+    base.robotsSitemapReference = declared ? declared[1].trim() : null;
     add('robots-sitemap', 'robots.txt declares the sitemap',
       declared ? 'pass' : 'warn',
       declared ? undefined : 'robots.txt does not declare a Sitemap: line.');
@@ -417,7 +551,17 @@ export async function validateSitemap({ origin }: ValidateOptions): Promise<Site
       : 'Search engine indexing is disabled in the SEO Manager while the sitemap '
         + 'still advertises these URLs — a configuration conflict.');
 
+  if (origin !== canonicalHost) {
+    add('production-target', 'Validated the production site', 'warn',
+      `This check ran against ${origin}, not ${canonicalHost}. `
+      + 'The result describes the local server, not production.');
+  }
+
   /* ── 7. Overall status ── */
+  if (base.validationLimited && base.limitReason) {
+    add('complete', 'Validation covered the whole sitemap', 'warn', base.limitReason);
+  }
+
   const failed = checks.filter((c) => c.status === 'fail').length;
   const warned = checks.filter((c) => c.status === 'warn').length;
   base.status = failed > 0 ? 'error' : warned > 0 ? 'warning' : 'healthy';

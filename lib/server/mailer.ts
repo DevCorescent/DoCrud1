@@ -47,7 +47,10 @@ export async function getCachedTransporter(): Promise<Transporter> {
     connectionTimeout: 30_000,  // GoDaddy cold-start can take 10-15 s
     greetingTimeout:   20_000,
     socketTimeout:     30_000,
-    tls: { rejectUnauthorized: false },
+    /* Certificate verification stays ON. Disabling it makes the connection
+       trivially interceptable, and it hides real provider certificate problems
+       instead of surfacing them. If a provider genuinely presents a bad
+       certificate, that is a provider issue to fix, not one to silence here. */
   });
 
   _cachedConfigKey = configKey;

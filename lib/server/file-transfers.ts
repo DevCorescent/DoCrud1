@@ -14,6 +14,7 @@ import {
   patchFileTransfersByLockerId,
   aggregatePublicAnalyticsForUser,
   selectExistingAccessPasswords,
+  selectPublicFileTransferSitemapRows,
 } from '@/lib/server/db/file-transfers-rows';
 
 export { deleteFileTransferRow, patchFileTransfersByFolderId, patchFileTransfersByLockerId };
@@ -97,6 +98,27 @@ export function resolveFileTransferDataUrl(
     });
   }
   return entry.dataUrl;
+}
+
+/**
+ * Public transfers for the sitemap: ids and timestamps only.
+ *
+ * Deliberately NOT `getFileTransfers()`, which returns whole documents
+ * including file blobs. Falls back to the local-file path when no database is
+ * configured, applying the same filter so both paths agree.
+ */
+export async function getPublicFileTransfersForSitemap(
+  limit = 5000,
+): Promise<Array<{ id: string; updatedAt?: string; createdAt?: string }>> {
+  if (getDbPool()) {
+    const rows = await selectPublicFileTransferSitemapRows(limit);
+    if (rows) return rows;
+  }
+  const all = await readJsonFile<SecureFileTransfer[]>(fileTransfersPath, []);
+  return all
+    .filter((ft) => ft.directoryVisibility === 'public' && ft.id && !ft.revokedAt)
+    .slice(0, limit)
+    .map((ft) => ({ id: ft.id, updatedAt: ft.updatedAt, createdAt: ft.createdAt }));
 }
 
 export async function getFileTransfers(): Promise<SecureFileTransfer[]> {

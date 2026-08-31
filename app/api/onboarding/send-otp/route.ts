@@ -293,7 +293,9 @@ async function dispatchOtpEmail(to: string, otp: string, firstName: string): Pro
         connectionTimeout: 30_000,
         greetingTimeout:   20_000,
         socketTimeout:     30_000,
-        tls: { rejectUnauthorized: false },
+        /* Verification ON, matching lib/server/mailer.ts. This is an
+           authenticated connection to our own configured provider, where a
+           certificate mismatch is a real problem worth failing on. */
       });
       const ok = await trySend(relayTransporter, mailOptions, `relay-attempt-${attempt}(${smtp.host})`);
       if (ok) return;
@@ -312,6 +314,14 @@ async function dispatchOtpEmail(to: string, otp: string, firstName: string): Pro
       connectionTimeout: 20_000,
       greetingTimeout:   15_000,
       socketTimeout:     20_000,
+      /* DELIBERATELY still permissive, unlike every other transport here.
+         This is opportunistic STARTTLS straight to a RECIPIENT's MX host,
+         which very often presents a certificate that does not match the MX
+         name. Strict verification would turn this last-resort fallback into a
+         guaranteed failure for many domains, so it keeps SMTP's normal
+         opportunistic-TLS behaviour: encrypt when possible, still deliver when
+         the certificate cannot be validated. Nothing we authenticate to is
+         reached over this transport. */
       tls: { rejectUnauthorized: false },
     });
     const ok = await trySend(directTransporter, mailOptions, `direct-mx-587(${mxHost})`);

@@ -410,7 +410,9 @@ export async function POST(req: NextRequest) {
       auth:   settings.requireAuth
         ? { user: settings.username, pass: settings.password }
         : undefined,
-      tls: { rejectUnauthorized: false }, // allow self-signed for dev
+      /* Certificate verification stays ON, matching lib/server/mailer.ts.
+         The "self-signed for dev" exemption also applied in production, where
+         it silently accepted any certificate. */
     });
 
     /* ── Mail options (anti-spam best practices) ── */

@@ -16,7 +16,7 @@ import { getVirtualIdCards } from '@/lib/server/virtual-ids';
 import { listBusinessPages, type BusinessPage } from '@/lib/server/business-pages';
 import { listResumeDirectory } from '@/lib/server/resume-directory';
 import { listMarketplaceItems } from '@/lib/server/template-marketplace';
-import { getFileTransfers } from '@/lib/server/file-transfers';
+import { getPublicFileTransfersForSitemap } from '@/lib/server/file-transfers';
 import { getPublicAppBaseUrl } from '@/lib/url';
 import type { SecureFileTransfer, TemplateMarketplaceItem } from '@/types/document';
 import type { ResumeDirectoryEntry } from '@/lib/server/resume-directory';
@@ -51,8 +51,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     listBusinessPages({ limit: 2000 }).then((r) => r.pages).catch(() => []),
     listResumeDirectory({ limit: 2000 }).then((r) => r.entries).catch(() => []),
     listMarketplaceItems({ limit: 2000, sort: 'popular' }).then((r) => r.items).catch(() => []),
+    /* Projected and filtered in the database. This used to call
+       getFileTransfers(), which returns whole documents including file blobs —
+       measured at ~161s for 189 transfers, so the 8s guard below fired every
+       time and every /published/ URL was silently missing from the sitemap.
+       The guard stays as a safety net; it should no longer be reached. */
     Promise.race([
-      getFileTransfers(),
+      getPublicFileTransfersForSitemap(5000),
       new Promise<[]>(r => setTimeout(() => r([]), 8000)),
     ]).catch(() => []),
   ]);
@@ -183,9 +188,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.72,
     }));
 
-  const publishedItemEntries: MetadataRoute.Sitemap = (fileTransfers as SecureFileTransfer[])
-    .filter((ft) => ft.directoryVisibility === 'public' && ft.id && !ft.revokedAt)
-    .slice(0, 5000)   // cap to avoid huge sitemaps
+  /* Already filtered to public, non-revoked and capped by the query. */
+  const publishedItemEntries: MetadataRoute.Sitemap = fileTransfers
+    .filter((ft) => Boolean(ft.id))
     .map((ft) => ({
       url: `${baseUrl}/published/${ft.id}`,
       lastModified: new Date(ft.updatedAt || ft.createdAt || now),

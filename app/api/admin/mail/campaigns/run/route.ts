@@ -11,8 +11,13 @@ export async function POST(request: NextRequest) {
     const session = await getAuthSession();
     if (session?.user?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     const origin = getOriginForRequest(request);
-    const results = await runDueMailCampaigns(origin);
-    return NextResponse.json({ results });
+    /* runDueMailCampaigns now returns a summary rather than a bare array; the
+       existing `results` key is preserved so this endpoint's response shape is
+       unchanged for anything already reading it. */
+    const summary = await runDueMailCampaigns(origin);
+    /* The summary already carries `results`, so the response keeps the exact
+       key this endpoint has always returned, plus the new counts. */
+    return NextResponse.json(summary);
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Failed to run due campaigns' }, { status: 500 });

@@ -21,6 +21,7 @@ import {
   getProviderHealth, getCachedProviderHealth, classifyMailError,
 } from '@/lib/server/mail-provider';
 
+import { rate } from '@/lib/email/mail-metrics';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 45;
@@ -73,6 +74,14 @@ export async function GET(req: NextRequest) {
     const opens = sent.reduce((n, e) => n + (e.tracking?.opens ?? 0), 0);
     const clicks = sent.reduce((n, e) => n + (e.tracking?.clicks ?? 0), 0);
     const attempted = sent.length + failed.length;
+    /* Messages with at least one tracked event, NOT the events themselves.
+
+       The rates below used to divide total opens by message count, so three
+       opens of one message in a two-message send reported 150% - a percentage
+       that cannot mean anything. Counting messages keeps the rate at or below
+       100%, and matches the definition Analytics uses. */
+    const openedMessages = sent.filter((e) => (e.tracking?.opens ?? 0) > 0).length;
+    const clickedMessages = sent.filter((e) => (e.tracking?.clicks ?? 0) > 0).length;
 
     return NextResponse.json({
       provider: health,
@@ -96,11 +105,14 @@ export async function GET(req: NextRequest) {
         totalQueued: queued.length,
         /* Reported as "accepted by the provider", not "delivered": without
            provider delivery callbacks the app cannot know about the inbox. */
-        acceptanceRate: attempted > 0 ? Math.round((sent.length / attempted) * 1000) / 10 : null,
+        /* The SHARED definitions, so Health and Analytics cannot disagree
+           about what a rate means. `rate` returns null for an empty
+           denominator - "no data" and "0%" are different answers. */
+        acceptanceRate: rate(sent.length, attempted),
         opens,
         clicks,
-        openRate: sent.length > 0 ? Math.round((opens / sent.length) * 1000) / 10 : null,
-        clickRate: sent.length > 0 ? Math.round((clicks / sent.length) * 1000) / 10 : null,
+        openRate: rate(openedMessages, sent.length),
+        clickRate: rate(clickedMessages, sent.length),
         lastSentAt: sent[0]?.sentAt ?? sent[0]?.createdAt ?? null,
         lastFailedAt: failed[0]?.createdAt ?? null,
       },

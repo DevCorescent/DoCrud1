@@ -1,3 +1,14 @@
+/**
+ * POST /api/super-admin/mail/test - SMTP CONNECTION diagnostics.
+ *
+ * This route verifies the configured server and, optionally, pushes a fixed
+ * diagnostic message through it. It is about the CONNECTION, not about any
+ * email an admin has written.
+ *
+ * Content test sends belong to /api/super-admin/mail/test-send, which renders
+ * whatever is in the editor. Compose's "Send test" button used to point here,
+ * so it mailed this diagnostic message instead of the email being composed.
+ */
 import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
 import { getMailSettings } from '@/lib/server/settings';
@@ -209,8 +220,12 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    stage: 'sent',
-    message: `Test email delivered to ${recipient} in ${totalMs}ms.`,
+    stage: 'accepted',
+    /* "Accepted", never "delivered". The provider took the message; whether it
+       reached the inbox is not something this application can observe, and
+       saying otherwise turned a working SMTP handshake into a false promise. */
+    message: `The provider accepted a diagnostic message for ${recipient} in ${totalMs}ms. `
+      + 'Check that inbox to confirm it arrived.',
     messageId,
     config: { host: settings.host, port: settings.port, secure: settings.secure, fromEmail: settings.fromEmail, fromName: settings.fromName },
     elapsedMs: totalMs,

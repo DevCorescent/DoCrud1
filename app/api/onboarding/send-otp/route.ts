@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import { getStoredUsers } from '@/lib/server/auth';
 import { otpSessionsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getMailSettings } from '@/lib/server/settings';
+import { resolveSystemEmail } from '@/lib/server/system-emails';
 import { enforceRateLimits, getClientIp, rateKeyEmail, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 import {
   appendEmailOutboxEvent,
@@ -267,13 +268,24 @@ async function dispatchOtpEmail(to: string, otp: string, firstName: string): Pro
 
   const messageId = `<otp-${Date.now()}-${crypto.randomBytes(6).toString('hex')}@${smtp.fromEmail.split('@')[1] ?? 'docrud.com'}>`;
 
+  /* Presentation comes from the PUBLISHED system-email configuration when one
+     exists and renders cleanly. `resolveSystemEmail` returns null for every
+     failure mode — no published version, storage down, corrupt content, an
+     unresolved variable — so the built-in template below stays the guaranteed
+     path. An admin's editing mistake must never stop a verification code
+     arriving. The OTP itself is still generated, hashed and expired by this
+     route; only the wording is configurable. */
+  const configured = await resolveSystemEmail('signup_otp', {
+    otp, firstName: firstName || 'there', email: to,
+  }).catch(() => null);
+
   const mailOptions = {
     from:    `"${smtp.fromName ?? 'Docrud'}" <${smtp.fromEmail}>`,
     to,
     replyTo: smtp.replyTo || smtp.fromEmail,
-    subject: `${otp} is your Docrud verification code`,
-    text:    buildOtpText(otp, firstName),
-    html:    buildOtpHtml(otp, firstName),
+    subject: configured?.subject ?? `${otp} is your Docrud verification code`,
+    text:    configured?.text ?? buildOtpText(otp, firstName),
+    html:    configured?.html ?? buildOtpHtml(otp, firstName),
     headers: {
       'X-Entity-Ref-ID': messageId,
       'X-Mailer':        'Docrud Mailer',

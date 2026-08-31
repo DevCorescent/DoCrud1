@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
         selected: r.selected,
         excluded: r.excluded,
         invalid: r.invalid,
+        suppressed: r.suppressed,
         final: r.final,
         /* Names and addresses only — never the full user record. */
         sample: r.sample.map((u) => ({ name: u.name, email: u.email, accountType: u.accountType })),
@@ -165,6 +166,7 @@ export async function POST(req: NextRequest) {
           recipientCount: recipients.final,
           excluded: recipients.excluded,
           invalid: recipients.invalid,
+          suppressed: recipients.suppressed,
           scheduledFor: campaign.sendAt,
           timezone: timezone || 'server default',
         },

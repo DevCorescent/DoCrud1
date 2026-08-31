@@ -79,3 +79,47 @@ export function formatInZone(date: Date, timeZone: string): string {
     return date.toISOString();
   }
 }
+
+/**
+ * The calendar day an instant falls on, in a given timezone: "YYYY-MM-DD".
+ *
+ * Analytics buckets by local day, and the naive approach - slicing an ISO
+ * string - buckets by UTC day instead. For Asia/Kolkata that is wrong for five
+ * and a half hours of every day: a send at 02:00 IST would be reported as the
+ * previous day. Built on `Intl`, so DST transitions are handled by the same
+ * mechanism the rest of this module uses rather than by arithmetic.
+ */
+export function zonedDayKey(date: Date, timeZone: string): string {
+  try {
+    /* en-CA formats as YYYY-MM-DD, which is exactly the key wanted here. */
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(date);
+  } catch {
+    /* An unknown zone falls back to UTC rather than throwing mid-aggregation. */
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * The Monday of the week an instant falls in, in a given timezone.
+ *
+ * Weeks start on Monday because a mail week does; a Sunday-start bucket splits
+ * every working week across two rows.
+ */
+export function zonedWeekKey(date: Date, timeZone: string): string {
+  const day = zonedDayKey(date, timeZone);
+  const [y, m, d] = day.split('-').map(Number);
+  /* Anchored at noon UTC so adding days cannot cross a DST boundary into the
+     previous or next day. */
+  const anchor = new Date(Date.UTC(y, m - 1, d, 12));
+  /* getUTCDay: 0 = Sunday. Shift so Monday is the start. */
+  const offset = (anchor.getUTCDay() + 6) % 7;
+  anchor.setUTCDate(anchor.getUTCDate() - offset);
+  return anchor.toISOString().slice(0, 10);
+}
+
+/** Is this a timezone the application is willing to aggregate in? */
+export function isSupportedTimezone(value: string): boolean {
+  return SUPPORTED_TIMEZONES.includes(value);
+}

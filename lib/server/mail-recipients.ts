@@ -20,6 +20,11 @@
 import { getStoredUsers } from '@/lib/server/auth';
 import { isValidEmail } from '@/lib/server/security';
 
+import { AUDIENCE_VARIABLES, type AudienceVariable } from '@/lib/email/variable-contracts';
+import {
+  extractEmailVariables, unsupportedEmailVariables, resolveEmailVariables,
+} from '@/lib/email/render-email';
+import { filterSuppressed } from '@/lib/server/mail-suppression';
 export type MailAudienceMode =
   | 'all'
   | 'individuals'
@@ -66,6 +71,14 @@ export interface RecipientResolution {
   excluded: number;
   /** Present but not a valid address. */
   invalid: number;
+  /**
+   * Unsubscribed or administratively suppressed.
+   *
+   * Reported separately from `excluded` because it is the one category an
+   * admin must not treat as a fixable data problem - it is a person's stated
+   * choice, and the send path enforces it again regardless of this figure.
+   */
+  suppressed: number;
   /** What would actually be mailed. */
   final: number;
   /** The deliverable addresses, lower-cased and de-duplicated. */
@@ -152,7 +165,7 @@ async function loadUsers(): Promise<Array<{ raw: Record<string, unknown>; user: 
  * count the browser produced earlier.
  */
 /** Why one candidate did or did not make the final list. */
-export type RecipientOutcome = 'included' | 'excluded' | 'invalid';
+export type RecipientOutcome = 'included' | 'excluded' | 'invalid' | 'suppressed';
 
 export interface RecipientRow {
   name: string;
@@ -232,13 +245,27 @@ export async function resolveRecipients(segment: MailSegment): Promise<Recipient
   const matched = await matchedFor(segment);
   const { rows, emails } = classifyRecipients(matched, segment.mode);
 
+  /* Suppression is applied to the SAME pass that produced the rows, so the
+     count an admin is shown and the addresses that would be mailed cannot
+     drift apart. The send path checks again immediately before sending - this
+     figure informs the admin, it does not authorise anything. */
+  const { eligible, suppressed } = await filterSuppressed(emails);
+  const suppressedSet = new Set(suppressed);
+  for (const row of rows) {
+    if (row.outcome === 'included' && suppressedSet.has(row.email)) {
+      row.outcome = 'suppressed';
+      row.reason = 'Unsubscribed or suppressed — will not be sent';
+    }
+  }
+
   return {
     selected: matched.length,
     excluded: rows.filter((r) => r.outcome === 'excluded').length,
     invalid: rows.filter((r) => r.outcome === 'invalid').length,
-    final: emails.length,
-    emails,
-    sample: matched.filter((u) => emails.includes(u.email)).slice(0, 8),
+    suppressed: suppressed.length,
+    final: eligible.length,
+    emails: eligible,
+    sample: matched.filter((u) => eligible.includes(u.email)).slice(0, 8),
     invalidSamples: rows.filter((r) => r.outcome === 'invalid').slice(0, 10).map((r) => r.email),
   };
 }
@@ -346,37 +373,32 @@ export async function searchRecipientUsers(opts: {
    anything else is rejected before sending rather than mailing a literal
    "{{city}}" to thousands of people. */
 
-export const SUPPORTED_VARIABLES = [
-  'firstName', 'lastName', 'fullName', 'email', 'companyName', 'role',
-] as const;
-export type SupportedVariable = typeof SUPPORTED_VARIABLES[number];
+export const SUPPORTED_VARIABLES = AUDIENCE_VARIABLES;
+export type SupportedVariable = AudienceVariable;
 
-const VARIABLE_PATTERN = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+/* The pattern, the extractor and the substitution all live in the canonical
+   renderer now. This file used to carry its own copy of each — a second
+   implementation that happened to agree with the others, which is not the same
+   thing as being the same code. */
 
 /** Every variable referenced by the content, in order of first appearance. */
-export function extractVariables(content: string): string[] {
-  const found: string[] = [];
-  /* exec-loop rather than matchAll: the project's compile target does not
-     allow iterating the matchAll result. */
-  const re = new RegExp(VARIABLE_PATTERN.source, 'g');
-  let m: RegExpExecArray | null = re.exec(content);
-  while (m !== null) {
-    if (!found.includes(m[1])) found.push(m[1]);
-    m = re.exec(content);
-  }
-  return found;
-}
+export const extractVariables = extractEmailVariables;
 
 /** Variables the app cannot resolve. A non-empty result must block sending. */
 export function unknownVariables(content: string): string[] {
-  return extractVariables(content).filter(
-    (v) => !(SUPPORTED_VARIABLES as readonly string[]).includes(v),
-  );
+  return unsupportedEmailVariables(content, SUPPORTED_VARIABLES);
 }
 
-export function renderVariables(content: string, user: RecipientUser): string {
+/**
+ * The values a real recipient contributes.
+ *
+ * Exported because the campaign send loop needs exactly this map: the loop is
+ * what makes `{{firstName}}` a promise the product actually keeps rather than
+ * a placeholder mailed verbatim to an entire audience.
+ */
+export function recipientVariableValues(user: RecipientUser): Record<SupportedVariable, string> {
   const parts = (user.name || '').trim().split(/\s+/).filter(Boolean);
-  const values: Record<SupportedVariable, string> = {
+  return {
     firstName: parts[0] || 'there',
     lastName: parts.slice(1).join(' ') || '',
     fullName: user.name || 'there',
@@ -384,8 +406,29 @@ export function renderVariables(content: string, user: RecipientUser): string {
     companyName: user.organizationName || '',
     role: user.role || '',
   };
-  return content.replace(VARIABLE_PATTERN, (whole, name: string) =>
-    (SUPPORTED_VARIABLES as readonly string[]).includes(name)
-      ? values[name as SupportedVariable]
-      : whole);
+}
+
+export function renderVariables(content: string, user: RecipientUser): string {
+  return resolveEmailVariables(content, recipientVariableValues(user), { escape: false });
+}
+
+/**
+ * The matched users behind a segment, not just their addresses.
+ *
+ * Personalisation needs the person. `resolveRecipients` deliberately returns
+ * only counts and addresses, because that is all the confirmation screen may
+ * see; the send loop needs more, and asks for it explicitly.
+ */
+export async function resolveRecipientUsers(segment: MailSegment): Promise<RecipientUser[]> {
+  const matched = await matchedFor(segment);
+  const { emails } = classifyRecipients(matched, segment.mode);
+  const deliverable = new Set(emails);
+  const seen = new Set<string>();
+  const out: RecipientUser[] = [];
+  for (const u of matched) {
+    if (!deliverable.has(u.email) || seen.has(u.email)) continue;
+    seen.add(u.email);
+    out.push(u);
+  }
+  return out;
 }

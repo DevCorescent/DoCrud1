@@ -32,12 +32,35 @@ const PublicHomepage = NextDynamic(() => import('@/components/PublicHomepage'), 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await getSeoSettings().catch(() => DEFAULT_SEO_SETTINGS);
   const seo = resolveSeo(settings);
-  return buildPageMetadata({
-  title: seo.title,
-  description: seo.description,
-  path: '/',
-  keywords: ['docrud', 'document management software', 'pdf editor', 'secure file sharing', 'form builder', 'ai document review'],
+  const base = buildPageMetadata({
+    title: seo.title,
+    description: seo.description,
+    path: '/',
+    image: seo.ogImage,
+    keywords: settings.keywords,
   });
+
+  /* Page metadata OVERRIDES layout metadata in Next.js, so the layout's
+     carefully resolved social tags were being replaced here by ones
+     `buildPageMetadata` synthesised from the title alone — which is why the
+     SEO Manager's Open Graph and Twitter fields had no effect on the homepage,
+     and why og:image was serving the favicon. The admin's resolved values are
+     re-applied on top. */
+  return {
+    ...base,
+    openGraph: {
+      ...base.openGraph,
+      title: seo.ogTitle,
+      description: seo.ogDescription,
+      images: [{ url: seo.ogImage, width: 1200, height: 630, alt: seo.ogTitle }],
+    },
+    twitter: {
+      ...base.twitter,
+      title: seo.twitterTitle,
+      description: seo.twitterDescription,
+      images: [seo.twitterImage || seo.ogImage],
+    },
+  };
 }
 
 export default async function Home() {

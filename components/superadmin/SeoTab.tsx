@@ -263,6 +263,18 @@ export default function SeoTab() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  /* Publishing is separate from saving: a save stages a draft, publishing puts
+     it in front of the public. */
+  const [hasUnpublished, setHasUnpublished] = useState(false);
+  const [publishedAt, setPublishedAt] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishNote, setPublishNote] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verification, setVerification] = useState<{
+    status: 'live' | 'mismatch' | 'unavailable';
+    checkedAt: string; error?: string; verifiedUrl?: string;
+    checks: { field: string; expected: string; actual: string; matches: boolean }[];
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError('');
@@ -276,6 +288,8 @@ export default function SeoTab() {
       setSettings(data.settings);
       setSavedSnapshot(JSON.stringify(data.settings));
       setBaseUrl(data.canonicalBaseUrl);
+      setHasUnpublished(Boolean(data.hasUnpublishedChanges));
+      setPublishedAt(data.publishedAt ?? null);
     } catch { setError('Could not reach the server.'); }
     finally { setLoading(false); }
   }, []);
@@ -312,9 +326,51 @@ export default function SeoTab() {
       setSettings(data.settings);
       setSavedSnapshot(JSON.stringify(data.settings));
       setLastSavedAt(new Date());
+      setHasUnpublished(Boolean(data.hasUnpublishedChanges));
+      setPublishNote('');
+      /* A stale verification result would now describe the wrong thing. */
+      setVerification(null);
     } catch { setError('Could not reach the server.'); }
     finally { setSaving(false); }
   }, [settings, saving]);
+
+  const publish = useCallback(async () => {
+    if (publishing) return;
+    setPublishing(true); setError(''); setPublishNote('');
+    try {
+      const r = await fetch('/api/super-admin/seo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'publish' }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok || !data?.ok) {
+        setError(data?.error || 'Could not publish. Production SEO is unchanged.');
+        return;
+      }
+      setHasUnpublished(false);
+      setPublishedAt(data.publishedAt ?? null);
+      setVerification(null);
+      /* Reported separately, because a save that persisted but failed to
+         invalidate the cache is NOT live. */
+      setPublishNote(data.revalidated
+        ? 'Published. Production cache refreshed — run Verify live to confirm.'
+        : 'Saved to the database, but the production cache refresh failed. Run Verify live.');
+    } catch { setError('Could not reach the server.'); }
+    finally { setPublishing(false); }
+  }, [publishing]);
+
+  const verifyLive = useCallback(async () => {
+    if (verifying) return;
+    setVerifying(true); setError('');
+    try {
+      const r = await fetch('/api/super-admin/seo/verify', { method: 'POST' });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) { setError(data?.error || 'Live verification failed.'); return; }
+      setVerification(data);
+    } catch { setError('Could not reach the server.'); }
+    finally { setVerifying(false); }
+  }, [verifying]);
 
   const discard = useCallback(() => {
     if (!savedSnapshot) return;
@@ -370,8 +426,18 @@ export default function SeoTab() {
               : lastSavedAt ? <span className="text-emerald-400">Saved</span> : null}
           </span>
           <button type="button" onClick={() => void save()} disabled={saving}
+            className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-60">
+            {saving ? 'Saving…' : 'Save draft'}
+          </button>
+          <button type="button" onClick={() => void verifyLive()} disabled={verifying}
+            className="rounded-lg border border-zinc-700 px-3 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:opacity-60">
+            {verifying ? 'Checking…' : 'Verify live'}
+          </button>
+          <button type="button" onClick={() => void publish()}
+            disabled={publishing || saving || dirty}
+            title={dirty ? 'Save your draft before publishing' : undefined}
             className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-zinc-950 transition hover:bg-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:opacity-60">
-            {saving ? 'Saving…' : 'Save changes'}
+            {publishing ? 'Publishing…' : 'Deploy to live site'}
           </button>
         </div>
       </div>
@@ -380,6 +446,79 @@ export default function SeoTab() {
         <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[13px] text-rose-300">
           Save failed — {error}
         </p>
+      )}
+
+      {/* Draft vs production. The panel must never imply the public site has
+          changed just because a draft was saved. */}
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[12px] text-zinc-400">
+            {hasUnpublished
+              ? <span className="font-semibold text-amber-400">
+                  ● Draft not published — the public site is still serving the previous metadata.
+                </span>
+              : <span className="font-semibold text-emerald-400">
+                  ● Draft matches what is published.
+                </span>}
+          </p>
+          <p className="text-[11px] text-zinc-500">
+            Last published: {publishedAt
+              ? new Date(publishedAt).toLocaleString(undefined, {
+                  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                })
+              : 'Never published from this panel'}
+          </p>
+        </div>
+        {publishNote && (
+          <p aria-live="polite" className="mt-1.5 text-[12px] text-zinc-300">{publishNote}</p>
+        )}
+        <p className={HINT}>
+          Saving stores a draft and updates the previews only. Deploy to live site publishes it and
+          refreshes the production cache — no code change, commit or redeploy is involved.
+        </p>
+      </div>
+
+      {/* Verify live: the actual public HTML, not the database. */}
+      {verification && (
+        <div className={`rounded-lg border px-3 py-2.5 ${
+          verification.status === 'live' ? 'border-emerald-500/30 bg-emerald-500/5'
+            : verification.status === 'mismatch' ? 'border-amber-500/40 bg-amber-500/5'
+            : 'border-zinc-700 bg-zinc-900'}`}>
+          <p className={`text-[13px] font-bold ${
+            verification.status === 'live' ? 'text-emerald-300'
+              : verification.status === 'mismatch' ? 'text-amber-300' : 'text-zinc-300'}`}>
+            <span aria-hidden>● </span>
+            {verification.status === 'live' ? 'LIVE — production matches the published settings'
+              : verification.status === 'mismatch' ? 'MISMATCH — production is still serving different metadata'
+              : 'UNAVAILABLE — the public page could not be checked'}
+          </p>
+          {verification.error && <p className={HINT}>{verification.error}</p>}
+          <p className="mt-0.5 text-[11px] text-zinc-500">
+            Checked {new Date(verification.checkedAt).toLocaleString()}
+            {verification.verifiedUrl ? ` · ${verification.verifiedUrl}` : ''}
+          </p>
+          {verification.checks.length > 0 && (
+            <ul className="mt-1.5 sm:columns-2 sm:gap-6">
+              {verification.checks.map((c) => (
+                <li key={c.field} className="flex gap-2 py-0.5">
+                  <span aria-hidden className={`mt-px w-3 shrink-0 text-center text-[12px] font-bold ${
+                    c.matches ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {c.matches ? '✓' : '✕'}
+                  </span>
+                  <span className="sr-only">{c.matches ? 'Matches:' : 'Does not match:'}</span>
+                  <span className="min-w-0 text-[12px] text-zinc-300">
+                    {c.field}
+                    {!c.matches && (
+                      <span className="block break-all text-[11px] text-zinc-500">
+                        live: &ldquo;{c.actual || '(none)'}&rdquo;
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {/* ── Overview tiles ── */}
@@ -611,7 +750,7 @@ export default function SeoTab() {
         <div role="status"
           className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-zinc-900/95 px-4 py-3 shadow-lg backdrop-blur">
           <p className="text-[13px] text-amber-200">
-            You have unsaved SEO changes. They are not live until you save.
+            You have unsaved SEO changes. Save the draft, then deploy it to the live site.
           </p>
           <div className="flex items-center gap-2">
             <button type="button" onClick={discard} className={MINI_BTN}>Discard changes</button>

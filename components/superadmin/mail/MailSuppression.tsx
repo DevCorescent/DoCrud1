@@ -11,9 +11,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { describeFetchError } from '@/lib/email/session-error';
 interface Row {
   email: string;
-  reason: 'unsubscribe' | 'admin_suppressed';
+  reason: 'unsubscribe' | 'admin_suppressed' | 'hard_bounce' | 'complaint';
+  /** Decided by the server from the same rule the store enforces. */
+  removable: boolean;
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -77,7 +80,7 @@ export default function MailSuppression() {
       const r = await fetch(url, { cache: 'no-store' });
       const data = await r.json().catch(() => null);
       if (seq !== requestSeq.current) return;
-      if (!r.ok) { setError(data?.error || 'Unable to load the suppression list.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Unable to load the suppression list.')); return; }
       setRows(data.records ?? []);
       setPage(data.page); setTotalPages(data.totalPages); setTotal(data.total);
     } catch {
@@ -102,7 +105,7 @@ export default function MailSuppression() {
         body: JSON.stringify({ email: newEmail.trim() }),
       });
       const data = await r.json().catch(() => null);
-      if (!r.ok) { setError(data?.error || 'Unable to add that address.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Unable to add that address.')); return; }
       setNotice(data.alreadySuppressed
         ? 'That address was already suppressed. Nothing changed.'
         : 'Address suppressed. Campaigns will no longer be sent to it.');
@@ -121,7 +124,7 @@ export default function MailSuppression() {
         `/api/super-admin/mail/suppression?email=${encodeURIComponent(row.email)}`,
         { method: 'DELETE' });
       const data = await r.json().catch(() => null);
-      if (!r.ok) { setError(data?.error || 'Unable to remove that suppression.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Unable to remove that suppression.')); return; }
       setNotice('Suppression removed. Campaigns may be sent to this address again.');
       setConfirmRemove(null);
       await load(page);
@@ -227,16 +230,21 @@ export default function MailSuppression() {
                     <td className="max-w-[220px] truncate p-2.5 text-zinc-200">{row.email}</td>
                     <td className="p-2.5">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        row.reason === 'unsubscribe'
-                          ? 'bg-sky-500/15 text-sky-300' : 'bg-zinc-700 text-zinc-300'}`}>
-                        {row.reason === 'unsubscribe' ? 'Unsubscribed' : 'Admin suppressed'}
+                        row.reason === 'unsubscribe' ? 'bg-sky-500/15 text-sky-300'
+                          : row.reason === 'complaint' ? 'bg-rose-500/15 text-rose-300'
+                            : row.reason === 'hard_bounce' ? 'bg-orange-500/15 text-orange-300'
+                              : 'bg-zinc-700 text-zinc-300'}`}>
+                        {row.reason === 'unsubscribe' ? 'Unsubscribed'
+                          : row.reason === 'complaint' ? 'Complaint'
+                            : row.reason === 'hard_bounce' ? 'Hard bounce'
+                              : 'Admin suppressed'}
                       </span>
                     </td>
                     <td className="p-2.5 text-zinc-400">{row.active ? 'Active' : 'Lifted'}</td>
                     <td className="p-2.5 text-zinc-500">{fmt(row.createdAt)}</td>
                     <td className="max-w-[160px] truncate p-2.5 text-zinc-500">{row.createdBy}</td>
                     <td className="p-2.5">
-                      {row.active && row.reason === 'admin_suppressed' ? (
+                      {row.removable ? (
                         <button type="button" onClick={() => setConfirmRemove(row)}
                           aria-label={`Remove suppression for ${row.email}`}
                           className={BTN}>Remove</button>
@@ -244,7 +252,9 @@ export default function MailSuppression() {
                         /* No affordance at all for an unsubscribe: offering a
                            button that always fails would be worse than none. */
                         <span className="text-[11px] text-zinc-600">
-                          {row.active ? 'Recipient opted out' : '—'}
+                          {!row.active ? '—'
+                            : row.reason === 'complaint' ? 'Reported as spam'
+                              : 'Recipient opted out'}
                         </span>
                       )}
                     </td>
@@ -266,8 +276,8 @@ export default function MailSuppression() {
             </span>
           </div>
           <p className={HINT}>
-            An unsubscribe cannot be lifted from here. If someone asks to start receiving marketing
-            email again, they must opt in themselves.
+            An unsubscribe or a spam complaint cannot be lifted from here — both are the
+            recipient&apos;s own signal. A hard bounce can be lifted if the mailbox is restored.
           </p>
         </>
       )}

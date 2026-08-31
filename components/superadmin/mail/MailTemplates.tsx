@@ -18,6 +18,7 @@ import RichEmailEditor from '@/components/superadmin/mail/RichEmailEditor';
 import EmailPreviewDialog, { type PreviewMode } from '@/components/superadmin/mail/EmailPreviewDialog';
 import TestSendDialog from '@/components/superadmin/mail/TestSendDialog';
 
+import { describeFetchError } from '@/lib/email/session-error';
 interface TemplateRow {
   id: string; name: string; category: string; subject: string;
   status: string; revision: number;
@@ -96,7 +97,7 @@ export default function MailTemplates() {
       const data = await r.json().catch(() => null);
       /* An API failure is not "no templates" — the second implies none were
          ever created. */
-      if (!r.ok) { setError(data?.error || 'Unable to load templates.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Unable to load templates.')); return; }
       setRows(data.templates); setPage(data.page);
       setTotalPages(data.totalPages); setTotal(data.total);
       setVariables(data.variables ?? []);

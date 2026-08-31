@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import EmailPreviewDialog from '@/components/superadmin/mail/EmailPreviewDialog';
 
+import { describeFetchError } from '@/lib/email/session-error';
 interface Row {
   id: string;
   createdAt: string;
@@ -40,6 +41,9 @@ interface Row {
   providerCode: number | null;
   retryable: boolean | null;
   messageId: string | null;
+  providerEvent: string | null;
+  providerEventAt: string | null;
+  providerEventCode: number | null;
   opens: number;
   clicks: number;
 }
@@ -103,6 +107,14 @@ const FAILURE_OPTIONS = [
   { value: 'provider_rejected', label: 'Provider rejected' },
   { value: 'unknown', label: 'Unknown' },
 ];
+/* Reported by the provider AFTER acceptance. Deliberately its own filter
+   rather than a status: a bounced message was accepted, then bounced. */
+const PROVIDER_EVENT_OPTIONS = [
+  { value: 'all', label: 'Any provider event' },
+  { value: 'hard_bounce', label: 'Hard bounce' },
+  { value: 'soft_bounce', label: 'Soft bounce' },
+  { value: 'complaint', label: 'Complaint' },
+];
 const TEST_OPTIONS = [
   { value: 'all', label: 'Tests and production' },
   { value: 'only', label: 'Tests only' },
@@ -137,6 +149,7 @@ export default function MailOutbox({ onOpenCampaign }: {
   const [status, setStatus] = useState('all');
   const [source, setSource] = useState('all');
   const [failureKind, setFailureKind] = useState('all');
+  const [providerEvent, setProviderEvent] = useState('all');
   const [test, setTest] = useState('all');
   const [range, setRange] = useState('all');
 
@@ -171,13 +184,14 @@ export default function MailOutbox({ onOpenCampaign }: {
     if (status !== 'all') p.set('status', status);
     if (source !== 'all') p.set('source', source);
     if (failureKind !== 'all') p.set('failureKind', failureKind);
+    if (providerEvent !== 'all') p.set('providerEvent', providerEvent);
     if (test !== 'all') p.set('test', test);
     if (range !== 'all') {
       const days = Number(range);
       p.set('from', new Date(Date.now() - days * 86400000).toISOString());
     }
     return p;
-  }, [search, status, source, failureKind, test, range]);
+  }, [search, status, source, failureKind, providerEvent, test, range]);
 
   const load = useCallback(async (nextPage = 1) => {
     const url = `/api/super-admin/mail/outbox?${buildQuery(nextPage)}`;
@@ -193,7 +207,7 @@ export default function MailOutbox({ onOpenCampaign }: {
          rendered - otherwise a slow early page could land after a fast later
          one and show the wrong filter's rows. */
       if (seq !== requestSeq.current) return;
-      if (!r.ok) { setError(data?.error || 'Unable to load the outbox.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Unable to load the outbox.')); return; }
       setRows(data.events ?? []);
       setPage(data.page); setTotalPages(data.totalPages); setTotal(data.total);
       setBackend(data.backend); setTruncated(Boolean(data.truncated));
@@ -208,7 +222,7 @@ export default function MailOutbox({ onOpenCampaign }: {
   /* Re-runs when a filter changes; the search box waits for Enter or the
      button, so typing does not fire a request per keystroke. */
   useEffect(() => { void load(1); /* eslint-disable-next-line react-hooks/exhaustive-deps */ },
-    [status, source, failureKind, test, range]);
+    [status, source, failureKind, providerEvent, test, range]);
 
   const openDetail = useCallback(async (id: string) => {
     setDetailLoading(true); setError(''); setShowRaw(false);
@@ -216,7 +230,7 @@ export default function MailOutbox({ onOpenCampaign }: {
       const r = await fetch(`/api/super-admin/mail/outbox?id=${encodeURIComponent(id)}`,
         { cache: 'no-store' });
       const data = await r.json().catch(() => null);
-      if (!r.ok) { setError(data?.error || 'Record not found.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Record not found.')); return; }
       setDetail(data.event);
     } catch {
       setError('Could not reach the server.');
@@ -290,6 +304,14 @@ export default function MailOutbox({ onOpenCampaign }: {
             <select id="ob-failure" className={INPUT} value={failureKind}
               onChange={(e) => setFailureKind(e.target.value)}>
               {FAILURE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={LABEL} htmlFor="ob-provider-event">Provider event</label>
+            <select id="ob-provider-event" className={INPUT} value={providerEvent}
+              onChange={(e) => setProviderEvent(e.target.value)}>
+              {PROVIDER_EVENT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>))}
             </select>
           </div>
           <div>
@@ -384,6 +406,12 @@ export default function MailOutbox({ onOpenCampaign }: {
                     <td className="p-2.5 text-zinc-400">
                       {e.providerCode ? `${e.providerCode}` : '—'}
                       {e.failureKind ? ` · ${e.failureKind}` : ''}
+                      {e.providerEvent && (
+                        <span className="ml-1 rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-bold text-orange-300">
+                          {e.providerEvent === 'complaint' ? 'COMPLAINT'
+                            : e.providerEvent === 'hard_bounce' ? 'HARD BOUNCE' : 'SOFT BOUNCE'}
+                        </span>
+                      )}
                     </td>
                     <td className="p-2.5 text-zinc-500">{fmt(e.createdAt)}</td>
                     <td className="p-2.5">
@@ -505,6 +533,28 @@ export default function MailOutbox({ onOpenCampaign }: {
                     {detail.failure.raw}
                   </pre>
                 )}
+              </div>
+            )}
+
+            {/* Provider event — after acceptance, never a "delivered" claim. */}
+            {detail.providerEvent && (
+              <div className="space-y-1 rounded-lg border border-orange-500/30 bg-orange-500/5 p-3">
+                <p className={LABEL}>Provider event</p>
+                <p className="text-[12px] font-semibold text-orange-200">
+                  {detail.providerEvent === 'complaint' ? 'Reported as spam by the recipient'
+                    : detail.providerEvent === 'hard_bounce' ? 'Permanent bounce'
+                      : 'Temporary bounce'}
+                </p>
+                <p className="text-[12px] text-zinc-300">
+                  Reported {fmt(detail.providerEventAt)}
+                  {detail.providerEventCode ? ` · code ${detail.providerEventCode}` : ''}
+                </p>
+                <p className={HINT}>
+                  The provider accepted this message and reported the problem afterwards, so the
+                  send itself is still recorded as accepted.
+                  {detail.providerEvent !== 'soft_bounce'
+                    && ' This address has been added to the suppression list.'}
+                </p>
               </div>
             )}
 

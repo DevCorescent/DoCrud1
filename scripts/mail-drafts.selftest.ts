@@ -199,8 +199,13 @@ async function main() {
 
   console.log('\n── 9. States, security and layout ──');
 
+  /* The expression became `describeFetchError`, which also turns a 401 into
+     "sign in again" instead of the raw "Unauthorized". The property is the
+     same - a failure sets an error rather than rendering an empty list - and
+     is asserted here against the shared helper. */
   check('an API failure is not rendered as an empty list',
-    UI.includes("setError(data?.error || 'Unable to load drafts.'); return;"));
+    UI.includes("describeFetchError(r.status, data?.error, 'Unable to load drafts.')")
+    && UI.includes("from '@/lib/email/session-error'"));
   check('empty and search-empty are different messages',
     UI.includes('No drafts yet.') && UI.includes('No drafts match your search.'));
   check('loading state exists', UI.includes('Loading drafts…'));

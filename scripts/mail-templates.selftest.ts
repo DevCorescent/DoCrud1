@@ -222,8 +222,13 @@ async function main() {
   check('actions are audited',
     ['created', 'updated', 'duplicated', 'deleted'].every((a) => API.includes(a)));
   check('an audit failure cannot fail a save', API.includes('never fail a save for the audit trail'));
+  /* The expression became `describeFetchError`, which also turns a 401 into
+     "sign in again" instead of the raw "Unauthorized". The property is the
+     same - a failure sets an error rather than rendering an empty list - and
+     is asserted here against the shared helper. */
   check('an API failure is not rendered as an empty list',
-    UI.includes("setError(data?.error || 'Unable to load templates.'); return;"));
+    UI.includes("describeFetchError(r.status, data?.error, 'Unable to load templates.')")
+    && UI.includes("from '@/lib/email/session-error'"));
   check('empty and search-empty are different messages',
     UI.includes('No email templates yet.') && UI.includes('No templates match your search.'));
   check('double-clicks are guarded synchronously',

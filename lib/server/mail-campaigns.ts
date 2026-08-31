@@ -51,6 +51,15 @@ export interface MailDelivery {
   /** null once it will never be retried again. */
   nextRetryAt?: string | null;
   lastAttemptAt?: string;
+  /**
+   * What the provider reported after acceptance, if anything.
+   *
+   * Distinct from `failureKind`, which describes why a SEND attempt failed. A
+   * bounce happens after a successful hand-off, and conflating the two would
+   * make an accepted-then-bounced message indistinguishable from one the
+   * provider refused outright.
+   */
+  providerEvent?: 'hard_bounce' | 'soft_bounce' | 'complaint';
 }
 
 /** Bounds the campaign document; failures beyond this are counted, not listed. */

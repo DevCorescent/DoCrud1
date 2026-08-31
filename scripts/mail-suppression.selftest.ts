@@ -122,8 +122,14 @@ async function main() {
     LIB.includes("return { ok: false, reason: 'unsubscribe_protected' } as const;"));
   check('the API reports the refusal rather than a false success',
     API.includes('status: 409') && API.includes('cannot re-enable'));
+  /* The condition moved to the SERVER, which decides removability from the
+     same rule the store enforces - so the UI can no longer offer a button the
+     store would refuse, nor hide one it would allow. Stronger than the
+     hardcoded reason check this replaces. */
   check('the UI offers no button that would always fail',
-    UI.includes("row.active && row.reason === 'admin_suppressed'"));
+    UI.includes('{row.removable ? (')
+    && read('app/api/super-admin/mail/suppression/route.ts')
+      .includes('removable: r.active && !isProtectedReason(r.reason)'));
 
   console.log('\n── 4. Admin suppression can be lifted ──');
 

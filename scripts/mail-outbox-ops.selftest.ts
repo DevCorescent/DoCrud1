@@ -463,7 +463,47 @@ async function main() {
   check('the query path takes no lock and cannot block writers',
     !/queryEmailOutbox[\s\S]{0,900}withOutboxLock/.test(OUTBOX_LIB));
 
-  console.log('\n── 16. Indexes ──');
+  console.log('\n── 16. A lapsed session reads as a lapsed session ──');
+
+  /* The defect this covers: every mail screen except Overview and Health
+     rendered the API's raw "Unauthorized" on a 401, which reads like a broken
+     backend. An admin whose four-hour session had simply expired was sent to
+     investigate infrastructure instead of signing in again. */
+  const { describeFetchError, SESSION_EXPIRED } =
+    await import('@/lib/email/session-error');
+  check('a 401 is described as an expired session',
+    describeFetchError(401, 'Unauthorized', 'fallback') === SESSION_EXPIRED);
+  check('a 403 is treated the same way',
+    describeFetchError(403, 'Forbidden', 'fallback') === SESSION_EXPIRED);
+  check('a real server error is still shown',
+    describeFetchError(500, 'Database unavailable', 'fallback') === 'Database unavailable');
+  check('a missing server error falls back',
+    describeFetchError(500, undefined, 'fallback') === 'fallback');
+  check('the raw Unauthorized string never reaches an admin',
+    describeFetchError(401, 'Unauthorized', 'x') !== 'Unauthorized');
+
+  for (const file of [
+    'MailOutbox', 'MailAnalytics', 'MailSuppression', 'MailCampaigns',
+    'MailDrafts', 'MailTemplates', 'EmailPreviewDialog',
+  ]) {
+    const src = read(`components/superadmin/mail/${file}.tsx`);
+    check(`${file} reports an expired session correctly`,
+      src.includes('describeFetchError(r.status'));
+  }
+  for (const file of ['MailOverview', 'MailHealthPanel']) {
+    /* These two already handled it; the fix made the rest agree with them. */
+    check(`${file} still reports an expired session correctly`,
+      read(`components/superadmin/${file}.tsx`).includes('Session expired'));
+  }
+
+  /* An SVG `points` attribute takes no units. "0%,80" was rejected outright -
+     the browser logged "Expected number" and the chart drew nothing. */
+  check('the admin sparkline uses numeric SVG coordinates, not percentages',
+    !/points=\{[^}]*%/.test(PANEL) && PANEL.includes('viewBox={`0 0 ${w} ${h}`}'));
+  check('a single-point series cannot divide by zero',
+    PANEL.includes('total === 1 ? w / 2'));
+
+  console.log('\n── 17. Indexes ──');
 
   check('the console\'s queries are indexed',
     ROWS.includes('outbox_recent') && ROWS.includes('outbox_status_recent')

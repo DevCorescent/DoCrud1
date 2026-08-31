@@ -20,7 +20,25 @@ import {
   mailSuppressionPath, readJsonFile, writeJsonFile, withStorageLock,
 } from '@/lib/server/storage';
 
-export type SuppressionReason = 'unsubscribe' | 'admin_suppressed';
+export type SuppressionReason =
+  | 'unsubscribe'
+  | 'admin_suppressed'
+  /** The provider reported a permanent delivery failure. */
+  | 'hard_bounce'
+  /** The recipient reported the message as spam. */
+  | 'complaint';
+
+/* Reasons an administrator may not simply lift.
+   `unsubscribe` and `complaint` are the RECIPIENT's own signal, and quietly
+   re-enabling marketing to someone who opted out or reported spam is both a
+   breach of their choice and a fast way to lose sending reputation. A hard
+   bounce is a fact about an address rather than a wish, so it stays removable
+   for the case where the mailbox is genuinely restored. */
+const PROTECTED_REASONS: SuppressionReason[] = ['unsubscribe', 'complaint'];
+
+export function isProtectedReason(reason: SuppressionReason): boolean {
+  return PROTECTED_REASONS.includes(reason);
+}
 
 export interface SuppressionRecord {
   /** Normalized: trimmed and lower-cased. The only form ever stored. */
@@ -32,7 +50,7 @@ export interface SuppressionRecord {
   /** Who or what created it: an admin address, or 'recipient' for an opt-out. */
   createdBy: string;
   /** How it arrived, for the audit trail. */
-  source: 'admin' | 'unsubscribe_link';
+  source: 'admin' | 'unsubscribe_link' | 'provider_event';
 }
 
 interface State { records: SuppressionRecord[] }
@@ -92,9 +110,13 @@ export async function addSuppression(input: {
       const next: SuppressionRecord = {
         ...existing,
         active: true,
-        /* An unsubscribe upgrades an admin suppression; an admin suppression
-           never downgrades an unsubscribe. */
-        reason: existing.reason === 'unsubscribe' ? 'unsubscribe' : input.reason,
+        /* Precedence, strongest first: an unsubscribe is never overwritten,
+           and a protected reason is never downgraded to an unprotected one.
+           An admin note must not erase a recipient's own signal. */
+        reason: existing.reason === 'unsubscribe' ? 'unsubscribe'
+          : isProtectedReason(existing.reason) && !isProtectedReason(input.reason)
+            ? existing.reason
+            : input.reason,
         updatedAt: now,
       };
       if (next.reason !== existing.reason || next.active !== existing.active) {
@@ -141,7 +163,7 @@ export async function removeSuppression(
     const records = await getSuppressionRecords();
     const existing = records.find((r) => r.email === normalized && r.active);
     if (!existing) return { ok: false, reason: 'not_found' } as const;
-    if (existing.reason === 'unsubscribe') {
+    if (isProtectedReason(existing.reason)) {
       return { ok: false, reason: 'unsubscribe_protected' } as const;
     }
     await writeJsonFile(mailSuppressionPath, {

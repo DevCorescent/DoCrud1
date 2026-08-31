@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from 'react';
 import EmailPreviewDialog from '@/components/superadmin/mail/EmailPreviewDialog';
 import TestSendDialog from '@/components/superadmin/mail/TestSendDialog';
 
+import { describeFetchError } from '@/lib/email/session-error';
 interface CampaignRow {
   id: string; title: string; subject: string; status: string;
   audienceDescription: string | null; audiencePreviewCount: number | null;
@@ -35,6 +36,10 @@ interface Delivery {
   failureKind: string | null; providerCode: number | null; error: string | null;
   retryable: boolean | null; advice: string | null;
   lastAttemptAt: string | null; nextRetryAt: string | null;
+  providerEvent: string | null;
+}
+interface ProviderEventCounts {
+  hardBounce: number; softBounce: number; complaint: number; suppressed: number;
 }
 interface Detail {
   campaign: CampaignRow & {
@@ -42,6 +47,7 @@ interface Detail {
     passes: number; startedAt: string | null; finishedAt: string | null;
   };
   deliveries: Delivery[];
+  providerEvents?: ProviderEventCounts;
   outbox: { to: string; status: string; createdAt: string; sentAt: string | null; error: string | null }[];
 }
 
@@ -111,7 +117,7 @@ export default function MailCampaigns() {
       const data = await r.json().catch(() => null);
       /* An API failure must not render as "no campaigns" — that reads as
          "nothing was ever sent", which is a very different fact. */
-      if (!r.ok) { setError(data?.error || 'Unable to load campaigns.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Unable to load campaigns.')); return; }
       setRows(data.campaigns); setPage(data.page);
       setTotalPages(data.totalPages); setTotal(data.total);
     } catch { setError('Could not reach the server.'); }
@@ -126,7 +132,7 @@ export default function MailCampaigns() {
       const r = await fetch(`/api/super-admin/mail/campaigns?id=${encodeURIComponent(id)}`,
         { cache: 'no-store' });
       const data = await r.json().catch(() => null);
-      if (!r.ok) { setError(data?.error || 'Campaign not found.'); return; }
+      if (!r.ok) { setError(describeFetchError(r.status, data?.error, 'Campaign not found.')); return; }
       setDetail(data);
     } catch { setError('Could not reach the server.'); }
     finally { setDetailLoading(false); }
@@ -210,6 +216,36 @@ export default function MailCampaigns() {
             <p className="text-[12px] font-semibold text-rose-300">Provider error</p>
             <p className="mt-1 break-words text-[12px] text-zinc-300">{c.lastError}</p>
           </div>
+        )}
+
+        {/* Provider events — what happened AFTER acceptance. Shown apart from
+            failures on purpose: a bounced message was accepted and then
+            bounced, which is not the same as one the provider refused. */}
+        {detail.providerEvents && (
+          detail.providerEvents.hardBounce + detail.providerEvents.softBounce
+          + detail.providerEvents.complaint + detail.providerEvents.suppressed > 0
+        ) && (
+          <section className={CARD}>
+            <p className={LABEL}>Provider events and suppression</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-4">
+              {([
+                ['Hard bounces', detail.providerEvents.hardBounce, 'text-orange-300'],
+                ['Soft bounces', detail.providerEvents.softBounce, 'text-amber-300'],
+                ['Complaints', detail.providerEvents.complaint, 'text-rose-300'],
+                ['Suppressed', detail.providerEvents.suppressed, 'text-sky-300'],
+              ] as const).map(([k, v, tone]) => (
+                <div key={k}>
+                  <p className={LABEL}>{k}</p>
+                  <p className={`text-sm font-semibold ${v ? tone : 'text-zinc-400'}`}>{v}</p>
+                </div>
+              ))}
+            </div>
+            <p className={HINT}>
+              These are separate from failures. A bounce or complaint means the provider accepted
+              the message and reported a problem afterwards; a suppressed recipient was never
+              sent to at all. Hard bounces and complaints add the address to the suppression list.
+            </p>
+          </section>
         )}
 
         <section className={CARD}>

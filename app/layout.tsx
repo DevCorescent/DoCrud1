@@ -23,6 +23,19 @@ const siteUrl = getPublicAppBaseUrl()
 const metadataBase = new URL(siteUrl)
 const googleAnalyticsId = 'G-C3WEQ82QWE'
 
+/**
+ * Microsoft Clarity project id.
+ *
+ * Read from the environment rather than hardcoded, so a fork, a preview
+ * deployment or a local checkout can point at its own project — or at none.
+ * When the variable is unset the script is not rendered at all, which is what
+ * keeps Clarity out of local development unless someone opts in.
+ *
+ * NEXT_PUBLIC_ is correct here and not a leak: the id is embedded in the
+ * client script Clarity itself serves, so it is an identifier, never a secret.
+ */
+const clarityProjectId = process.env.NEXT_PUBLIC_CLARITY_PROJECT_ID?.trim() ?? ''
+
 const siteTitle = 'Docrud';
 const siteTitleFull = 'Docrud - A right connection can change everything';
 
@@ -385,6 +398,30 @@ export default function RootLayout({
             gtag('config', '${googleAnalyticsId}');
           `}
         </Script>
+        {/*
+          Microsoft Clarity — Microsoft's own snippet, unchanged apart from the
+          id coming from the environment.
+
+          `afterInteractive` matches the analytics already above: the tag loads
+          once, after hydration, without blocking the first paint. next/script
+          also de-duplicates by `id`, so a re-render or a client-side navigation
+          cannot inject a second copy.
+
+          Nothing is pushed to Clarity by this app. It records what Clarity's
+          own tag records; no resume text, job description, email or any other
+          user data is sent from here.
+        */}
+        {clarityProjectId && (
+          <Script id="microsoft-clarity" strategy="afterInteractive">
+            {`
+              (function(c,l,a,r,i,t,y){
+                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "${clarityProjectId}");
+            `}
+          </Script>
+        )}
       </head>
      <body
   className={`${manrope.className} bg-background text-foreground antialiased`}

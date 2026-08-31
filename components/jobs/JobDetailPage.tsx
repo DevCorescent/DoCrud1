@@ -64,7 +64,7 @@ const INPUT =
 const GHOST_BTN =
   'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] border px-5 text-[13px] font-semibold transition '
   + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 '
-  + 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 '
+  + 'border-slate-300 bg-[#ffffff] text-slate-700 hover:bg-slate-100 '
   + 'dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white/85';
 const PRIMARY_BTN =
   'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] px-5 text-[13px] font-bold transition '

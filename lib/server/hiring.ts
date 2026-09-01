@@ -443,6 +443,47 @@ export async function assertCanManageHiringJob(
   return { ok: true, job };
 }
 
+/** A positive, finite salary figure, or undefined. Never zero, never NaN. */
+function normalizeSalary(value: unknown): number | undefined {
+  if (value === '' || value === null || value === undefined) return undefined;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.round(n);
+}
+
+const SALARY_PERIODS = new Set(['hour', 'day', 'week', 'month', 'year']);
+
+/**
+ * The compensation block, built only from values the payload actually stated.
+ *
+ * A min above a max is rejected rather than swapped: silently reordering
+ * changes what the employer wrote, and a candidate would then read a range the
+ * poster never entered. The pair is dropped and the poster is left to correct
+ * it — the composer validates the same rule before it ever gets here.
+ */
+function salaryFields(payload: Partial<HiringJobPosting>): Partial<HiringJobPosting> {
+  let salaryMin = normalizeSalary(payload.salaryMin);
+  let salaryMax = normalizeSalary(payload.salaryMax);
+  if (salaryMin !== undefined && salaryMax !== undefined && salaryMin > salaryMax) {
+    salaryMin = undefined;
+    salaryMax = undefined;
+  }
+  if (salaryMin === undefined && salaryMax === undefined) return {};
+
+  const currency = String(payload.salaryCurrency ?? '').trim().toUpperCase();
+  const period = String(payload.salaryPeriod ?? '').trim().toLowerCase();
+  return {
+    ...(salaryMin !== undefined ? { salaryMin } : {}),
+    ...(salaryMax !== undefined ? { salaryMax } : {}),
+    /* A currency is required to read a number as money, so it falls back to the
+       marketplace's own default rather than rendering a bare figure. */
+    salaryCurrency: /^[A-Z]{3}$/.test(currency) ? currency : 'INR',
+    salaryPeriod: SALARY_PERIODS.has(period)
+      ? (period as NonNullable<HiringJobPosting['salaryPeriod']>)
+      : 'year',
+  };
+}
+
 export async function upsertHiringJob(
   actor: User,
   payload: Partial<HiringJobPosting> & { title: string; description: string; minimumAtsScore: number },
@@ -488,6 +529,18 @@ export async function upsertHiringJob(
       ? payload.requiredDocuments.map((item) => String(item).trim()).filter(Boolean).slice(0, 8)
       : [],
     minimumAtsScore: Math.max(0, Math.min(100, Math.round(Number(payload.minimumAtsScore) || 0))),
+    /* COMPENSATION — optional, and absent stays absent.
+       These four fields have existed on HiringJobPosting since the canonical
+       job model landed, but nothing wrote them: this function builds the record
+       from an explicit list, so a salary in the payload was silently dropped.
+       They are read here so the composer's Compensation step actually persists.
+
+       `normalizeSalary` returns undefined for anything that is not a real
+       number, which is the whole point — a posting that did not state a salary
+       must never be stored as ₹0, because a zero renders as a fact. On an edit,
+       clearing the field clears the stored value rather than resurrecting the
+       old one. */
+    ...salaryFields(payload),
     status: payload.status || 'draft',
     shareUrl: `/jobs/${jobId}`,
     createdAt: existing?.createdAt || now,

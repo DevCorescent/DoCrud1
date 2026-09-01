@@ -17,6 +17,12 @@ import { BOTTOM_NAV_EXPLORE } from '@/lib/explore-destinations';
 const EXCLUDED = [
   '/workspace', '/documents', '/sign', '/pdf-studio',
   '/doc-word', '/form-builder', '/onboarding',
+  /* The job-posting wizard, for the same reason as '/onboarding': it is a
+     focused step-by-step flow whose own Back/Continue bar is pinned to the
+     bottom of the viewport on phones. This bar is `bottom: 18px` at
+     z-index 9995, so it sat on top of Continue and hid the only way forward.
+     Note this is '/jobs/post', not '/jobs' — the Jobs feed keeps its nav. */
+  '/jobs/post',
 ];
 function shouldShow(path: string) {
   return !EXCLUDED.some(p => path.startsWith(p));

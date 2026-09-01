@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import PostJobPage from '@/components/jobs/PostJobPage';
+import { Suspense } from 'react';
+import JobPostWizard from '@/components/jobs/post/JobPostWizard';
 import { buildPageMetadata } from '@/lib/seo';
 
 export const dynamic = 'force-dynamic';
@@ -14,5 +15,12 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default function PostJobRoute() {
-  return <PostJobPage />;
+  /* The wizard reads its step from the query string, so it must sit inside a
+     Suspense boundary — useSearchParams opts a client component out of static
+     rendering, and without this the whole route fails to build. */
+  return (
+    <Suspense fallback={null}>
+      <JobPostWizard />
+    </Suspense>
+  );
 }

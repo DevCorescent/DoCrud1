@@ -1006,11 +1006,10 @@ export default function PublishAnythingDialog({
   if (!open) return null;
 
   const activeCat = category ? CATEGORIES.find(c => c.id === category) : null;
-  const vis = category === 'resume' ? resume.visibility : fields.visibility;
-  const setVis = (v: Visibility) => {
-    if (category === 'resume') setResume(r => ({ ...r, visibility: v }));
-    else set({ visibility: v });
-  };
+  /* Publishing from this composer is always public: the private option was
+     removed from the UI, so there is no longer a variable to branch on. The
+     form's `visibility` field still defaults to 'public' and is what the
+     request actually carries — see the publish() body. */
 
   const filteredCats = catSearch.trim()
     ? CATEGORIES.filter(c =>
@@ -1100,39 +1099,27 @@ export default function PublishAnythingDialog({
         )}
 
 
-        {/* ── Header ── */}
-        <div className="flex shrink-0 items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-white/[0.06]">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] ring-1 ring-white/[0.09]">
-              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white/60" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-[14px] sm:text-[15px] font-bold text-white leading-tight tracking-[-0.01em]">Create publication</h2>
-              <p className="mt-0.5 truncate text-[10.5px] sm:text-[11px] text-white/35 leading-tight">
-                {businessPageName ? `Posting as ${businessPageName}` : 'Share an update with the community'}
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {/* Mobile preview toggle — desktop keeps the preview on screen. */}
-            <button
-              type="button"
-              onClick={() => setShowPreview(v => !v)}
-              aria-pressed={showPreview}
-              className={`lg:hidden inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.08] px-3 text-[12px] font-semibold transition ${showPreview ? 'bg-white/[0.12] text-white' : 'bg-white/[0.03] text-white/50 hover:text-white'}`}
-            >
-              <Eye className="h-3.5 w-3.5" /> Preview
-            </button>
-            <button
-              type="button"
-              onClick={requestClose}
-              aria-label="Close"
-              className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-white/40 transition hover:bg-white/[0.09] hover:text-white active:scale-95"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
+        {/* ── Close ──
+            The header bar (sparkles mark, "Create publication", its subtitle
+            and the mobile Preview toggle) is gone; the composer now opens
+            straight onto the author's own row, which is the first thing worth
+            reading. Only the close affordance survives, as a small floating
+            control so it costs no vertical space — `absolute` inside the
+            dialog's own stacking context, above the scroll area but below the
+            category picker overlay.
+
+            The mobile Preview toggle it used to hold has moved to the footer
+            beside Cancel: the panel it controls is still there, and deleting
+            the only way to reach it would have removed a working feature
+            rather than a header. */}
+        <button
+          type="button"
+          onClick={requestClose}
+          aria-label="Close"
+          className="absolute right-3 top-3 z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-[#0a0a0e]/80 text-white/40 backdrop-blur-md transition hover:bg-white/[0.09] hover:text-white active:scale-95"
+        >
+          <X className="h-4 w-4" />
+        </button>
 
         {/* ── Composer ──────────────────────────────────────────────────────
             One screen. Editing on the left, a live card preview on the right
@@ -1149,7 +1136,7 @@ export default function PublishAnythingDialog({
                   <IdentityAvatar src={authorAvatar} name={authorName} />
                   <div className="min-w-0">
                     <p className="truncate text-[13px] font-semibold text-white/85">{authorName}</p>
-                    <p className="text-[10.5px] text-white/35">{vis === 'private' ? 'Only you' : 'Anyone on Docrud'}</p>
+                    <p className="text-[10.5px] text-white/35">Anyone on Docrud</p>
                   </div>
                 </div>
 
@@ -1227,16 +1214,16 @@ export default function PublishAnythingDialog({
                     <ChevronDown className="h-3 w-3 opacity-60" />
                   </button>
 
-                  <div className="inline-flex items-center gap-px rounded-xl border border-white/[0.09] bg-white/[0.03] p-[3px]">
-                    <button type="button" onClick={() => setVis('public')}
-                      className={`inline-flex h-[26px] items-center gap-1.5 rounded-[9px] px-2.5 text-[11.5px] font-semibold transition ${vis === 'public' ? 'bg-white/[0.12] text-white' : 'text-white/40 hover:text-white/70'}`}>
-                      <Globe className="h-3 w-3" /> Public
-                    </button>
-                    <button type="button" onClick={() => setVis('private')}
-                      className={`inline-flex h-[26px] items-center gap-1.5 rounded-[9px] px-2.5 text-[11.5px] font-semibold transition ${vis === 'private' ? 'bg-white/[0.12] text-white' : 'text-white/40 hover:text-white/70'}`}>
-                      <Lock className="h-3 w-3" /> Private
-                    </button>
-                  </div>
+                  {/* Publishing is public. Not a toggle any more: with one
+                      option a segmented control asks the author to choose
+                      between a thing and nothing. It stays visible because
+                      "who will see this" is worth stating before someone
+                      presses Publish — it just states it instead of asking.
+                      `visibility` already defaults to 'public' in the blank
+                      form, so nothing downstream changes. */}
+                  <span className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 text-[12px] font-semibold text-white/70">
+                    <Globe className="h-3.5 w-3.5" /> Public
+                  </span>
 
                   {!ctaOpen && !ctaDraft && (
                     <button
@@ -1432,6 +1419,19 @@ export default function PublishAnythingDialog({
             className="flex shrink-0 items-center justify-end gap-2.5 border-t border-white/[0.06] bg-[#0a0a0e] px-5 py-3.5 sm:px-6 sm:py-4"
             style={{ paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom))' }}
           >
+            {/* Preview, on phones only — the panel it toggles is `lg:hidden`
+                and desktop shows the preview permanently beside the editor.
+                It lived in the header that this change removed; without a
+                home here, the mobile preview would still exist but be
+                unreachable, which is a deleted feature dressed as a tidy-up. */}
+            <button
+              type="button"
+              onClick={() => setShowPreview(v => !v)}
+              aria-pressed={showPreview}
+              className={`lg:hidden mr-auto inline-flex h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.07] px-3.5 text-[13px] font-medium transition ${showPreview ? 'bg-white/[0.10] text-white' : 'bg-transparent text-white/45 hover:bg-white/[0.05] hover:text-white'}`}
+            >
+              <Eye className="h-3.5 w-3.5" /> Preview
+            </button>
             <button
               type="button"
               onClick={requestClose}
@@ -1443,20 +1443,13 @@ export default function PublishAnythingDialog({
               type="button"
               onClick={() => void publish()}
               disabled={busy}
-              className={[
-                'inline-flex h-9 min-w-[120px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-5 sm:px-6 text-[13px] font-bold transition-all duration-[170ms] active:scale-[0.97] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100',
-                vis === 'private'
-                  ? 'border border-white/[0.14] bg-white/[0.08] text-white hover:bg-white/[0.14]'
-                  : 'bg-white text-[#09090c] hover:bg-white/90 shadow-[0_4px_20px_rgba(255,255,255,0.12),0_2px_8px_rgba(0,0,0,0.3)]',
-              ].join(' ')}
+              className="inline-flex h-9 min-w-[120px] shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white px-5 sm:px-6 text-[13px] font-bold text-[#09090c] shadow-[0_4px_20px_rgba(255,255,255,0.12),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-[170ms] hover:bg-white/90 active:scale-[0.97] disabled:opacity-40 motion-reduce:transition-none motion-reduce:active:scale-100"
             >
               {busy ? (
                 <>
-                  <div className={`h-3.5 w-3.5 animate-spin rounded-full border-2 ${vis === 'private' ? 'border-white/30 border-t-white' : 'border-[#09090c]/30 border-t-[#09090c]'}`} />
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#09090c]/30 border-t-[#09090c]" />
                   Publishing…
                 </>
-              ) : vis === 'private' ? (
-                <><Lock className="h-3.5 w-3.5" /> Save privately</>
               ) : (
                 <>Publish</>
               )}
@@ -3300,7 +3293,10 @@ function PublishPreviewCard({
                 {activeCat?.label ?? 'Publication'}
               </span>
               <span aria-hidden className="opacity-50">·</span>
-              {f.visibility === 'private' ? 'Private' : 'Public'}
+              {/* Always Public: the composer no longer offers a private
+                  option, so branching here would render a state the author
+                  can no longer produce. */}
+              Public
               <span aria-hidden className="opacity-50">·</span>
               just now
             </p>

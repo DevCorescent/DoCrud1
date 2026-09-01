@@ -1018,26 +1018,26 @@ useEffect(() => {
     <div
       className="md:hidden fixed right-3 top-[54px] z-[2147483647] pointer-events-auto w-[238px] overflow-hidden rounded-[18px] border border-white/[0.10] bg-[#0b0b10]/95 backdrop-blur-2xl shadow-[0_24px_70px_rgba(0,0,0,0.72)]"
     >
-      {/* Appearance */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3.5">
-        <div className="flex items-center gap-3">
+      {/* Appearance.
+          The "Dark mode" subtitle is gone because the control now states the
+          mode in words: keeping both put the same fact on the row twice, and
+          the freed height is what absorbs the two new job items without the
+          menu growing. `py-3` matches the rows below it, so every row in the
+          menu is now one height. Theme state is untouched — this still calls
+          the same setMode. */}
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
           {colorMode === 'dark' ? (
-            <Moon className="h-4 w-4 text-violet-300/75" />
+            <Moon className="h-4 w-4 shrink-0 text-violet-300/75" />
           ) : (
-            <Sun className="h-4 w-4 text-amber-300/75" />
+            <Sun className="h-4 w-4 shrink-0 text-amber-300/75" />
           )}
-
-          <div>
-            <p className="text-[12px] font-semibold text-white/85">
-              Appearance
-            </p>
-            <p className="text-[10px] text-white/30">
-              {colorMode === 'dark' ? 'Dark mode' : 'Light mode'}
-            </p>
-          </div>
+          <p className="truncate text-[12px] font-semibold text-white/85">
+            Appearance
+          </p>
         </div>
 
-        <ThemeToggle value={colorMode} onChange={setMode} />
+        <ThemeToggle pill value={colorMode} onChange={setMode} />
       </div>
 
       {/* Ddrive */}
@@ -1063,6 +1063,30 @@ useEffect(() => {
       >
         <User className="h-4 w-4 text-white/45" />
         <span>Profile</span>
+      </Link>
+
+      {/* My Jobs / Post a Job.
+          The SAME routes the Jobs feed header already links to
+          (JobsFeedPage's MY_JOBS_HREF and POST_HREF), which are hidden below
+          `sm` there — so on a phone these two actions had no entry point at
+          all. Nothing new is implemented: same hrefs, same labels, same
+          icons, reached from one more place. */}
+      <Link
+        href="/jobs/my"
+        onClick={() => setProfileOpen(false)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left text-[12px] font-medium text-white/75 transition hover:bg-white/[0.05] active:bg-white/[0.08]"
+      >
+        <Briefcase className="h-4 w-4 shrink-0 text-white/45" />
+        <span className="truncate">My Jobs</span>
+      </Link>
+
+      <Link
+        href="/jobs/post"
+        onClick={() => setProfileOpen(false)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left text-[12px] font-medium text-white/75 transition hover:bg-white/[0.05] active:bg-white/[0.08]"
+      >
+        <Plus className="h-4 w-4 shrink-0 text-white/45" />
+        <span className="truncate">Post a Job</span>
       </Link>
 
       {/* Upgrade */}

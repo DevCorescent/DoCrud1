@@ -339,10 +339,22 @@ export default function GlobalBottomNav() {
              it stretching on a tall display. dvh is the accurate measure where
              a mobile browser's chrome slides away — the vh line above it is
              the fallback for engines without dvh. */
-          max-height: calc(100vh - 128px);
-          max-height: min(calc(100dvh - 128px), 460px);
-          overflow-y: auto;
-          overscroll-behavior: contain;
+          /* A FIXED quarter-screen box, not a max-height.
+             The panel is now exactly one quarter of the viewport, and the grid
+             inside it is sized in fractions of that box (see .gnb-explore-grid),
+             so the tiles shrink to fit rather than the panel growing to fit the
+             tiles. That is what makes scrolling impossible instead of merely
+             unlikely: overflow is hidden and nothing can exceed the box.
+             The clamp only bites at the extremes: a landscape phone (375px
+             tall) would get a 94px panel from a literal 25dvh, too short for a
+             row of tiles, and a 1366px iPad would get 341px, which is a lot of
+             screen for eight shortcuts. Between roughly 450px and 1200px of
+             viewport height — every phone and laptop — the panel is exactly a
+             quarter of the screen. */
+          height: clamp(112px, 25dvh, 300px);
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
 
           background: rgba(0,0,0,0.86);
           backdrop-filter: blur(28px) saturate(180%);
@@ -354,7 +366,7 @@ export default function GlobalBottomNav() {
             0 2px 8px rgba(0,0,0,0.30),
             inset 0 1px 0 rgba(255,255,255,0.07);
 
-          padding: 10px 12px 12px;
+          padding: clamp(8px, 2.4vw, 12px);
           opacity: 0;
           visibility: hidden;
           pointer-events: none;
@@ -379,25 +391,36 @@ export default function GlobalBottomNav() {
         /* Sheet grabber, as in the reference. */
         .gnb-explore-grabber {
           display: block;
-          width: 36px; height: 4px;
-          margin: 0 auto 10px;
+          width: 34px; height: 4px;
           border-radius: 999px;
           background: rgba(255,255,255,0.16);
         }
 
-        .gnb-explore-head {
-          display: flex; align-items: center; justify-content: space-between;
-          gap: 8px;
-          padding: 0 4px 10px;
-        }
-        .gnb-explore-title {
-          font-size: 14px; font-weight: 700;
-          letter-spacing: -0.01em;
-          color: rgba(255,255,255,0.92);
-        }
-        .gnb-explore-close {
+        /* A strip of its own for the grabber and the close button.
+           The close button is absolute so it does not push the grabber
+           off-centre, but absolute inside the PANEL let it sit on top of the
+           top-right tile and swallow taps meant for it. Scoping it to this
+           strip keeps the reference's layout while guaranteeing it can never
+           overlap the grid. */
+        .gnb-explore-top {
+          position: relative;
+          flex: 0 0 auto;
+          height: clamp(22px, 5.4vw, 28px);
           display: flex; align-items: center; justify-content: center;
-          width: 30px; height: 30px;
+        }
+
+        /* The "Explore DoCrud" title row is gone, and the close button is
+           taken OUT of flow rather than given a row of its own. A header row
+           cost ~40px, which at a quarter of a 640px-tall phone is a third of
+           the whole panel — height the tiles need. Absolute keeps the control
+           exactly where the reference puts it while costing nothing. */
+        .gnb-explore-close {
+          position: absolute;
+          top: 50%;
+          right: 0;
+          transform: translateY(-50%);
+          display: flex; align-items: center; justify-content: center;
+          width: clamp(22px, 5.4vw, 28px); height: clamp(22px, 5.4vw, 28px);
           flex-shrink: 0;
           border-radius: 999px;
           border: 1px solid rgba(255,255,255,0.10);
@@ -410,39 +433,45 @@ export default function GlobalBottomNav() {
         .gnb-explore-close:hover { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.92); }
         .gnb-explore-close:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
 
-        /* FOUR columns at every width, with no breakpoint that changes it.
-           Eight destinations over four columns is exactly two rows, and that
-           is the requirement — the old max-width: 400px rule dropped to two
-           columns, which turned the panel into four rows on precisely the
-           phones it was meant to help. Narrow screens are handled by SHRINKING
-           the cells instead (see the clamps below), never by re-flowing them.
-
-           minmax(0, 1fr) rather than a plain 1fr is what lets a column go narrower
-           than its longest word; without it "Businesses" would force the track
-           wider and push the grid into horizontal overflow. */
+        /* The tile grid. Fills the panel's fixed height exactly — see below. */
         .gnb-explore-grid {
           display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-          /* Every dimension below scales with the viewport between a 320px
-             phone and the panel's 680px cap, so the two rows fit without a
-             breakpoint anywhere in between. */
+          /* COLUMN COUNT ADAPTS; the tile never gets narrower than its own
+             label. Four fixed columns is the target and is what a tablet and
+             desktop get, but it is arithmetically impossible on a phone: at
+             320px each of four tiles is ~66px wide, of which ~36px is left for
+             text after the icon and padding, and "Businesses" needs ~52px even
+             at a 9px font. Fixed columns there could only truncate. auto-fit
+             drops to three columns on a narrow phone instead, so every label
+             stays whole — the requirement was that no word breaks or
+             overlaps, and hiding half a word behind an ellipsis fails it just
+             as surely as spilling it would. */
+          grid-template-columns: repeat(auto-fit, minmax(clamp(78px, 22vw, 132px), 1fr));
+          /* FRACTIONAL rows, however many the columns produce. 1fr rows divide
+             whatever height the panel has, so the tiles always fill the fixed
+             box exactly — no leftover space, and nothing pushed past the
+             bottom edge whether the grid lands as 4x2 or 3x3. minmax(0, …) is
+             what permits a track to be smaller than its content. */
+          grid-auto-rows: minmax(0, 1fr);
+          flex: 1 1 auto;
+          min-height: 0;
           gap: clamp(4px, 1.8vw, 8px);
         }
 
         .gnb-explore-link {
-          display: flex; flex-direction: column;
-          align-items: flex-start; justify-content: flex-start;
-          gap: clamp(3px, 1.2vw, 6px);
-          /* The floor stays past a 44px touch target even on the narrowest
-             phone; the ceiling is the original 78px, so nothing changes from
-             400px up. */
-          min-height: clamp(62px, 19vw, 78px);
-          padding: clamp(7px, 2.4vw, 10px);
-          /* A four-column track on a 320px screen is ~63px wide, which is
-             narrower than "Businesses" or "opportunities" — without this the
-             word would spill past the rounded corner rather than wrap. */
-          overflow-wrap: anywhere;
-          border-radius: clamp(12px, 4vw, 16px);
+          /* ROW, not column: the icon sits to the left of the name, as in the
+             reference. Dropping the stacked layout and the blurb underneath is
+             most of the height saving that lets two rows live in a quarter
+             screen. */
+          display: flex; flex-direction: row;
+          align-items: center; justify-content: center;
+          gap: clamp(4px, 1.4vw, 7px);
+          /* No min-height at all — the grid's 1fr rows set the height. A floor
+             here would fight the box and be the one thing able to overflow it. */
+          min-width: 0;
+          min-height: 0;
+          padding: clamp(4px, 1.6vw, 8px) clamp(5px, 1.8vw, 9px);
+          border-radius: clamp(11px, 3.4vw, 15px);
           border: 1px solid rgba(255,255,255,0.06);
           background: rgba(255,255,255,0.025);
           color: rgba(255,255,255,0.92);
@@ -456,23 +485,29 @@ export default function GlobalBottomNav() {
         }
         .gnb-explore-link:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
 
-        .gnb-explore-label {
-          font-size: clamp(10px, 3.1vw, 13px);
-          font-weight: 700; line-height: 1.15;
-          letter-spacing: -0.01em;
-          color: rgba(255,255,255,0.92);
+        /* The icon must never be squeezed by a long neighbour, and it scales
+           with the tile so a 320px phone does not get a 20px glyph in a 60px
+           cell. */
+        .gnb-explore-link svg {
+          flex: 0 0 auto;
+          width: clamp(14px, 4.2vw, 19px);
+          height: clamp(14px, 4.2vw, 19px);
         }
-        /* Capped at two lines: the blurbs are a nicety, and letting one run to
-           three lines on a narrow screen would set the height of its whole
-           row and unbalance the grid. */
-        .gnb-explore-desc {
-          font-size: clamp(8.5px, 2.6vw, 11px);
-          line-height: 1.3;
-          color: rgba(255,255,255,0.34);
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
+
+        /* ONE LINE, never wrapped and never broken mid-word. nowrap plus a
+           min-width:0 parent is what stops "Businesses" from either splitting
+           across lines or spilling over the neighbouring tile; if a viewport is
+           genuinely too narrow for the whole word the ellipsis is the honest
+           outcome, not overlapping text. */
+        .gnb-explore-label {
+          min-width: 0;
+          font-size: clamp(9px, 2.9vw, 13px);
+          font-weight: 700; line-height: 1.15;
+          letter-spacing: -0.015em;
+          color: rgba(255,255,255,0.92);
+          white-space: nowrap;
           overflow: hidden;
+          text-overflow: ellipsis;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -498,11 +533,12 @@ export default function GlobalBottomNav() {
         aria-label="Explore DoCrud"
         aria-hidden={!exploreOpen}
       >
-        {/* Sheet grabber — the affordance the panel reads as. Decorative. */}
-        <span className="gnb-explore-grabber" aria-hidden="true" />
-
-        <div className="gnb-explore-head">
-          <span className="gnb-explore-title">Explore DoCrud</span>
+        {/* Grabber + close. No visible title: the panel is already labelled for
+            assistive tech by aria-label on the container, so removing the
+            heading costs nothing semantically and returns its height to the
+            tiles. */}
+        <div className="gnb-explore-top">
+          <span className="gnb-explore-grabber" aria-hidden="true" />
           <button
             type="button"
             className="gnb-explore-close"
@@ -510,7 +546,7 @@ export default function GlobalBottomNav() {
             aria-label="Close Explore"
             tabIndex={exploreOpen ? 0 : -1}
           >
-            <X width={15} height={15} />
+            <X width={14} height={14} />
           </button>
         </div>
 
@@ -524,9 +560,8 @@ export default function GlobalBottomNav() {
               tabIndex={exploreOpen ? 0 : -1}
               onClick={() => setExploreOpen(false)}
             >
-              <item.Icon width={20} height={20} style={{ color: item.ic }} aria-hidden />
+              <item.Icon style={{ color: item.ic }} aria-hidden />
               <span className="gnb-explore-label">{item.label}</span>
-              <span className="gnb-explore-desc">{item.desc}</span>
             </a>
           ))}
         </div>

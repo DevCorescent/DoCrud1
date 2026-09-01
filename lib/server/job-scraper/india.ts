@@ -79,3 +79,30 @@ export function matchesIndiaFilter(location: string, workMode: string | undefine
   if (filter === 'remote-india') return indiaBucket(location, workMode) === 'remote-india' || (isIndiaRelevant(location) && (workMode === 'remote' || /remote/.test(lc(location))));
   return indiaBucket(location, workMode) === filter;
 }
+
+/**
+ * City suggestions for the job composer's location field.
+ *
+ * Reuses the SAME canon map the scraper matches against, so a location a
+ * poster picks here is one the India filters already recognise. There is no
+ * geocoding service in this project; rather than stub a fetch that returns
+ * nothing, this offers the real list the platform actually understands and
+ * leaves the field free-text for everywhere else.
+ *
+ * Canonical names only — the aliases ('bangalore', 'bombay') all resolve to the
+ * same display name, so the list is deduplicated rather than showing both.
+ */
+export function indiaCitySuggestions(query: string, limit = 6): string[] {
+  const canon = Array.from(new Set(Object.values(CITY_CANON))).sort();
+  const q = lc(query).trim();
+  if (!q) return canon.slice(0, limit);
+
+  /* An alias match counts: typing "bangalore" must offer "Bengaluru". */
+  const matches = canon.filter((city) => {
+    if (lc(city).includes(q)) return true;
+    return Object.entries(CITY_CANON).some(([alias, display]) => display === city && alias.includes(q));
+  });
+  /* Prefixes first — "che" should lead with Chennai, not Kochi. */
+  matches.sort((a, b) => Number(lc(b).startsWith(q)) - Number(lc(a).startsWith(q)));
+  return matches.slice(0, limit);
+}

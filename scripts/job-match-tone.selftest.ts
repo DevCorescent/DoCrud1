@@ -12,6 +12,8 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import {
   getJobMatchTone, getJobMatchLabel, jobMatchTokenClasses, JOB_MATCH_TONE_CLASSES,
+  jobMatchPanelClasses, jobMatchActionClasses,
+  JOB_MATCH_PANEL_CLASSES, JOB_MATCH_ACTION_CLASSES, JOB_MATCH_ACTION_NEUTRAL,
 } from '@/lib/job-match-tone';
 import { toneForScore, TONE_LABEL, TONE_THRESHOLDS } from '@/lib/score-tone';
 import { recommendMatch, buildRecProfile } from '@/lib/server/job-recommend';
@@ -143,6 +145,75 @@ function main() {
   }
   check('the badge still says Match, never "ATS Score"',
     !/ATS Score/i.test(CARD) && !/ATS Score/i.test(RECS));
+
+
+  console.log('\n── 9. Panel and Apply track the SAME score as the badge ──');
+
+  /* Comments in the card explain the colours and name every hue; an absence
+     check against the raw source would match the prose, not the markup. */
+  const CARD_CODE = CARD.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  const TONES = ['red', 'yellow', 'blue', 'green'] as const;
+  for (const tone of TONES) {
+    const panel = JOB_MATCH_PANEL_CLASSES[tone];
+    check(`the ${tone} panel declares a border, a fill, a label and an icon colour`,
+      /border-\w+-500/.test(panel.panel) && /bg-\w+-500/.test(panel.panel)
+      && panel.label.startsWith('text-') && panel.icon.startsWith('text-'));
+    check(`the ${tone} action declares BOTH a light and a dark fill`,
+      /(^|\s)bg-\w+-\d{3}/.test(JOB_MATCH_ACTION_CLASSES[tone])
+      && /dark:bg-\w+-\d{3}/.test(JOB_MATCH_ACTION_CLASSES[tone]));
+    check(`the ${tone} action declares a hover state in both themes`,
+      /(^|\s)hover:bg-/.test(JOB_MATCH_ACTION_CLASSES[tone])
+      && /dark:hover:bg-/.test(JOB_MATCH_ACTION_CLASSES[tone]));
+  }
+
+  /* The point of the change: at 18% the panel and the button must NOT be the
+     green they used to be, and at 88% they must not be red. */
+  check('a weak match colours the panel in the weak tone, not emerald',
+    !jobMatchPanelClasses(18).panel.includes('emerald')
+    && jobMatchPanelClasses(18).panel.includes('rose'));
+  check('a weak match colours Apply in the weak tone, not emerald',
+    !jobMatchActionClasses(18).includes('emerald') && jobMatchActionClasses(18).includes('rose'));
+  check('a strong match still reads emerald',
+    jobMatchPanelClasses(88).panel.includes('emerald') && jobMatchActionClasses(88).includes('emerald'));
+  check('panel, badge and Apply agree on the band at every score',
+    [0, 18, 24, 25, 49, 50, 74, 75, 88, 100].every((n) => {
+      const tone = getJobMatchTone(n);
+      return jobMatchPanelClasses(n) === JOB_MATCH_PANEL_CLASSES[tone]
+        && jobMatchActionClasses(n) === JOB_MATCH_ACTION_CLASSES[tone];
+    }));
+  check('the four panel tones are all different from one another',
+    new Set(TONES.map((t) => JOB_MATCH_PANEL_CLASSES[t].panel)).size === 4);
+  check('the four action tones are all different from one another',
+    new Set(TONES.map((t) => JOB_MATCH_ACTION_CLASSES[t])).size === 4);
+
+  /* A card with no score must not be dressed in a tone it did not earn. */
+  check('a job with no score gets the product default button, not a tone',
+    jobMatchActionClasses(undefined) === JOB_MATCH_ACTION_NEUTRAL);
+  check('a NaN score falls back to the neutral button rather than throwing',
+    jobMatchActionClasses(Number.NaN) === JOB_MATCH_ACTION_NEUTRAL);
+  check('the neutral button carries both themes',
+    /(^|\s)bg-slate-900/.test(JOB_MATCH_ACTION_NEUTRAL) && /dark:bg-/.test(JOB_MATCH_ACTION_NEUTRAL));
+
+  check('the card styles the reasons panel from the score',
+    CARD_CODE.includes('jobMatchPanelClasses('));
+  check('the card styles Apply from the score',
+    CARD_CODE.includes('jobMatchActionClasses('));
+  check('the reasons panel no longer hardcodes emerald',
+    !/border-emerald-500\/\[0\.14\]/.test(CARD_CODE)
+    && !/text-emerald-300\/70/.test(CARD_CODE)
+    && !/Check className="[^"]*text-emerald-400/.test(CARD_CODE));
+  check('Apply no longer hardcodes the emerald pill',
+    !/bg-emerald-500 px-3 py-1/.test(CARD_CODE)
+    && !/shadow-\[0_1px_6px_rgba\(16,185,129/.test(CARD_CODE));
+  check('Apply adopts the shared button metrics rather than a bespoke pill',
+    /rounded-lg/.test(CARD_CODE) && /focus-visible:ring-2/.test(CARD_CODE));
+  /* The global stylesheet's `.ui-button:hover` rule would overwrite the tone
+     fill in dark mode, so the card must not render Apply through <Button>. */
+  check('Apply does not go through the ui-button class the global sheet overrides',
+    !CARD_CODE.includes('ui-button') && !/from '@\/components\/ui\/button'/.test(CARD_CODE));
+  check('both Apply paths — external applyUrl and internal flow — share one class',
+    (CARD_CODE.match(/className=\{applyClass\}/g) ?? []).length === 2);
 
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);
   if (failures > 0) process.exit(1);

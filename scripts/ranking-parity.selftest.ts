@@ -16,8 +16,39 @@
  *
  * Run:  npm run test:ranking-parity
  */
+import fs from 'fs';
+import path from 'path';
 import { MongoClient } from 'mongodb';
 import { buildRecProfile, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
+
+/**
+ * Load .env the way the repository's other maintenance scripts do.
+ *
+ * `tsx` does not read .env, so `process.env.MONGODB_URI` was undefined when this
+ * test ran through `npm run test:ranking-parity`. The MongoClient constructor
+ * then called `.startsWith()` on it and the suite died with a bare
+ * "Cannot read properties of undefined" - which reads like a product bug and is
+ * really a missing environment variable.
+ *
+ * An already-set variable always wins, so CI and a shell export still override
+ * the file.
+ */
+function loadEnvFile(filePath: string) {
+  if (!fs.existsSync(filePath)) return;
+  for (const rawLine of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"'))
+      || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env) || process.env[key] === '') process.env[key] = value;
+  }
+}
 
 const NOW = 1756339200000;   // fixed clock — recency must not vary between runs
 
@@ -35,7 +66,24 @@ function standIn(tokens: Set<string>, length: number): string {
 }
 
 async function main() {
-  const client = new MongoClient(process.env.MONGODB_URI!, {
+  loadEnvFile(path.join(process.cwd(), '.env'));
+  loadEnvFile(path.join(process.cwd(), '.env.local'));
+
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    /* An actionable message instead of a TypeError from deep inside the driver.
+       This test compares ranking against REAL production jobs and profiles, so
+       it cannot fall back to the local file store the way other selftests do. */
+    console.error(
+      'ranking-parity needs MONGODB_URI.\n'
+      + 'It compares ranking against the real hiring_jobs and user_profiles\n'
+      + 'collections, so there is no offline fallback.\n'
+      + 'Set MONGODB_URI in .env (or export it) and run again.',
+    );
+    process.exit(1);
+  }
+
+  const client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 60000, socketTimeoutMS: 900000,
   });
   await client.connect();

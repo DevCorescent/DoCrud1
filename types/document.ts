@@ -492,6 +492,108 @@ export interface HiringJobPosting {
    * did not specify documents must never appear to require any.
    */
   requiredDocuments?: string[];
+
+  /* ── Canonical job model (Job Platform, Phase 1) ─────────────────────────
+     EVERY field below is OPTIONAL, deliberately. There are 446 live postings
+     written before these existed, and a required field would make all of them
+     invalid the moment the type changed. Absent means "not known", never
+     "empty" and never a default that later reads as fact.
+
+     Nothing here is populated by guessing. A field is written only when the
+     source actually supplied it, or when it can be derived deterministically
+     from content that is already present. Later phases (classification,
+     lifecycle, matching) fill the rest; this phase only makes room for them. */
+
+  /* Provenance — which source produced this, and where it came from. */
+  /** The adapter/source that produced it, e.g. 'ashby:acme'. */
+  sourceId?: string;
+  /** The provider's own id for the posting. Half of the strongest dedup key. */
+  sourceJobId?: string;
+  /** The page this was read from. */
+  sourceUrl?: string;
+  /** The provider's canonical/permanent URL, when it differs from sourceUrl. */
+  canonicalUrl?: string;
+
+  /* Normalized presentation. */
+  /** Lower-cased, punctuation-collapsed title used for matching and dedup. */
+  normalizedTitle?: string;
+  /** The employer's domain, when known. Never inferred from the company name. */
+  companyDomain?: string;
+  logoUrl?: string;
+
+  /* Content. `description` (above) stays the single field every existing
+     reader uses; these two hold the split forms when a source provides them. */
+  descriptionHtml?: string;
+  descriptionText?: string;
+  requirementsText?: string;
+
+  /**
+   * Skills extracted from the posting by the platform.
+   *
+   * Distinct from `preferredSkills`, which is what the SOURCE stated. Keeping
+   * them apart means a later extraction pass can be re-run and corrected
+   * without overwriting what the employer actually wrote.
+   */
+  skillsExtracted?: string[];
+
+  /* Requirements, as numbers rather than prose, when the source is explicit. */
+  minExperienceYears?: number;
+  maxExperienceYears?: number;
+  educationRequired?: string;
+
+  /* Compensation. Absent means the posting did not state it - which is common,
+     and must never be rendered as a salary of zero. */
+  salaryMin?: number;
+  salaryMax?: number;
+  /** ISO 4217, e.g. 'INR'. */
+  salaryCurrency?: string;
+  salaryPeriod?: 'hour' | 'day' | 'week' | 'month' | 'year';
+
+  /* Structured location. `location` (above) remains the human string; these
+     are the parsed parts, filled by the Phase 4 location taxonomy. */
+  country?: string;
+  state?: string;
+  city?: string;
+  isIndia?: boolean;
+  latitude?: number;
+  longitude?: number;
+  /**
+   * Where a remote role may actually be performed, e.g. ['IN'] or ['US'].
+   *
+   * A remote job is NOT globally eligible: "remote (US only)" must not be
+   * offered to a candidate in India. Absent means the posting did not say, so
+   * eligibility must not assume it is open.
+   */
+  remoteEligibleRegions?: string[];
+
+  /* Classification (Phase 4 writes these; nothing reads them yet). */
+  domain?: string;
+  subDomain?: string;
+  /** 0–1. Low confidence must route to review, never silently to a user. */
+  domainConfidence?: number;
+  /** Which classifier version produced the above, so it can be recomputed. */
+  classificationVersion?: string;
+
+  /* Lifecycle (Phase 8 enforces these; nothing filters on them yet). */
+  /** When the SOURCE says it was published. Absent when not trustworthy. */
+  postedAt?: string;
+  /** When this application first stored it. */
+  ingestedAt?: string;
+  expiresAt?: string;
+  /**
+   * Whether the posting is currently live.
+   *
+   * Absent is NOT false: the 446 existing jobs predate this field and are
+   * governed by `status` as they always were. Only a reader that understands
+   * both may combine them.
+   */
+  isActive?: boolean;
+
+  /* Deduplication. */
+  /** Deterministic hash of the normalized content. Same content, same hash. */
+  contentHash?: string;
+  /** Groups the same real job seen through several sources. */
+  dedupGroupId?: string;
 }
 
 export interface HiringJobApplication {

@@ -61,7 +61,9 @@
     "test:mail-analytics": "tsx scripts/mail-analytics.selftest.ts",
     "test:mail-suppression": "tsx scripts/mail-suppression.selftest.ts",
     "test:mail-bounce": "tsx scripts/mail-bounce.selftest.ts",
-    "test:mail-provider-settings": "tsx scripts/mail-provider-settings.selftest.ts"
+    "test:mail-provider-settings": "tsx scripts/mail-provider-settings.selftest.ts",
+    "test:job-model": "tsx scripts/job-model.selftest.ts",
+    "test:job-sources": "tsx scripts/job-sources.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",
@@ -114,5 +116,8 @@
   },
   "optionalDependencies": {
     "@next/swc-darwin-arm64": "^14.2.33"
+  },
+  "overrides": {
+    "jsdom": "^26.1.0"
   }
 }

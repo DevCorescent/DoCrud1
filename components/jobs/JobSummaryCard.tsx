@@ -29,7 +29,9 @@ import {
 } from '@/lib/jobs-ui';
 import { getCompanyLogo } from '@/lib/company-logos';
 import { isIndiaRelevant } from '@/lib/server/job-scraper/india';
-import { getJobMatchLabel, jobMatchTokenClasses } from '@/lib/job-match-tone';
+import {
+  getJobMatchLabel, jobMatchTokenClasses, jobMatchPanelClasses, jobMatchActionClasses,
+} from '@/lib/job-match-tone';
 
 export type JobSummary = {
   id: string;
@@ -52,16 +54,26 @@ export type JobSummary = {
 };
 
 /**
- * Apply carries its own colour rather than inheriting the card's.
+ * Apply, in the product's standard button language.
  *
- * It used to be a white pill with near-black text, which only reads against a
- * dark ground — on any light surface the fill disappeared into the page and the
- * label went with it. A solid emerald fill with white text keeps the button and
- * its text legible either way, and emerald is already this card's own accent
- * (the Open pill, the match badge), so nothing new enters the palette.
+ * These are the base tokens of components/ui/button.tsx at `size: 'xs'` —
+ * rounded-lg, h-7, the shared focus ring and the press response — so the card's
+ * action looks and behaves like every other button in the software instead of
+ * being a bespoke emerald pill.
+ *
+ * WHY THE TOKENS ARE REPEATED HERE RATHER THAN <Button> USED DIRECTLY. The
+ * `Button` component emits a `ui-button` class, and app/globals.css carries
+ *   :root[data-ui-mode='dark'] .ui-button:hover { background-color: rgba(255,255,255,0.1) !important }
+ * which outranks any utility class on specificity. Rendering Apply as a
+ * <Button> would therefore turn every hover into the same grey wash and destroy
+ * the score colour precisely when the member is about to click. The fill itself
+ * comes from jobMatchActionClasses() and carries both themes.
  */
-const APPLY_BTN =
-  'inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3 py-1 text-[11.5px] font-bold text-white shadow-[0_1px_6px_rgba(16,185,129,0.30)] transition hover:bg-emerald-400';
+const APPLY_BASE =
+  'inline-flex h-7 items-center justify-center gap-1 whitespace-nowrap rounded-lg px-2.5 text-xs font-semibold'
+  + ' transition-all duration-200 active:scale-[0.98]'
+  + ' focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
+  + ' focus-visible:ring-slate-900/40 dark:focus-visible:ring-white/50';
 
 function CompanyLogo({ company }: { company: string }) {
   const logo = getCompanyLogo(company);
@@ -112,6 +124,10 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
   const canApply = isValidApplyUrl(job.applyUrl);
   const reasons = (job.matchReasons ?? []).filter(Boolean).slice(0, 3);
   const hasMatch = typeof job.matchScore === 'number';
+  /* Panel and Apply take their hue from the SAME score the badge prints, so a
+     weak match can never be dressed as a strong one. */
+  const panelTone = hasMatch ? jobMatchPanelClasses(job.matchScore as number) : null;
+  const applyClass = `${APPLY_BASE} ${jobMatchActionClasses(job.matchScore)}`;
 
   const open = () => router.push(detail);
   const stop = (e: React.MouseEvent) => e.stopPropagation();
@@ -179,13 +195,13 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
           )}
 
           {/* why this matches (real reasons only) */}
-          {hasMatch && reasons.length > 0 && (
-            <div className="mt-3 rounded-xl border border-emerald-500/[0.14] bg-emerald-500/[0.05] px-3 py-2.5">
-              <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-emerald-300/70">Why this matches you</p>
+          {hasMatch && panelTone && reasons.length > 0 && (
+            <div className={`mt-3 rounded-xl border px-3 py-2.5 ${panelTone.panel}`}>
+              <p className={`text-[9.5px] font-bold uppercase tracking-[0.12em] ${panelTone.label}`}>Why this matches you</p>
               <ul className="mt-1.5 flex flex-col gap-1">
                 {reasons.map((r) => (
                   <li key={r} className="flex items-center gap-1.5 text-[11.5px] text-white/60">
-                    <Check className="h-3 w-3 shrink-0 text-emerald-400" />
+                    <Check className={`h-3 w-3 shrink-0 ${panelTone.icon}`} />
                     <span className="truncate">{r}</span>
                   </li>
                 ))}
@@ -208,7 +224,7 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
                 <a
                   href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow" onClick={stop}
                   aria-label={`Apply for ${job.title} at ${company} on the original source`}
-                  className={APPLY_BTN}
+                  className={applyClass}
                 >
                   Apply <ArrowUpRight className="h-3.5 w-3.5" />
                 </a>
@@ -216,7 +232,7 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
                 <Link
                   href={`${detail}#apply`} onClick={stop}
                   aria-label={`Apply for ${job.title} at ${company} on Docrud`}
-                  className={APPLY_BTN}
+                  className={applyClass}
                 >
                   Apply <ArrowRight className="h-3.5 w-3.5" />
                 </Link>

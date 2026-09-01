@@ -13,7 +13,7 @@
  * beside a form. Duplicating the real page would be a second thing to keep in
  * step for no gain, so this shows what a candidate will read, not a pixel copy.
  */
-import { Briefcase, MapPin } from 'lucide-react';
+import { Briefcase, Banknote, MapPin } from 'lucide-react';
 import { EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, EXPERIENCE_LABELS } from '@/lib/jobs-ui';
 
 export interface JobPreviewData {
@@ -27,6 +27,12 @@ export interface JobPreviewData {
   responsibilities: string;
   requirements: string;
   preferredSkills: string;
+  /* Compensation, as the composer holds it: strings, and blank when the
+     posting does not state a figure. */
+  salaryMin?: string;
+  salaryMax?: string;
+  salaryCurrency?: string;
+  salaryPeriod?: string;
 }
 
 /** Who the job will be posted as. Drawn from the signed-in profile, never typed. */
@@ -45,6 +51,44 @@ const CHIP = 'inline-flex items-center gap-1 rounded-full border border-slate-20
 const lines = (value: string): string[] =>
   value.split('\n').map((line) => line.trim()).filter(Boolean);
 
+/**
+ * The pay range as a candidate reads it, or '' when none was stated.
+ *
+ * A posting with no salary must render NOTHING — not "₹0", not "Not
+ * disclosed", which would be a claim the poster never made. A single figure is
+ * shown as a floor ("From ₹8,00,000") rather than invented into a range.
+ */
+export function formatSalary(data: Pick<JobPreviewData, 'salaryMin' | 'salaryMax' | 'salaryCurrency' | 'salaryPeriod'>): string {
+  const num = (v?: string) => {
+    const n = Number(String(v ?? '').trim());
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const min = num(data.salaryMin);
+  const max = num(data.salaryMax);
+  if (min === null && max === null) return '';
+
+  const currency = String(data.salaryCurrency ?? 'INR').trim().toUpperCase() || 'INR';
+  const money = (n: number) => {
+    try {
+      return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {
+        style: 'currency', currency, maximumFractionDigits: 0,
+      }).format(n);
+    } catch {
+      /* An unknown currency code must not take the preview down with it. */
+      return `${currency} ${n.toLocaleString('en-IN')}`;
+    }
+  };
+
+  const PERIOD: Record<string, string> = {
+    hour: 'per hour', day: 'per day', week: 'per week', month: 'per month', year: 'per year',
+  };
+  const period = PERIOD[String(data.salaryPeriod ?? 'year')] ?? 'per year';
+  const range = min !== null && max !== null ? `${money(min)} – ${money(max)}`
+    : min !== null ? `From ${money(min)}`
+    : `Up to ${money(max as number)}`;
+  return `${range} ${period}`;
+}
+
 export default function JobPostPreview({
   data, poster,
 }: {
@@ -54,6 +98,7 @@ export default function JobPostPreview({
   const responsibilities = lines(data.responsibilities);
   const requirements = lines(data.requirements);
   const skills = lines(data.preferredSkills);
+  const salary = formatSalary(data);
 
   const meta = [
     EMPLOYMENT_TYPE_LABELS[data.employmentType] ?? data.employmentType,
@@ -111,6 +156,9 @@ export default function JobPostPreview({
           {meta.map((label) => <span key={label} className={CHIP}>{label}</span>)}
           {data.department.trim() && (
             <span className={CHIP}><Briefcase className="h-3 w-3" aria-hidden />{data.department.trim()}</span>
+          )}
+          {salary && (
+            <span className={CHIP}><Banknote className="h-3 w-3" aria-hidden />{salary}</span>
           )}
         </div>
 

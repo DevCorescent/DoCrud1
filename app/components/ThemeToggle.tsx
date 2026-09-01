@@ -32,12 +32,24 @@ export function ThemeToggle({
   onChange,
   className = '',
   compact = false,
+  pill = false,
 }: {
   value: ColorMode;
   onChange: (mode: ColorMode) => void;
   className?: string;
   /** Single icon button that flips the mode per click, sized for a nav row. */
   compact?: boolean;
+  /**
+   * Single button showing the CURRENT mode as an icon plus its name.
+   *
+   * The mobile profile menu's row needs one control that reads as one control.
+   * The segmented pair below states both options and asks the reader to spot
+   * which is selected; at that size, next to a heading, a single button that
+   * simply says what the theme IS is easier to parse and half the width.
+   * Distinct from `compact`, which is icon-only for a nav row with no space
+   * for a word.
+   */
+  pill?: boolean;
 }) {
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -51,6 +63,30 @@ export function ThemeToggle({
      label names the DESTINATION ("Switch to light mode") because that is what
      the click does — naming the current mode reads as a status, not an
      action. */
+  /* ONE BUTTON, NOT A CHOICE OF TWO.
+     A plain <button>, deliberately: with a single control there is no group to
+     describe, so radiogroup/radio semantics would be a lie about what is on
+     screen. The label names the DESTINATION ("Switch to light mode") because
+     that is what pressing it does — naming the current mode would read as a
+     status rather than an action, even though the visible text is the current
+     mode, which is what a reader glancing at the row wants to know. */
+  if (pill) {
+    const next: ColorMode = value === 'dark' ? 'light' : 'dark';
+    const Icon = value === 'dark' ? Moon : Sun;
+    return (
+      <button
+        type="button"
+        aria-label={`Switch to ${next} mode`}
+        title={`Switch to ${next} mode`}
+        onClick={() => onChange(next)}
+        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.06] px-2.5 py-1 text-[12px] font-semibold text-white/85 transition active:scale-95 hover:bg-white/[0.11] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${className}`}
+      >
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+        {value === 'dark' ? 'Dark' : 'Light'}
+      </button>
+    );
+  }
+
   if (compact) {
     const next: ColorMode = value === 'dark' ? 'light' : 'dark';
     const Icon = value === 'dark' ? Moon : Sun;

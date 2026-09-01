@@ -63,7 +63,19 @@
     "test:mail-bounce": "tsx scripts/mail-bounce.selftest.ts",
     "test:mail-provider-settings": "tsx scripts/mail-provider-settings.selftest.ts",
     "test:job-model": "tsx scripts/job-model.selftest.ts",
-    "test:job-sources": "tsx scripts/job-sources.selftest.ts"
+    "test:job-sources": "tsx scripts/job-sources.selftest.ts",
+    "test:job-dedupe": "tsx scripts/job-dedupe.selftest.ts",
+    "test:job-classify": "tsx scripts/job-classify.selftest.ts",
+    "test:job-eligibility": "tsx scripts/job-eligibility.selftest.ts",
+    "test:job-ats-match": "tsx scripts/job-ats-match.selftest.ts",
+    "test:job-recommendation": "tsx scripts/job-recommendation.selftest.ts",
+    "test:job-lifecycle": "tsx scripts/job-lifecycle.selftest.ts",
+    "test:job-scrape-metrics": "tsx scripts/job-scrape-metrics.selftest.ts",
+    "test:job-ingestion-run": "tsx scripts/job-ingestion-run.selftest.ts",
+    "test:job-ats-platforms": "tsx scripts/job-ats-platforms.selftest.ts",
+    "test:job-api": "tsx scripts/job-api.selftest.ts",
+    "test:job-ui": "tsx scripts/job-ui.selftest.ts",
+    "test:job-personalized": "tsx scripts/job-personalized.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

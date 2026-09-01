@@ -28,30 +28,38 @@ const DEFAULT_EXPERIENCE: HiringJobPosting['experienceLevel'] = 'associate';
 // thing. Canonicalize (lowercase, collapse spaces/hyphens to underscore) then map
 // common synonyms onto the exact enum values the model allows. An unrecognized
 // value still returns null → the row is rejected (never coerced to a wrong enum).
-function canonEnum(raw: string): string {
+export function canonEnum(raw: string): string {
   return raw.trim().toLowerCase().replace(/[\s\-/]+/g, '_').replace(/_+/g, '_');
 }
-const EMPLOYMENT_ALIASES: Record<string, HiringJobPosting['employmentType']> = {
+export const EMPLOYMENT_ALIASES: Record<string, HiringJobPosting['employmentType']> = {
   full_time: 'full_time', fulltime: 'full_time', permanent: 'full_time', regular: 'full_time',
   part_time: 'part_time', parttime: 'part_time',
   contract: 'contract', contractor: 'contract', contractual: 'contract', temporary: 'contract', temp: 'contract',
   internship: 'internship', intern: 'internship', trainee: 'internship',
   freelance: 'freelance', freelancer: 'freelance',
 };
-const WORKMODE_ALIASES: Record<string, HiringJobPosting['workMode']> = {
+export const WORKMODE_ALIASES: Record<string, HiringJobPosting['workMode']> = {
   remote: 'remote', wfh: 'remote', work_from_home: 'remote', telecommute: 'remote', virtual: 'remote',
   hybrid: 'hybrid', flexible: 'hybrid',
   onsite: 'onsite', on_site: 'onsite', in_office: 'onsite', office: 'onsite', in_person: 'onsite',
 };
-const EXPERIENCE_ALIASES: Record<string, HiringJobPosting['experienceLevel']> = {
+export const EXPERIENCE_ALIASES: Record<string, HiringJobPosting['experienceLevel']> = {
   entry: 'entry', entry_level: 'entry', junior: 'entry', jr: 'entry', fresher: 'entry', graduate: 'entry', trainee: 'entry',
   associate: 'associate',
   mid: 'mid', mid_level: 'mid', intermediate: 'mid', midweight: 'mid',
   senior: 'senior', sr: 'senior', senior_level: 'senior',
   lead: 'lead', principal: 'lead', staff: 'lead', director: 'lead', head: 'lead', manager: 'lead', expert: 'lead',
 };
-/** Map a raw enum cell to a canonical value, or null when it isn't recognized. */
-function normalizeEnum<T>(raw: string, aliases: Record<string, T>): T | null {
+/**
+ * Map a raw enum cell to a canonical value, or null when it isn't recognized.
+ *
+ * Exported (with the alias tables above) so the source-ingestion normalizer in
+ * lib/server/job-sources/normalize.ts maps enums through EXACTLY this table.
+ * A second copy would let a CSV import and an adapter import disagree about
+ * what "Full Time" means, and the two would drift the first time either was
+ * corrected. Nothing about the CSV behaviour changes.
+ */
+export function normalizeEnum<T>(raw: string, aliases: Record<string, T>): T | null {
   const key = canonEnum(raw);
   return key in aliases ? aliases[key] : null;
 }
@@ -79,12 +87,48 @@ export const CSV_HEADER = [
 
 export interface RowError { row: number; errors: string[] }
 export interface RowDuplicate { row: number; reason: string; fingerprint: string }
+/**
+ * What the importer can TRUTHFULLY tell apart.
+ *
+ * The old summary had one `duplicates` number covering three different facts,
+ * which is how "149 found, 0 imported" came to look like a failure when it was
+ * a fully up-to-date board. These buckets are mutually exclusive and sum to
+ * `valid`.
+ *
+ * `contentChanged` is the honest admission of a real limitation: this importer
+ * SKIPS a row whose job already exists, so a posting whose description changed
+ * is recognised and then not updated. Reporting it as `unchanged` would be a
+ * lie; reporting it as a duplicate hides that the stored copy is now stale.
+ * Updating it is Path B's job (Stage 2), not this one's.
+ */
+export interface ImportBreakdown {
+  /** Written as new jobs. */
+  inserted: number;
+  /** A second row for a job already seen EARLIER IN THIS SAME RUN. */
+  duplicateInRun: number;
+  /** Matches a stored job, and the content hash proves it is still current. */
+  unchanged: number;
+  /** Matches a stored job whose content DIFFERS. Skipped — see above. */
+  contentChanged: number;
+  /**
+   * Matches a stored job that predates `contentHash`, so current-vs-changed
+   * cannot be determined. Counted separately rather than guessed either way.
+   */
+  existingUnknown: number;
+}
+
 export interface ImportSummary {
   totalRows: number;
   valid: number;
   invalid: number;
   duplicates: number;
   imported: number;              // rows actually written (commit only; 0 on preview)
+  /**
+   * Always 0 for this importer: it never updates an existing job, only skips
+   * it. Present so a caller can read one shape across both ingestion paths.
+   */
+  updated: number;
+  breakdown: ImportBreakdown;
   committed: boolean;
   invalidRows: RowError[];
   duplicateRows: RowDuplicate[];
@@ -199,9 +243,22 @@ export async function importJobsFromCsv(
   const identity = scraperIdentity(opts.adminEmail);
   const now = new Date().toISOString();
 
-  // Existing fingerprints (any status) so re-imports are skipped.
+  /* Existing fingerprints (any status) so re-imports are skipped — and the
+     stored content hash alongside, which is what lets an already-current job
+     be told apart from one whose content moved on. Jobs imported before
+     `contentHash` existed map to undefined and are reported as such. */
   const existing = await getHiringJobs();
-  const seen = new Set<string>(existing.map((j) => jobFingerprint(j.organizationName, j.title, j.location || '')));
+  const existingByFp = new Map<string, string | undefined>();
+  for (const j of existing) {
+    const fp = jobFingerprint(j.organizationName, j.title, j.location || '');
+    if (!existingByFp.has(fp)) existingByFp.set(fp, j.contentHash);
+  }
+  /* Rows accepted so far IN THIS RUN, kept separate from the stored set so the
+     two kinds of "duplicate" never get merged into one number again. */
+  const seenInRun = new Set<string>();
+  const breakdown: ImportBreakdown = {
+    inserted: 0, duplicateInRun: 0, unchanged: 0, contentChanged: 0, existingUnknown: 0,
+  };
 
   const invalidRows: RowError[] = [];
   const duplicateRows: RowDuplicate[] = [];
@@ -261,8 +318,29 @@ export async function importJobsFromCsv(
     if (errors.length > 0) { invalidRows.push({ row: rowNum, errors }); return; }
 
     const fp = jobFingerprint(organizationName, title, location);
-    if (seen.has(fp)) { duplicateRows.push({ row: rowNum, reason: 'duplicate of an existing or already-imported job', fingerprint: fp }); return; }
-    seen.add(fp);
+
+    if (seenInRun.has(fp)) {
+      breakdown.duplicateInRun += 1;
+      duplicateRows.push({ row: rowNum, reason: 'duplicate of another row in this run', fingerprint: fp });
+      return;
+    }
+    if (existingByFp.has(fp)) {
+      const storedHash = existingByFp.get(fp);
+      const rowHash = jobContentHash({
+        title, organizationName, location, description,
+        responsibilities: responsibilities.values,
+        requirements: requirements.values,
+        preferredSkills: preferredSkills.values,
+      });
+      let reason: string;
+      if (!storedHash) { breakdown.existingUnknown += 1; reason = 'already stored (content comparison unavailable)'; }
+      else if (storedHash === rowHash) { breakdown.unchanged += 1; reason = 'already stored and unchanged'; }
+      else { breakdown.contentChanged += 1; reason = 'already stored but the source content changed — not updated by this importer'; }
+      duplicateRows.push({ row: rowNum, reason, fingerprint: fp });
+      return;
+    }
+    seenInRun.add(fp);
+    breakdown.inserted += 1;
 
     const id = `job-${randomUUID()}`;
     valid.push({
@@ -322,8 +400,13 @@ export async function importJobsFromCsv(
     totalRows: dataRows.length,
     valid: valid.length,
     invalid: invalidRows.length,
+    /* Kept as the SUM of every not-inserted-but-recognised bucket, so existing
+       callers keep the number they already read while `breakdown` explains it. */
     duplicates: duplicateRows.length,
     imported,
+    /* This importer skips rather than updates — see ImportBreakdown. */
+    updated: 0,
+    breakdown,
     committed: Boolean(opts.commit),
     invalidRows: invalidRows.slice(0, 200),
     duplicateRows: duplicateRows.slice(0, 200),

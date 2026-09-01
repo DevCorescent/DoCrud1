@@ -4,6 +4,12 @@
  *   GET https://api.ashbyhq.com/posting-api/job-board/{board}?includeCompensation=true
  *   docs: https://developers.ashbyhq.com/docs/public-job-posting-api
  *
+ * NOT PAGINATED, deliberately. The public Job Posting API returns every
+ * published posting for the board in a single response — there is no page,
+ * cursor or offset parameter to follow. Adding one would be inventing an API
+ * the provider does not expose, so this fetches once and normalizes the lot.
+ * If Ashby ever introduces paging, this is the function to change.
+ *
  * Public, no auth/secret. Only LISTED postings are importable (isListed === true).
  * The board name comes from configuration (ASHBY_JOB_BOARDS), never hardcoded.
  */

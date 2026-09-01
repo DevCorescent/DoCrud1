@@ -4,6 +4,11 @@
  *   GET https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true
  *   docs: https://developers.greenhouse.io/job-board.html
  *
+ * NOT PAGINATED, deliberately. The public Job Board API returns the board's
+ * complete job list in one response. (Greenhouse's paginated endpoints belong
+ * to the authenticated Harvest API, which is a different product and needs a
+ * key — out of scope for a public-source architecture.) Fetches once.
+ *
  * Public, no auth/secret. Lists a company's currently-open postings. The board
  * token comes from configuration (GREENHOUSE_BOARDS), never hardcoded.
  */

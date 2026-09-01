@@ -6,7 +6,11 @@
  * importer (lib/server/job-import.ts). No new job model, no second pipeline.
  */
 
-export type SourceProvider = 'ashby' | 'lever' | 'greenhouse' | 'jsonld';
+export type SourceProvider =
+  | 'ashby' | 'lever' | 'greenhouse'
+  /* Stage 3 — all public, unauthenticated board endpoints. */
+  | 'workday' | 'smartrecruiters' | 'workable' | 'recruitee' | 'personio' | 'bamboohr'
+  | 'jsonld';
 
 export interface ScrapeSource {
   /** Stable identifier the admin selects (never a raw URL). */
@@ -17,6 +21,13 @@ export interface ScrapeSource {
   provider?: SourceProvider;
   /** Provider board/company identifier (Ashby board / Lever company / Greenhouse board). */
   board?: string;
+  /**
+   * Workday only. Its public URL is
+   * https://{tenant}.{shard}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs
+   * so a single slug cannot address a board — all three parts are required,
+   * and forcing Workday into the slug model would just produce broken URLs.
+   */
+  workday?: { tenant: string; shard: string; site: string };
   /** Optional country tag for the source registry (e.g. 'IN'). Presentation only. */
   country?: string;
   /** SSRF guard: the ONLY host the fetcher is allowed to request for this source. */
@@ -106,6 +117,10 @@ export interface NormalizedJob {
 /** Injectable deps for provider fetching (tests inject fixtures — no network). */
 export interface ProviderDeps {
   fetchJson?: (url: string) => Promise<unknown | null>;
+  /** Workday's board endpoint is a POST. Injected so tests need no network. */
+  fetchJsonPost?: (url: string, body: unknown) => Promise<unknown | null>;
+  /** Personio's XML feed, and any fetch that must not follow redirects. */
+  fetchTextStrict?: (url: string) => Promise<{ status: number; text: string } | null>;
   now?: () => number;
 }
 

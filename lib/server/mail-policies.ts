@@ -19,11 +19,14 @@ export type MailPolicyKey =
   | 'social_notifications'
   | 'public_face_notifications'
   | 'business_verification'
-  | 'feed_moderation';
+  | 'feed_moderation'
+  /* Phase 9: application status updates sent to a candidate. */
+  | 'hiring_notifications';
 
 export type MailPolicies = Record<MailPolicyKey, boolean>;
 
 export const defaultMailPolicies: MailPolicies = {
+  hiring_notifications: true,
   document_delivery: true,
   collection_request: true,
   document_signed_owner_notify: true,
@@ -71,6 +74,7 @@ export async function saveMailPolicies(next: MailPolicies) {
     public_face_notifications: Boolean(next.public_face_notifications),
     business_verification: Boolean(next.business_verification),
     feed_moderation: Boolean(next.feed_moderation),
+    hiring_notifications: Boolean(next.hiring_notifications),
   };
   await writeJsonFile(mailPoliciesPath, cleaned);
 }

@@ -62,7 +62,15 @@ export interface Conversation {
   participants: string[];
   status: 'active' | 'request' | 'rejected';
   requestFrom?: string;
-  source?: 'service';
+  /**
+   * Why this conversation exists.
+   *
+   * 'job' marks an employer<->applicant thread opened from a real application.
+   * That relationship is itself the legitimacy evidence, which is why such a
+   * thread opens ACTIVE rather than as a message request — a candidate must not
+   * have to accept a request to hear from a company they applied to.
+   */
+  source?: 'service' | 'job';
   createdAt: string;
   updatedAt: string;
   lastMessage?: {
@@ -166,8 +174,12 @@ async function areMutualFollowers(userA: string, userB: string): Promise<boolean
 export async function getOrCreateConversation(
   fromUserId: string,
   toUserId: string,
-  source?: 'service',
+  source?: 'service' | 'job',
 ): Promise<{ conversation: Conversation; created: boolean }> {
+  /* A job thread is always active: the caller has already proved an
+     application links these two people. Everything else keeps the existing
+     mutual-follower rule exactly as it was. */
+  const forceActive = source === 'job';
   if (getDbPool()) {
     const db = await getMongoDb();
     if (db) {
@@ -176,6 +188,17 @@ export async function getOrCreateConversation(
       });
       if (existing) {
         const conv = stripConv(existing);
+        /* An existing request between these two is promoted once a real
+           application links them — otherwise an earlier cold request would
+           keep a hiring conversation stuck behind an accept. */
+        if (forceActive && conv.status === 'request') {
+          await db.collection('conversations').updateOne(
+            { _id: existing._id as any },
+            { $set: { status: 'active', source: 'job', updatedAt: new Date().toISOString() }, $unset: { requestFrom: '' } },
+          );
+          conv.status = 'active';
+          conv.source = 'job';
+        }
         if (source === 'service' && !conv.source) {
           await db.collection('conversations').updateOne({ _id: existing._id as any }, { $set: { source: 'service', updatedAt: new Date().toISOString() } });
           conv.source = 'service';
@@ -184,12 +207,12 @@ export async function getOrCreateConversation(
       }
 
       const mutual = await areMutualFollowers(fromUserId, toUserId);
-      const status: Conversation['status'] = mutual ? 'active' : 'request';
+      const status: Conversation['status'] = (mutual || forceActive) ? 'active' : 'request';
       const id = `conv_${crypto.randomBytes(8).toString('hex')}`;
       const now = new Date().toISOString();
       const conversation: Conversation = {
         id, participants: [fromUserId, toUserId], status,
-        requestFrom: mutual ? undefined : fromUserId,
+        requestFrom: (mutual || forceActive) ? undefined : fromUserId,
         source, createdAt: now, updatedAt: now,
         unreadCount: { [fromUserId]: 0, [toUserId]: 0 },
       };

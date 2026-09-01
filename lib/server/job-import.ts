@@ -10,7 +10,7 @@
  * (getHiringJobs/saveHiringJobs), so a commit performs ONE read + ONE write for
  * the whole batch — never one write per row.
  */
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { HiringJobPosting } from '@/types/document';
 import { getHiringJobs, saveHiringJobs } from '@/lib/server/hiring';
 import { parseCsv } from '@/lib/server/csv';
@@ -104,6 +104,60 @@ function scraperIdentity(adminEmail: string) {
 export function jobFingerprint(organizationName: string, title: string, location: string): string {
   const norm = (v: string) => (v || '').toLowerCase().replace(/\s+/g, ' ').trim();
   return `${norm(organizationName)}::${norm(title)}::${norm(location)}`;
+}
+
+/**
+ * A title reduced to its comparable form.
+ *
+ * Lower-cased, punctuation collapsed to single spaces, trimmed. Used for
+ * matching and dedup; the original `title` is never altered, because that is
+ * what an employer wrote and what a candidate is shown.
+ */
+export function normalizeJobTitle(title: string): string {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * A deterministic hash of a posting's CONTENT.
+ *
+ * Same content, same hash - on any machine, in any process, in any order. That
+ * is the whole requirement: it is how a later phase recognises the same job
+ * arriving from a second source, and how it avoids reclassifying a posting
+ * that has not changed.
+ *
+ * Only content participates. Ids, timestamps, URLs and status are deliberately
+ * excluded: they differ between sources for what is genuinely the same job,
+ * and including them would defeat the purpose. Array fields are sorted so that
+ * two sources listing the same requirements in a different order still agree.
+ */
+export function jobContentHash(input: {
+  title?: string;
+  organizationName?: string;
+  location?: string;
+  description?: string;
+  responsibilities?: string[];
+  requirements?: string[];
+  preferredSkills?: string[];
+}): string {
+  const norm = (v: unknown) => String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  /* Sorted, so ordering differences between sources do not change the hash. */
+  const normList = (v: unknown) => (Array.isArray(v) ? v.map(norm).filter(Boolean).sort() : []);
+
+  const canonical = JSON.stringify({
+    t: normalizeJobTitle(String(input.title ?? '')),
+    o: norm(input.organizationName),
+    l: norm(input.location),
+    d: norm(input.description),
+    r: normList(input.responsibilities),
+    q: normList(input.requirements),
+    s: normList(input.preferredSkills),
+  });
+
+  return createHash('sha256').update(canonical).digest('hex');
 }
 
 function splitArray(raw: string): { values: string[]; error?: string } {
@@ -235,6 +289,24 @@ export async function importJobsFromCsv(
       updatedAt: now,
       source: 'scraper',
       applyUrl: safeApplyUrl,
+
+      /* ── Canonical fields, only where they are DERIVABLE ──────────────────
+         A CSV row carries content, not provenance: there is no sourceJobId,
+         no postedAt and no salary to read here, so those stay absent rather
+         than being invented. What can be derived deterministically from the
+         row itself is derived; everything else waits for the phase that has
+         the data. */
+      normalizedTitle: normalizeJobTitle(title),
+      contentHash: jobContentHash({
+        title, organizationName, location, description,
+        responsibilities: responsibilities.values,
+        requirements: requirements.values,
+        preferredSkills: preferredSkills.values,
+      }),
+      /* When this application first stored the posting. Distinct from
+         `postedAt`, which is what the SOURCE claims and is not available in a
+         CSV import. */
+      ingestedAt: now,
     });
   });
 

@@ -120,13 +120,18 @@ const channels = (hex: string) => {
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 };
 
-/* The greeting has no metric of its own to colour, so it takes the Docrud
-   gold the Explore heading already uses — the brand tone, not a fifth accent. */
-const WASH_BRAND = '206,151,96';
+/* One accent per card, and none of them may collide with the score card.
+   That card is the only DYNAMIC one — its glow follows the band colour, which
+   moves through red, gold, yellow and green as the percentage changes — so the
+   three fixed cards stay out of that warm range entirely. The greeting used to
+   take the brand gold, which read as a duplicate of the score card whenever a
+   profile sat in the Fair band; connections' amber collided with the same
+   band. Keeping the fixed cards cool means every combination stays legible.
 
-/* Just the channels — the gradient that consumes them is WASH_CSS below. */
-const WASH_EMERALD = '16,185,129';
-const WASH_AMBER = '245,158,11';
+   Just the channels — the gradient that consumes them is WASH_CSS below. */
+const WASH_VIOLET = '139,127,232';
+const WASH_TEAL = '45,178,196';
+const WASH_BLUE = '96,150,240';
 
 /* The corner accent: a bottom-right glow with concentric rings rising out of
    it, built to the approved reference.
@@ -156,10 +161,10 @@ const WASH_CSS = `
     overflow: hidden;
     background-image: radial-gradient(
       circle at 100% 100%,
-      rgba(var(--wash-rgb),0.55) 0%,
-      rgba(var(--wash-rgb),0.30) 26%,
-      rgba(var(--wash-rgb),0.13) 46%,
-      rgba(var(--wash-rgb),0.04) 62%,
+      rgba(var(--wash-rgb),0.40) 0%,
+      rgba(var(--wash-rgb),0.21) 26%,
+      rgba(var(--wash-rgb),0.09) 46%,
+      rgba(var(--wash-rgb),0.03) 62%,
       transparent 76%);
   }
   .hh-wash::after {
@@ -170,7 +175,7 @@ const WASH_CSS = `
     background-image: repeating-radial-gradient(
       circle at 100% 100%,
       transparent 0 42px,
-      rgba(var(--wash-rgb),0.34) 42px 43.5px,
+      rgba(var(--wash-rgb),0.24) 42px 43.5px,
       transparent 43.5px 84px);
     -webkit-mask-image: radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
     mask-image: radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
@@ -294,7 +299,7 @@ export default function HomeHighlights({
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
       <div
         className={`hh-wash relative flex items-center gap-3 overflow-hidden p-4 sm:p-5 ${CARD}`}
-        style={{ '--wash-rgb': WASH_BRAND } as CSSProperties}
+        style={{ '--wash-rgb': WASH_VIOLET } as CSSProperties}
       >
         <div className="min-w-0 flex-1">
           <h2 className="flex items-center gap-2 text-[19px] font-bold tracking-[-0.02em] text-white sm:text-[21px]">
@@ -339,14 +344,14 @@ export default function HomeHighlights({
           label="Jobs"
           value={jobCount}
           caption="New matches"
-          wash={WASH_EMERALD}
+          wash={WASH_TEAL}
         />
         <StatTile
           href={RECOMMENDED_PEOPLE_HREF}
           label="Connections"
           value={peopleCount}
           caption="New people"
-          wash={WASH_AMBER}
+          wash={WASH_BLUE}
         />
       </div>
 

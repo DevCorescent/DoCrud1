@@ -29,9 +29,14 @@ type ImportSummary = {
 };
 
 type SourceInfo = { name: string; label: string; provider: string; enabled: boolean; lastSyncAt?: string; jobs?: number; failed?: boolean };
-type ScraperRun = { runAt: string; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number };
+type ScraperRun = { runAt: string; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number;
+  discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
+  existingUnknown?: number; duplicateInRun?: number; truncated?: number; sourcesOk?: number };
 type ScraperStatus = { mode: 'internal' | 'unconfigured'; configured: boolean; sourceNames: string[]; sources: SourceInfo[]; lastRun: ScraperRun | null };
-type ScrapeSummary = { sources: number; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number; perSource: Array<{ name: string; provider: string; fetched: number; active: number; failed: boolean }>; runAt: string };
+type ScrapeSummary = { sources: number; sourcesOk?: number; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number;
+  discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
+  existingUnknown?: number; duplicateInRun?: number; truncated?: number;
+  perSource: Array<{ name: string; provider: string; fetched: number; active: number; failed: boolean }>; runAt: string };
 
 const CSV_HEADER = 'title,organizationName,location,department,employmentType,workMode,experienceLevel,description,responsibilities,requirements,preferredSkills,targetRoleKeywords,applyUrl';
 
@@ -109,7 +114,7 @@ export default function JobsTab() {
       if (!r.ok) { setErr(d.error || 'Import failed.'); return; }
       setSummary(d);
       if (mode === 'commit') {
-        setMsg(`${d.imported} imported · ${d.duplicates} duplicates skipped · ${d.invalid} invalid rejected`);
+        setMsg(`${d.imported} inserted · ${d.duplicates} already known · ${d.invalid} invalid rejected`);
         setCsvText(''); setFileName(''); if (fileRef.current) fileRef.current.value = '';
         await load();
       }
@@ -163,8 +168,12 @@ export default function JobsTab() {
             {/* Dashboard */}
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Approved sources</div><div className="mt-1 text-xl font-bold text-white">{scraper.sources.filter((s) => s.enabled).length}</div></div>
-              <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Jobs found</div><div className="mt-1 text-xl font-bold text-sky-400">{scraper.lastRun?.fetched ?? '—'}</div></div>
-              <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Imported (last run)</div><div className="mt-1 text-xl font-bold text-emerald-400">{scraper.lastRun?.imported ?? '—'}</div></div>
+              {/* DISCOVERED is what the sources returned; INSERTED is what was
+                  written. They are different facts, and showing only "found"
+                  and "imported" made a fully up-to-date board — everything
+                  discovered, nothing new to write — read as a failed run. */}
+              <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Discovered</div><div className="mt-1 text-xl font-bold text-sky-400">{scraper.lastRun?.discovered ?? scraper.lastRun?.fetched ?? '—'}</div></div>
+              <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Inserted (last run)</div><div className="mt-1 text-xl font-bold text-emerald-400">{scraper.lastRun?.inserted ?? scraper.lastRun?.imported ?? '—'}</div></div>
               <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Last run</div><div className="mt-1 text-[12px] font-semibold text-zinc-300">{scraper.lastRun ? new Date(scraper.lastRun.runAt).toLocaleString() : 'Never'}</div></div>
             </div>
 
@@ -176,13 +185,26 @@ export default function JobsTab() {
 
             {scrapeErr && <div className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[12px] text-red-300">{scrapeErr}</div>}
 
+            {/* Every bucket is mutually exclusive and reported even when zero,
+                so a run that changed nothing still explains itself. */}
             {scrapeSummary && (
               <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
-                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300">Sources: <b className="text-white">{scrapeSummary.sources}</b></span>
-                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300">Fetched: <b className="text-white">{scrapeSummary.fetched}</b></span>
-                <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-300">New: <b>{scrapeSummary.imported}</b></span>
-                <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-300">Duplicates: <b>{scrapeSummary.duplicates}</b></span>
+                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300">Sources: <b className="text-white">{scrapeSummary.sourcesOk ?? scrapeSummary.sources}/{scrapeSummary.sources}</b></span>
+                <span className="rounded-md bg-sky-500/10 px-2 py-1 text-sky-300">Discovered: <b>{scrapeSummary.discovered ?? scrapeSummary.fetched}</b></span>
+                <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-300">Inserted: <b>{scrapeSummary.inserted ?? scrapeSummary.imported}</b></span>
+                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300">Updated: <b className="text-white">{scrapeSummary.updated ?? 0}</b></span>
+                <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300">Unchanged: <b className="text-white">{scrapeSummary.unchanged ?? 0}</b></span>
+                {(scrapeSummary.contentChanged ?? 0) > 0 && (
+                  <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-300" title="Already stored, but the source content changed. This importer does not update existing jobs.">Stale: <b>{scrapeSummary.contentChanged}</b></span>
+                )}
+                {(scrapeSummary.existingUnknown ?? 0) > 0 && (
+                  <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-400" title="Already stored, but imported before content hashing — current vs changed cannot be determined.">Indeterminate: <b>{scrapeSummary.existingUnknown}</b></span>
+                )}
+                <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-300">Duplicates: <b>{scrapeSummary.duplicateInRun ?? scrapeSummary.duplicates}</b></span>
                 <span className="rounded-md bg-red-500/10 px-2 py-1 text-red-300">Rejected: <b>{scrapeSummary.rejected}</b></span>
+                {(scrapeSummary.truncated ?? 0) > 0 && (
+                  <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-300" title="Jobs discarded because the run hit its limit. Raise the limit to ingest them.">Truncated: <b>{scrapeSummary.truncated}</b></span>
+                )}
                 {scrapeSummary.failed > 0 && <span className="rounded-md bg-red-500/10 px-2 py-1 text-red-300">Failed sources: <b>{scrapeSummary.failed}</b></span>}
               </div>
             )}

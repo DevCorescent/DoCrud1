@@ -19,7 +19,9 @@ export type OutboundEmailEvent = {
   id: string;
   createdAt: string;
   status: OutboundEmailStatus;
-  type: 'document_delivery' | 'collection_request' | 'system' | 'test' | 'docrud_go_welcome' | 'admin_user_message' | 'feed_moderation';
+  type: 'document_delivery' | 'collection_request' | 'system' | 'test' | 'docrud_go_welcome' | 'admin_user_message' | 'feed_moderation'
+    /* Phase 9. */
+    | 'hiring_status';
   to: string;
   cc?: string[];
   bcc?: string[];

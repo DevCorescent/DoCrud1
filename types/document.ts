@@ -577,8 +577,21 @@ export interface HiringJobPosting {
   /* Lifecycle (Phase 8 enforces these; nothing filters on them yet). */
   /** When the SOURCE says it was published. Absent when not trustworthy. */
   postedAt?: string;
-  /** When this application first stored it. */
+  /** When this application first stored it. The lifecycle's "first seen". */
   ingestedAt?: string;
+  /**
+   * When a source run last confirmed this posting was still listed.
+   *
+   * DISTINCT FROM `updatedAt`, deliberately. `updatedAt` moves when the
+   * CONTENT changes, and ingestion leaves it alone for a posting that has not
+   * changed — so a job still on the board every day would look untouched for
+   * weeks. Age must never be read from it.
+   *
+   * Absent on the postings that predate this field, and absent is not
+   * evidence of absence: the lifecycle treats "never recorded" as unknown.
+   */
+  lastSeenAt?: string;
+  /** When the lifecycle expired it. Absent while the posting is still live. */
   expiresAt?: string;
   /**
    * Whether the posting is currently live.
@@ -654,7 +667,84 @@ export interface HiringJobApplication {
     applicationRiskLevel?: 'low' | 'medium' | 'high';
     roleAlignmentSummary?: string;
   };
-  status: 'submitted' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired';
+  /**
+   * The recruitment state.
+   *
+   * The first five values are the ORIGINAL ones and keep their exact meaning —
+   * nothing stored today changes. Phase 9 adds the four stages the hiring flow
+   * needs between shortlisting and hiring, plus a candidate-initiated
+   * withdrawal. Extending this union rather than introducing a second status
+   * field is what keeps one source of truth: `submitted` is what the API calls
+   * APPLIED, and no record has to be migrated.
+   */
+  status:
+    | 'submitted' | 'reviewing' | 'shortlisted' | 'rejected' | 'hired'
+    | 'interview' | 'assignment' | 'offer_proposed' | 'withdrawn';
+  /**
+   * Every status change, oldest first. Append-only.
+   *
+   * A candidate needs to see how their application moved and an employer needs
+   * a timeline; neither is recoverable from a single mutable `status` field.
+   * Optional because applications created before Phase 9 have no history, and
+   * an absent history means "not recorded", never "no changes happened".
+   */
+  statusHistory?: Array<{
+    from: HiringJobApplication['status'] | null;
+    to: HiringJobApplication['status'];
+    changedAt: string;
+    /** User id of whoever made the change. */
+    changedBy: string;
+    /** Optional employer note. Never shown to a candidate unless intended. */
+    note?: string;
+  }>;
+  /** Set once a rejection email has been sent, so it is never sent twice. */
+  rejectionEmailSentAt?: string;
+
+  /* ── Recruitment stage records (Phase 9) ────────────────────────────────
+     Carried ON THE APPLICATION rather than in three new collections. Each
+     belongs to exactly one application, is read whenever that application is
+     read, and has no life of its own — a separate collection would add three
+     joins and three ownership checks to answer questions the application
+     already answers. All optional: a stage that has not happened is absent,
+     never an empty placeholder. */
+
+  /** Set when the employer schedules or records an interview. */
+  interview?: {
+    scheduledAt?: string;
+    /** Free text: "Google Meet", "Office, 3rd floor", a phone number. */
+    mode?: string;
+    /** Employer-authored detail shown to the candidate. */
+    notes?: string;
+    createdAt: string;
+    createdBy: string;
+  };
+
+  /** A take-home task the employer set. */
+  assignment?: {
+    title: string;
+    instructions?: string;
+    dueAt?: string;
+    /** What the candidate submitted back, when they have. */
+    submissionUrl?: string;
+    submittedAt?: string;
+    createdAt: string;
+    createdBy: string;
+  };
+
+  /** An offer the employer proposed. Money is stated only if the employer states it. */
+  offer?: {
+    /** Absent means the offer did not name a figure — never rendered as zero. */
+    salaryAmount?: number;
+    salaryCurrency?: string;
+    salaryPeriod?: 'hour' | 'day' | 'week' | 'month' | 'year';
+    startDate?: string;
+    notes?: string;
+    /** The candidate's answer, when they have given one. */
+    response?: 'accepted' | 'declined';
+    respondedAt?: string;
+    createdAt: string;
+    createdBy: string;
+  };
   appliedAt: string;
   updatedAt: string;
 }
@@ -1874,7 +1964,9 @@ export interface InternalMailThread {
 
 export interface WorkspaceNotification {
   id: string;
-  type: 'mail' | 'feedback' | 'billing' | 'system' | 'follow' | 'profile_view' | 'like' | 'comment' | 'mention' | 'gig_applied' | 'document_viewed';
+  type: 'mail' | 'feedback' | 'billing' | 'system' | 'follow' | 'profile_view' | 'like' | 'comment' | 'mention' | 'gig_applied' | 'document_viewed'
+    /* Phase 9: an employer moved this candidate's application. */
+    | 'application_status';
   title: string;
   body: string;
   href?: string;

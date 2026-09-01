@@ -106,3 +106,84 @@ export function indiaCitySuggestions(query: string, limit = 6): string[] {
   matches.sort((a, b) => Number(lc(b).startsWith(q)) - Number(lc(a).startsWith(q)));
   return matches.slice(0, limit);
 }
+
+/**
+ * Canonical city to Indian state.
+ *
+ * Added here rather than in a new module so there is exactly ONE list of
+ * Indian cities in the codebase: CITY_CANON above decides what a city is
+ * called, and this decides where it is. A second file would let the two drift,
+ * and a city recognised by the filters but unknown to the classifier is
+ * precisely the kind of silent gap that is hard to notice.
+ *
+ * Keys are the CANONICAL display names produced by `indiaCity`, never aliases.
+ */
+const CITY_STATE: Record<string, string> = {
+  Bengaluru: 'Karnataka',
+  Hyderabad: 'Telangana',
+  Pune: 'Maharashtra',
+  Mumbai: 'Maharashtra',
+  Nagpur: 'Maharashtra',
+  Delhi: 'Delhi',
+  'New Delhi': 'Delhi',
+  Gurugram: 'Haryana',
+  Faridabad: 'Haryana',
+  Noida: 'Uttar Pradesh',
+  Ghaziabad: 'Uttar Pradesh',
+  Chennai: 'Tamil Nadu',
+  Coimbatore: 'Tamil Nadu',
+  Kolkata: 'West Bengal',
+  Ahmedabad: 'Gujarat',
+  Jaipur: 'Rajasthan',
+  Kochi: 'Kerala',
+  Thiruvananthapuram: 'Kerala',
+  Indore: 'Madhya Pradesh',
+  Chandigarh: 'Chandigarh',
+};
+
+/** The state a canonical Indian city sits in, or '' when unknown. */
+export function indiaCityState(canonicalCity: string): string {
+  return CITY_STATE[(canonicalCity || '').trim()] || '';
+}
+
+/** Every Indian state this file can name. Used to read a state written explicitly. */
+export function indiaStates(): string[] {
+  return Array.from(new Set(Object.values(CITY_STATE))).sort();
+}
+
+/**
+ * EVERY canonical Indian city named in a location string, in the order the
+ * canon lists them.
+ *
+ * `indiaCity` returns only the first match, which is right for bucketing but
+ * wrong for a posting like "Bengaluru / Hyderabad / Pune" — reducing that to
+ * one city would discard two real locations. Callers that must not lose them
+ * use this instead.
+ */
+export function indiaCitiesIn(location: string): string[] {
+  let s = lc(location);
+  if (!s) return [];
+
+  /* LONGEST ALIAS FIRST, and each match is masked out of the string.
+     Without this "New Delhi" matched both 'new delhi' AND 'delhi' and reported
+     two cities, which made a single-city posting look multi-location and
+     suppressed its city entirely. Masking the matched span is what stops a
+     shorter alias re-matching inside a longer one it is contained in. */
+  const aliases = Object.keys(CITY_CANON).sort((a, b) => b.length - a.length);
+  const found = new Set<string>();
+  for (const alias of aliases) {
+    if (!s.includes(alias)) continue;
+    found.add(CITY_CANON[alias]);
+    s = s.split(alias).join(' '.repeat(alias.length));
+  }
+  if (found.size === 0) return [];
+
+  /* Returned in canon order rather than match order, so the result depends
+     only on WHICH cities are present, never on how they were written. */
+  const seen = new Set<string>();
+  return Object.values(CITY_CANON).filter((canon) => {
+    if (seen.has(canon) || !found.has(canon)) return false;
+    seen.add(canon);
+    return true;
+  });
+}

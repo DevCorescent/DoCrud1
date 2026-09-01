@@ -16,6 +16,10 @@ import { buildRecProfile, hasProfileSignals, isRecommended, recommendMatch, type
 import { mergeResumeSignals } from '@/lib/server/recommend-profile';
 import { isValidApplyUrl } from '@/lib/jobs-ui';
 import { registerRecommendationCache, rememberViewerCount } from '@/lib/server/recommendation-cache';
+import { getHiringApplications } from '@/lib/server/hiring';
+import { personalizedPage } from '@/lib/server/job-api/personalized';
+import { buildEligibilityProfile } from '@/lib/server/job-sources/eligibility';
+import type { MatchCandidate } from '@/lib/server/job-sources/ats-match';
 
 export const dynamic = 'force-dynamic';
 
@@ -154,9 +158,132 @@ async function computeRecommendations(
     return payload;
 }
 
+/**
+ * Phase 11 — the personalized page: ranked, applied-excluded, ATS- and
+ * eligibility-enriched.
+ *
+ * A SEPARATE SCOPE ON PURPOSE. The homepage carousel and the jobs directory
+ * both read the scopes above and neither wants the cost of an ATS pass, so
+ * this path is entered only when it is asked for by name. Their payloads are
+ * untouched.
+ *
+ * The ranking itself is NOT redone here — the same scorer orders the list, and
+ * personalizedPage preserves that order exactly.
+ */
+async function computePersonalized(
+  meId: string | null,
+  page: number,
+  pageSize: number,
+) {
+  const config = await getFeedConfig();
+  if (!config.jobs.enabled || !meId) {
+    return { items: [], page: 1, pageSize, total: 0, scored: false };
+  }
+
+  const [jobs, fields, applications] = await Promise.all([
+    getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>),
+    getProfileFields(meId, ['headline', 'bio', 'skills', 'location', 'experience', 'interests', 'resumeFiles']).catch(() => null),
+    /* Scoped to THIS viewer. The applied set is the reason a job leaves the
+       feed, so it must never be another member's. */
+    getHiringApplications().then((all) => all.filter((a) => a?.candidateUserId === meId)).catch(() => []),
+  ]);
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return { items: [], page: 1, pageSize, total: 0, scored: false };
+  }
+
+  const signals = mergeResumeSignals(
+    fields as Parameters<typeof mergeResumeSignals>[0],
+    (fields as { resumeFiles?: Parameters<typeof mergeResumeSignals>[1] })?.resumeFiles,
+  );
+  const profile = buildRecProfile(signals as Parameters<typeof buildRecProfile>[0]);
+  const showMatch = hasProfileSignals(profile);
+  const now = Date.now();
+
+  /* The SAME ranking pass the other scopes use, so the personalized feed and
+     the carousel cannot disagree about which jobs matched or why. */
+  const reasons = new Map<string, string[]>();
+  const scored = (jobs as unknown as Array<Record<string, unknown>>).map((j) => {
+    const recJob: RecJob = {
+      id: String(j.id ?? ''),
+      title: String(j.title ?? ''),
+      organizationName: String(j.organizationName ?? ''),
+      location: String(j.location ?? ''),
+      employmentType: String(j.employmentType ?? ''),
+      workMode: String(j.workMode ?? ''),
+      experienceLevel: String(j.experienceLevel ?? ''),
+      description: String(j.description ?? ''),
+      preferredSkills: Array.isArray(j.preferredSkills) ? (j.preferredSkills as string[]) : [],
+      targetRoleKeywords: Array.isArray(j.targetRoleKeywords) ? (j.targetRoleKeywords as string[]) : [],
+      createdAt: String(j.createdAt ?? ''),
+    };
+    const match = recommendMatch(profile, recJob, now);
+    if (showMatch) reasons.set(recJob.id, match.reasons);
+    return { score: showMatch ? match.score : 0, recommended: showMatch && isRecommended(match), raw: j, createdAt: recJob.createdAt };
+  });
+
+  scored.sort((a, b) => b.score - a.score || Date.parse(String(b.createdAt)) - Date.parse(String(a.createdAt)));
+  const ranked = scored.filter((s) => s.recommended).map((s) => s.raw);
+
+  /* A candidate is built only when there is something real to score against.
+     With no signals the rows carry a null ATS score rather than a fabricated
+     zero — see personalized.ts. */
+  const candidate: MatchCandidate | null = showMatch
+    ? {
+        id: meId,
+        profile: {
+          headline: signals.headline,
+          bio: (fields as { bio?: string } | null)?.bio,
+          skills: signals.skills,
+          location: signals.location,
+          interests: signals.interests,
+          /* No `domain` is passed: the member profile has no domain field, so
+             there is nothing truthful to send. Phase 6 redistributes the domain
+             weight across the components it can actually measure rather than
+             scoring a guess. */
+        },
+      }
+    : null;
+
+  /* Preferences the member actually stated. Today that is LOCATION ONLY: the
+     profile has no stored work-mode, employment-type, salary or domain
+     preference, so those Phase 5 rules cannot fire and correctly report
+     `unknown`. buildEligibilityProfile returns an empty profile when nothing
+     was stated, and an empty profile decides nothing — eligibility then stays
+     null rather than becoming a guess. */
+  const prefs = buildEligibilityProfile({ location: signals.location });
+  const hasPrefs = Object.keys(prefs).length > 0;
+
+  return personalizedPage({
+    rankedJobs: ranked as never,
+    candidate,
+    appliedJobIds: new Set(applications.map((a) => String(a.jobId))),
+    eligibilityProfile: hasPrefs ? prefs : null,
+    reasonsByJobId: reasons,
+    page,
+    pageSize,
+  });
+}
+
 export async function GET(request: Request) {
   try {
-    const scope = new URL(request.url).searchParams.get('scope') === 'recommended' ? 'recommended' : 'row';
+    const params = new URL(request.url).searchParams;
+    const rawScope = params.get('scope');
+
+    /* Phase 11's personalized feed. Handled before the cached scopes because it
+       is paged and enriched, and shares nothing with their payload shape. */
+    if (rawScope === 'personalized') {
+      const session = await getAuthSession().catch(() => null);
+      const meId = session?.user ? await resolveSessionUserId(session).catch(() => null) : null;
+      if (!meId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const payload = await computePersonalized(
+        meId,
+        Number(params.get('page')) || 1,
+        Number(params.get('pageSize')) || 20,
+      );
+      return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    const scope = rawScope === 'recommended' ? 'recommended' : 'row';
 
     // Viewer signals from the stored profile — never client-supplied.
     const session = await getAuthSession().catch(() => null);

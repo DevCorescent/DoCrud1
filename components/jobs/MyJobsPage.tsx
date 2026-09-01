@@ -1,214 +1,148 @@
 'use client';
 
 /**
- * My Jobs — the postings this member created, and what has happened to them.
+ * My Jobs — one entry point for both sides of hiring.
  *
- * Same marketplace shell as /jobs, /jobs/post and /jobs/[id]: the 56px fixed
+ * Same marketplace shell as /jobs, /jobs/post and /jobs/[id]: a 56px fixed
  * header with a back button, a rigid 100dvh frame and one scrolling column, so
- * managing a posting never leaves the marketplace.
+ * managing a posting or an application never leaves the marketplace.
  *
- * Every value is real: the list, the statuses and the application counts all
- * come from GET /api/hiring/jobs?scope=mine, which is server-scoped to jobs
- * this session created. Counts are tallied server-side from one applications
- * read — there is no request per row.
+ * ═══ ROLE ═══
  *
- * Actions reuse the endpoints that already exist: editing opens the same
- * composer at /jobs/post?edit=<id>, and unpublish/delete call
- * DELETE /api/hiring/jobs. The server re-verifies ownership on every write, so
- * these controls are a convenience, never the thing that authorises the change.
+ * The tabs are NOT chosen from an account type. Docrud lets an individual post
+ * a role and a company person apply for one, so deciding from `accountType`
+ * would hide a section from someone who is actively using it. Instead we ask
+ * both endpoints how much they hold and show what the person actually has —
+ * two `pageSize=1` probes, which is cheap and always truthful.
+ *
+ * ═══ THEME ═══
+ *
+ * Every surface in here carries a light value and a `dark:` value. The page
+ * this replaced was hard-coded to `bg-[#0A0A0C] text-white`, which meant white
+ * text on a white card the moment the global toggle was set to light.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft, ArrowUpRight, Briefcase, EyeOff, Loader2, PencilLine, Plus, Trash2, Users,
-} from 'lucide-react';
-import { EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, formatJobLocation, formatPosted } from '@/lib/jobs-ui';
+import { ArrowLeft, Plus } from 'lucide-react';
+import PostedJobs from './my/PostedJobs';
+import Applicants from './my/Applicants';
+import AppliedJobs from './my/AppliedJobs';
+import { FOCUS, PRIMARY_BTN, Skeletons } from './my/ui';
 
-type MyJob = {
-  id: string;
-  title: string;
-  organizationName: string;
-  location: string;
-  employmentType: string;
-  workMode: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  applicationCount: number;
-};
-
-const PANEL = 'rounded-2xl border border-white/[0.07] bg-white/[0.02]';
-const GHOST_BTN =
-  'inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-white/[0.10] bg-white/[0.04] px-3 text-[12.5px] font-semibold text-white/55 transition hover:bg-white/[0.08] hover:text-white/85 disabled:cursor-not-allowed disabled:opacity-60';
-
-/** Published is the only publicly visible state; everything else reads as draft. */
-function StatusPill({ status }: { status: string }) {
-  const live = status === 'published';
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-[10.5px] font-semibold ${
-      live
-        ? 'border-emerald-400/25 bg-emerald-400/[0.10] text-emerald-200/90'
-        : 'border-white/[0.10] bg-white/[0.04] text-white/45'
-    }`}>
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${live ? 'bg-emerald-400' : 'bg-white/30'}`} aria-hidden />
-      {live ? 'Published' : 'Draft'}
-    </span>
-  );
-}
+type Tab = 'posted' | 'applied';
 
 export default function MyJobsPage() {
   const router = useRouter();
-  const [jobs, setJobs] = useState<MyJob[] | null>(null);
-  const [error, setError] = useState('');
-  const [busyId, setBusyId] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState('');
+  const [tab, setTab] = useState<Tab | null>(null);
+  const [counts, setCounts] = useState<{ posted: number; applied: number } | null>(null);
+  const [applicantsFor, setApplicantsFor] = useState<{ id: string; title: string } | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const response = await fetch('/api/hiring/jobs?scope=mine', { cache: 'no-store' });
-      if (response.status === 401) { router.push('/login'); return; }
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.error || 'Unable to load your jobs.');
-      setJobs(Array.isArray(payload?.jobs) ? payload.jobs : []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to load your jobs.');
-      setJobs([]);
-    }
-  }, [router]);
+  /**
+   * Which section leads.
+   *
+   * Someone with postings and no applications lands on Posted; someone with
+   * applications and no postings lands on Applied. A person with both, or
+   * neither, lands on Posted — the section that has an action to offer.
+   */
+  const probe = useCallback(async () => {
+    const read = async (url: string) => {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) return 0;
+        const body = await res.json().catch(() => null);
+        return Number(body?.total) || 0;
+      } catch { return 0; }
+    };
+    const [posted, applied] = await Promise.all([
+      read('/api/hiring/jobs/mine?page=1&pageSize=1'),
+      read('/api/me/applications?page=1&pageSize=1'),
+    ]);
+    setCounts({ posted, applied });
+    setTab(posted === 0 && applied > 0 ? 'applied' : 'posted');
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  const remove = async (job: MyJob, mode: 'unpublish' | 'delete') => {
-    if (busyId) return;
-    setBusyId(job.id);
-    setError('');
-    try {
-      const response = await fetch(
-        `/api/hiring/jobs?id=${encodeURIComponent(job.id)}&mode=${mode}`,
-        { method: 'DELETE' },
-      );
-      const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.error || 'That change could not be saved.');
-      setConfirmDelete('');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'That change could not be saved.');
-    } finally {
-      setBusyId('');
-    }
-  };
+  useEffect(() => { probe(); }, [probe]);
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#0A0A0C] text-white">
-      <style>{`.no-sb::-webkit-scrollbar{display:none}.no-sb{scrollbar-width:none}`}</style>
-
-      <header className="shrink-0 z-30 border-b border-white/[0.06]"
-        style={{ height: 56, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px) saturate(180%)' }}>
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#f8fafc] text-slate-900 dark:bg-[#0A0A0C] dark:text-white">
+      <header
+        className="shrink-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[#0A0A0C]/95"
+        style={{ height: 56 }}
+      >
         <div className="flex h-full items-center gap-3 px-3 sm:px-5 lg:px-8">
           <button onClick={() => router.back()} aria-label="Back"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-white/48 transition-all hover:bg-white/[0.08] hover:text-white">
-            <ArrowLeft className="h-4 w-4" />
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-slate-300 bg-[#ffffff] text-slate-500 transition hover:bg-[#f8fafc] hover:text-slate-900 dark:border-white/[0.08] dark:bg-[rgba(255,255,255,0.04)] dark:text-white/48 dark:hover:bg-[rgba(255,255,255,0.08)] dark:hover:text-white ${FOCUS}`}>
+            <ArrowLeft className="h-4 w-4" aria-hidden />
           </button>
-          <span className="truncate text-[15px] font-bold tracking-[-0.01em] text-white">My Jobs</span>
-          <Link href="/jobs/post"
-            className="ml-auto inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] bg-emerald-500 px-3.5 text-[12.5px] font-bold text-white transition hover:bg-emerald-400">
-            <Plus className="h-3.5 w-3.5" /> Post a Job
+          <h1 className="truncate text-[15px] font-bold tracking-[-0.01em] text-slate-900 dark:text-white">
+            My Jobs
+          </h1>
+          <Link href="/jobs/post" className={`${PRIMARY_BTN} ${FOCUS} ml-auto shrink-0`}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            <span className="hidden sm:inline">Post a Job</span>
+            <span className="sr-only sm:hidden">Post a Job</span>
           </Link>
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-3 pb-20 pt-6 sm:px-5 lg:px-8">
-
-          {error && (
-            <p role="alert" className="mb-4 rounded-[12px] border border-rose-400/25 bg-rose-400/[0.07] px-3.5 py-2.5 text-[12.5px] font-medium text-rose-200/90">
-              {error}
-            </p>
-          )}
-
-          {jobs === null ? (
-            <div className="flex items-center gap-2 px-1 py-10 text-[12.5px] text-white/28">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading your jobs…
-            </div>
-          ) : jobs.length === 0 ? (
-            <div className={`flex flex-col items-center px-6 py-14 text-center ${PANEL}`}>
-              <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04]">
-                <Briefcase className="h-5 w-5 text-white/25" />
-              </span>
-              <p className="text-[14px] font-bold text-white/70">You have not posted a job yet</p>
-              <p className="mx-auto mt-1.5 max-w-[320px] text-[12.5px] leading-relaxed text-white/32">
-                Post a role and it appears in the Jobs feed straight away, with applications arriving here.
-              </p>
-              <Link href="/jobs/post"
-                className="mt-5 inline-flex h-10 items-center gap-1.5 rounded-[13px] bg-emerald-500 px-5 text-[13px] font-bold text-white transition hover:bg-emerald-400">
-                <Plus className="h-3.5 w-3.5" /> Post a Job
-              </Link>
-            </div>
+      {/* One scrolling column. `pb-28` keeps the last row clear of the app's
+          fixed bottom navigation on phones. */}
+      <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div className="mx-auto w-full max-w-3xl px-3 pb-28 pt-4 sm:px-5 lg:px-8">
+          {tab === null ? (
+            <Skeletons rows={3} />
+          ) : applicantsFor ? (
+            <Applicants job={applicantsFor} onBack={() => setApplicantsFor(null)} />
           ) : (
-            <ul className={`overflow-hidden ${PANEL}`}>
-              {jobs.map((job) => {
-                const meta = [
-                  formatJobLocation(job.location, job.workMode as never),
-                  EMPLOYMENT_TYPE_LABELS[job.employmentType] ?? job.employmentType,
-                  WORK_MODE_LABELS[job.workMode] ?? job.workMode,
-                ].filter(Boolean).join(' · ');
-                const posted = formatPosted(job.createdAt);
+            <>
+              <div role="tablist" aria-label="My Jobs sections"
+                className="mb-4 flex gap-1 border-b border-slate-200 dark:border-white/[0.07]">
+                <TabButton id="posted" active={tab === 'posted'} onClick={setTab}
+                  label="Posted Jobs" count={counts?.posted} />
+                <TabButton id="applied" active={tab === 'applied'} onClick={setTab}
+                  label="Applied Jobs" count={counts?.applied} />
+              </div>
 
-                return (
-                  <li key={job.id} className="border-t border-white/[0.06] px-4 py-4 first:border-t-0 sm:px-5">
-                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link href={`/jobs/${job.id}`}
-                            className="truncate text-[14px] font-bold text-white/90 transition hover:text-white">
-                            {job.title}
-                          </Link>
-                          <StatusPill status={job.status} />
-                        </div>
-                        {meta && <p className="mt-1 truncate text-[12px] text-white/35">{meta}</p>}
-                        <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-white/28">
-                          <span className="inline-flex items-center gap-1.5 text-white/45">
-                            <Users className="h-3 w-3 shrink-0" />
-                            {job.applicationCount} {job.applicationCount === 1 ? 'application' : 'applications'}
-                          </span>
-                          {posted && <span>Posted {posted}</span>}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Link href={`/jobs/${job.id}`} className={GHOST_BTN}>
-                          View <ArrowUpRight className="h-3.5 w-3.5" />
-                        </Link>
-                        <Link href={`/jobs/post?edit=${encodeURIComponent(job.id)}`} className={GHOST_BTN}>
-                          <PencilLine className="h-3.5 w-3.5" /> Edit
-                        </Link>
-                        {job.status === 'published' && (
-                          <button type="button" disabled={busyId === job.id}
-                            onClick={() => remove(job, 'unpublish')} className={GHOST_BTN}>
-                            {busyId === job.id
-                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              : <EyeOff className="h-3.5 w-3.5" />}
-                            Unpublish
-                          </button>
-                        )}
-                        <button type="button" disabled={busyId === job.id}
-                          onClick={() => (confirmDelete === job.id ? remove(job, 'delete') : setConfirmDelete(job.id))}
-                          className={`${GHOST_BTN} ${confirmDelete === job.id ? 'border-rose-400/35 bg-rose-400/[0.10] text-rose-200/90' : ''}`}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {/* Two-step: deleting a posting also detaches its applications. */}
-                          {confirmDelete === job.id ? 'Confirm delete' : 'Delete'}
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+              <Suspense fallback={<Skeletons rows={3} />}>
+                {tab === 'posted'
+                  ? <PostedJobs onViewApplicants={setApplicantsFor} />
+                  : <AppliedJobs />}
+              </Suspense>
+            </>
           )}
         </div>
       </main>
     </div>
+  );
+}
+
+function TabButton({ id, label, count, active, onClick }: {
+  id: Tab;
+  label: string;
+  count?: number;
+  active: boolean;
+  onClick: (t: Tab) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={() => onClick(id)}
+      className={`${FOCUS} -mb-px flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[13px] font-semibold transition ${
+        active
+          ? 'border-slate-900 text-slate-900 dark:border-white dark:text-white'
+          : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-white/40 dark:hover:text-white/70'
+      }`}
+    >
+      {label}
+      {typeof count === 'number' && count > 0 ? (
+        <span className="rounded-full bg-slate-200 px-1.5 py-px text-[10.5px] font-bold text-[#334155] dark:bg-[rgba(255,255,255,0.10)] dark:text-white/60">
+          {count}
+        </span>
+      ) : null}
+    </button>
   );
 }

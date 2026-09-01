@@ -662,3 +662,18 @@ export async function updateHiringApplicationStatus(applicationId: string, statu
   await saveHiringApplications(next);
   return next.find((application) => application.id === applicationId) || null;
 }
+
+/**
+ * Every organization id this user acts for.
+ *
+ * Their own workspace owner id plus any Business Page they own. Exported for
+ * the Phase 9 APIs so authorization is derived from ONE place — a route that
+ * built this list itself would eventually build it differently from
+ * `canUserManageApplication`, and the two would disagree about who may read a
+ * candidate's resume.
+ */
+export async function viewerOrganizationIds(user: User): Promise<string[]> {
+  const ids = new Set<string>([jobOwnerId(user)]);
+  (await ownedBusinessPageIds(user.id)).forEach((id) => ids.add(id));
+  return Array.from(ids);
+}

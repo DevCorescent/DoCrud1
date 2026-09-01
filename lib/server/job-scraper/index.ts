@@ -17,6 +17,13 @@ import { htmlToText, splitList, deriveKeywords, safeUrl, clip, clipList } from '
 import { fetchAshby } from './providers/ashby';
 import { fetchLever } from './providers/lever';
 import { fetchGreenhouse } from './providers/greenhouse';
+import { fetchWorkday } from './providers/workday';
+import { fetchSmartRecruiters } from './providers/smartrecruiters';
+import { fetchWorkable } from './providers/workable';
+import { fetchRecruitee } from './providers/recruitee';
+import { fetchPersonio } from './providers/personio';
+import { fetchBambooHr } from './providers/bamboohr';
+
 import { normalizeIndiaLocation } from './india';
 import { scoreJob } from './score';
 import { listSources } from './sources';
@@ -187,6 +194,14 @@ async function fetchSource(source: ScrapeSource, deps: ProviderDeps): Promise<No
   if (source.provider === 'ashby') return fetchAshby(source, deps);
   if (source.provider === 'lever') return fetchLever(source, deps);
   if (source.provider === 'greenhouse') return fetchGreenhouse(source, deps);
+  /* Stage 3 platforms. Each is a documented public board endpoint; the
+     registry decides which companies exist, this only routes. */
+  if (source.provider === 'workday') return fetchWorkday(source, deps);
+  if (source.provider === 'smartrecruiters') return fetchSmartRecruiters(source, deps);
+  if (source.provider === 'workable') return fetchWorkable(source, deps);
+  if (source.provider === 'recruitee') return fetchRecruitee(source, deps);
+  if (source.provider === 'personio') return fetchPersonio(source, deps);
+  if (source.provider === 'bamboohr') return fetchBambooHr(source, deps);
   return []; // 'jsonld' sources use runScrape(); the env registry builds only API sources
 }
 
@@ -199,6 +214,8 @@ export interface ApprovedScrapeOutput {
   rejected: number;   // inactive / missing title-org / no valid URL
   failed: number;     // sources that errored
   duplicates: number; // within-batch fingerprint duplicates removed
+  /** Unique jobs discarded because the run hit `totalLimit`. Never silent. */
+  truncated: number;
   perSource: SourceRunStat[];
   jobs: NormalizedJob[];
 }
@@ -242,13 +259,21 @@ export async function runApprovedScrape(opts: ApprovedScrapeOptions = {}): Promi
   collected.sort((x, y) => (y.score ?? 0) - (x.score ?? 0));
   const seen = new Set<string>();
   const jobs: NormalizedJob[] = [];
+  /* Jobs dropped ONLY because the run hit its cap.
+     Previously the loop simply `break`ed and those jobs vanished with no
+     record at all — a run could fetch 800 postings, carry 200 forward and
+     report nothing about the other 600. Counting them is what makes a
+     truncated run visible instead of merely small. The duplicate check now
+     runs BEFORE the cap test too, so `duplicates` is no longer undercounted
+     by whatever the cap happened to cut off. */
+  let truncated = 0;
   for (const j of collected) {
-    if (jobs.length >= cap) break;
     const fp = jobFingerprint(j.organizationName, j.title, j.location);
     if (seen.has(fp)) { duplicates++; continue; }
     seen.add(fp);
+    if (jobs.length >= cap) { truncated++; continue; }
     jobs.push(j);
   }
 
-  return { csv: toCsv(jobs.map(normalizedRow)), fetched, active, rejected, failed, duplicates, perSource, jobs };
+  return { csv: toCsv(jobs.map(normalizedRow)), fetched, active, rejected, failed, duplicates, truncated, perSource, jobs };
 }

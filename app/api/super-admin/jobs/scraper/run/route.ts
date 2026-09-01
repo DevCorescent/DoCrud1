@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
-import { runApprovedAndImport } from '@/lib/server/scraper-client';
+import { runCanonicalIngest } from '@/lib/server/scraper-client';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * Run the approved-source scraper: fetch every enabled approved source
- * (Ashby / Lever public APIs), normalize, score, dedupe and persist the best
- * jobs through the EXISTING importer. Super-Admin only. Returns a summary.
+ * Run the approved-source scraper through the CANONICAL pipeline.
+ *
+ *   registry -> adapter (paginated) -> normalizeSourceJob -> identity
+ *   -> dedupe/upsert -> classification -> lastSeenAt
+ *
+ * Switched from the legacy CSV importer in Stage 2. The behavioural difference
+ * that matters: a posting whose SOURCE CONTENT CHANGED is now updated in place
+ * rather than skipped as a duplicate, so stored jobs stop going stale. Job ids,
+ * ownership, status and applications are preserved by the upsert.
+ *
+ * Super-Admin only. Returns the same summary shape the dashboard already reads.
  */
 export async function POST(req: NextRequest) {
   const session = await getSuperAdminSessionFromRequest(req);
@@ -23,7 +31,7 @@ export async function POST(req: NextRequest) {
   const totalLimit = Number(body.limit) || undefined;
 
   try {
-    const summary = await runApprovedAndImport({ totalLimit, adminEmail: session.email || '' });
+    const summary = await runCanonicalIngest({ totalLimit });
 
     await appendSuperAdminAudit({
       action: 'jobs.scrape',
@@ -31,8 +39,10 @@ export async function POST(req: NextRequest) {
       details: {
         actor: session.email || 'super-admin',
         sources: summary.sources,
-        fetched: summary.fetched,
-        imported: summary.imported,
+        discovered: summary.discovered,
+        inserted: summary.inserted,
+        updated: summary.updated,
+        unchanged: summary.unchanged,
         duplicates: summary.duplicates,
         rejected: summary.rejected,
         failed: summary.failed,

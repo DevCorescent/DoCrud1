@@ -17,6 +17,16 @@ export interface ScraperRunSummary {
   imported: number;
   rejected: number;
   failed: number;
+  /* Stage 1/2 breakdown. All optional so a run recorded by an older build
+     still parses — an absent field means "that build did not measure it",
+     never zero. */
+  discovered?: number;
+  inserted?: number;
+  updated?: number;
+  unchanged?: number;
+  duplicateInRun?: number;
+  truncated?: number;
+  sourcesOk?: number;
 }
 
 export interface ScraperState {

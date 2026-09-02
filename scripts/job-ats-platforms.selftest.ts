@@ -39,6 +39,23 @@ const wdPost = (i: number) => ({
   locationsText: 'Bengaluru, India', postedOn: 'Posted 3 Days Ago', timeType: 'Full time',
 });
 
+/**
+ * A failed provider fetch must THROW, so the runner records a failed source.
+ *
+ * These assertions previously read "a failed request yields nothing, no throw"
+ * and expected an empty array — they encoded the defect: a 404/500/timeout was
+ * indistinguishable from a board with no openings, and a dead source showed
+ * green in Super Admin. The contract is now the opposite.
+ */
+async function throwsOnFailure(label: string, run: () => Promise<unknown>) {
+  try {
+    await run();
+    check(`${label}: a failed request THROWS rather than yielding []`, false);
+  } catch {
+    check(`${label}: a failed request THROWS rather than yielding []`, true);
+  }
+}
+
 async function main() {
   console.log('\n── 1. Workday ──');
 
@@ -121,14 +138,14 @@ async function main() {
   }
   {
     const deps: ProviderDeps = { fetchJsonPost: async () => null };
-    check('a failed request yields no jobs, no throw', (await fetchWorkday(WD, deps)).length === 0);
+    await throwsOnFailure('workday', () => fetchWorkday(WD, deps));
   }
   {
     const deps: ProviderDeps = { fetchJsonPost: async () => ({ nonsense: true }) };
     check('a malformed payload yields no jobs', (await fetchWorkday(WD, deps)).length === 0);
   }
-  check('a source without tenant/shard/site fetches nothing',
-    (await fetchWorkday(src({ provider: 'workday' }), { fetchJsonPost: async () => ({ jobPostings: [wdPost(1)] }) })).length === 0);
+  await throwsOnFailure('workday (no tenant/shard/site)',
+    () => fetchWorkday(src({ provider: 'workday' }), { fetchJsonPost: async () => ({ jobPostings: [wdPost(1)] }) }));
   /* The two fabrication traps. */
   check('"3 Locations" is NOT stored as a place name', (() => {
     const j = normalizeWorkday(WD, { jobPostings: [{ ...wdPost(1), locationsText: '3 Locations' }] })[0];
@@ -213,8 +230,7 @@ async function main() {
     (await fetchSmartRecruiters(SR, { fetchJson: async () => ({ totalFound: 0, content: [] }) })).length === 0);
   check('a malformed payload yields nothing',
     (await fetchSmartRecruiters(SR, { fetchJson: async () => ({ oops: 1 }) })).length === 0);
-  check('a failed request yields nothing',
-    (await fetchSmartRecruiters(SR, { fetchJson: async () => null })).length === 0);
+  await throwsOnFailure('smartrecruiters', () => fetchSmartRecruiters(SR, { fetchJson: async () => null }));
   check('the remote boolean is read, not guessed', (() => {
     const p = { ...srPost(1), location: { city: 'Anywhere', remote: true } };
     return fetchSmartRecruiters(SR, { fetchJson: async () => ({ totalFound: 1, content: [p] }) })
@@ -263,7 +279,7 @@ async function main() {
     check('telecommuting:true maps to remote', j[0].workMode === 'remote');
     check('a posting with no location gets none invented', j[0].location === '');
   }
-  check('a failed request yields nothing', (await fetchWorkable(WK, { fetchJson: async () => null })).length === 0);
+  await throwsOnFailure('workable', () => fetchWorkable(WK, { fetchJson: async () => null }));
   check('a malformed payload yields nothing', (await fetchWorkable(WK, { fetchJson: async () => ({}) })).length === 0);
 
   console.log('\n── 4. Recruitee ──');
@@ -292,9 +308,9 @@ async function main() {
     check('the remote flag is honoured', j[0].workMode === 'remote');
     check('a flat location string is used when there are no structured ones', j[0].location.length > 0);
   }
-  check('an invalid slug is refused before any request',
-    (await fetchRecruitee(src({ provider: 'recruitee', board: 'bad slug/../x' }), { fetchJson: async () => ({ offers: [{ id: 1, title: 'X' }] }) })).length === 0);
-  check('a failed request yields nothing', (await fetchRecruitee(RC, { fetchJson: async () => null })).length === 0);
+  await throwsOnFailure('recruitee (invalid slug)',
+    () => fetchRecruitee(src({ provider: 'recruitee', board: 'bad slug/../x' }), { fetchJson: async () => ({ offers: [{ id: 1, title: 'X' }] }) }));
+  await throwsOnFailure('recruitee', () => fetchRecruitee(RC, { fetchJson: async () => null }));
 
   console.log('\n── 5. Personio (XML) ──');
 
@@ -317,14 +333,14 @@ async function main() {
     check('a stated createdAt is kept', jobs[0].postedAt === '2026-05-04');
   }
   /* The redirect trap: an unknown slug must NOT read as an empty board. */
-  check('a REDIRECT is refused, not parsed as an empty board',
-    (await fetchPersonio(PN, { fetchTextStrict: async () => null })).length === 0);
+  await throwsOnFailure('personio (redirect/failure)',
+    () => fetchPersonio(PN, { fetchTextStrict: async () => null }));
   check('marketing HTML is not parsed as a feed',
     normalizePersonio(PN, '<html><body>Personio</body></html>').length === 0);
   check('malformed XML yields nothing rather than throwing',
     normalizePersonio(PN, '<workzag-jobs><position><id>1</id>').length === 0);
-  check('an invalid slug is refused before any request',
-    (await fetchPersonio(src({ provider: 'personio', board: 'bad/slug' }), { fetchTextStrict: async () => ({ status: 200, text: xml }) })).length === 0);
+  await throwsOnFailure('personio (invalid slug)',
+    () => fetchPersonio(src({ provider: 'personio', board: 'bad/slug' }), { fetchTextStrict: async () => ({ status: 200, text: xml }) }));
   check('no company name is fabricated when neither feed nor config states one',
     normalizePersonio({ name: 'personio:acme', provider: 'personio', board: 'acme',
       host: 'x', enabled: true } as ScrapeSource, xml)[0].organizationName === '');
@@ -354,12 +370,14 @@ async function main() {
     check('no description is invented when the list has none', jobs[0].description === '');
     check('no postedAt is invented', jobs[0].postedAt === '');
   }
-  check('a REDIRECT is refused, not read as an empty board',
-    (await fetchBambooHr(BH, { fetchTextStrict: async () => null })).length === 0);
-  check('non-JSON body yields nothing rather than throwing',
-    (await fetchBambooHr(BH, { fetchTextStrict: async () => ({ status: 200, text: '<html>nope</html>' }) })).length === 0);
-  check('an invalid slug is refused before any request',
-    (await fetchBambooHr(src({ provider: 'bamboohr', board: 'bad_slug/../x' }), { fetchTextStrict: async () => ({ status: 200, text: bhJson }) })).length === 0);
+  await throwsOnFailure('bamboohr (redirect/failure)',
+    () => fetchBambooHr(BH, { fetchTextStrict: async () => null }));
+  /* A 200 carrying HTML is a MALFORMED response, not an empty board — it used
+     to be swallowed as zero jobs. */
+  await throwsOnFailure('bamboohr (non-JSON body)',
+    () => fetchBambooHr(BH, { fetchTextStrict: async () => ({ status: 200, text: '<html>nope</html>' }) }));
+  await throwsOnFailure('bamboohr (invalid slug)',
+    () => fetchBambooHr(src({ provider: 'bamboohr', board: 'bad_slug/../x' }), { fetchTextStrict: async () => ({ status: 200, text: bhJson }) }));
 
   console.log('\n── 7. Registry: all nine coexist ──');
 

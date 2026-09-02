@@ -6,6 +6,34 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
+ * The platform execution window for this route.
+ *
+ * THIS ROUTE RUNS THE WHOLE SCRAPE INLINE and answers only when every source
+ * has been attempted. Sources are processed SEQUENTIALLY, so the worst case is
+ * the sum of them, and one slow board delays everything behind it.
+ *
+ * The fetchers allow 3 attempts at a 12 s timeout plus ~1.2 s of backoff, so a
+ * single unreachable URL can cost ~37 s. Most providers are one request, but
+ * Workday pages at 20/request (up to 100 pages) and Lever/SmartRecruiters up to
+ * 50 — so ONE badly behaved paginated source can exceed this window on its own.
+ *
+ * 300 s is the Vercel maximum, and every other long route in this codebase sets
+ * its own (30/45/60/300). This one had none and inherited the default, which is
+ * how a long scrape became a dead request with no run state written.
+ *
+ * ═══ THIS IS A CEILING, NOT A GUARANTEE ═══
+ *
+ * A large enough source list will still exceed 300 s. That is a real limit of
+ * running the scrape inside a request, and raising the number does not fix it —
+ * the durable answer is to execute the run outside the request (create run →
+ * return runId → poll), which is a larger change than this correctness pass.
+ * Until then an operator should keep the configured source list small enough to
+ * finish inside the window, and read the per-source failure state to see which
+ * ones did not.
+ */
+export const maxDuration = 300;
+
+/**
  * Run the approved-source scraper through the CANONICAL pipeline.
  *
  *   registry -> adapter (paginated) -> normalizeSourceJob -> identity

@@ -13,6 +13,7 @@ import path from 'path';
 import {
   getJobMatchTone, getJobMatchLabel, jobMatchTokenClasses, JOB_MATCH_TONE_CLASSES,
   jobMatchPanelClasses, jobMatchActionClasses,
+  jobMatchCardClasses, JOB_MATCH_CARD_CLASSES, JOB_MATCH_CARD_NEUTRAL,
   JOB_MATCH_PANEL_CLASSES, JOB_MATCH_ACTION_CLASSES, JOB_MATCH_ACTION_NEUTRAL,
 } from '@/lib/job-match-tone';
 import { toneForScore, TONE_LABEL, TONE_THRESHOLDS } from '@/lib/score-tone';
@@ -214,6 +215,59 @@ function main() {
     !CARD_CODE.includes('ui-button') && !/from '@\/components\/ui\/button'/.test(CARD_CODE));
   check('both Apply paths — external applyUrl and internal flow — share one class',
     (CARD_CODE.match(/className=\{applyClass\}/g) ?? []).length === 2);
+
+  /* ── The card frame follows the same score as everything inside it ──── */
+
+  /* A 23% match must not sit in the same frame as a 90% one. The frame's hue
+     is derived from the SAME tone function as the badge, so they cannot drift. */
+  for (const [score, hue] of [[10, 'rose'], [23, 'rose'], [26, 'amber'],
+    [49, 'amber'], [50, 'sky'], [74, 'sky'], [75, 'emerald'], [96, 'emerald']] as const) {
+    check(`a ${score}% card frame is ${hue}`, jobMatchCardClasses(score).includes(`${hue}-500`));
+  }
+
+  /* The boundary the user named: below 25 is red. */
+  check('24% is still red', jobMatchCardClasses(24).includes('rose-500'));
+  check('25% is no longer red', !jobMatchCardClasses(25).includes('rose-500'));
+
+  /* Frame, badge and panel must agree for every tone. */
+  for (const score of [5, 23, 30, 55, 80, 99]) {
+    const tone = toneForScore(score);
+    check(`frame and badge agree at ${score}%`,
+      jobMatchCardClasses(score) === JOB_MATCH_CARD_CLASSES[tone]);
+    /* Compare the HUE token of each: 'border-rose-500/[0.20]' -> 'rose'. */
+    const frameHue = jobMatchCardClasses(score).split('-')[1];
+    const panelHue = jobMatchPanelClasses(score).panel.split('-')[1];
+    const badgeHue = jobMatchTokenClasses(score).split('-')[1];
+    check(`frame, panel and badge share one hue at ${score}%`,
+      frameHue === panelHue && panelHue === badgeHue);
+  }
+
+  /* An unscored card keeps the ORIGINAL white hairline — tinting it would
+     state a match nobody computed. */
+  check('an unscored card frame is neutral', jobMatchCardClasses(undefined) === JOB_MATCH_CARD_NEUTRAL);
+  check('a NaN score frame is neutral', jobMatchCardClasses(Number.NaN) === JOB_MATCH_CARD_NEUTRAL);
+  check('the neutral frame is the original white hairline',
+    JOB_MATCH_CARD_NEUTRAL.includes('border-white/[0.07]')
+    && JOB_MATCH_CARD_NEUTRAL.includes('hover:border-white/[0.14]'));
+
+  /* Weight preserved: every tone keeps an idle AND a hover border, so the
+     recolour cannot silently become a heavier or a static frame. */
+  for (const tone of ['red', 'yellow', 'blue', 'green'] as const) {
+    check(`the ${tone} frame has an idle border`, /(^|\s)border-\w+-500\/20(\s|$)/.test(JOB_MATCH_CARD_CLASSES[tone]));
+    check(`the ${tone} frame has a hover border`, /hover:border-\w+-500\/40(\s|$)/.test(JOB_MATCH_CARD_CLASSES[tone]));
+    /* tailwind.config does not scan lib/, so an ARBITRARY opacity written only
+       here is never generated — the sky tier rendered pale grey that way. */
+    check(`the ${tone} frame uses a standard opacity step, not an arbitrary one`,
+      !/\[0\.\d+\]/.test(JOB_MATCH_CARD_CLASSES[tone]));
+  }
+
+  /* The card must actually USE it, and must no longer hard-code the white one. */
+  check('the card applies the tone frame', CARD_CODE.includes('jobMatchCardClasses(job.matchScore)'));
+  check('the card no longer hard-codes a white frame',
+    !/border border-white\/\[0\.07\][\s\S]{0,120}hover:border-white\/\[0\.14\]/.test(CARD_CODE));
+  /* Colour is never the only signal — the percentage still prints. */
+  check('the percentage is still rendered beside the frame',
+    CARD_CODE.includes('{job.matchScore}% Match'));
 
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);
   if (failures > 0) process.exit(1);

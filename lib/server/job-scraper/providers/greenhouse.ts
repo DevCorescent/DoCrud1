@@ -17,6 +17,7 @@ import { fetchJson } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
 import { prettyCompany } from './ashby';
+import { configError, fetchJsonOrThrow } from '../source-fetch';
 
 export function normalizeGreenhouse(source: ScrapeSource, raw: unknown): NormalizedJob[] {
   const jobs = raw && typeof raw === 'object' && Array.isArray((raw as { jobs?: unknown }).jobs)
@@ -57,9 +58,10 @@ export function normalizeGreenhouse(source: ScrapeSource, raw: unknown): Normali
 
 export async function fetchGreenhouse(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const board = (source.board ?? '').trim();
-  if (!board) return [];
+  if (!board) configError('Greenhouse source has no board token.');
   const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs?content=true`;
-  const json = deps.fetchJson ? await deps.fetchJson(url) : await fetchJson(url);
-  if (json == null) return [];
+  /* Throws on 404/500/timeout/parse failure, so the runner records a FAILED
+     source instead of an empty successful one. */
+  const json = await fetchJsonOrThrow(url, deps);
   return normalizeGreenhouse(source, json);
 }

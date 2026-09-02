@@ -80,6 +80,52 @@ export function jobMatchPanelClasses(score: number) {
 }
 
 /**
+ * The CARD's own border, per tone.
+ *
+ * The badge, the "why this matches you" panel and the Apply button already take
+ * their hue from the score; the card around them stayed a neutral white
+ * hairline, so a 23% match sat inside the same frame as a 90% one. This makes
+ * the frame agree with its contents.
+ *
+ * Weight is unchanged — a hairline idle, brighter on hover, exactly as the
+ * white border behaved. Only the HUE follows the score, so this is a recolour
+ * and not a restyle. Colour is never the only signal: the percentage and its
+ * band label are printed in the badge regardless.
+ *
+ * The opacities are higher than the white border's 0.07/0.14 because a
+ * saturated hue at 0.07 is invisible on a near-black card; these read at the
+ * same visual weight, not a heavier one.
+ *
+ * STANDARD OPACITY STEPS (`/20`, `/40`), NOT arbitrary values. tailwind.config
+ * scans `pages/`, `components/` and `app/` — NOT `lib/` — so an arbitrary class
+ * written only in this file is never generated and the border silently falls
+ * back to the default token. That was measured: `border-sky-500/[0.20]` was
+ * absent from the built CSS and the blue tier rendered pale grey, while the
+ * other three happened to work only because some scanned component uses the
+ * same arbitrary string. The standard steps exist for all four colours.
+ */
+export const JOB_MATCH_CARD_CLASSES: Record<ScoreTone, string> = {
+  red: 'border-rose-500/20 hover:border-rose-500/40',
+  yellow: 'border-amber-500/20 hover:border-amber-500/40',
+  blue: 'border-sky-500/20 hover:border-sky-500/40',
+  green: 'border-emerald-500/20 hover:border-emerald-500/40',
+};
+
+/**
+ * The neutral frame, for a card with no match score.
+ *
+ * The card's original white hairline, unchanged. An unscored role gets no hue,
+ * because tinting it would state a match nobody computed.
+ */
+export const JOB_MATCH_CARD_NEUTRAL = 'border-white/[0.07] hover:border-white/[0.14]';
+
+/** The border classes for a card at `score`, or the neutral frame without one. */
+export function jobMatchCardClasses(score?: number): string {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return JOB_MATCH_CARD_NEUTRAL;
+  return JOB_MATCH_CARD_CLASSES[getJobMatchTone(score)];
+}
+
+/**
  * A filled ACTION in the match tone — the Apply button.
  *
  * Filled rather than tinted: this is the card's primary action and has to hold

@@ -641,7 +641,11 @@ export default function JobsFeedPage() {
 
           {/* A banner instead of the carousel when the whole page IS the matched
               set — otherwise the top four would simply repeat the list below. */}
-          {recommendedOnly && (
+          {/* Only once the count is KNOWN. While the request is in flight
+              `recommended` is still empty, and rendering the banner then
+              announced "Showing your 0 best matches" above a grid of loading
+              skeletons — a number stated before anything had been counted. */}
+          {recommendedOnly && recState === 'ready' && (
             <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] border border-emerald-400/20 bg-emerald-400/[0.06] px-4 py-3">
               <Sparkles className="h-3.5 w-3.5 shrink-0 text-emerald-300/80" />
               <p className="text-[12.5px] font-semibold text-emerald-100/85">

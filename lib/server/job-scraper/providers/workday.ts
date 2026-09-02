@@ -24,6 +24,7 @@ import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchJsonPost } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
+import { configError, fetchJsonPostOrThrow } from '../source-fetch';
 
 const PAGE_SIZE = 20;
 /** Hard ceiling: 100 pages x 20 = 2000 postings from one board. */
@@ -102,8 +103,7 @@ export function normalizeWorkday(source: ScrapeSource, raw: unknown): Normalized
 
 export async function fetchWorkday(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const w = source.workday;
-  if (!w?.tenant || !w?.shard || !w?.site) return [];
-  const post = deps.fetchJsonPost ?? fetchJsonPost;
+  if (!w?.tenant || !w?.shard || !w?.site) configError('Workday source needs tenant, shard and site.');
   const url = `${baseUrl(w)}/jobs`;
 
   const all: NormalizedJob[] = [];
@@ -113,8 +113,11 @@ export async function fetchWorkday(source: ScrapeSource, deps: ProviderDeps = {}
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const body = { limit: PAGE_SIZE, offset: page * PAGE_SIZE, searchText: '' };
-    const json = await post(url, body);
-    if (json == null) break;
+    /* Throws on failure, INCLUDING mid-pagination. A page-2 error used to
+       `break` and return page 1 as if it were the whole board — a partial
+       result presented as complete, which is the more dangerous half of this
+       bug because it looks plausible. */
+    const json = await fetchJsonPostOrThrow(url, body, deps);
 
     const root = (json ?? {}) as Record<string, unknown>;
     if (firstPageTotal === null) {

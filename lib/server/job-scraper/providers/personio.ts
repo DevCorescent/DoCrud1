@@ -17,6 +17,7 @@ import { fetchTextStrict } from '../fetcher';
 import { decodeEntities } from '../html';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
+import { configError, fetchTextStrictOrThrow } from '../source-fetch';
 
 const EMPLOYMENT: Record<string, string> = {
   permanent: 'full_time', full_time: 'full_time', 'full-time': 'full_time',
@@ -98,10 +99,10 @@ export function normalizePersonio(source: ScrapeSource, xml: string): Normalized
 
 export async function fetchPersonio(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const slug = (source.board ?? '').trim();
-  if (!slug || !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(slug)) return [];
-  const get = deps.fetchTextStrict
-    ?? ((url: string) => fetchTextStrict(url, { expectContentType: /xml|text\/plain/i }));
-  const res = await get(`https://${slug}.jobs.personio.de/xml`);
-  if (!res || res.status !== 200) return [];
+  if (!slug || !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(slug)) configError('Personio source has no valid company slug.');
+  /* Throws on 404/500/timeout/redirect/content-type mismatch. A redirect here
+     means the slug is wrong — never an empty board. */
+  const res = await fetchTextStrictOrThrow(
+    `https://${slug}.jobs.personio.de/xml`, deps, { expectContentType: /xml|text\/plain/i });
   return normalizePersonio(source, res.text);
 }

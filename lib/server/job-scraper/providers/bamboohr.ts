@@ -12,6 +12,7 @@ import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchTextStrict } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
+import { configError, fetchTextStrictOrThrow, SourceFetchError } from '../source-fetch';
 
 /** BambooHR spreads location across sparse, often-null fields. */
 function bambooLocation(raw: unknown): string {
@@ -68,12 +69,14 @@ export function normalizeBambooHr(source: ScrapeSource, raw: unknown): Normalize
 
 export async function fetchBambooHr(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const slug = (source.board ?? '').trim();
-  if (!slug || !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(slug)) return [];
-  const get = deps.fetchTextStrict
-    ?? ((url: string) => fetchTextStrict(url, { expectContentType: /json|text\/plain/i }));
-  const res = await get(`https://${slug}.bamboohr.com/careers/list`);
-  if (!res || res.status !== 200) return [];
+  if (!slug || !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(slug)) configError('BambooHR source has no valid company slug.');
+  /* Throws on 404/500/timeout/redirect/content-type mismatch. A redirect here
+     means the slug is wrong — never an empty board. */
+  const res = await fetchTextStrictOrThrow(
+    `https://${slug}.bamboohr.com/careers/list`, deps, { expectContentType: /json|text\/plain/i });
   let parsed: unknown;
-  try { parsed = JSON.parse(res.text); } catch { return []; }
+  /* A 200 whose body is not JSON is a malformed response, not an empty board. */
+  try { parsed = JSON.parse(res.text); }
+  catch { throw new SourceFetchError('BambooHR returned a non-JSON body', 'parse'); }
   return normalizeBambooHr(source, parsed);
 }

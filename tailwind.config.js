@@ -5,6 +5,12 @@ module.exports = {
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
+    /* lib/ holds the shared class tables (e.g. lib/job-match-tone.ts). Without
+       this glob Tailwind never scans them, so a class written only there is
+       silently NOT generated and the element falls back to a default token —
+       measured: the match panel's border rendered pale grey for every tone and
+       the red tier had no tint at all. */
+    './lib/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     container: {

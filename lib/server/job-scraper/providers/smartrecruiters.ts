@@ -16,6 +16,7 @@ import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchJson } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
+import { configError, fetchJsonOrThrow } from '../source-fetch';
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 50;
@@ -86,8 +87,7 @@ export async function fetchSmartRecruiters(
   deps: ProviderDeps = {},
 ): Promise<NormalizedJob[]> {
   const company = (source.board ?? '').trim();
-  if (!company) return [];
-  const get = deps.fetchJson ?? fetchJson;
+  if (!company) configError('SmartRecruiters source has no company identifier.');
 
   const all: NormalizedJob[] = [];
   const seenIds = new Set<string>();
@@ -96,8 +96,11 @@ export async function fetchSmartRecruiters(
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const url = `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(company)}/postings`
       + `?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`;
-    const json = await get(url);
-    if (json == null) break;
+    /* Throws on failure, INCLUDING mid-pagination. A page-2 error used to
+       `break` and return page 1 as if it were the whole board — a partial
+       result presented as complete, which is the more dangerous half of this
+       bug because it looks plausible. */
+    const json = await fetchJsonOrThrow(url, deps);
 
     if (totalFound === null) {
       const t = Number(((json ?? {}) as Record<string, unknown>).totalFound);

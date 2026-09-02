@@ -11,6 +11,7 @@ import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchJson } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
+import { configError, fetchJsonOrThrow } from '../source-fetch';
 
 const EMPLOYMENT: Record<string, string> = {
   full_time: 'full_time', part_time: 'part_time', contract: 'contract',
@@ -83,10 +84,9 @@ export function normalizeRecruitee(source: ScrapeSource, raw: unknown): Normaliz
 export async function fetchRecruitee(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const slug = (source.board ?? '').trim();
   /* Re-validated here as well as in the registry: this slug becomes a HOST. */
-  if (!slug || !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(slug)) return [];
-  const get = deps.fetchJson ?? fetchJson;
-  /* Trailing slash is required — see the file header. */
-  const json = await get(`https://${slug}.recruitee.com/api/offers/`);
-  if (json == null) return [];
+  if (!slug || !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(slug)) configError('Recruitee source has no valid company slug.');
+  /* Trailing slash is required — see the file header. Throws on failure so a
+     dead board is never recorded as an empty successful one. */
+  const json = await fetchJsonOrThrow(`https://${slug}.recruitee.com/api/offers/`, deps);
   return normalizeRecruitee(source, json);
 }

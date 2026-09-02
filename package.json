@@ -76,7 +76,9 @@
     "test:job-api": "tsx scripts/job-api.selftest.ts",
     "test:job-ui": "tsx scripts/job-ui.selftest.ts",
     "test:job-personalized": "tsx scripts/job-personalized.selftest.ts",
-    "test:job-performance": "tsx scripts/job-performance.selftest.ts"
+    "test:job-performance": "tsx scripts/job-performance.selftest.ts",
+    "test:job-scraper-health": "tsx scripts/job-scraper-health.selftest.ts",
+    "test:job-redis-performance": "tsx scripts/job-redis-performance.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",
@@ -88,6 +90,7 @@
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.100.1",
     "@types/nodemailer": "^7.0.11",
+    "@upstash/redis": "^1.38.3",
     "@xmldom/xmldom": "^0.9.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

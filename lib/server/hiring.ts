@@ -6,6 +6,7 @@ import {
 } from '@/lib/server/db/hiring-jobs-rows';
 import { invalidateRecommendationCaches } from '@/lib/server/recommendation-cache';
 import { invalidateHiringCompanies } from '@/lib/server/hiring-companies';
+import { invalidateNamespaces } from '@/lib/server/cache';
 import {
   countPublishedJobs, mirrorPublishedJobs, readHiringCorpusVersion,
   selectPublishedCompanyNames, selectPublishedJobDocById, selectPublishedJobListDocs,
@@ -445,6 +446,17 @@ export async function saveHiringJobs(jobs: HiringJobPosting[]) {
   // Every write path funnels through here, so this is the one place the
   // job caches can go stale — and the one place they are cleared.
   invalidatePublishedHiringJobs();
+
+  /* The DISTRIBUTED caches, cleared in the same breath as the in-process ones.
+     Without this an employer's edit would be invisible to every other lambda
+     until the TTL expired. One counter bump per namespace invalidates every
+     key built against the old version — no scan, no key enumeration.
+
+     Fire-and-forget with a caught rejection: the MongoDB write has already
+     succeeded and must not be failed by a cache that is unreachable. The TTL is
+     the backstop if the bump is lost. */
+  void invalidateNamespaces(['jobs:public', 'jobs:recs', 'jobs:personalized'])
+    .catch(() => { /* a cache that cannot be cleared must not fail a save */ });
   /* A new or changed posting can change anyone's matches and the marquee's
      employer list, so those derived caches are dropped too. Without this a job
      posted now stayed invisible to recommendations until the entry aged out. */

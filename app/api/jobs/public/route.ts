@@ -9,14 +9,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getHiringJobsCached } from '@/lib/server/hiring';
 import { publicJobs } from '@/lib/server/job-api/queries';
+import { TTL, cached } from '@/lib/server/cache';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
     const q = request.nextUrl.searchParams;
-    const jobs = await getHiringJobsCached();
-    return NextResponse.json(publicJobs(jobs, {
+    const query = {
       search: q.get('search') ?? undefined,
       country: q.get('country') ?? undefined,
       state: q.get('state') ?? undefined,
@@ -30,7 +30,21 @@ export async function GET(request: NextRequest) {
       sort: (q.get('sort') as 'newest' | 'relevance' | 'salary' | null) ?? undefined,
       page: q.get('page') ?? undefined,
       pageSize: q.get('pageSize') ?? undefined,
-    }));
+    };
+
+    /* THE PAGE is cached, not the corpus. Caching the ~2.7 MB job corpus in
+       Redis would move that payload over the network on every miss to answer a
+       request for twenty rows; the answer itself is a few tens of KB. On a miss
+       this falls through to the in-process corpus cache and MongoDB exactly as
+       before, so with Redis unconfigured nothing about this route changes.
+
+       Public data only — no session is read here and the key carries no user
+       scope, so this response is identical for every visitor by construction. */
+    const payload = await cached(
+      { ns: 'jobs:public', kind: 'list', params: query, ttlSeconds: TTL.publicList },
+      async () => publicJobs(await getHiringJobsCached(), query),
+    );
+    return NextResponse.json(payload);
   } catch {
     return NextResponse.json({ error: 'Failed to load jobs.' }, { status: 500 });
   }

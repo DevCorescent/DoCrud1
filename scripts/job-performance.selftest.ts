@@ -25,7 +25,7 @@ import {
   type MatchCandidate,
 } from '../lib/server/job-sources/ats-match';
 import { buildRecommendations } from '../lib/server/job-sources/recommendation';
-import { buildRecProfile } from '../lib/server/job-recommend';
+import { buildRecProfile, recommendMatch, type RecJob } from '../lib/server/job-recommend';
 import { evaluateAts } from '../lib/server/ats';
 import { normalizeJd } from '../lib/server/ats/jd';
 import { normalizeResume } from '../lib/server/ats/resume';
@@ -577,6 +577,154 @@ check('and the in-flight promise is cleared on failure',
   /rawInFlight = null;[\s\S]{0,120}throw error/.test(hiringSrc));
 check('the cache is revalidated by a version probe, not trusted forever',
   /readHiringCorpusVersion/.test(hiringSrc));
+
+/* ═══ COMPLEXITY: work must scale with the PAGE, not the corpus ══════════ */
+
+/* Each stage is counted by instrumenting the field it reads. `candidateEmail`
+   is touched ONLY by the applicant row builder, so counting its reads counts
+   row constructions exactly — no production code is modified. */
+function countingApp(i: number, counter: { n: number }): HiringJobApplication {
+  const raw: Record<string, unknown> = {
+    id: `ca-${i}`, jobId: 'job-0001', candidateUserId: `cu${String(i).padStart(5, '0')}`,
+    candidateName: `Candidate ${i}`, organizationId: 'org1', organizationName: 'Acme',
+    jobTitle: 'Engineer', atsScore: (i * 37) % 101, status: 'submitted',
+    appliedAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+    resumeFileName: 'cv.pdf',
+  };
+  Object.defineProperty(raw, 'candidateEmail', {
+    get() { counter.n += 1; return `c${i}@example.com`; }, enumerable: true,
+  });
+  return raw as unknown as HiringJobApplication;
+}
+
+for (const A of [200, 2000]) {
+  const counter = { n: 0 };
+  const pool = Array.from({ length: A }, (_, i) => countingApp(i, counter));
+  counter.n = 0;
+  const paged = rankApplicants(pool, { page: 1, pageSize: 25 });
+  check(`rankApplicants builds <= 25 rows for A=${A}`, counter.n <= 25);
+  check(`rankApplicants returns 25 rows for A=${A}`, paged.items.length === 25);
+  check(`rankApplicants reports the true total for A=${A}`, paged.total === A);
+  /* THE POINT: constructions must NOT grow with the corpus. */
+  check(`rankApplicants row construction is independent of A=${A}`, counter.n < A);
+}
+
+/* publicJobs: description serialization must stay at P as N grows 50x. */
+function countingJob(i: number, counter: { n: number }): HiringJobPosting {
+  const raw: Record<string, unknown> = {
+    id: `cj-${String(i).padStart(5, '0')}`, title: `Role ${i}`, organizationName: 'Acme',
+    organizationId: 'org1', location: 'Bengaluru', workMode: 'hybrid',
+    employmentType: 'full_time', requirements: ['TypeScript'], responsibilities: ['Ship'],
+    preferredSkills: ['React'], status: 'published',
+    createdAt: new Date(Date.UTC(2026, 0, 1 + (i % 300))).toISOString(),
+    updatedAt: '2026-08-01T00:00:00.000Z',
+  };
+  Object.defineProperty(raw, 'description', {
+    get() { counter.n += 1; return 'Requirements: TypeScript, React.'; }, enumerable: true,
+  });
+  return raw as unknown as HiringJobPosting;
+}
+
+const counts: number[] = [];
+for (const N of [100, 5000]) {
+  const c = { n: 0 };
+  const corpus = Array.from({ length: N }, (_, i) => countingJob(i, c));
+  c.n = 0;
+  publicJobs(corpus, { page: 1, pageSize: 20 });
+  counts.push(c.n);
+  check(`publicJobs serializes <= 20 descriptions for N=${N}`, c.n <= 20);
+}
+check('publicJobs serialization does not grow with the corpus', counts[0] === counts[1]);
+
+/* personalizedPage: ATS enrichment must stay at P as N grows 50x. */
+const enrichCounts: number[] = [];
+for (const N of [100, 5000]) {
+  const c = { n: 0 };
+  const corpus = Array.from({ length: N }, (_, i) => countingJob(i, c));
+  c.n = 0;
+  personalizedPage({ rankedJobs: corpus, candidate: SHARED_CAND as never, page: 1, pageSize: 25 });
+  enrichCounts.push(c.n);
+}
+check('personalizedPage enrichment does not grow with the corpus',
+  enrichCounts[0] === enrichCounts[1]);
+check('personalizedPage enrichment is bounded by the page, not the corpus',
+  enrichCounts[1] < 5000);
+
+/* ═══ RANKING: O(J x profileSkills) -> ~O(J) ═════════════════════════════ */
+
+const RSKILLS = ['typescript', 'react', 'node.js', 'mongodb', 'graphql', 'go', 'rust', 'kafka'];
+const recJob = (i: number, over: Partial<RecJob> = {}): RecJob => ({
+  id: `rj${i}`, title: `Senior Software Engineer ${i}`, organizationName: 'Acme',
+  location: 'Bengaluru', employmentType: 'full_time', workMode: 'hybrid',
+  experienceLevel: 'senior',
+  description: `Requirements: ${RSKILLS.join(', ')}. Responsibilities: ship features.`,
+  preferredSkills: ['typescript', 'react'], targetRoleKeywords: ['engineer'],
+  createdAt: '2026-08-01T00:00:00.000Z', ...over,
+});
+
+const bigProfile = buildRecProfile({
+  headline: 'Senior Software Engineer', location: 'Bengaluru',
+  skills: Array.from({ length: 150 }, (_, i) => RSKILLS[i % RSKILLS.length] + (i >= RSKILLS.length ? String(i) : '')),
+  experience: [{ title: 'Senior Software Engineer' }], interests: ['distributed systems'],
+} as never);
+
+/* The profile must carry a prebuilt Set, so skill overlap is O(jobSkills) per
+   job instead of an array scan per job skill. */
+check('buildRecProfile precomputes a skill Set', bigProfile.skillSet instanceof Set);
+check('the Set holds exactly the profile skills',
+  bigProfile.skillSet!.size === new Set(bigProfile.skills).size);
+
+/* A profile WITHOUT the Set must score identically — the fallback path. */
+const noSet = { ...bigProfile, skillSet: undefined };
+const withSet = recommendMatch(bigProfile, recJob(1), Date.parse('2026-09-02T00:00:00.000Z'));
+const without = recommendMatch(noSet, recJob(1), Date.parse('2026-09-02T00:00:00.000Z'));
+check('the Set fast path scores identically to the array fallback',
+  JSON.stringify(withSet) === JSON.stringify(without));
+
+/* LAZINESS, counted. `profile.skills.filter` is the textHits scan — the single
+   most expensive step. A job whose declared skills MATCHED must never run it. */
+function countingProfile(base: typeof bigProfile, counter: { n: number }) {
+  const arr = base.skills.slice() as string[] & { filter: unknown };
+  const realFilter = Array.prototype.filter;
+  Object.defineProperty(arr, 'filter', {
+    value(this: string[], ...args: Parameters<typeof realFilter>) {
+      counter.n += 1;
+      return realFilter.apply(this, args as never);
+    },
+  });
+  return { ...base, skills: arr as unknown as string[] };
+}
+
+const NOW = Date.parse('2026-09-02T00:00:00.000Z');
+let c1 = { n: 0 };
+recommendMatch(countingProfile(bigProfile, c1), recJob(2), NOW);          // declared skills MATCH
+check('a matched job never runs the description scan', c1.n === 0);
+
+let c2 = { n: 0 };
+recommendMatch(countingProfile(bigProfile, c2),
+  recJob(3, { preferredSkills: ['cobol'], targetRoleKeywords: ['mainframe'] }), NOW);
+check('an unmatched job still runs the description scan once', c2.n === 1);
+
+let c3 = { n: 0 };
+recommendMatch(countingProfile(bigProfile, c3),
+  recJob(4, { preferredSkills: [], targetRoleKeywords: [] }), NOW);
+check('a job that declares no skills scans the description once', c3.n === 1);
+check('and never more than once (the result is memoized)', c3.n <= 1);
+
+/* Semantics preserved on the paths that DO need textHits. */
+const noDeclared = recommendMatch(bigProfile, recJob(5, { preferredSkills: [], targetRoleKeywords: [] }), NOW);
+check('a job with no declared skills still scores from text mentions', noDeclared.score > 0);
+check('and still reports overlap', noDeclared.overlap === true);
+check('and still explains itself',
+  noDeclared.reasons.some((r) => /referenced|matching/.test(r)));
+
+/* ═══ UI: never state a count before it is known ═════════════════════════ */
+
+const feedSrc = readFileSync('components/JobsFeedPage.tsx', 'utf8');
+check('the best-matches banner waits for the request to finish',
+  /recommendedOnly && recState === 'ready' &&/.test(feedSrc));
+check('the banner is not rendered on the loading state alone',
+  !/\{recommendedOnly && \(\s*\n\s*<div className="mb-6/.test(feedSrc));
 
 console.log(`\n${passed} checks passed, ${failed} failed.`);
 if (failed > 0) { console.error('FAILED'); process.exit(1); }

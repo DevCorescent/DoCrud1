@@ -44,6 +44,7 @@ import { getAdapter, isPartnershipBlocked, listSourceConfigs, safeMessage } from
 import { normalizeSourceJob } from './normalize';
 import { planIngest, type IngestReport } from './ingest';
 import { markSeen } from './lifecycle';
+import { SourceFetchError } from '@/lib/server/job-scraper/source-fetch';
 
 /* ── Result shape ─────────────────────────────────────────────────────────*/
 
@@ -66,6 +67,14 @@ export interface SourceIngestStat {
   latencyMs: number;
   /** Safe message. Never a stack trace, never a credential. */
   error?: string;
+  /**
+   * The failure CATEGORY, so an administrator can tell a dead host from a
+   * misconfigured slug from a board that returned nonsense — 'http',
+   * 'timeout', 'network', 'parse', 'redirect', 'content_type', 'config'…
+   */
+  errorKind?: string;
+  /** The HTTP status, when the server actually sent one. */
+  errorStatus?: number;
 }
 
 export interface IngestionRunSummary {
@@ -177,9 +186,14 @@ export async function runCanonicalIngestion(
     } catch (error) {
       /* A FAILED source contributes no jobs AND no absence evidence. Nothing
          downstream may read this as "the board is empty". */
+      /* The category survives alongside the message, so the console can say
+         WHY rather than only that something went wrong. */
+      const detail = error instanceof SourceFetchError
+        ? { errorKind: error.kind, ...(error.status ? { errorStatus: error.status } : {}) }
+        : {};
       perSource.push({
         ...base, ok: false, skipped: false, latencyMs: Date.now() - started,
-        error: safeMessage(error),
+        error: safeMessage(error), ...detail,
       });
       continue;
     }

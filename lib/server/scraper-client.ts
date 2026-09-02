@@ -9,7 +9,10 @@
  */
 import { runApprovedScrape } from '@/lib/server/job-scraper';
 import { allSources, listSources } from '@/lib/server/job-scraper/sources';
-import { getScraperState, saveScraperState, type ScraperRunSummary } from '@/lib/server/job-scraper/state';
+import {
+  getScraperState, saveScraperState,
+  type ScraperRunSummary, type ScraperSourceState,
+} from '@/lib/server/job-scraper/state';
 import { importJobsFromCsv } from '@/lib/server/job-import';
 import type { SourceRunStat } from '@/lib/server/job-scraper/types';
 
@@ -21,6 +24,13 @@ export interface SourceInfo {
   lastSyncAt?: string;
   jobs?: number;
   failed?: boolean;
+  /* Admin diagnostics: why a source is failing, and for how long. Safe strings
+     only — a host and a status, never a URL, a credential or a stack. */
+  lastAttemptAt?: string;
+  lastError?: string;
+  lastErrorKind?: string;
+  lastErrorStatus?: number;
+  consecutiveFailures?: number;
 }
 
 export interface ScraperStatus {
@@ -34,7 +44,7 @@ export interface ScraperStatus {
 export async function getScraperStatus(): Promise<ScraperStatus> {
   const enabled = listSources();
   const state = await getScraperState().catch(() => ({}));
-  const perSource = (state as { perSource?: Record<string, { lastSyncAt: string; jobs: number; failed: boolean }> }).perSource ?? {};
+  const perSource = (state as { perSource?: Record<string, ScraperSourceState> }).perSource ?? {};
   const sources: SourceInfo[] = allSources().map((s) => ({
     name: s.name,
     label: s.label || s.name,
@@ -43,6 +53,11 @@ export async function getScraperStatus(): Promise<ScraperStatus> {
     lastSyncAt: perSource[s.name]?.lastSyncAt,
     jobs: perSource[s.name]?.jobs,
     failed: perSource[s.name]?.failed,
+    lastAttemptAt: perSource[s.name]?.lastAttemptAt,
+    lastError: perSource[s.name]?.lastError,
+    lastErrorKind: perSource[s.name]?.lastErrorKind,
+    lastErrorStatus: perSource[s.name]?.lastErrorStatus,
+    consecutiveFailures: perSource[s.name]?.consecutiveFailures,
   }));
   return {
     mode: enabled.length > 0 ? 'internal' : 'unconfigured',
@@ -182,13 +197,46 @@ export async function runCanonicalIngest(opts: { totalLimit?: number }): Promise
   }));
 
   const prev = await getScraperState().catch(() => ({}));
-  const perSourceMap = { ...((prev as { perSource?: Record<string, { lastSyncAt: string; jobs: number; failed: boolean }> }).perSource ?? {}) };
+  const perSourceMap: Record<string, ScraperSourceState> = {
+    ...((prev as { perSource?: Record<string, ScraperSourceState> }).perSource ?? {}),
+  };
   for (const s of out.perSource) {
-    /* A failed or skipped source keeps its PREVIOUS lastSyncAt: overwriting it
-       would claim a successful sync that did not happen, and Phase 8 reads
-       this kind of signal when deciding whether a job is genuinely absent. */
-    if (!s.ok || s.skipped) continue;
-    perSourceMap[s.name] = { lastSyncAt: out.runAt, jobs: s.discovered, failed: false };
+    /* A source that was never attempted is left exactly as it was. */
+    if (s.skipped) continue;
+
+    const before = perSourceMap[s.name];
+    if (!s.ok) {
+      /* THE FIX. Failures used to `continue` here, so `failed: true` was never
+         written and the console's red dot could not light up — a source that
+         failed every run showed as "Not synced" forever, indistinguishable
+         from one that had simply never been configured.
+
+         `lastSyncAt` and `jobs` KEEP their previous values: the last successful
+         read is a fact, and overwriting it would claim a sync that never
+         happened. Only the failure fields move. */
+      perSourceMap[s.name] = {
+        ...before,
+        jobs: before?.jobs ?? 0,
+        failed: true,
+        lastAttemptAt: out.runAt,
+        lastError: s.error ?? 'Source failed.',
+        lastErrorKind: s.errorKind,
+        lastErrorStatus: s.errorStatus,
+        consecutiveFailures: (before?.consecutiveFailures ?? 0) + 1,
+      };
+      continue;
+    }
+
+    /* A SUCCESSFUL run — including one that legitimately found zero jobs —
+       clears the failure state. `jobs: 0` with `failed: false` is a real and
+       meaningful answer: the board was read and has no openings. */
+    perSourceMap[s.name] = {
+      lastSyncAt: out.runAt,
+      jobs: s.discovered,
+      failed: false,
+      lastAttemptAt: out.runAt,
+      consecutiveFailures: 0,
+    };
   }
 
   const summary: ScrapeSummary = {

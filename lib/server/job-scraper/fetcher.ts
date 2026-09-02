@@ -203,3 +203,197 @@ export async function fetchTextStrict(
   }
   return null;
 }
+
+/* ── Truthful fetch results ───────────────────────────────────────────────
+   THE DEFECT THIS FIXES. Every function above returns `null` for a 404, a 500,
+   a timeout, a DNS failure, a redirect, unparseable JSON and an oversized body
+   alike. Every provider then turned that `null` into `[]`, and the runner
+   recorded a source that "succeeded with 0 jobs". A board that could not be
+   contacted was indistinguishable from a company with no openings — so a
+   totally broken source showed green in Super Admin.
+
+   The null-returning functions are KEPT, unchanged, because other callers rely
+   on them. These variants carry the reason instead of discarding it. */
+
+export type FetchFailureKind =
+  | 'http'          // a non-2xx the server actually sent
+  | 'access'        // 401/403 — respected, never worked around
+  | 'timeout'       // our AbortController fired
+  | 'network'       // DNS, TLS, connection reset
+  | 'parse'         // 200, but the body was not what it claimed
+  | 'redirect'      // a 3xx we refused to follow (wrong slug)
+  | 'content_type'  // 200 of the wrong type — an HTML "feed"
+  | 'too_large'     // body past MAX_JSON_BYTES
+  | 'bad_url';      // not https — a configuration fault
+
+export interface FetchFailure {
+  ok: false;
+  kind: FetchFailureKind;
+  /** Present only for `http` and `redirect`. */
+  status?: number;
+}
+
+export type FetchOutcome<T> = { ok: true; value: T } | FetchFailure;
+
+/** A message safe to persist and show an administrator. Never a stack. */
+export function describeFetchFailure(f: FetchFailure, url?: string): string {
+  const where = url ? ` (${safeHost(url)})` : '';
+  switch (f.kind) {
+    case 'http': return `HTTP ${f.status ?? '???'}${where}`;
+    case 'access': return `Access denied — HTTP ${f.status ?? 403}${where}`;
+    case 'timeout': return `Timed out${where}`;
+    case 'network': return `Network failure${where}`;
+    case 'parse': return `Unreadable response body${where}`;
+    case 'redirect': return `Redirected (HTTP ${f.status ?? 3}xx) — the slug is probably wrong${where}`;
+    case 'content_type': return `Unexpected content type${where}`;
+    case 'too_large': return `Response too large${where}`;
+    case 'bad_url': return `Refused non-HTTPS URL${where}`;
+    default: return `Fetch failed${where}`;
+  }
+}
+
+/** Host only — never the full URL, which can carry a board identifier. */
+function safeHost(url: string): string {
+  try { return new URL(url).host; } catch { return 'unknown host'; }
+}
+
+/** Classify a thrown fetch error without leaking its message. */
+function classifyThrow(error: unknown): FetchFailure {
+  const name = (error as { name?: string })?.name ?? '';
+  if (name === 'AbortError' || name === 'TimeoutError') return { ok: false, kind: 'timeout' };
+  return { ok: false, kind: 'network' };
+}
+
+/** Shared response triage. `null` means "keep retrying". */
+function triage(status: number): FetchFailure | 'retry' | null {
+  if (status === 401 || status === 403) return { ok: false, kind: 'access', status };
+  if (status === 429 || (status >= 500 && status < 600)) return 'retry';
+  if (status !== 200) return { ok: false, kind: 'http', status };
+  return null;
+}
+
+/** `fetchJson`, but the failure reason survives. */
+export async function fetchJsonResult(url: string, opts: FetchOpts = {}): Promise<FetchOutcome<unknown>> {
+  if (!/^https:\/\//i.test(url)) return { ok: false, kind: 'bad_url' };
+  const timeoutMs = opts.timeoutMs ?? 12_000;
+  const retries = Math.max(0, opts.retries ?? 2);
+  let last: FetchFailure = { ok: false, kind: 'network' };
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'GET', redirect: 'follow', signal: controller.signal,
+        headers: { 'user-agent': SCRAPER_UA, accept: 'application/json' },
+      });
+      const verdict = triage(res.status);
+      if (verdict === 'retry') {
+        last = { ok: false, kind: 'http', status: res.status };
+        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        return last;
+      }
+      if (verdict) return verdict;
+      const len = Number(res.headers.get('content-length') || 0);
+      if (len && len > MAX_JSON_BYTES) return { ok: false, kind: 'too_large' };
+      const text = await res.text();
+      if (text.length > MAX_JSON_BYTES) return { ok: false, kind: 'too_large' };
+      try { return { ok: true, value: JSON.parse(text) }; }
+      catch { return { ok: false, kind: 'parse' }; }
+    } catch (error) {
+      last = classifyThrow(error);
+      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      return last;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return last;
+}
+
+/** `fetchJsonPost`, but the failure reason survives. */
+export async function fetchJsonPostResult(
+  url: string, body: unknown, opts: FetchOpts = {},
+): Promise<FetchOutcome<unknown>> {
+  if (!/^https:\/\//i.test(url)) return { ok: false, kind: 'bad_url' };
+  const timeoutMs = opts.timeoutMs ?? 12_000;
+  const retries = Math.max(0, opts.retries ?? 2);
+  let last: FetchFailure = { ok: false, kind: 'network' };
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'POST', redirect: 'follow', signal: controller.signal,
+        headers: {
+          'user-agent': SCRAPER_UA, accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body ?? {}),
+      });
+      const verdict = triage(res.status);
+      if (verdict === 'retry') {
+        last = { ok: false, kind: 'http', status: res.status };
+        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        return last;
+      }
+      if (verdict) return verdict;
+      const text = await res.text();
+      if (text.length > MAX_JSON_BYTES) return { ok: false, kind: 'too_large' };
+      try { return { ok: true, value: JSON.parse(text) }; }
+      catch { return { ok: false, kind: 'parse' }; }
+    } catch (error) {
+      last = classifyThrow(error);
+      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      return last;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return last;
+}
+
+/** `fetchTextStrict`, but the failure reason survives. */
+export async function fetchTextStrictResult(
+  url: string, opts: FetchOpts & { expectContentType?: RegExp } = {},
+): Promise<FetchOutcome<{ status: number; text: string }>> {
+  if (!/^https:\/\//i.test(url)) return { ok: false, kind: 'bad_url' };
+  const timeoutMs = opts.timeoutMs ?? 12_000;
+  const retries = Math.max(0, opts.retries ?? 2);
+  let last: FetchFailure = { ok: false, kind: 'network' };
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        method: 'GET', redirect: 'manual', signal: controller.signal,
+        headers: { 'user-agent': SCRAPER_UA, accept: 'application/xml,text/xml,application/json,text/plain' },
+      });
+      /* A redirect means the slug is wrong. Not an empty board. */
+      if (res.status >= 300 && res.status < 400) return { ok: false, kind: 'redirect', status: res.status };
+      const verdict = triage(res.status);
+      if (verdict === 'retry') {
+        last = { ok: false, kind: 'http', status: res.status };
+        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        return last;
+      }
+      if (verdict) return verdict;
+      if (opts.expectContentType) {
+        const ct = res.headers.get('content-type') || '';
+        if (!opts.expectContentType.test(ct)) return { ok: false, kind: 'content_type' };
+      }
+      const text = await res.text();
+      if (text.length > MAX_JSON_BYTES) return { ok: false, kind: 'too_large' };
+      return { ok: true, value: { status: 200, text } };
+    } catch (error) {
+      last = classifyThrow(error);
+      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      return last;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return last;
+}

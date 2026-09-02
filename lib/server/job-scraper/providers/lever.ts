@@ -16,6 +16,7 @@ import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchJson } from '../fetcher';
 import { htmlToText, splitList, deriveKeywords } from '../normalize';
 import { prettyCompany } from './ashby';
+import { configError, fetchJsonOrThrow } from '../source-fetch';
 
 const EMPLOYMENT: Record<string, string> = {
   'full-time': 'full_time', fulltime: 'full_time', 'part-time': 'part_time', parttime: 'part_time',
@@ -91,8 +92,7 @@ const LEVER_MAX_PAGES = 50;
 
 export async function fetchLever(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const company = (source.board ?? '').trim();
-  if (!company) return [];
-  const get = deps.fetchJson ?? fetchJson;
+  if (!company) configError('Lever source has no company slug.');
 
   const all: NormalizedJob[] = [];
   /* Provider ids already returned. A provider that ignores `skip` would serve
@@ -103,8 +103,11 @@ export async function fetchLever(source: ScrapeSource, deps: ProviderDeps = {}):
   for (let page = 0; page < LEVER_MAX_PAGES; page += 1) {
     const url = `https://api.lever.co/v0/postings/${encodeURIComponent(company)}`
       + `?mode=json&limit=${LEVER_PAGE_SIZE}&skip=${page * LEVER_PAGE_SIZE}`;
-    const json = await get(url);
-    if (json == null) break;
+    /* Throws on failure, INCLUDING mid-pagination. A page-2 error used to
+       `break` and return page 1 as if it were the whole board — a partial
+       result presented as complete, which is the more dangerous half of this
+       bug because it looks plausible. */
+    const json = await fetchJsonOrThrow(url, deps);
 
     const batch = normalizeLever(source, json);
     if (batch.length === 0) break;

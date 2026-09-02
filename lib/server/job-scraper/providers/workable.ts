@@ -12,6 +12,7 @@ import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchJson } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
+import { configError, fetchJsonOrThrow } from '../source-fetch';
 
 const EMPLOYMENT: Record<string, string> = {
   full_time: 'full_time', fulltime: 'full_time', part_time: 'part_time',
@@ -68,9 +69,8 @@ export function normalizeWorkable(source: ScrapeSource, raw: unknown): Normalize
 
 export async function fetchWorkable(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const slug = (source.board ?? '').trim();
-  if (!slug) return [];
-  const get = deps.fetchJson ?? fetchJson;
-  const json = await get(`https://apply.workable.com/api/v1/widget/accounts/${encodeURIComponent(slug)}?details=true`);
-  if (json == null) return [];
+  if (!slug) configError('Workable source has no account slug.');
+  const json = await fetchJsonOrThrow(
+    `https://apply.workable.com/api/v1/widget/accounts/${encodeURIComponent(slug)}?details=true`, deps);
   return normalizeWorkable(source, json);
 }

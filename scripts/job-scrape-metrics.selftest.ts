@@ -124,12 +124,19 @@ async function main() {
       (await fetchLever(leverSource, deps)).length === 0);
   }
   {
+    /* A failed request must THROW so the runner records a failed source. It
+       used to return [] — indistinguishable from a board with no openings. */
     const deps: ProviderDeps = { fetchJson: async () => null };
-    check('a failed request yields no jobs rather than throwing',
-      (await fetchLever(leverSource, deps)).length === 0);
+    let threw = false;
+    try { await fetchLever(leverSource, deps); } catch { threw = true; }
+    check('a failed request throws rather than yielding an empty board', threw);
   }
   {
-    /* Failure midway keeps what was already read. */
+    /* A MID-PAGINATION failure is the more dangerous half of the same defect:
+       page 1 succeeds, page 2 fails, and the adapter used to return page 1 as
+       though it were the whole board — a partial result presented as complete,
+       which looks entirely plausible and would let absence logic act on it.
+       It must fail the source instead. */
     let n = 0;
     const deps: ProviderDeps = {
       fetchJson: async (url) => {
@@ -139,11 +146,18 @@ async function main() {
         return Array.from({ length: limit }, (_, k) => post(skip + k));
       },
     };
-    check('a mid-pagination failure keeps the pages already fetched',
-      (await fetchLever(leverSource, deps)).length === 100);
+    let threw = false;
+    try { await fetchLever(leverSource, deps); } catch { threw = true; }
+    check('a mid-pagination failure fails the source, not a partial board', threw);
   }
-  check('a source with no board slug fetches nothing',
-    (await fetchLever({ ...leverSource, board: '' }, { fetchJson: async () => [post(1)] })).length === 0);
+  {
+    /* A missing slug is a CONFIGURATION fault, reported immediately rather
+       than consuming retries or reading as an empty board. */
+    let threw = false;
+    try { await fetchLever({ ...leverSource, board: '' }, { fetchJson: async () => [post(1)] }); }
+    catch { threw = true; }
+    check('a source with no board slug is reported as misconfigured', threw);
+  }
 
   console.log('\n── 2. Ashby and Greenhouse do not paginate (documented) ──');
 

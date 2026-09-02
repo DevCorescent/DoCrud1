@@ -16,6 +16,7 @@
 import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchJson } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
+import { configError, fetchJsonOrThrow } from '../source-fetch';
 
 const EMPLOYMENT: Record<string, string> = {
   fulltime: 'full_time', parttime: 'part_time', intern: 'internship', contract: 'contract', temporary: 'contract',
@@ -67,9 +68,10 @@ export function normalizeAshby(source: ScrapeSource, raw: unknown): NormalizedJo
 
 export async function fetchAshby(source: ScrapeSource, deps: ProviderDeps = {}): Promise<NormalizedJob[]> {
   const board = (source.board ?? '').trim();
-  if (!board) return [];
+  if (!board) configError('Ashby source has no board slug.');
   const url = `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board)}?includeCompensation=true`;
-  const json = deps.fetchJson ? await deps.fetchJson(url) : await fetchJson(url);
-  if (json == null) return [];
+  /* Throws on 404/500/timeout/parse failure, so the runner records a FAILED
+     source instead of an empty successful one. */
+  const json = await fetchJsonOrThrow(url, deps);
   return normalizeAshby(source, json);
 }

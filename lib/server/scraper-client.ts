@@ -13,6 +13,9 @@ import {
   getScraperState, saveScraperState,
   type ScraperRunSummary, type ScraperSourceState,
 } from '@/lib/server/job-scraper/state';
+import { resolveCompanyLogos } from '@/lib/server/company-logo-resolver';
+import { logoKey } from '@/lib/company-logos';
+import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { importJobsFromCsv } from '@/lib/server/job-import';
 import type { SourceRunStat } from '@/lib/server/job-scraper/types';
 
@@ -20,6 +23,19 @@ export interface SourceInfo {
   name: string;
   label: string;
   provider: string;
+  /** Canonical company identity — the same id Company Explorer and /jobs/company use. */
+  companyId: string;
+  /** '' when no trustworthy logo exists. The UI then renders initials. */
+  logoUrl: string;
+  /**
+   * The company's own website, ONLY when an operator configured one.
+   *
+   * Never derived from the job's applyUrl — that host is the ATS
+   * (boards.greenhouse.io, jobs.lever.co), not the employer — and never guessed
+   * from the display name. Absent means "not configured", which the UI states
+   * plainly rather than filling in.
+   */
+  websiteUrl: string;
   enabled: boolean;
   lastSyncAt?: string;
   jobs?: number;
@@ -41,14 +57,49 @@ export interface ScraperStatus {
   lastRun: ScraperRunSummary | null;
 }
 
+/** Websites an operator configured, keyed by canonical company identity. */
+function websiteFor(map: Map<string, string>, name: string): string | undefined {
+  return map.get(logoKey(name));
+}
+
 export async function getScraperStatus(): Promise<ScraperStatus> {
+  /* Operator-supplied websites are the ONLY domain source in the system — no
+     ATS provider reports one, and a domain is never derived from a name. */
+  const configuredWebsites = await getHomepageConfig()
+    .then((c) => new Map(
+      c.companyExplorer.items
+        .filter((i) => i.websiteUrl)
+        .map((i) => [i.id, i.websiteUrl as string]),
+    ))
+    .catch(() => new Map<string, string>());
+
   const enabled = listSources();
   const state = await getScraperState().catch(() => ({}));
   const perSource = (state as { perSource?: Record<string, ScraperSourceState> }).perSource ?? {};
-  const sources: SourceInfo[] = allSources().map((s) => ({
+  const all = allSources();
+
+  /* ONE resolution per COMPANY, not per source row and never per job.
+     22 configured sources produce at most 22 company-level lookups, and a warm
+     cache produces none. Two sources for one employer collapse to one entry.
+
+     Best effort: a resolver failure yields an empty logoUrl and the row renders
+     initials. Scraper status must never depend on a logo host being reachable. */
+  const logos = await resolveCompanyLogos(
+    all.map((s) => ({
+      name: s.label || s.name,
+      websiteUrl: websiteFor(configuredWebsites, s.label || s.name),
+    })),
+  ).catch(() => new Map());
+
+  const sources: SourceInfo[] = all.map((s) => ({
     name: s.name,
     label: s.label || s.name,
     provider: s.provider ?? 'jsonld',
+    companyId: logoKey(s.label || s.name),
+    /* Independent of sync state: a source that has never synced can still have
+       a perfectly good logo. "Not synced" is a SCRAPER fact, not a brand one. */
+    logoUrl: logos.get(logoKey(s.label || s.name))?.logoUrl ?? '',
+    websiteUrl: websiteFor(configuredWebsites, s.label || s.name) ?? '',
     enabled: s.enabled,
     lastSyncAt: perSource[s.name]?.lastSyncAt,
     jobs: perSource[s.name]?.jobs,

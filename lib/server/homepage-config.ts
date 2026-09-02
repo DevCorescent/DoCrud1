@@ -11,6 +11,10 @@
  * cache, so an admin sees their own change immediately.
  */
 import { readJsonFile, writeJsonFile, homepageConfigPath } from '@/lib/server/storage';
+import {
+  DEFAULT_COMPANY_EXPLORER, normalizeCompanyExplorerConfig,
+  type CompanyExplorerConfig,
+} from '@/lib/company-explorer';
 
 type SectionVisibility = {
   trustedCompanies: boolean; homeHighlights: boolean;
@@ -39,6 +43,15 @@ export type HomepageConfig = {
   contentDiscovery: { tabs: ContentTab[] };
   footer: { columns: FooterColumn[]; securityBadges: Array<{ label: string; visible: boolean }>; tagline: string; madeIn: string; copyrightEntity: string };
   announcementBanner: AnnouncementBanner | null;
+  /**
+   * The Company Explorer strip.
+   *
+   * Lives on the homepage config rather than in its own store: it IS homepage
+   * configuration, it is written from the same Super Admin screen, and it reads
+   * on the same cached path. A separate store would mean a second cache, a
+   * second invalidation and a second admin route for no gain.
+   */
+  companyExplorer: CompanyExplorerConfig;
   seoTitle: string;
   seoDescription: string;
   updatedAt: string;
@@ -66,6 +79,7 @@ export const DEFAULT_CONFIG: HomepageConfig = {
   contentDiscovery: { tabs: [] },
   footer: { columns: [], securityBadges: [], tagline: '', madeIn: '', copyrightEntity: '' },
   announcementBanner: null,
+  companyExplorer: DEFAULT_COMPANY_EXPLORER,
   seoTitle: '',
   seoDescription: '',
   updatedAt: '',
@@ -84,6 +98,11 @@ export function mergeConfig(stored: Partial<HomepageConfig> | null): HomepageCon
     featureCards:     { ...DEFAULT_CONFIG.featureCards,     ...(stored.featureCards     ?? {}) },
     contentDiscovery: { ...DEFAULT_CONFIG.contentDiscovery, ...(stored.contentDiscovery ?? {}) },
     footer:           { ...DEFAULT_CONFIG.footer,           ...(stored.footer           ?? {}) },
+    /* NORMALIZED, not spread: this value can arrive from storage written by an
+       older build or from an admin request body, and a malformed entry must not
+       be able to break the homepage. normalizeCompanyExplorerConfig drops junk,
+       collapses duplicate ids and re-numbers the order densely. */
+    companyExplorer: normalizeCompanyExplorerConfig(stored.companyExplorer),
   };
 }
 
@@ -120,6 +139,10 @@ export async function saveHomepageConfig(incoming: Partial<HomepageConfig>): Pro
     featureCards: { ...current.featureCards, ...(incoming.featureCards ?? {}) },
     contentDiscovery: { ...current.contentDiscovery, ...(incoming.contentDiscovery ?? {}) },
     footer: { ...current.footer, ...(incoming.footer ?? {}) },
+    /* Same normalization on the way IN, so nothing invalid is ever persisted. */
+    companyExplorer: normalizeCompanyExplorerConfig(
+      incoming.companyExplorer ?? current.companyExplorer,
+    ),
     updatedAt: new Date().toISOString(),
   };
   await writeJsonFile(homepageConfigPath, updated);

@@ -44,11 +44,27 @@ export interface AtsInput {
   jobDescription: string;
   /** The posting's title. Falls back to the description's first line. */
   jobTitle?: string;
+  /**
+   * Pre-normalized forms, when the caller has already computed them.
+   *
+   * Purely an escape hatch for callers that score MANY pairs sharing one side —
+   * ranking 25 jobs against one candidate, or 200 candidates against one job.
+   * normalizeJd measures ~3.4 ms and depends only on the description and title,
+   * so recomputing it per pair is the dominant cost of a recommendation page.
+   *
+   * SEMANTICS ARE UNCHANGED. When these are absent the function normalizes
+   * exactly as before; when present they must be the result of calling the same
+   * normalizer on the same inputs. Nothing downstream mutates either object.
+   */
+  normalizedResume?: NormalizedResume;
+  normalizedJd?: NormalizedJd;
 }
 
 export function evaluateAts(input: AtsInput): AtsEvaluation {
-  const resume: NormalizedResume = normalizeResume(input.resume, input.resumeText ?? '');
-  const jd: NormalizedJd = normalizeJd(input.jobDescription ?? '', input.jobTitle ?? '');
+  const resume: NormalizedResume = input.normalizedResume
+    ?? normalizeResume(input.resume, input.resumeText ?? '');
+  const jd: NormalizedJd = input.normalizedJd
+    ?? normalizeJd(input.jobDescription ?? '', input.jobTitle ?? '');
 
   const audit = auditResume(resume);
   const keyword = analyzeKeywords(resume, jd);

@@ -19,11 +19,12 @@ import { statusCounts } from '@/lib/server/job-api/status';
 export const dynamic = 'force-dynamic';
 
 async function ownedJob(email: string, jobId: string) {
-  const users = await getStoredUsers();
+  /* The users and jobs stores are independent; they were read one after the
+     other. Ownership is still decided below from the same records. */
+  const [users, jobs] = await Promise.all([getStoredUsers(), getHiringJobs()]);
   const actor = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
   if (!actor) return { actor: null, job: null, jobs: [] as Awaited<ReturnType<typeof getHiringJobs>> };
   const orgIds = await viewerOrganizationIds(actor);
-  const jobs = await getHiringJobs();
   const job = jobs.find((j) => j.id === jobId) ?? null;
   const owns = job && (actor.role === 'admin' || orgIds.includes(job.organizationId));
   return { actor, job: owns ? job : null, jobs };
@@ -32,11 +33,16 @@ async function ownedJob(email: string, jobId: string) {
 export async function GET(_req: NextRequest, { params }: { params: { jobId: string } }) {
   const session = await getAuthSession();
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const { job } = await ownedJob(session.user.email, params.jobId);
+  /* The applications read does not depend on the ownership outcome, so it runs
+     alongside it rather than after. The 404 below is unchanged. */
+  const [{ job }, allApplications] = await Promise.all([
+    ownedJob(session.user.email, params.jobId),
+    getHiringApplications(),
+  ]);
   /* A job owned by someone else answers exactly as one that never existed. */
   if (!job) return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
 
-  const applications = (await getHiringApplications()).filter((a) => a.jobId === job.id);
+  const applications = allApplications.filter((a) => a.jobId === job.id);
   return NextResponse.json({
     job,
     stats: { applicantCount: applications.length, counts: statusCounts(applications) },

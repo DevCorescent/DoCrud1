@@ -26,11 +26,13 @@ export async function GET(
   if (!session?.user?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const users = await getStoredUsers();
+  /* Independent stores, fetched together. canAccessResume still decides on the
+     same records, and no résumé bytes are touched until it says yes. */
+  const [users, applications] = await Promise.all([
+    getStoredUsers(), getHiringApplications(),
+  ]);
   const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const applications = await getHiringApplications();
   const application = applications.find((a) => a.id === params.applicationId) ?? null;
 
   const verdict = canAccessResume({

@@ -42,7 +42,10 @@ import type { HiringJobPosting, HiringJobApplication } from '@/types/document';
 import {
   isRecommended, recommendMatch, type RecJob, type RecProfile,
 } from '@/lib/server/job-recommend';
-import { evaluateJobMatch, type MatchCandidate } from './ats-match';
+import {
+  evaluateJobMatch, normalizeCandidateForMatch,
+  type MatchCandidate, type SharedNormalization,
+} from './ats-match';
 import { evaluateJobEligibility, type EligibilityStatus } from './eligibility';
 import { isJobActive } from './lifecycle';
 
@@ -168,7 +171,13 @@ export interface ScoredJob {
  *
  * Pure: no clock, no database, no network, and neither argument is mutated.
  */
-export function scoreJobForUser(job: HiringJobPosting, input: RecommendationInput): ScoredJob {
+export function scoreJobForUser(
+  job: HiringJobPosting,
+  input: RecommendationInput,
+  /* Pre-normalized shared side from the caller's pass. Omitted, behaviour is
+     exactly as before. */
+  shared: SharedNormalization = {},
+): ScoredJob {
   const recJob: RecJob = {
     id: job.id,
     title: job.title,
@@ -191,7 +200,7 @@ export function scoreJobForUser(job: HiringJobPosting, input: RecommendationInpu
   /* ATS only when there is a candidate view to score. Absent means "no signal",
      never "scored zero". */
   const atsScore = input.candidate
-    ? evaluateJobMatch(job, input.candidate).score
+    ? evaluateJobMatch(job, input.candidate, shared).score
     : null;
 
   const freshness = freshnessScore(job, input.now);
@@ -280,8 +289,15 @@ export function buildRecommendations(
     unique.push(job);
   }
 
+  /* ONE CANDIDATE, MANY JOBS. The résumé is identical for every job in this
+     pass, so it is normalized once rather than once per job. Ranking, reasons
+     and scores are unchanged. */
+  const shared: SharedNormalization = input.candidate
+    ? { resume: normalizeCandidateForMatch(input.candidate) }
+    : {};
+
   return unique
-    .map((job) => scoreJobForUser(job, input))
+    .map((job) => scoreJobForUser(job, input, shared))
     .filter((s) => s.excluded === null)
     /* Score descending, then jobId ascending — a property of the data, so the
        same inputs always rank the same way regardless of array order. */

@@ -27,12 +27,15 @@ export async function GET(
   if (!session?.user?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const users = await getStoredUsers();
+  /* Independent stores, fetched together. Authorization is unchanged and still
+     happens below, against the same records — only the waiting is shared. */
+  const [users, jobs, allApplications] = await Promise.all([
+    getStoredUsers(), getHiringJobs(), getHiringApplications(),
+  ]);
   const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const orgIds = await viewerOrganizationIds(actor);
-  const jobs = await getHiringJobs();
   const job = jobs.find((j) => j.id === params.jobId);
 
   /* Ownership is checked against the JOB, so another employer asking for this
@@ -42,7 +45,7 @@ export async function GET(
     return NextResponse.json({ error: 'Job not found.' }, { status: 404 });
   }
 
-  const applications = (await getHiringApplications()).filter((a) => a.jobId === job.id);
+  const applications = allApplications.filter((a) => a.jobId === job.id);
   const q = request.nextUrl.searchParams;
   const page = rankApplicants(applications, {
     search: q.get('search') ?? undefined,

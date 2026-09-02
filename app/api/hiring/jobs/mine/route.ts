@@ -20,15 +20,22 @@ export async function GET(request: NextRequest) {
   if (!session?.user?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const users = await getStoredUsers();
+  /* Three INDEPENDENT stores. They were awaited one after another, so the
+     request cost the sum of three round trips instead of the slowest one.
+     Nothing here depends on anything else here — the actor lookup is a find()
+     over the users already in hand. */
+  const [users, allJobs, allApplications] = await Promise.all([
+    getStoredUsers(), getHiringJobs(), getHiringApplications(),
+  ]);
   const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  /* Depends on the actor, so it cannot join the batch above. */
   const orgIds = await viewerOrganizationIds(actor);
   /* Scoped HERE, once. Everything downstream is presentation. */
-  const owned = (await getHiringJobs()).filter((j) => orgIds.includes(j.organizationId));
+  const owned = allJobs.filter((j) => orgIds.includes(j.organizationId));
   const ownedIds = new Set(owned.map((j) => j.id));
-  const applications = (await getHiringApplications()).filter((a) => ownedIds.has(a.jobId));
+  const applications = allApplications.filter((a) => ownedIds.has(a.jobId));
 
   const q = request.nextUrl.searchParams;
   return NextResponse.json(employerJobs(owned, applications, {

@@ -21,12 +21,12 @@ export async function GET(request: NextRequest) {
   if (!session?.user?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const users = await getStoredUsers();
+  /* Independent stores, fetched together rather than in sequence. */
+  const [users, all] = await Promise.all([getStoredUsers(), getHiringApplications()]);
   const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const q = request.nextUrl.searchParams;
-  const all = await getHiringApplications();
   return NextResponse.json(candidateApplications(all, actor.id, {
     status: q.get('status') ?? undefined,
     since: q.get('since') ?? undefined,

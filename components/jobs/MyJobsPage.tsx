@@ -26,7 +26,7 @@ import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus } from 'lucide-react';
-import PostedJobs from './my/PostedJobs';
+import PostedJobs, { type PostedSeed, SEED_PAGE_SIZE, SEED_SORT } from './my/PostedJobs';
 import Applicants from './my/Applicants';
 import AppliedJobs from './my/AppliedJobs';
 import { FOCUS, PRIMARY_BTN, Skeletons } from './my/ui';
@@ -37,6 +37,9 @@ export default function MyJobsPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab | null>(null);
   const [counts, setCounts] = useState<{ posted: number; applied: number } | null>(null);
+  /* The probe's own response, handed to PostedJobs so it does not immediately
+     re-run the identical query. See below. */
+  const [seedPosted, setSeedPosted] = useState<PostedSeed | null>(null);
   const [applicantsFor, setApplicantsFor] = useState<{ id: string; title: string } | null>(null);
 
   /**
@@ -50,17 +53,36 @@ export default function MyJobsPage() {
     const read = async (url: string) => {
       try {
         const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) return 0;
-        const body = await res.json().catch(() => null);
-        return Number(body?.total) || 0;
-      } catch { return 0; }
+        if (!res.ok) return null;
+        return (await res.json().catch(() => null)) as
+          { items?: unknown[]; page?: number; pageSize?: number; total?: number } | null;
+      } catch { return null; }
     };
+    /* MEASURED: this page used to issue /api/hiring/jobs/mine TWICE — a
+       pageSize=1 count probe, then the panel's own pageSize=20 list. Both ran
+       the full employer query server-side (users + jobs + applications, filter,
+       sort, count), so the most expensive authenticated page paid for it twice.
+
+       Asking the probe for the FIRST PAGE instead of a bare count costs the
+       server nothing extra — the same query, a larger slice — and its result is
+       exactly what the panel was about to request. It is handed over as a seed.
+       Tab selection, counts, filters and pagination are unchanged. */
     const [posted, applied] = await Promise.all([
-      read('/api/hiring/jobs/mine?page=1&pageSize=1'),
+      read(`/api/hiring/jobs/mine?page=1&pageSize=${SEED_PAGE_SIZE}&sort=${SEED_SORT}`),
       read('/api/me/applications?page=1&pageSize=1'),
     ]);
-    setCounts({ posted, applied });
-    setTab(posted === 0 && applied > 0 ? 'applied' : 'posted');
+    const postedTotal = Number(posted?.total) || 0;
+    const appliedTotal = Number(applied?.total) || 0;
+    if (posted && Array.isArray(posted.items)) {
+      setSeedPosted({
+        items: posted.items,
+        page: Number(posted.page) || 1,
+        pageSize: Number(posted.pageSize) || SEED_PAGE_SIZE,
+        total: postedTotal,
+      });
+    }
+    setCounts({ posted: postedTotal, applied: appliedTotal });
+    setTab(postedTotal === 0 && appliedTotal > 0 ? 'applied' : 'posted');
   }, []);
 
   useEffect(() => { probe(); }, [probe]);
@@ -107,7 +129,7 @@ export default function MyJobsPage() {
 
               <Suspense fallback={<Skeletons rows={3} />}>
                 {tab === 'posted'
-                  ? <PostedJobs onViewApplicants={setApplicantsFor} />
+                  ? <PostedJobs onViewApplicants={setApplicantsFor} seed={seedPosted} />
                   : <AppliedJobs />}
               </Suspense>
             </>

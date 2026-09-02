@@ -23,11 +23,15 @@ export const dynamic = 'force-dynamic';
 export async function POST(_req: NextRequest, { params }: { params: { applicationId: string } }) {
   const session = await getAuthSession();
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const users = await getStoredUsers();
+  /* Independent stores, fetched together. The authorization rule below is
+     unchanged: still only the two parties to this application. */
+  const [users, applications] = await Promise.all([
+    getStoredUsers(), getHiringApplications(),
+  ]);
   const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const application = (await getHiringApplications()).find((a) => a.id === params.applicationId) ?? null;
+  const application = applications.find((a) => a.id === params.applicationId) ?? null;
   const orgIds = await viewerOrganizationIds(actor);
   const asEmployer = employerOwnsApplication(application, orgIds, actor.role === 'admin');
   const asCandidate = isApplicationCandidate(application, actor.id);

@@ -25,11 +25,13 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest, { params }: { params: { applicationId: string } }) {
   const session = await getAuthSession();
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const users = await getStoredUsers();
+  /* Independent stores, fetched together. Authorization is unchanged and still
+     happens below, against the same records — only the waiting is shared. */
+  const [users, applications] = await Promise.all([
+    getStoredUsers(), getHiringApplications(),
+  ]);
   const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const applications = await getHiringApplications();
   const application = applications.find((a) => a.id === params.applicationId) ?? null;
   const orgIds = await viewerOrganizationIds(actor);
   const isAdmin = actor.role === 'admin';
@@ -71,11 +73,15 @@ export async function POST(request: NextRequest, { params }: { params: { applica
 export async function GET(_req: NextRequest, { params }: { params: { applicationId: string } }) {
   const session = await getAuthSession();
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const users = await getStoredUsers();
+  /* Independent stores, fetched together. The viewer split below is unchanged,
+     so a candidate still never receives recruiter notes. */
+  const [users, applications] = await Promise.all([
+    getStoredUsers(), getHiringApplications(),
+  ]);
   const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
   if (!actor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const application = (await getHiringApplications()).find((a) => a.id === params.applicationId) ?? null;
+  const application = applications.find((a) => a.id === params.applicationId) ?? null;
   const orgIds = await viewerOrganizationIds(actor);
   const asEmployer = employerOwnsApplication(application, orgIds, actor.role === 'admin');
   const asCandidate = isApplicationCandidate(application, actor.id);

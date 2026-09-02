@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import CompanyLogo from '@/components/jobs/company/CompanyLogo';
 
 const CARD = 'rounded-xl border border-white/10 bg-white/[0.03] p-4';
 const BTN = 'rounded-lg px-3 py-1.5 text-[12px] font-semibold transition disabled:opacity-40';
@@ -28,7 +29,13 @@ type ImportSummary = {
   preview: { title: string; organizationName: string; location: string; employmentType: string; workMode: string; experienceLevel: string }[];
 };
 
-type SourceInfo = { name: string; label: string; provider: string; enabled: boolean; lastSyncAt?: string; jobs?: number; failed?: boolean };
+/* Mirrors SourceInfo in lib/server/scraper-client.ts. `logoUrl` and
+   `companyId` come from the shared company-logo resolver — resolved once per
+   COMPANY, not per row and never per job. `lastError` is the reason a source
+   failed, which the scraper fix now persists. */
+type SourceInfo = { name: string; label: string; provider: string; enabled: boolean;
+  companyId?: string; logoUrl?: string; websiteUrl?: string; lastSyncAt?: string; jobs?: number; failed?: boolean;
+  lastError?: string; lastErrorKind?: string; consecutiveFailures?: number };
 type ScraperRun = { runAt: string; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number;
   discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
   existingUnknown?: number; duplicateInRun?: number; truncated?: number; sourcesOk?: number };
@@ -39,6 +46,22 @@ type ScrapeSummary = { sources: number; sourcesOk?: number; fetched: number; val
   perSource: Array<{ name: string; provider: string; fetched: number; active: number; failed: boolean }>; runAt: string };
 
 const CSV_HEADER = 'title,organizationName,location,department,employmentType,workMode,experienceLevel,description,responsibilities,requirements,preferredSkills,targetRoleKeywords,applyUrl';
+
+/* The one place a source's state is decided. The filter and the row both call
+   it, so a source can never be counted as "failed" by one and drawn as "synced"
+   by the other. Status is READ from data that already exists: a source with no
+   timestamp has genuinely never run, which is a different thing from one that
+   ran and failed. Nothing here is inferred, and a logo is never consulted. */
+type SourceState = 'synced' | 'never' | 'failed';
+function sourceState(s: { failed?: boolean; lastSyncAt?: string }): SourceState {
+  return s.failed ? 'failed' : s.lastSyncAt ? 'synced' : 'never';
+}
+
+const STATE_TONE: Record<SourceState, { dot: string; text: string; label: string }> = {
+  failed: { dot: 'bg-red-400', text: 'text-red-300/90', label: 'Sync failed' },
+  synced: { dot: 'bg-emerald-400', text: 'text-emerald-300/90', label: 'Synced' },
+  never: { dot: 'bg-zinc-600', text: 'text-zinc-500', label: 'Never synced' },
+};
 
 export default function JobsTab() {
   const [stats, setStats] = useState<Stats | null>(null);
@@ -58,6 +81,10 @@ export default function JobsTab() {
   const [scraping, setScraping] = useState(false);
   const [scrapeSummary, setScrapeSummary] = useState<ScrapeSummary | null>(null);
   const [scrapeErr, setScrapeErr] = useState('');
+  /* Source Status search + filter. Presentation only — these never mutate the
+     source data, they only decide which existing rows are drawn. */
+  const [srcQuery, setSrcQuery] = useState('');
+  const [srcFilter, setSrcFilter] = useState<'all' | 'synced' | 'never' | 'failed'>('all');
 
   const loadStatus = useCallback(() => {
     fetch('/api/super-admin/jobs/scraper')
@@ -66,6 +93,14 @@ export default function JobsTab() {
       .catch(() => { /* scraper status is best-effort */ });
   }, []);
   useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  /* The rows to draw. Filtering is presentation only — it never edits, sorts
+     or re-counts the sources it was given. */
+  const sourceRows = (scraper?.sources ?? []).filter((s) => {
+    if (srcFilter !== 'all' && srcFilter !== sourceState(s)) return false;
+    const q = srcQuery.trim().toLowerCase();
+    return !q || s.label.toLowerCase().includes(q) || s.provider.toLowerCase().includes(q);
+  });
 
   const runScraper = async () => {
     if (scraping) return;                        // prevent duplicate clicks
@@ -209,23 +244,114 @@ export default function JobsTab() {
               </div>
             )}
 
-            {/* Source status */}
+            {/* ── Source status ──────────────────────────────────────────
+                 A row answers five questions at a glance: who the company is,
+                 which ATS serves its jobs, whether that source is synced, how
+                 many jobs it holds, and when it last ran. The logo answers a
+                 SIXTH — who this company is — and is deliberately independent
+                 of the other five: a source that has never synced can still
+                 have a perfect brand mark, and a company with no logo can be
+                 perfectly synced. */}
             <div className="mt-4">
-              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Source status</div>
+              <div className="mb-2 flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Source status</div>
+                  <div className="mt-0.5 text-[11px] text-zinc-600">Connected job sources and ingestion state</div>
+                </div>
+                {/* Derived, never hardcoded. */}
+                <div className="shrink-0 text-[11px] tabular-nums text-zinc-500">
+                  {sourceRows.length} of {scraper.sources.length} {scraper.sources.length === 1 ? 'source' : 'sources'}
+                </div>
+              </div>
+
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <label className="relative min-w-0 flex-1 basis-44">
+                  <span className="sr-only">Search sources by company</span>
+                  <input value={srcQuery} onChange={(e) => setSrcQuery(e.target.value)}
+                    placeholder="Search company…"
+                    className="h-8 w-full rounded-lg border border-white/10 bg-white/[0.03] px-2.5 text-[12px] text-white placeholder:text-zinc-600 outline-none focus-visible:border-white/20" />
+                </label>
+                <label className="shrink-0">
+                  <span className="sr-only">Filter by sync status</span>
+                  <select value={srcFilter} onChange={(e) => setSrcFilter(e.target.value as typeof srcFilter)}
+                    className="h-8 rounded-lg border border-white/10 bg-white/[0.03] px-2 text-[12px] text-zinc-300 outline-none focus-visible:border-white/20">
+                    <option value="all">All</option>
+                    <option value="synced">Synced</option>
+                    <option value="never">Never synced</option>
+                    <option value="failed">Failed</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* A constrained scroll area: 20+ sources must not push the rest
+                  of the dashboard off screen. Vertical only — the page itself
+                  never scrolls sideways. */}
               <div className="overflow-hidden rounded-lg border border-white/10">
-                {scraper.sources.map((s) => (
-                  <div key={s.name} className="flex items-center justify-between gap-3 border-b border-white/5 px-3 py-2 text-[12px] last:border-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.failed ? 'bg-red-400' : s.enabled ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                      <span className="truncate text-white">{s.label}</span>
-                      <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase text-zinc-400">{s.provider}</span>
+                <div className="max-h-[520px] overflow-y-auto overflow-x-hidden">
+                  {sourceRows.length === 0 ? (
+                    <div className="px-3 py-6 text-center text-[12px] text-zinc-500">
+                      No sources match that search.
                     </div>
-                    <div className="flex shrink-0 items-center gap-3 text-zinc-500">
-                      {typeof s.jobs === 'number' && <span>Jobs: <b className="text-zinc-300">{s.jobs}</b></span>}
-                      <span>{s.lastSyncAt ? new Date(s.lastSyncAt).toLocaleDateString() : 'Not synced'}</span>
-                    </div>
-                  </div>
-                ))}
+                  ) : sourceRows.map((s) => {
+                    /* Four explicit states, read from data that already exists.
+                       Nothing is inferred: a source with no timestamp has
+                       genuinely never run, which is different from one that ran
+                       and failed. */
+                    const tone = STATE_TONE[sourceState(s)];
+                    return (
+                      <div key={s.name}
+                        className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-b border-white/5 px-3 py-2.5 text-[12px] transition-colors last:border-0 hover:bg-white/[0.02] sm:grid-cols-[auto_minmax(0,1.4fr)_auto_auto_auto] sm:gap-x-4">
+                        {/* The one shared component. Resolves verified logo →
+                            configured logo → initials, and a broken URL falls
+                            back rather than showing a broken-image icon. */}
+                        <CompanyLogo name={s.label} logoUrl={s.logoUrl} size={38} rounded={10} />
+
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-white">{s.label}</div>
+                          {/* Only a website an operator configured. Never
+                              derived from the ATS host, never guessed. */}
+                          <div className="truncate text-[10.5px] text-zinc-600">
+                            {s.websiteUrl
+                              ? s.websiteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '')
+                              : 'Website not configured'}
+                          </div>
+                        </div>
+
+                        <span className="justify-self-start rounded-md bg-white/5 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-zinc-400 sm:justify-self-auto">
+                          {s.provider}
+                        </span>
+
+                        {/* Status carries a WORD, not just a colour — a dot
+                            alone is unreadable to a colour-blind operator. */}
+                        <span className={`col-start-2 flex items-center gap-1.5 sm:col-start-auto ${tone.text}`}>
+                          <span aria-hidden className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} />
+                          {tone.label}
+                        </span>
+
+                        <div className="col-start-2 text-[11px] text-zinc-500 sm:col-start-auto sm:text-right">
+                          <div className="tabular-nums">
+                            {typeof s.jobs === 'number'
+                              ? <><b className="text-zinc-300">{s.jobs.toLocaleString()}</b> {s.jobs === 1 ? 'job' : 'jobs'}</>
+                              : <span className="text-zinc-600">—</span>}
+                          </div>
+                          {/* Only the real date. The status column already says
+                              "Never synced", and repeating it here would print
+                              the same fact twice on one row. */}
+                          <div className="tabular-nums text-[10.5px] text-zinc-600">
+                            {s.lastSyncAt
+                              ? new Date(s.lastSyncAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                              : <span aria-hidden>—</span>}
+                          </div>
+                        </div>
+
+                        {/* Why it failed, when the scraper recorded a reason. */}
+                        {s.failed && s.lastError ? (
+                          <div className="col-span-full text-[10.5px] text-red-400/80">{s.lastError}</div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </>

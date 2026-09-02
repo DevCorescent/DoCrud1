@@ -107,6 +107,7 @@ import type { DocumentHistory } from '@/types/document';
 import type { AssistantResultCard, DocumentQuickAction, UploadedDocument } from '@/types/doc-assistant';
 import { fireSearchEvent, SEARCH_CONTEXTS } from '@/lib/search-tracking';
 import { EXPLORE_DESTINATIONS, exploreWash } from '@/lib/explore-destinations';
+import CompanyExplorer from '@/components/jobs/company/CompanyExplorer';
 
 // Heavy modal components — loaded only when first opened, not part of the initial bundle
 const QuickFileEditorDialog = dynamic(() => import('@/components/QuickFileEditorDialog'), { ssr: false });
@@ -6403,11 +6404,26 @@ function NewHomepageContent({
           </div>
         )}
 
-        {/* ── Explore — entry points into the opportunity network ── */}
-        {/* Same wrapper the highlights block above uses, so the two sections
-            share one bottom rhythm as well as one left edge. */}
+        {/* ── LEGACY EXPLORE SECTION — PRESERVED / DISABLED FOR COMPANY EXPLORER ──
+             Replaced by Company Explorer directly below, in the same slot.
+
+             COMMENTED, NOT DELETED. The ExploreSection component, its styles
+             and EXPLORE_DESTINATIONS all remain in the file, so restoring this
+             is a matter of uncommenting these three lines and commenting the
+             block beneath. Nothing became unreachable either way: the bottom
+             navigation's Explore panel reads the SAME destination list
+             (lib/explore-destinations.ts).
+
         <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
           <ExploreSection />
+        </div>
+        */}
+
+        {/* ── Company Explorer — employers actually hiring on DoCrud ──
+             Occupies the slot the Explore row used, with the same wrapper, so
+             the section keeps the homepage's left edge and bottom rhythm. */}
+        <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
+          <CompanyExplorer />
         </div>
 
         {hpConfig?.announcementBanner?.active && (
@@ -6676,10 +6692,15 @@ function NewHomepageContent({
         {hpSections.adBanners && <AdBannerSlider />} */}
 
 
-        {/* ── Content discovery + feed cards + gig slider (grouped) ── */}
+        {/* ── Content discovery + feed cards + gig slider (grouped) ──
+             COMMENTED OUT — the find-by-type tab row (Publish / News / Articles /
+             Docs / Portfolio / All / Announce / More). Uncomment to restore.
+             Kept commented rather than deleted so ContentDiscoveryStrip and its
+             counts fetch stay intact. While commented the strip never mounts, so
+             its published-type counts request and the More dropdown do not run.
         <div className="hidden lg:flex flex-col w-full min-w-0" style={{ gap: 14 }}>
           <ContentDiscoveryStrip onPublish={() => onPublishClick()} />
-        </div>
+        </div> */}
 
         {/* ── Gigs grid ── */}
         {hpSections.gigsGrid && <div>

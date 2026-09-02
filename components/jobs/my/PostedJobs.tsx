@@ -43,6 +43,21 @@ interface JobRow {
   salaryPeriod?: string;
 }
 
+/**
+ * The query the parent's probe issues, so its response can seed this panel.
+ * These MUST match the defaults below — a seed produced by a different query
+ * would show the wrong rows.
+ */
+export const SEED_PAGE_SIZE = 20;
+export const SEED_SORT = 'newest';
+
+export interface PostedSeed {
+  items: unknown[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 const SORTS = [
   { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
@@ -56,11 +71,24 @@ const STATES = [
   { value: 'closed', label: 'Closed' },
 ] as const;
 
-export default function PostedJobs({ onViewApplicants }: {
+export default function PostedJobs({ onViewApplicants, seed }: {
   onViewApplicants: (job: { id: string; title: string }) => void;
+  /** The parent's first-page response, reused instead of re-requesting it. */
+  seed?: PostedSeed | null;
 }) {
-  const [rows, setRows] = useState<JobRow[] | null>(null);
-  const [meta, setMeta] = useState({ page: 1, pageSize: 20, total: 0 });
+  /* Seeded rows render immediately; without a seed the panel loads as before. */
+  const [rows, setRows] = useState<JobRow[] | null>(
+    seed ? (seed.items as JobRow[]) : null,
+  );
+  const [meta, setMeta] = useState(
+    seed
+      ? { page: seed.page, pageSize: seed.pageSize, total: seed.total }
+      : { page: 1, pageSize: 20, total: 0 },
+  );
+  /* A seed answers the FIRST load only. Every later load — a filter, a sort, a
+     page change, or a refresh after closing a job — must go to the server, or
+     the list would show what was true when the page opened. */
+  const seedUsed = useRef(Boolean(seed));
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
@@ -83,6 +111,8 @@ export default function PostedJobs({ onViewApplicants }: {
   const runId = useRef(0);
 
   const load = useCallback(async () => {
+    /* The parent already fetched exactly this query; skip the duplicate. */
+    if (seedUsed.current) { seedUsed.current = false; return; }
     const id = ++runId.current;
     setError('');
     try {

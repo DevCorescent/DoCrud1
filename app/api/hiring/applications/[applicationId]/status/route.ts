@@ -30,15 +30,17 @@ export async function PATCH(
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    const users = await getStoredUsers();
+    /* Independent stores, fetched together. Every authorization check below is
+       unchanged and still runs against these same records. */
+    const [users, applications] = await Promise.all([
+      getStoredUsers(), getHiringApplications(),
+    ]);
     const actor = users.find((u) => u.email.toLowerCase() === session.user.email!.toLowerCase());
     if (!actor) return NextResponse.json({ error: 'Workspace user not found.' }, { status: 404 });
 
     const body = await request.json().catch(() => ({}));
     const to = parseStatus((body as { status?: unknown })?.status);
     if (!to) return NextResponse.json({ error: 'Unknown status.' }, { status: 400 });
-
-    const applications = await getHiringApplications();
     const application = applications.find((a) => a.id === params.applicationId) ?? null;
 
     const orgIds = await viewerOrganizationIds(actor);

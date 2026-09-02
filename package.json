@@ -75,7 +75,8 @@
     "test:job-ats-platforms": "tsx scripts/job-ats-platforms.selftest.ts",
     "test:job-api": "tsx scripts/job-api.selftest.ts",
     "test:job-ui": "tsx scripts/job-ui.selftest.ts",
-    "test:job-personalized": "tsx scripts/job-personalized.selftest.ts"
+    "test:job-personalized": "tsx scripts/job-personalized.selftest.ts",
+    "test:job-performance": "tsx scripts/job-performance.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

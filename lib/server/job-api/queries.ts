@@ -404,7 +404,13 @@ export function publicJobs(
   };
   const sorted = [...rows].sort(sorters[query.sort ?? 'newest'] ?? sorters.newest);
 
-  return paginate(sorted.map(publicJobView), query.page, query.pageSize);
+  /* PAGE FIRST, THEN SERIALIZE. This used to map every matching posting
+     through publicJobView and then throw all but 20 of them away — 360 full
+     job objects built to return a page of 20, and descriptions are the bulk of
+     each one. Slicing first makes the serialization cost proportional to the
+     page, not to the corpus. Order and contents are identical. */
+  const page = paginate(sorted, query.page, query.pageSize);
+  return { ...page, items: page.items.map(publicJobView) };
 }
 
 /**

@@ -77,6 +77,63 @@ export async function getHiringJobs() {
   return readJsonFile<HiringJobPosting[]>(hiringJobsPath, []);
 }
 
+/* ─── raw-corpus cache ────────────────────────────────────────────────────
+   getHiringJobs() re-reads and re-parses the whole ~2.7 MB hiring-jobs
+   document on EVERY call, with no cache — while getPublishedHiringJobs()
+   right below has had a version-probe cache all along. Measured against the
+   real corpus, the public feed answered a 20-row page in ~33 s warm, and the
+   recommendations feed answered from its cache in ~9 ms. Same data, same
+   process; the only difference was the cache.
+
+   So the raw corpus gets the same treatment, and getPublishedHiringJobs() now
+   builds on it — one shared read instead of two independent ones.
+
+   THIS IS NOT USED BY THE EMPLOYER ROUTES. An employer who edits a posting and
+   reloads must see their own change with no window at all, so those routes
+   keep the direct read. This serves the PUBLIC paths, which already tolerate
+   exactly this staleness through the published cache. */
+type RawCache = { value: HiringJobPosting[]; ts: number; version: CorpusVersion | null };
+let rawCache: RawCache | null = null;
+let rawInFlight: Promise<HiringJobPosting[]> | null = null;
+
+/**
+ * The full hiring-jobs corpus, cached behind a version probe.
+ *
+ * Same contract as getPublishedHiringJobs: trusted for PUBLISHED_PROBE_INTERVAL,
+ * then revalidated with a ~50-byte version query, and rebuilt outright past
+ * PUBLISHED_MAX_AGE. Every write path calls invalidatePublishedHiringJobs(),
+ * which clears this too, so a posting created in this process is visible to the
+ * next read immediately.
+ */
+export async function getHiringJobsCached(): Promise<HiringJobPosting[]> {
+  const age = rawCache ? Date.now() - rawCache.ts : Infinity;
+  if (rawCache && age < PUBLISHED_PROBE_INTERVAL) return rawCache.value;
+
+  if (rawCache && age < PUBLISHED_MAX_AGE) {
+    const current = await readHiringCorpusVersion().catch(() => null);
+    if (sameVersion(current, rawCache.version)) {
+      rawCache = { ...rawCache, ts: Date.now() };
+      return rawCache.value;
+    }
+  }
+
+  /* Concurrent cold callers share ONE read. */
+  if (rawInFlight) return rawInFlight;
+  rawInFlight = getHiringJobs()
+    .then(async (value) => {
+      const version = await readHiringCorpusVersion().catch(() => null);
+      rawCache = { value, ts: Date.now(), version };
+      rawInFlight = null;
+      return value;
+    })
+    .catch((error) => {
+      /* A failed load is never cached and never becomes an empty corpus. */
+      rawInFlight = null;
+      throw error;
+    });
+  return rawInFlight;
+}
+
 /* ─── published-jobs cache ────────────────────────────────────────────────
    The hiring-jobs document is ~2.7 MB (360 postings, 88% of it descriptions)
    and EVERY caller re-read and re-parsed the whole thing: one homepage load
@@ -115,6 +172,8 @@ let publishedInFlight: Promise<HiringJobPosting[]> | null = null;
 export function invalidatePublishedHiringJobs() {
   publishedCache = null;
   publishedInFlight = null;
+  rawCache = null;
+  rawInFlight = null;
   listCache = null;
   namesCache = null;
 }
@@ -129,7 +188,9 @@ function peekPublishedHiringJobs(): HiringJobPosting[] | null {
 async function readPublishedHiringJobs(): Promise<HiringJobPosting[]> {
   // The two stores are independent; they were being awaited one after the other.
   const [jobs, business] = await Promise.all([
-    getHiringJobs(),
+    /* Shares the raw-corpus cache, so the published list and the public feed
+       cost ONE read between them rather than one each. */
+    getHiringJobsCached(),
     getPublishedBusinessFeedJobs(),
   ]);
   // Single source of truth per record: hiring jobs from the hiring store,

@@ -27,7 +27,7 @@
  */
 import type { HiringJobPosting } from '@/types/document';
 import {
-  evaluateJobMatch, type MatchCandidate,
+  evaluateJobMatch, normalizeCandidateForMatch, type MatchCandidate,
 } from '@/lib/server/job-sources/ats-match';
 import {
   evaluateJobEligibility, type EligibilityProfile,
@@ -107,6 +107,12 @@ export function personalizedPage(input: PersonalizedInput): Page<PersonalizedJob
   const candidate = input.candidate;
   const prefs = input.eligibilityProfile;
 
+  /* ONE CANDIDATE, MANY JOBS. The résumé is identical for every job on this
+     page, so it is normalized once here rather than once per job. Scores are
+     unchanged — the same normalized résumé the per-job path would have built,
+     built once. */
+  const sharedResume = candidate ? normalizeCandidateForMatch(candidate) : undefined;
+
   const items: PersonalizedJobRow[] = slice.map((job) => {
     const row: PersonalizedJobRow = {
       id: String(job.id),
@@ -132,7 +138,7 @@ export function personalizedPage(input: PersonalizedInput): Page<PersonalizedJob
       /* Phase 6, unmodified. A failure on one job must not take the page down
          with it — that job simply carries no score. */
       try {
-        const match = evaluateJobMatch(job, candidate);
+        const match = evaluateJobMatch(job, candidate, { resume: sharedResume });
         row.atsScore = match.score;
         row.atsBand = match.band;
         row.matchedSkills = match.matchedSkills.slice(0, 12);

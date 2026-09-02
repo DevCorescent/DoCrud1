@@ -7,7 +7,7 @@
  * metadata and owner ids are omitted by an allow-list, not stripped afterwards.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getHiringJobs } from '@/lib/server/hiring';
+import { getHiringJobsCached } from '@/lib/server/hiring';
 import { publicJobs } from '@/lib/server/job-api/queries';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const q = request.nextUrl.searchParams;
-    const jobs = await getHiringJobs();
+    const jobs = await getHiringJobsCached();
     return NextResponse.json(publicJobs(jobs, {
       search: q.get('search') ?? undefined,
       country: q.get('country') ?? undefined,

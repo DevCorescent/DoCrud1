@@ -31,6 +31,7 @@ import { getCompanyLogo } from '@/lib/company-logos';
 import { isIndiaRelevant } from '@/lib/server/job-scraper/india';
 import {
   getJobMatchLabel, jobMatchTokenClasses, jobMatchPanelClasses, jobMatchActionClasses,
+  jobMatchCardClasses,
 } from '@/lib/job-match-tone';
 
 export type JobSummary = {
@@ -138,7 +139,7 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
       onClick={open} role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') open(); }}
     >
-      <article className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] transition-all duration-200 hover:border-white/[0.14] hover:bg-white/[0.035]">
+      <article className={`relative overflow-hidden rounded-2xl border bg-white/[0.02] transition-all duration-200 hover:bg-white/[0.035] ${jobMatchCardClasses(job.matchScore)}`}>
         <div className="p-4 sm:p-5">
           {/* header: company mark + identity + match badge */}
           <div className="flex items-start gap-3">

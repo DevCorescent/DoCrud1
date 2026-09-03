@@ -36,6 +36,66 @@ import { normalizeIndiaLocation } from '@/lib/server/job-scraper/india';
 import { canonicalizeJobUrl, jobIdentity, type JobIdentity } from './identity';
 
 /**
+ * The seniority a job TITLE explicitly states, or undefined.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * Not one of the nine ATS providers reports a seniority: every adapter sets
+ * `experienceLevel: ''` because the board APIs have no such field. That empty
+ * string used to fall through to a default of 'associate', so EVERY scraped job
+ * in the system claimed the same band — internships, graduate schemes,
+ * "Entry-Level Structural Engineer", "Principal Fire Protection Engineer" and
+ * "Associate Director" alike. It was a fabricated attribute: the employer never
+ * said it, and it was shown to members as though they had.
+ *
+ * It also distorted matching. `recommendMatch` awards up to 15 of its 100
+ * points for level proximity, so a flat 'associate' handed every associate-band
+ * member the same bonus on every scraped job — a signal that cannot
+ * discriminate — while penalising a lead-band member on the very Principal and
+ * Director roles that suit them best.
+ *
+ * ═══ WHAT IT READS, AND WHAT IT REFUSES TO ═══
+ *
+ * Only words the employer WROTE IN THE TITLE. "Senior Data Engineer" is the
+ * employer saying senior; inferring a band from a salary, a department or a
+ * description's tone would be a guess, and a wrong band is worse than none.
+ *
+ * Undefined is a real answer and the common one. `experienceLevel` is optional
+ * on the model and `recommendMatch` already guards on both sides being present,
+ * so an unknown level contributes ZERO rather than a false 15.
+ *
+ * ═══ ORDER IS THE WHOLE ALGORITHM ═══
+ *
+ * Titles combine these words, so the most senior marker must win:
+ * "Associate Director" is a director, not an associate, and "Consulting Senior
+ * Associate" is the employer writing "Senior". Matching from the top down is
+ * what gets those right.
+ *
+ * `mid` is deliberately unreachable: no title word states it, and mapping
+ * something to it would be inventing the band this function exists to stop
+ * inventing.
+ */
+const TITLE_LEVELS: Array<{ level: NonNullable<HiringJobPosting['experienceLevel']>; re: RegExp }> = [
+  /* Word boundaries throughout: "International" must never read as "intern",
+     and "Sr" must not match inside another word. */
+  /* Nouns take an optional plural, EXCEPT 'lead': "Leads" in a title is
+     usually sales leads, not seniority. */
+  { level: 'lead', re: /\b(principals?|directors?|chief|distinguished|vp|vice[\s-]president|head\s+of|lead|leaders?)\b/i },
+  { level: 'senior', re: /\b(senior|snr|sr\.?)\b/i },
+  { level: 'associate', re: /\b(associates?|juniors?|jnr|jr\.?)\b/i },
+  { level: 'entry', re: /\b(interns?|internships?|trainees?|apprentices?|graduates?|freshers?|entry[\s-]level|campus)\b/i },
+];
+
+export function experienceFromTitle(
+  title: string,
+): NonNullable<HiringJobPosting['experienceLevel']> | undefined {
+  const t = String(title ?? '');
+  if (!t.trim()) return undefined;
+  for (const { level, re } of TITLE_LEVELS) if (re.test(t)) return level;
+  return undefined;
+}
+
+/**
  * What a source is allowed to state about a job.
  *
  * Ownership fields (organizationId, createdByUserId, status, minimumAtsScore)
@@ -209,7 +269,10 @@ export function normalizeSourceJob(
      "Full-time (Permanent)" would silently lose source data. */
   const employmentType = normalizeEnum(String(job.employmentType ?? ''), EMPLOYMENT_ALIASES) ?? 'full_time';
   const workMode = normalizeEnum(String(job.workMode ?? ''), WORKMODE_ALIASES) ?? 'onsite';
-  const experienceLevel = normalizeEnum(String(job.experienceLevel ?? ''), EXPERIENCE_ALIASES) ?? 'associate';
+  /* A level the SOURCE stated wins. Failing that, one the employer wrote into
+     the title. Failing both, none — never a default band. */
+  const experienceLevel = normalizeEnum(String(job.experienceLevel ?? ''), EXPERIENCE_ALIASES)
+    ?? experienceFromTitle(title);
 
   /* Keywords the source stated, else derived from the title exactly as the
      existing posting paths derive them. */

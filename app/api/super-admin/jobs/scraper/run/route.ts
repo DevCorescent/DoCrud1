@@ -27,9 +27,11 @@ export const runtime = 'nodejs';
  * running the scrape inside a request, and raising the number does not fix it —
  * the durable answer is to execute the run outside the request (create run →
  * return runId → poll), which is a larger change than this correctness pass.
- * Until then an operator should keep the configured source list small enough to
- * finish inside the window, and read the per-source failure state to see which
- * ones did not.
+ * A run now STOPS VOLUNTARILY before the ceiling and persists what it read,
+ * then resumes from that point next time — so a source list too long for one
+ * window is covered across several runs instead of losing every pass to the
+ * kill. That makes overrun survivable; it does not make the run unbounded, and
+ * executing outside the request is still the durable answer.
  */
 export const maxDuration = 300;
 
@@ -59,7 +61,10 @@ export async function POST(req: NextRequest) {
   const totalLimit = Number(body.limit) || undefined;
 
   try {
-    const summary = await runCanonicalIngest({ totalLimit });
+    /* The run is given the SAME window the platform gives this route, so it
+       can stop while there is still time to persist what it read. Derived from
+       `maxDuration` rather than repeated, so the two cannot drift apart. */
+    const summary = await runCanonicalIngest({ totalLimit, budgetMs: maxDuration * 1000 });
 
     await appendSuperAdminAudit({
       action: 'jobs.scrape',

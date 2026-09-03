@@ -242,6 +242,117 @@ async function main() {
     delete process.env.GREENHOUSE_BOARDS;
   }
 
+  console.log('\n── 8b. The time budget and the round-robin ──');
+
+  /* THE BUG THIS SECTION EXISTS FOR.
+
+     A run reads its sources one at a time inside a request with a hard ceiling,
+     and every write happens AFTER the loop. A run that overran was killed
+     mid-loop and persisted NOTHING, so the sources it had already read kept
+     their old state and the ones it never reached stayed "Never synced"
+     forever. With a fixed starting order the same head of the list was read
+     every pass and the tail was starved permanently — which is precisely how
+     six sources showed a sync timestamp and sixteen showed none. */
+  {
+    /* Three sources, in a known order: lever:acme, greenhouse:beta, ashby:gamma. */
+    process.env.LEVER_COMPANIES = 'acme|Acme|IN';
+    process.env.GREENHOUSE_BOARDS = 'beta|Beta|IN';
+    process.env.ASHBY_JOB_BOARDS = 'gamma|Gamma|IN';
+
+    const attempted: string[] = [];
+    const spyDeps = {
+      fetchJson: async (url: string) => {
+        if (url.includes('lever')) { attempted.push('lever:acme'); return []; }
+        if (url.includes('greenhouse')) { attempted.push('greenhouse:beta'); return { jobs: [] }; }
+        attempted.push('ashby:gamma');
+        return { jobs: [] };
+      },
+      fetchJsonPost: async () => ({ jobPostings: [] }),
+    };
+
+    /* A deadline already in the past: nothing may be started. */
+    attempted.length = 0;
+    const none = await runCanonicalIngestion({
+      deps: spyDeps, now: NOW, commit: false, ...store(), deadlineAt: Date.now() - 1,
+    });
+    check('an expired budget starts no source at all', attempted.length === 0);
+    check('and every source is reported skipped for time',
+      none.deadlineSkipped === none.sources && none.sources > 0,
+      `${none.deadlineSkipped}/${none.sources}`);
+    check('a source skipped for time is NOT a failure', none.failed === 0);
+    /* The point of skipped-not-failed: the caller leaves prior state alone. */
+    check('and every one is marked skipped so its state is left untouched',
+      none.perSource.every((r) => r.skipped && r.skipReason === 'deadline'));
+    check('an untouched run does not move the cursor',
+      none.nextStartAfterSourceId === undefined);
+
+    /* No deadline: the whole list runs, and the cursor lands on the last one. */
+    attempted.length = 0;
+    const all = await runCanonicalIngestion({ deps: spyDeps, now: NOW, commit: false, ...store() });
+    check('with no deadline every source is attempted', attempted.length === 3, attempted.join(','));
+    check('the run is not marked as time-skipped', all.deadlineSkipped === 0);
+    const lastId = all.perSource.filter((r) => !r.skipped).map((r) => r.sourceId).pop();
+    check('the cursor is the last source actually attempted',
+      all.nextStartAfterSourceId === lastId, `${all.nextStartAfterSourceId} vs ${lastId}`);
+
+    /* Resuming: the run begins AFTER the cursor, and wraps. */
+    const firstId = all.perSource.filter((r) => !r.skipped).map((r) => r.sourceId)[0];
+    attempted.length = 0;
+    const resumed = await runCanonicalIngestion({
+      deps: spyDeps, now: NOW, commit: false, ...store(), startAfterSourceId: firstId,
+    });
+    const order = resumed.perSource.map((r) => r.sourceId);
+    check('a resumed run does not start at the cursor itself', order[0] !== firstId);
+    check('and it wraps around to cover the cursor last',
+      order[order.length - 1] === firstId, order.join(','));
+    check('rotation changes the order but never the membership',
+      order.length === all.perSource.length
+      && new Set(order).size === new Set(all.perSource.map((r) => r.sourceId)).size);
+
+    /* THE STARVATION TEST. One source per pass, resuming each time: every
+       source must get its turn rather than the head repeating forever. */
+    /* The stub SPENDS time, so "one source per pass" is a fact rather than a
+       race: the first source is checked before the deadline and takes 12 ms,
+       which is past a 4 ms budget by the time the second is checked. A stub
+       that returned instantly would let a second source slip in and the test
+       would pass or fail on scheduler luck. */
+    const slowDeps = {
+      fetchJson: async (url: string) => {
+        await new Promise((r) => setTimeout(r, 12));
+        if (url.includes('lever')) { attempted.push('lever:acme'); return []; }
+        if (url.includes('greenhouse')) { attempted.push('greenhouse:beta'); return { jobs: [] }; }
+        attempted.push('ashby:gamma');
+        return { jobs: [] };
+      },
+      fetchJsonPost: async () => ({ jobPostings: [] }),
+    };
+
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    for (let pass = 0; pass < 3; pass += 1) {
+      attempted.length = 0;
+      const one = await runCanonicalIngestion({
+        deps: slowDeps, now: NOW, commit: false, ...store(),
+        startAfterSourceId: cursor,
+        deadlineAt: Date.now() + 4,
+      });
+      check(`pass ${pass + 1} reads exactly one source`, attempted.length === 1, attempted.join(','));
+      if (one.nextStartAfterSourceId) { seen.add(one.nextStartAfterSourceId); cursor = one.nextStartAfterSourceId; }
+    }
+    check('successive budget-limited runs cover every source, not just the head',
+      seen.size === 3, Array.from(seen).join(','));
+
+    /* An id that has been removed from the configuration must not strand it. */
+    const stale = await runCanonicalIngestion({
+      deps: spyDeps, now: NOW, commit: false, ...store(), startAfterSourceId: 'lever:deleted-company',
+    });
+    check('an unknown cursor falls back to the top of the list rather than stalling',
+      stale.perSource.length === all.perSource.length && stale.sourcesOk === all.sourcesOk);
+
+    delete process.env.GREENHOUSE_BOARDS;
+    delete process.env.ASHBY_JOB_BOARDS;
+  }
+
   console.log('\n── 9. Truncation and metrics ──');
 
   {

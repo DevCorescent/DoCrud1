@@ -7,7 +7,7 @@
  * whole contract be proven here.
  */
 import type { CanonicalJobDraft } from '@/lib/server/job-sources/normalize';
-import { normalizeSourceJob } from '@/lib/server/job-sources/normalize';
+import { experienceFromTitle, normalizeSourceJob } from '@/lib/server/job-sources/normalize';
 import type { NormalizedJob } from '@/lib/server/job-scraper/types';
 import {
   CLASSIFICATION_VERSION, classificationFields, classifyJob, scoreDomains,
@@ -304,6 +304,109 @@ function main() {
     const out = planIngest([normalizeSourceJob(src(), { now: NOW })], [member]);
     return out.jobs.find((j) => j.id === 'job-m')?.domain === undefined;
   })());
+
+  console.log('\n── Experience level: read from the title, never defaulted ──');
+
+  /* THE BUG THIS SECTION EXISTS FOR.
+
+     All nine ATS adapters set `experienceLevel: ''` — no board API reports a
+     seniority — and normalize used to fall back to 'associate'. So every
+     scraped job in the system claimed the same band: internships, graduate
+     schemes, "Entry-Level Structural Engineer" and "Associate Director" alike.
+     The employer never said it, members were shown it as fact, and
+     recommendMatch's 15-point level term became a flat bonus that could not
+     discriminate between any two scraped jobs. */
+
+  /* Titles taken verbatim from the live feed. */
+  for (const [title, want] of [
+    ['Environmental Intern', 'entry'],
+    ['Civil Engineering Graduate – Water', 'entry'],
+    ['Entry-Level Structural Engineer - Bridge & Transportation Structures', 'entry'],
+    ['Accounts Receivable Trainee with French - Early Careers Program', 'entry'],
+    ['Consulting Associate, Land & Right of Way', 'associate'],
+    ['Fraud and Risk Associate', 'associate'],
+    ['Senior Data Engineer', 'senior'],
+    ['Quality Sr Manager', 'senior'],
+    ['Principal Fire Protection Engineer', 'lead'],
+    ['Lead Modeler - Architecture', 'lead'],
+    ['Deputy Project Director - PMCM', 'lead'],
+  ] as Array<[string, string]>) {
+    check(`"${title.slice(0, 46)}" reads as ${want}`, experienceFromTitle(title) === want,
+      String(experienceFromTitle(title)));
+  }
+
+  /* ORDER. A title carrying two markers must resolve to the more senior one —
+     these are the cases a naive first-match-wins rule gets backwards. */
+  check('"Associate Director" is a director, not an associate',
+    experienceFromTitle('Associate Director-Project Management (PMCM)') === 'lead');
+  check('"Consulting Senior Associate" takes the senior the employer wrote',
+    experienceFromTitle('Consulting Senior Associate, Archaeology') === 'senior');
+  check('"Sr. Associate III" likewise', experienceFromTitle('Sr. Associate III, ERP Business Analysis') === 'senior');
+
+  /* WORD BOUNDARIES. Substring matching would classify half an office as interns. */
+  check('"International Trade Analyst" is not an internship',
+    experienceFromTitle('International Trade Analyst') === undefined);
+  check('"Internal Auditor" is not an internship',
+    experienceFromTitle('Internal Auditor') === undefined);
+  check('"Graduated Cylinder Technician" is not a graduate scheme',
+    experienceFromTitle('Graduated Cylinder Technician') === undefined);
+  /* "leadership" contains "lead" and "leader" but states neither band. */
+  check('"Leadership Development Programme" is not a lead role',
+    experienceFromTitle('Leadership Development Programme') === undefined,
+    String(experienceFromTitle('Leadership Development Programme')));
+
+  /* Plurals are the same word. A title that says "Associates" is saying
+     associate, and missing it would silently drop a band the employer wrote. */
+  check('"Consulting Associates" reads as associate',
+    experienceFromTitle('Consulting Associates') === 'associate');
+  check('"Summer Interns, Data" reads as entry',
+    experienceFromTitle('Summer Interns, Data') === 'entry');
+  check('"Graduates - Civil Engineering" reads as entry',
+    experienceFromTitle('Graduates - Civil Engineering') === 'entry');
+  check('"Principals, Advisory" reads as lead',
+    experienceFromTitle('Principals, Advisory') === 'lead');
+  /* But "Leads" is sales pipeline, not seniority. */
+  check('"Leads Generation Specialist" is not a lead role',
+    experienceFromTitle('Leads Generation Specialist') === undefined,
+    String(experienceFromTitle('Leads Generation Specialist')));
+
+  /* SILENCE IS AN ANSWER. A title that states no band must yield none — the
+     whole point is to stop inventing one. */
+  for (const title of ['Teammate', 'Operations Manager (Retention)', 'Construction Project Manager',
+    'Analista de Marketing', 'Inspector - Structural', 'Architecture', '', '   ']) {
+    check(`"${title}" states no level, so none is invented`, experienceFromTitle(title) === undefined,
+      String(experienceFromTitle(title)));
+  }
+
+  /* `mid` is unreachable on purpose: no title word states it. */
+  check('no title is ever mapped to the mid band',
+    ['Mid Engineer', 'Mid-Level Engineer', 'Midfield Analyst', 'Midwife']
+      .every((t) => experienceFromTitle(t) !== 'mid'));
+
+  /* END TO END, through the real normalizer — not just the helper. */
+  {
+    /* `experienceLevel: ''` is what every one of the nine real adapters sends,
+       so this is the production path — the fixture's own 'Senior' would
+       otherwise (correctly) win and the title would never be consulted. */
+    const withTitle = (title: string) => normalizeSourceJob(
+      { ...src(), title, experienceLevel: '' } as NormalizedJob, { now: NOW },
+    ).experienceLevel;
+    check('the normalizer applies the title level', withTitle('Senior Platform Engineer') === 'senior');
+    check('and leaves it unset when the title is silent',
+      withTitle('Software Engineer') === undefined, String(withTitle('Software Engineer')));
+    check('no scraped job is defaulted to associate any more',
+      withTitle('Software Engineer') !== 'associate');
+  }
+
+  /* A level the SOURCE states still wins over the title — the provider is the
+     better authority when it actually has one. */
+  {
+    const stated = normalizeSourceJob(
+      { ...src(), title: 'Senior Platform Engineer', experienceLevel: 'entry' } as NormalizedJob,
+      { now: NOW },
+    );
+    check('a level the source stated beats the title', stated.experienceLevel === 'entry');
+  }
 
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);
   if (failures > 0) process.exit(1);

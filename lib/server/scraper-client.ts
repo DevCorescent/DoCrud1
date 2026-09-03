@@ -229,9 +229,33 @@ export async function runApprovedAndImport(opts: { totalLimit?: number; adminEma
  * `imported` is mapped from INSERTED, and `updated` is now a real number
  * rather than a permanent zero — that is the whole point of the switch.
  */
-export async function runCanonicalIngest(opts: { totalLimit?: number }): Promise<ScrapeSummary> {
+export const SAVE_RESERVE_MS = 45_000;
+
+export async function runCanonicalIngest(
+  opts: { totalLimit?: number; budgetMs?: number },
+): Promise<ScrapeSummary> {
   const { runCanonicalIngestion } = await import('./job-sources/run-ingestion');
-  const out = await runCanonicalIngestion({ perSourceLimit: opts.totalLimit });
+
+  const prevState = await getScraperState().catch(() => ({} as Record<string, unknown>));
+
+  /* Stop reading new sources with time still on the clock. Everything this run
+     achieved is written AFTER the loop — the job store, then the per-source
+     state — and both of those writes need to happen inside the window or the
+     entire pass is lost. The reserve is what pays for them. */
+  const deadlineAt = opts.budgetMs
+    ? Date.now() + Math.max(1_000, opts.budgetMs - SAVE_RESERVE_MS)
+    : undefined;
+
+  const out = await runCanonicalIngestion({
+    perSourceLimit: opts.totalLimit,
+    ...(deadlineAt ? { deadlineAt } : {}),
+    /* Continue where the last run stopped, so a source list too long for one
+       window is still covered completely — just across several runs instead of
+       one. Without this the same head of the list is read every time. */
+    ...(typeof (prevState as { cursor?: unknown }).cursor === 'string'
+      ? { startAfterSourceId: (prevState as { cursor: string }).cursor }
+      : {}),
+  });
 
   const perSource: SourceRunStat[] = out.perSource.map((s) => ({
     name: s.name,
@@ -247,9 +271,8 @@ export async function runCanonicalIngest(opts: { totalLimit?: number }): Promise
     ...(s.error ? { error: s.error } : {}),
   }));
 
-  const prev = await getScraperState().catch(() => ({}));
   const perSourceMap: Record<string, ScraperSourceState> = {
-    ...((prev as { perSource?: Record<string, ScraperSourceState> }).perSource ?? {}),
+    ...((prevState as { perSource?: Record<string, ScraperSourceState> }).perSource ?? {}),
   };
   for (const s of out.perSource) {
     /* A source that was never attempted is left exactly as it was. */
@@ -323,6 +346,14 @@ export async function runCanonicalIngest(opts: { totalLimit?: number }): Promise
       truncated: out.truncated, sourcesOk: out.sourcesOk,
     },
     perSource: perSourceMap,
+    /* Advance the round-robin. A run that attempted nothing leaves the cursor
+       exactly where it was, so the next one retries the same starting point
+       rather than skipping a source that was never read. */
+    ...(out.nextStartAfterSourceId
+      ? { cursor: out.nextStartAfterSourceId }
+      : (typeof (prevState as { cursor?: unknown }).cursor === 'string'
+          ? { cursor: (prevState as { cursor: string }).cursor }
+          : {})),
   }).catch(() => {});
 
   return summary;

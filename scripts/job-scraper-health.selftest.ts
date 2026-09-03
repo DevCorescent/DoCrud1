@@ -187,6 +187,46 @@ async function main() {
   check('and documents that the ceiling is not a guarantee',
     /CEILING, NOT A GUARANTEE/.test(routeSrc));
 
+  /* ═══ 11. AN OVERRUNNING RUN MAKES PROGRESS INSTEAD OF LOSING EVERYTHING ══
+
+     Every write in a run happens AFTER the source loop, so a run killed at the
+     platform ceiling persisted nothing at all — not even the sources it had
+     already read. Combined with a fixed starting order that starved the tail of
+     the list permanently: the same head synced every pass, and the rest showed
+     "Never synced" forever. */
+  check('the run is given the route\'s own window, not a repeated literal',
+    /budgetMs: maxDuration \* 1000/.test(routeSrc));
+  check('the client reserves time for the writes that follow the loop',
+    /SAVE_RESERVE_MS/.test(clientSrc)
+    && /opts\.budgetMs - SAVE_RESERVE_MS/.test(clientSrc));
+  check('a run with no budget has no deadline, so callers outside a request are unchanged',
+    /opts\.budgetMs\s*\?/.test(clientSrc));
+
+  /* The round-robin: read the cursor before, advance it after. */
+  check('the client resumes from the stored cursor',
+    /startAfterSourceId: \(prevState as \{ cursor: string \}\)\.cursor/.test(clientSrc));
+  check('and persists the next one', /cursor: out\.nextStartAfterSourceId/.test(clientSrc));
+  check('a run that attempted nothing leaves the cursor where it was',
+    /cursor: \(prevState as \{ cursor: string \}\)\.cursor/.test(clientSrc));
+  /* Scoped to runCanonicalIngest: the other readers are different functions
+     (getScraperStatus, and the legacy import path) and are not this rule. */
+  const canonicalBody = clientSrc.slice(clientSrc.indexOf('export async function runCanonicalIngest('));
+  check('the canonical run reads state once and reuses it, not twice',
+    (canonicalBody.match(/await getScraperState\(\)/g) ?? []).length === 1
+    && /\.\.\.\(\(prevState as \{ perSource\?/.test(canonicalBody));
+
+  /* The ordering rule is what stops starvation, so it must not be silently
+     dropped: skipped sources may never advance the cursor. */
+  const runSrc = readFileSync('lib/server/job-sources/run-ingestion.ts', 'utf8');
+  check('the cursor advances only for a source actually attempted',
+    /nextStartAfterSourceId = config\.sourceId;/.test(runSrc)
+    && !/skipReason: 'deadline'[\s\S]{0,200}nextStartAfterSourceId =/.test(runSrc));
+  check('a source skipped for time is reported as skipped, never as failed',
+    /skipReason: 'deadline', latencyMs: 0/.test(runSrc)
+    && /ok: true, skipped: true, skipReason: 'deadline'/.test(runSrc));
+  check('the deadline is checked before a source starts, never mid-source',
+    /if \(!outOfTime && options\.deadlineAt !== undefined && started >= options\.deadlineAt\)/.test(runSrc));
+
   console.log(`\n${passed} checks passed, ${failed} failed.`);
   if (failed > 0) { console.error('FAILED'); process.exit(1); }
   console.log('ALL CHECKS PASSED');

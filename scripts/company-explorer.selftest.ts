@@ -292,12 +292,24 @@ for (const f of ['components/jobs/company/CompanyExplorer.tsx',
     !/filter:\s*(grayscale|invert|brightness)|grayscale\(|invert\(/.test(src));
 }
 
-/* The rail scrolls horizontally only, and cannot widen the page. */
+/* The rail scrolls horizontally only, and cannot widen the page.
+
+   These rules moved OUT of an inline <style> in the component and into
+   company-explorer.css: React compares a style element's text when hydrating,
+   and the server and client emitted that block with different whitespace, so
+   every page carrying the strip logged a hydration mismatch. The rules are
+   unchanged — only their address is — so this reads the stylesheet. */
 const strip = read('components/jobs/company/CompanyExplorer.tsx');
+const railCss = read('components/jobs/company/company-explorer.css');
+check('the component imports its own stylesheet', /company-explorer\.css/.test(strip));
+check('and keeps no inline <style> to mismatch on hydration', !/<style>/.test(strip));
 for (const rule of ['overflow-x:auto', 'overflow-y:hidden', 'touch-action:pan-x', 'overscroll-behavior-x:contain']) {
-  check(`the rail sets ${rule}`, strip.includes(rule));
+  check(`the rail sets ${rule}`, railCss.includes(rule));
 }
-check('the rail is width-capped so the body cannot scroll sideways', /max-width:100%/.test(strip));
+check('the rail is width-capped so the body cannot scroll sideways', /max-width:100%/.test(railCss));
+/* The first tile must start on the same line as the heading. */
+check('the rail carries the same horizontal inset as the header row',
+  /ce-rail[^"]*\bpx-2\b[^"]*\bsm:px-3\b/.test(strip));
 check('and min-width:0 so a flex child cannot force it wider', /min-w-0/.test(strip));
 /* ── The rail is cursor-driven; the arrow buttons are gone ──────────────── */
 
@@ -328,7 +340,7 @@ check('and it is removed on unmount',
 check('the rail is moved by direct assignment, not an animation',
   /el\.scrollLeft = /.test(stripCode));
 check('nothing on the rail scrolls smoothly',
-  !/behavior:\s*'smooth'/.test(stripCode) && /scroll-behavior:auto/.test(stripCode));
+  !/behavior:\s*'smooth'/.test(stripCode) && /scroll-behavior:auto/.test(railCss));
 
 /* End to end, and never trapping the page at either end. */
 check('travel is clamped to the real scrollable range',

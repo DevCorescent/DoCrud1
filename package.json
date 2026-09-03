@@ -81,7 +81,8 @@
     "test:job-redis-performance": "tsx scripts/job-redis-performance.selftest.ts",
     "test:company-explorer": "tsx scripts/company-explorer.selftest.ts",
     "test:company-logo": "tsx scripts/company-logo.selftest.ts",
-    "test:job-microsoft": "tsx scripts/job-microsoft.selftest.ts"
+    "test:job-microsoft": "tsx scripts/job-microsoft.selftest.ts",
+    "test:company-logo-upload": "tsx scripts/company-logo-upload.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

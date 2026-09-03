@@ -32,6 +32,26 @@
  * `min-width: 0` inside a `min-width: 0` parent, which is what stops a flex
  * child from forcing the body wider than the viewport.
  *
+ * A mouse may also DRAG it, past a 5px threshold so a click on a tile is still
+ * a click. Touch is left to the browser's own panning.
+ *
+ * ═══ IT NEVER MOVES BY ITSELF ═══
+ *
+ * There is no marquee here. No keyframes, no transform animation, no interval,
+ * no timeout, no requestAnimationFrame, and nothing that assigns `scrollLeft`
+ * except the two user-driven handlers. Left alone, the rail stays exactly where
+ * it is, indefinitely. The only automatic work is READING `scrollLeft` to size
+ * the edge fades.
+ *
+ * ═══ THE EDGES FADE, THEY DO NOT BLUR ═══
+ *
+ * A `mask-image` on the rail itself, the same technique the projects, people
+ * and onboarding strips use. Not `filter: blur()` — that would smear the very
+ * logos this component exists to show — and not an overlay div, which would
+ * need a background colour matching whatever sits behind it and could swallow
+ * a click. Each side's width comes from the scroll position, so an edge with
+ * nothing beyond it shows no fade.
+ *
  * ═══ LOGOS KEEP THEIR OWN COLOURS ═══
  *
  * Every mark sits on a permanently white plate in BOTH themes, with no filter,
@@ -45,6 +65,12 @@ import { Building2 } from 'lucide-react';
 import { companyJobsHref, formatCompanyJobCount, type CompanyExplorerTile } from '@/lib/company-explorer';
 import CompanyExplorerManageModal from './CompanyExplorerManageModal';
 import CompanyLogo from './CompanyLogo';
+import './company-explorer.css';
+
+/** How far a fade reaches in from an edge. Tuned to about one tile's margin. */
+const FADE = '34px';
+/** Under this, the gesture was a click on a tile, not a drag of the rail. */
+const DRAG_THRESHOLD_PX = 5;
 
 export default function CompanyExplorer() {
   const router = useRouter();
@@ -53,6 +79,102 @@ export default function CompanyExplorer() {
   /* Whether to DRAW the Manage control. The server re-checks on every write. */
   const [canManage, setCanManage] = useState(false);
   const railRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * How wide each edge fade should be, from where the rail actually is.
+   *
+   * Written straight onto the element as custom properties rather than held in
+   * React state: this runs on every scroll frame, and a setState per frame
+   * would re-render the whole strip for a purely visual change. Nothing here
+   * moves the rail — it only reads `scrollLeft`.
+   */
+  const syncEdges = useCallback(() => {
+    const el = railRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    /* Nothing overflows: no fade at all, or the rail would look scrollable
+       when it is not. */
+    const room = max > 1;
+    const left = room && el.scrollLeft > 1;
+    const right = room && el.scrollLeft < max - 1;
+    el.style.setProperty('--ce-fade-l', left ? FADE : '0px');
+    el.style.setProperty('--ce-fade-r', right ? FADE : '0px');
+  }, []);
+
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el) return;
+    syncEdges();
+    /* Passive: this listener only measures, so it must never delay a scroll. */
+    el.addEventListener('scroll', syncEdges, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncEdges) : null;
+    ro?.observe(el);
+    window.addEventListener('resize', syncEdges);
+    return () => {
+      el.removeEventListener('scroll', syncEdges);
+      ro?.disconnect();
+      window.removeEventListener('resize', syncEdges);
+    };
+  }, [syncEdges, companies]);
+
+  /**
+   * Click-and-drag, MOUSE ONLY.
+   *
+   * Touch is deliberately left to the browser: the rail already has
+   * `touch-action: pan-x`, and native panning is smoother than anything
+   * reproduced from pointermove — and it keeps a vertical swipe scrolling the
+   * page, which a JS drag would have to re-implement and would get wrong.
+   *
+   * A drag is not a click. Movement under the threshold stays a click and the
+   * tile navigates as before; past it, the pointer is captured, the rail
+   * follows, and the click that the browser fires afterwards is swallowed once
+   * so a drag that happens to end over a tile does not navigate.
+   */
+  const drag = useRef({ active: false, startX: 0, startLeft: 0, moved: false });
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    const el = railRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    drag.current = { active: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d.active) return;
+    const el = railRef.current;
+    if (!el) return;
+    const dx = e.clientX - d.startX;
+    if (!d.moved) {
+      if (Math.abs(dx) < DRAG_THRESHOLD_PX) return;
+      d.moved = true;
+      el.classList.add('ce-dragging');
+      /* Capture only once it IS a drag, so a plain click is never stolen. */
+      try { el.setPointerCapture(e.pointerId); } catch { /* not fatal */ }
+    }
+    /* Assigned directly — same no-latency rule as the wheel handler. */
+    el.scrollLeft = d.startLeft - dx;
+  };
+
+  const endDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d.active) return;
+    const el = railRef.current;
+    if (el) {
+      el.classList.remove('ce-dragging');
+      try { el.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+    }
+    d.active = false;
+    /* `moved` is intentionally left set — the click handler below reads it. */
+  };
+
+  /* Fires before the tile's own onClick, in the capture phase. */
+  const onClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!drag.current.moved) return;
+    drag.current.moved = false;
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   const load = useCallback(async () => {
     try {
@@ -111,23 +233,15 @@ export default function CompanyExplorer() {
   if (companies !== null && companies.length === 0) return null;
 
   return (
-    <div className="w-full min-w-0 px-2 sm:px-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
+    <div className="w-full min-w-0">
+      <div className="mb-2 flex items-center justify-between gap-3 px-2 sm:px-3">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
             <span className="hp-sec text-[11px] font-semibold tracking-[0.10em]"
               style={{ color: 'rgba(255,255,255,0.28)' }}>
               Company Explorer
             </span>
-            <span className="rounded-full px-1.5 py-[2px] text-[8.5px] font-extrabold tracking-[0.10em]"
-              style={{ color: 'rgb(167,139,250)', background: 'rgba(167,139,250,0.13)',
-                border: '1px solid rgba(167,139,250,0.28)' }}>
-              BETA
-            </span>
           </div>
-          <span className="mt-0.5 text-[11px] font-medium" style={{ color: 'rgba(255,255,255,0.30)' }}>
-            Top companies hiring now on DoCrud
-          </span>
         </div>
 
         {canManage && (
@@ -139,30 +253,27 @@ export default function CompanyExplorer() {
           </button>
         )}
       </div>
-
-      <div className="relative min-w-0">
+<div className="ce-rail-wrap relative left-1/2 w-screen min-w-0 -translate-x-1/2">
         {/* No arrow buttons. The rail is scrolled by the cursor — see the
             wheel handler above — so there is no control to render, and none to
-            leave present-but-dead at either end. */}
+            leave present-but-dead at either end.
+
+            The rail carries the SAME px-2 sm:px-3 inset as the header row, so
+            the first tile starts on the same vertical line as the "Company
+            Explorer" label instead of 12px to its left. It is padding on the
+            scroll container rather than a margin on the first tile: padding
+            belongs to the scrollable box, so tiles still travel edge to edge
+            and pass under the fade, whereas a margin would leave a permanent
+            gap that scrolls away with the content. */}
         <div
           ref={railRef}
-          className="ce-rail flex min-w-0 items-stretch gap-2 sm:gap-2.5"
+          className="ce-rail flex w-full min-w-0 items-stretch gap-2 px-2 sm:gap-2.5 sm:px-3"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onClickCapture={onClickCapture}
         >
-          <style>{`
-            .ce-rail{
-              overflow-x:auto; overflow-y:hidden;
-              touch-action:pan-x; overscroll-behavior-x:contain;
-              -webkit-overflow-scrolling:touch;
-              max-width:100%; padding-bottom:2px;
-              /* Explicitly instant: an inherited scroll-behavior:smooth from a
-                 global stylesheet would add exactly the lag this rail must not
-                 have. */
-              scroll-behavior:auto;
-              scrollbar-width:none; -ms-overflow-style:none;
-            }
-            .ce-rail::-webkit-scrollbar{display:none}
-          `}</style>
-
           {companies === null
             ? Array.from({ length: 7 }).map((_, i) => (
                 <div key={i} aria-hidden

@@ -5,6 +5,7 @@ import './globals.css'
 import { SessionProvider } from './components/SessionProvider'
 import { ThemeController } from './components/ThemeController'
 import SplashScreen from '@/components/SplashScreen'
+import CompanyLogoOverrides from '@/components/jobs/company/CompanyLogoOverrides'
 import GlobalBottomNav from '@/components/GlobalBottomNav'
 import { PresenceProvider } from './components/PresenceProvider'
 import { TelemetryTracker } from './components/TelemetryTracker'
@@ -416,6 +417,10 @@ export default async function RootLayout({
         <SessionProvider>
           <PresenceProvider>
             <TelemetryTracker />
+            {/* Loads the Super Admin company-logo overrides into the shared
+                lookup once per visit, so every surface that shows a company
+                agrees on which mark to use. Renders nothing. */}
+            <CompanyLogoOverrides />
             <SplashScreen />
             <ThemeController />
             {children}

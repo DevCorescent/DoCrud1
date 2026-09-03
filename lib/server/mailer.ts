@@ -29,6 +29,12 @@ type SendTrackedMailInput = {
   metadata?: Record<string, string>;
   attachment?: { filename: string; content: Buffer; contentType?: string };
   origin: string;
+  /**
+   * An explicit header image, passed through to the chrome. There is no
+   * default: omit it and the email carries no image, which is what every
+   * caller does today.
+   */
+  headerImageUrl?: string | null;
 };
 
 export async function sendTrackedMail(input: SendTrackedMailInput) {
@@ -88,6 +94,7 @@ export async function sendTrackedMail(input: SendTrackedMailInput) {
     subject,
     preheader: input.preheader,
     bodyHtml: baseBody,
+    headerImageUrl: input.headerImageUrl,
   });
 
   try {

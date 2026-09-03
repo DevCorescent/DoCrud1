@@ -62,6 +62,10 @@ const PROVIDERS: Array<{
   { env: 'RECRUITEE_COMPANIES', provider: 'recruitee', host: (slug) => `${slug}.recruitee.com` },
   { env: 'PERSONIO_COMPANIES', provider: 'personio', host: (slug) => `${slug}.jobs.personio.de` },
   { env: 'BAMBOOHR_COMPANIES', provider: 'bamboohr', host: (slug) => `${slug}.bamboohr.com` },
+  /* Microsoft Careers (Eightfold). The slug is the Eightfold DOMAIN, not a
+     subdomain: it is sent as the `domain` query parameter and can never
+     become part of the host, which is a fixed literal. */
+  { env: 'MICROSOFT_CAREERS', provider: 'microsoft', host: 'apply.careers.microsoft.com' },
 ];
 
 /**

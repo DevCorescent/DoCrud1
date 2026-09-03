@@ -20,6 +20,7 @@ import { fetchWorkable } from '@/lib/server/job-scraper/providers/workable';
 import { fetchRecruitee } from '@/lib/server/job-scraper/providers/recruitee';
 import { fetchPersonio } from '@/lib/server/job-scraper/providers/personio';
 import { fetchBambooHr } from '@/lib/server/job-scraper/providers/bamboohr';
+import { fetchMicrosoftPaged } from '@/lib/server/job-scraper/providers/microsoft';
 import type { ProviderDeps, ScrapeSource } from '@/lib/server/job-scraper/types';
 import {
   DEFAULT_SOURCE_CONFIG,
@@ -62,6 +63,8 @@ const PROVIDER_ACCESS: Record<string, SourceAccessType> = {
   recruitee: 'public_ats',
   personio: 'public_ats',
   bamboohr: 'public_ats',
+  /* robots.txt on apply.careers.microsoft.com explicitly Allows /api/pcsx. */
+  microsoft: 'public_ats',
   jsonld: 'sitemap_jsonld',
 };
 
@@ -154,7 +157,7 @@ export function isPartnershipBlocked(sourceId: string): boolean {
 function providerAdapter(source: ScrapeSource, deps: ProviderDeps): JobSourceAdapter {
   const provider = source.provider ?? 'jsonld';
 
-  const fetchJobs = async (): Promise<SourceFetchResult> => {
+  const fetchJobs = async (cursor: string | null = null): Promise<SourceFetchResult> => {
     /* These three providers each return a company's whole open board in one
        response, so there is nothing to page through. The cursor is part of the
        CONTRACT rather than of these adapters: a paginated source added later
@@ -173,6 +176,22 @@ function providerAdapter(source: ScrapeSource, deps: ProviderDeps): JobSourceAda
     if (provider === 'recruitee') return { jobs: await fetchRecruitee(source, deps), nextCursor: null };
     if (provider === 'personio') return { jobs: await fetchPersonio(source, deps), nextCursor: null };
     if (provider === 'bamboohr') return { jobs: await fetchBambooHr(source, deps), nextCursor: null };
+
+    /* The FIRST provider to use the cursor half of the contract.
+       Microsoft's page size is fixed at 10 by their server, so the corpus is
+       hundreds of requests and cannot be read in one bounded run. The adapter
+       reads a bounded slice and hands back the page to resume at; `null` means
+       it reached the end and the next run starts from the top. */
+    if (provider === 'microsoft') {
+      const startPage = Number(cursor);
+      const out = await fetchMicrosoftPaged(source, deps, {
+        startPage: Number.isFinite(startPage) && startPage > 0 ? startPage : 0,
+      });
+      return {
+        jobs: out.jobs,
+        nextCursor: out.nextPage === null ? null : String(out.nextPage),
+      };
+    }
     throw new Error(`No adapter for provider "${provider}".`);
   };
 

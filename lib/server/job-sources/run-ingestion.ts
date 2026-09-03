@@ -104,6 +104,12 @@ export interface IngestionRunSummary {
   nextStartAfterSourceId?: string;
   /** Sources not started because the run ran out of its time budget. */
   deadlineSkipped: number;
+  /**
+   * Resume tokens produced by this run, keyed by sourceId. `null` means the
+   * source finished its corpus. Sources absent from this map were not read and
+   * their stored cursor must be left exactly as it was.
+   */
+  nextCursors: Record<string, string | null>;
 }
 
 /**
@@ -150,6 +156,16 @@ export interface RunIngestionOptions {
    * Omit for no deadline (tests, and any caller not inside a request).
    */
   deadlineAt?: number;
+  /**
+   * Per-source resume tokens from the previous run, keyed by sourceId.
+   *
+   * `SourceFetchResult.nextCursor` has been part of the adapter contract from
+   * the start, but nothing stored it, so every adapter returned null and this
+   * path passed null back. A source whose corpus is larger than one bounded
+   * run — Microsoft, whose server fixes the page size at 10 — would otherwise
+   * re-read its first pages every run and never reach the rest.
+   */
+  sourceCursors?: Readonly<Record<string, string>>;
   /**
    * Resume point: the run begins at the source AFTER this id, wrapping around.
    *
@@ -205,6 +221,9 @@ export async function runCanonicalIngestion(
      exactly as before. */
   let nextStartAfterSourceId: string | undefined;
   let outOfTime = false;
+  /* null is meaningful: "this source is exhausted, start it from the top next
+     run". Absent means the source was not read and its stored cursor stands. */
+  const nextCursors: Record<string, string | null> = {};
 
   const perSource: SourceIngestStat[] = [];
   const identityBasis: IngestReport['basisCounts'] = { external_id: 0, canonical_url: 0, fingerprint: 0 };
@@ -259,8 +278,12 @@ export async function runCanonicalIngestion(
     try {
       const adapter = getAdapter(config.sourceId, options.deps ?? {});
       if (!adapter) throw new Error(`No adapter for source "${config.sourceId}".`);
-      const result = await adapter.fetch(null);
+      const result = await adapter.fetch(options.sourceCursors?.[config.sourceId] ?? null);
       fetched = Array.isArray(result?.jobs) ? result.jobs : [];
+      /* Recorded per source, and only for a source that actually succeeded: a
+         failed fetch proves nothing about where to resume, and advancing past
+         a page we never read would skip it silently. */
+      nextCursors[config.sourceId] = result?.nextCursor ?? null;
     } catch (error) {
       /* A FAILED source contributes no jobs AND no absence evidence. Nothing
          downstream may read this as "the board is empty". */
@@ -345,6 +368,7 @@ export async function runCanonicalIngestion(
     identityBasis,
     ...(nextStartAfterSourceId ? { nextStartAfterSourceId } : {}),
     deadlineSkipped: perSource.filter((s) => s.skipReason === 'deadline').length,
+    nextCursors,
   };
 }
 

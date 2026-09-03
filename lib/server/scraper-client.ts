@@ -255,6 +255,9 @@ export async function runCanonicalIngest(
     ...(typeof (prevState as { cursor?: unknown }).cursor === 'string'
       ? { startAfterSourceId: (prevState as { cursor: string }).cursor }
       : {}),
+    /* Where to resume INSIDE each source. Only Microsoft returns one today;
+       every other adapter reports null and is unaffected. */
+    sourceCursors: (prevState as { sourceCursors?: Record<string, string> }).sourceCursors ?? {},
   });
 
   const perSource: SourceRunStat[] = out.perSource.map((s) => ({
@@ -349,6 +352,17 @@ export async function runCanonicalIngest(
     /* Advance the round-robin. A run that attempted nothing leaves the cursor
        exactly where it was, so the next one retries the same starting point
        rather than skipping a source that was never read. */
+    /* Merge, never replace: a source this run did not read keeps the cursor it
+       had. `null` from an adapter means "corpus exhausted", which is recorded
+       by REMOVING the entry so the next run starts that source from the top. */
+    sourceCursors: (() => {
+      const merged = { ...((prevState as { sourceCursors?: Record<string, string> }).sourceCursors ?? {}) };
+      for (const [sourceId, next] of Object.entries(out.nextCursors)) {
+        if (next === null) delete merged[sourceId];
+        else merged[sourceId] = next;
+      }
+      return merged;
+    })(),
     ...(out.nextStartAfterSourceId
       ? { cursor: out.nextStartAfterSourceId }
       : (typeof (prevState as { cursor?: unknown }).cursor === 'string'

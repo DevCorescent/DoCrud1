@@ -13,10 +13,15 @@
  * So resolution runs in strict priority and STOPS at the first trustworthy
  * answer:
  *
+ *   0. a mark a SUPER ADMIN uploaded                 (human-chosen, highest)
  *   1. a verified override in lib/company-logos.ts   (human-checked)
  *   2. a logo the SOURCE supplied                    (authoritative)
  *   3. a website an operator configured              (human-supplied domain)
  *   4. nothing — the caller renders initials
+ *
+ * Step 0 exists so an operator can fix a wrong or missing mark without a
+ * deployment. It is checked FIRST and returns immediately, which is what makes
+ * it impossible for anything automatic to overwrite an admin's choice.
  *
  * There is deliberately no step that invents a domain. `NOT_FOUND` is a real
  * answer and is cached, so a company with no discoverable logo is not
@@ -33,13 +38,14 @@
  * Nothing here throws. Every failure returns a status. A scrape that cannot
  * reach a logo host still ingests its jobs.
  */
-import { getCompanyLogo, logoKey } from '@/lib/company-logos';
+import { getVerifiedCompanyLogo, logoKey } from '@/lib/company-logos';
+import type { CompanyLogoOverrides } from '@/lib/company-logo-uploads';
 import {
   getCompanyDomainDiscovery, isActionableCandidate,
 } from '@/lib/server/company-domain-discovery';
 
 export type LogoStatus = 'found' | 'not_found' | 'failed';
-export type LogoSource = 'verified' | 'source' | 'website' | 'none';
+export type LogoSource = 'admin_upload' | 'verified' | 'source' | 'website' | 'none';
 
 export interface ResolvedCompanyLogo {
   id: string;
@@ -87,6 +93,18 @@ export function invalidateCompanyLogo(name: string): void {
   if (id) cache.delete(id);
 }
 export function companyLogoCacheSize(): number { return cache.size; }
+
+/**
+ * The stored Super Admin uploads.
+ *
+ * Imported lazily so this module stays importable from contexts that must not
+ * pull in the configuration store, and so a test can inject its own via
+ * `deps.overrides` without touching disk.
+ */
+async function loadAdminOverrides(): Promise<CompanyLogoOverrides> {
+  const { getHomepageConfig } = await import('@/lib/server/homepage-config');
+  return (await getHomepageConfig()).companyLogos ?? {};
+}
 
 function remember(entry: ResolvedCompanyLogo): ResolvedCompanyLogo {
   if (cache.size >= MAX_ENTRIES) {
@@ -138,6 +156,8 @@ export interface ResolverDeps {
   /** Injected in tests. Returns headers only — the bytes are never stored here. */
   head?: (url: string) => Promise<{ ok: boolean; contentType: string; contentLength: number } | null>;
   now?: () => number;
+  /** Injected in tests. Defaults to the stored Super Admin uploads. */
+  overrides?: () => Promise<CompanyLogoOverrides>;
 }
 
 /** Confirm a candidate URL actually serves a bounded image. Never throws. */
@@ -240,8 +260,25 @@ export async function resolveCompanyLogo(
   const cached = cache.get(id);
   if (cached && fresh(cached, now)) return cached;
 
+  /* 0. A mark a Super Admin uploaded. The highest authority there is: a human
+        looked at this company and chose this file. Returned immediately, with
+        no network call and without consulting anything below, which is exactly
+        what stops an automatic answer from replacing it. */
+  try {
+    const uploaded = (await (deps.overrides ?? loadAdminOverrides)())[id];
+    if (uploaded?.url) {
+      return remember({
+        id, name: uploaded.name || hint.name, logoUrl: uploaded.url,
+        status: 'found', source: 'admin_upload', checkedAt: now,
+      });
+    }
+  } catch {
+    /* The store being briefly unreadable must not break resolution — fall
+       through to the automatic answers rather than reporting no logo. */
+  }
+
   /* 1. Verified override. Checked first and returned immediately — no network. */
-  const verified = getCompanyLogo(hint.name);
+  const verified = getVerifiedCompanyLogo(hint.name);
   if (verified) {
     return remember({ id, name: verified.name, logoUrl: verified.src, status: 'found', source: 'verified', checkedAt: now });
   }

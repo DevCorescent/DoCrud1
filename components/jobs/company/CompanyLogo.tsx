@@ -16,9 +16,21 @@
  * for the rest of the session, and the failed URL is remembered in a module-level
  * set so a list of fifty cards does not re-request the same dead URL fifty
  * times, and a re-render does not restart the attempt.
+ *
+ * ═══ AN UPLOADED MARK BEATS THE PROP ═══
+ *
+ * Callers pass `logoUrl` from wherever they got their data — a server-rendered
+ * tile, the verified registry, a scrape. If a Super Admin has uploaded a mark
+ * for this company, THAT is used instead, because a human chose it. The
+ * override set arrives asynchronously, so this subscribes to it rather than
+ * reading it once: a card already on screen when the overrides land updates
+ * itself instead of showing the old logo until the next navigation.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import {
+  companyLogoOverrideVersion, getCompanyLogoOverride, subscribeCompanyLogoOverrides,
+} from '@/lib/company-logos';
 
 /** URLs that failed this session. Module-level so it survives re-mounts. */
 const broken = new Set<string>();
@@ -40,13 +52,22 @@ export default function CompanyLogo({
   rounded?: number;
   className?: string;
 }) {
-  const usable = Boolean(logoUrl) && !broken.has(logoUrl as string);
+  /* Re-reads whenever the override set changes. The server snapshot is the
+     same string, so this does not cause a hydration mismatch. */
+  useSyncExternalStore(
+    subscribeCompanyLogoOverrides,
+    companyLogoOverrideVersion,
+    companyLogoOverrideVersion,
+  );
+  const resolved = getCompanyLogoOverride(name) ?? logoUrl;
+
+  const usable = Boolean(resolved) && !broken.has(resolved as string);
   const [showImage, setShowImage] = useState(usable);
 
   /* A changed URL gets a fresh attempt; a known-dead one never does. */
   useEffect(() => {
-    setShowImage(Boolean(logoUrl) && !broken.has(logoUrl as string));
-  }, [logoUrl]);
+    setShowImage(Boolean(resolved) && !broken.has(resolved as string));
+  }, [resolved]);
 
   return (
     <span
@@ -61,11 +82,11 @@ export default function CompanyLogo({
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={logoUrl}
+          src={resolved}
           alt=""
           loading="lazy"
           decoding="async"
-          onError={() => { if (logoUrl) broken.add(logoUrl); setShowImage(false); }}
+          onError={() => { if (resolved) broken.add(resolved); setShowImage(false); }}
           style={{ width: size * 0.72, height: size * 0.72, objectFit: 'contain', display: 'block' }}
         />
       ) : (

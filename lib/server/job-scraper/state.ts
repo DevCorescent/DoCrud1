@@ -77,6 +77,14 @@ export interface ScraperState {
    * the beginning", which is also the correct behaviour for a fresh install.
    */
   cursor?: string;
+  /**
+   * Per-source resume tokens, keyed by sourceId.
+   *
+   * Distinct from `cursor` above: that one says which SOURCE to start with,
+   * this one says where to resume INSIDE a source whose corpus is larger than
+   * a single bounded run can read. A source absent here starts from the top.
+   */
+  sourceCursors?: Record<string, string>;
 }
 
 export async function getScraperState(): Promise<ScraperState> {

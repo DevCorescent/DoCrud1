@@ -10,6 +10,8 @@ export type SourceProvider =
   | 'ashby' | 'lever' | 'greenhouse'
   /* Stage 3 — all public, unauthenticated board endpoints. */
   | 'workday' | 'smartrecruiters' | 'workable' | 'recruitee' | 'personio' | 'bamboohr'
+  /* Eightfold-hosted careers site; /api/pcsx is robots-allowed. */
+  | 'microsoft'
   | 'jsonld';
 
 export interface ScrapeSource {

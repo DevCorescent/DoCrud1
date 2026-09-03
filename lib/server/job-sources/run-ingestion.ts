@@ -96,6 +96,32 @@ export interface IngestionRunSummary {
   perSource: SourceIngestStat[];
   /** How identity was resolved across the whole run. Auditable. */
   identityBasis: IngestReport['basisCounts'];
+  /**
+   * The last source this run actually attempted. Feed it back as
+   * `startAfterSourceId` next time and the run continues where it stopped.
+   * Undefined when the run attempted nothing.
+   */
+  nextStartAfterSourceId?: string;
+  /** Sources not started because the run ran out of its time budget. */
+  deadlineSkipped: number;
+}
+
+/**
+ * Rotate the list so it begins at the entry AFTER `afterId`.
+ *
+ * Every source is still present exactly once — this changes the ORDER of a
+ * pass, never its membership, so no source can be dropped by rotating.
+ */
+function rotateFrom<T extends { sourceId: string }>(
+  list: readonly T[],
+  afterId?: string,
+): T[] {
+  if (!afterId) return [...list];
+  const at = list.findIndex((c) => c.sourceId === afterId);
+  /* An id that is no longer configured (removed from the environment) must not
+     strand the cursor — fall back to the top of the list. */
+  if (at < 0) return [...list];
+  return [...list.slice(at + 1), ...list.slice(0, at + 1)];
 }
 
 export interface RunIngestionOptions {
@@ -107,6 +133,30 @@ export interface RunIngestionOptions {
   perSourceLimit?: number;
   /** Only run these sourceIds. Omit for every enabled source. */
   onlySourceIds?: readonly string[];
+  /**
+   * Epoch ms after which no NEW source is started.
+   *
+   * The run happens inside a request with a hard platform ceiling, and EVERY
+   * write happens after the loop — the job store once at the end, the
+   * per-source state after that. So a run that overruns is killed mid-loop and
+   * persists NOTHING: not the sources it had already read, not their new job
+   * counts, not even their timestamps. The whole pass is lost, and the next one
+   * starts from the same place and loses it again.
+   *
+   * Stopping voluntarily turns that into progress. Sources not started are
+   * reported as skipped for time, which leaves their previous state untouched —
+   * they are not failures, they simply were not asked this pass.
+   *
+   * Omit for no deadline (tests, and any caller not inside a request).
+   */
+  deadlineAt?: number;
+  /**
+   * Resume point: the run begins at the source AFTER this id, wrapping around.
+   *
+   * Paired with `deadlineAt` this is what stops the tail of a long source list
+   * from starving. An unknown id is ignored and the run starts at the top.
+   */
+  startAfterSourceId?: string;
   /** Set false to compute the plan without writing. Defaults to true. */
   commit?: boolean;
   /**
@@ -141,10 +191,20 @@ export async function runCanonicalIngestion(
   const perSourceLimit = Math.max(1, options.perSourceLimit ?? PER_SOURCE_LIMIT);
   const commit = options.commit !== false;
 
-  const configs = listSourceConfigs().filter((c) => {
-    if (options.onlySourceIds && !options.onlySourceIds.includes(c.sourceId)) return false;
-    return true;
-  });
+  const configs = rotateFrom(
+    listSourceConfigs().filter((c) => {
+      if (options.onlySourceIds && !options.onlySourceIds.includes(c.sourceId)) return false;
+      return true;
+    }),
+    options.startAfterSourceId,
+  );
+
+  /* The last source actually ASKED for jobs — successfully or not. Skipped
+     sources do not move it: nothing was spent on them, so resuming after one
+     would hand the next run the same starting point and starve the tail
+     exactly as before. */
+  let nextStartAfterSourceId: string | undefined;
+  let outOfTime = false;
 
   const perSource: SourceIngestStat[] = [];
   const identityBasis: IngestReport['basisCounts'] = { external_id: 0, canonical_url: 0, fingerprint: 0 };
@@ -166,6 +226,19 @@ export async function runCanonicalIngestion(
       duplicateInRun: 0, rejected: 0,
     };
 
+    /* Out of budget. Checked BEFORE the work, never during it: a source that
+       has started is allowed to finish, because abandoning it half-read is what
+       produces a partial board reported as a complete one. Once set, the flag
+       stays set so the remainder of the list is reported consistently rather
+       than one more source sneaking in on a fast clock. */
+    if (!outOfTime && options.deadlineAt !== undefined && started >= options.deadlineAt) {
+      outOfTime = true;
+    }
+    if (outOfTime) {
+      perSource.push({ ...base, ok: true, skipped: true, skipReason: 'deadline', latencyMs: 0 });
+      continue;
+    }
+
     /* Never fetched, and never counted as a failure: a disabled source was not
        asked, and a partnership-blocked one must not be asked at all. */
     if (isPartnershipBlocked(config.sourceId)) {
@@ -176,6 +249,11 @@ export async function runCanonicalIngestion(
       perSource.push({ ...base, ok: true, skipped: true, skipReason: 'disabled', latencyMs: 0 });
       continue;
     }
+
+    /* Recorded before the fetch, so a source that fails still advances the
+       cursor. Otherwise one permanently broken board would be retried first on
+       every run and block everything behind it forever. */
+    nextStartAfterSourceId = config.sourceId;
 
     let fetched: NormalizedJob[];
     try {
@@ -265,6 +343,8 @@ export async function runCanonicalIngestion(
     seenStamped: stamps.length,
     perSource,
     identityBasis,
+    ...(nextStartAfterSourceId ? { nextStartAfterSourceId } : {}),
+    deadlineSkipped: perSource.filter((s) => s.skipReason === 'deadline').length,
   };
 }
 

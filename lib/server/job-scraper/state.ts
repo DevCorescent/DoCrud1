@@ -63,6 +63,20 @@ export interface ScraperSourceState {
 export interface ScraperState {
   lastRun?: ScraperRunSummary;
   perSource?: Record<string, ScraperSourceState>;
+  /**
+   * Where the NEXT run starts — the sourceId the last run stopped after.
+   *
+   * A run is capped by the platform's execution window and works through its
+   * sources one at a time, so a long list cannot all be read in one pass. With
+   * a fixed starting point the same head of the list would be read every time
+   * and the tail would never be reached at all, which is exactly how a source
+   * ends up permanently "Never synced" while its neighbours are up to date.
+   *
+   * Advancing this cursor makes the run round-robin: each pass continues where
+   * the last one stopped, so every source gets its turn. Absent means "start at
+   * the beginning", which is also the correct behaviour for a fresh install.
+   */
+  cursor?: string;
 }
 
 export async function getScraperState(): Promise<ScraperState> {

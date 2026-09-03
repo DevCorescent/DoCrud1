@@ -23,6 +23,7 @@ import {
   formatCompanyJobCount, type CompanyExplorerEntry, type CompanyExplorerTile,
 } from '@/lib/company-explorer';
 import CompanyLogo from './CompanyLogo';
+import CompanyLogoUploader from './CompanyLogoUploader';
 
 interface Payload {
   items: CompanyExplorerEntry[];
@@ -38,8 +39,24 @@ export default function CompanyExplorerManageModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [dragId, setDragId] = useState<string | null>(null);
+  /* Which row's logo panel is open, and the marks already uploaded. Local to
+     this modal — nothing global learns about an admin's open panel. */
+  const [logoFor, setLogoFor] = useState<string | null>(null);
+  const [uploaded, setUploaded] = useState<Record<string, string>>({});
   const panelRef = useRef<HTMLDivElement | null>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+
+  /** The marks Super Admin has uploaded, so a row can say which it is using. */
+  const loadUploaded = useCallback(async () => {
+    try {
+      const res = await fetch('/api/super-admin/company-logo', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json() as { logos?: Array<{ id: string; url: string }> };
+      setUploaded(Object.fromEntries((data.logos ?? []).map((l) => [l.id, l.url])));
+    } catch { /* the panel still works; a row just cannot show "uploaded" */ }
+  }, []);
+
+  useEffect(() => { void loadUploaded(); }, [loadUploaded]);
 
   const load = useCallback(async () => {
     setError('');
@@ -251,12 +268,36 @@ export default function CompanyExplorerManageModal({
                       : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.40)' }}>
                     {c.visible ? 'Visible' : 'Hidden'}
                   </button>
+                  {/* Opens this company's logo panel. Uploading is what makes
+                      the mark authoritative everywhere it is shown. */}
+                  <button type="button" onClick={() => setLogoFor(logoFor === c.id ? null : c.id)}
+                    disabled={busy}
+                    aria-label={`${uploaded[c.id] ? 'Replace' : 'Upload'} logo for ${c.name}`}
+                    aria-expanded={logoFor === c.id}
+                    className="shrink-0 rounded-full px-2 py-[3px] text-[9.5px] font-bold transition"
+                    style={uploaded[c.id]
+                      ? { background: 'rgba(167,139,250,0.13)', border: '1px solid rgba(167,139,250,0.30)', color: 'rgb(196,181,253)' }
+                      : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.40)' }}>
+                    {uploaded[c.id] ? '\u2713 Logo' : 'Logo'}
+                  </button>
                   {/* Removes it from the EXPLORER only — the company, its jobs
                       and its applications are untouched. */}
                   <button type="button" onClick={() => remove(c.id)} disabled={busy}
                     aria-label={`Remove ${c.name} from the explorer`} className={ICON_BTN} style={ICON_STYLE}>
                     <Trash2 className="h-3 w-3" />
                   </button>
+
+                  {logoFor === c.id && (
+                    <div className="w-full">
+                      <CompanyLogoUploader
+                        companyId={c.id}
+                        companyName={c.name}
+                        currentLogoUrl={uploaded[c.id] || logoOf(c.id)}
+                        hasUpload={Boolean(uploaded[c.id])}
+                        onChanged={() => { void loadUploaded(); }}
+                      />
+                    </div>
+                  )}
 
                   {/* THE ONLY DOMAIN SOURCE IN THE SYSTEM. No ATS provider
                       reports a company website, and one is never derived from

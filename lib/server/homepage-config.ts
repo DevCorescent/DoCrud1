@@ -22,6 +22,8 @@ type SectionVisibility = {
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
   gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
 };
+import type { CompanyLogoOverrides } from '@/lib/company-logo-uploads';
+
 export type TrustedCompany = { id: string; name: string; logoUrl: string; href: string; visible: boolean };
 /** The "Top companies trust docrud" marquee — Super Admin owns the list AND the logos. */
 type TrustedCompanies = { label: string; items: TrustedCompany[]; autoFromJobs: boolean };
@@ -33,6 +35,38 @@ type ContentTab = { id: string; label: string; visible: boolean; order: number }
 type FooterLink = { label: string; href: string; visible: boolean };
 type FooterColumn = { id: string; title: string; links: FooterLink[] };
 type AnnouncementBanner = { id: string; text: string; ctaLabel: string; ctaHref: string; style: 'info' | 'warning' | 'success' | 'promo'; active: boolean };
+/**
+ * Re-check every stored override before it can render.
+ *
+ * Constructed field by field, never spread: this value comes back from a JSON
+ * file that an older build wrote, and one malformed entry must not be able to
+ * put a broken or hostile URL onto every page that shows a company.
+ */
+export function normalizeCompanyLogoOverrides(raw: unknown): CompanyLogoOverrides {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: CompanyLogoOverrides = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const id = String(key ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 64);
+    if (!id || !value || typeof value !== 'object') continue;
+    const e = value as Record<string, unknown>;
+    const url = typeof e.url === 'string' ? e.url.trim() : '';
+    /* Same-origin path or https only. A `javascript:` or `data:` URL stored by
+       any means is refused at READ time, not merely at write time. */
+    if (!url || !(url.startsWith('/') || url.startsWith('https://'))) continue;
+    const storagePath = typeof e.storagePath === 'string' ? e.storagePath.trim() : '';
+    out[id] = {
+      id,
+      name: typeof e.name === 'string' ? e.name.slice(0, 200) : id,
+      url: url.slice(0, 1024),
+      format: typeof e.format === 'string' ? e.format.slice(0, 8) : '',
+      storagePath: storagePath.slice(0, 512),
+      updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt.slice(0, 40) : '',
+      updatedBy: typeof e.updatedBy === 'string' ? e.updatedBy.slice(0, 200) : '',
+    };
+  }
+  return out;
+}
+
 export type HomepageConfig = {
   sections: SectionVisibility;
   trustedCompanies: TrustedCompanies;
@@ -52,6 +86,16 @@ export type HomepageConfig = {
    * second invalidation and a second admin route for no gain.
    */
   companyExplorer: CompanyExplorerConfig;
+  /**
+   * Company marks a Super Admin uploaded, keyed by `logoKey(name)`.
+   *
+   * Stored here for the same reason companyExplorer is: it is written from the
+   * Super Admin screens and read on this already-cached path, so it needs no
+   * second store, second cache or second invalidation. Absent on configs
+   * written by an older build — `mergeConfig` supplies `{}`, so every existing
+   * record keeps working untouched with no migration.
+   */
+  companyLogos: CompanyLogoOverrides;
   seoTitle: string;
   seoDescription: string;
   updatedAt: string;
@@ -80,6 +124,7 @@ export const DEFAULT_CONFIG: HomepageConfig = {
   footer: { columns: [], securityBadges: [], tagline: '', madeIn: '', copyrightEntity: '' },
   announcementBanner: null,
   companyExplorer: DEFAULT_COMPANY_EXPLORER,
+  companyLogos: {},
   seoTitle: '',
   seoDescription: '',
   updatedAt: '',
@@ -103,6 +148,9 @@ export function mergeConfig(stored: Partial<HomepageConfig> | null): HomepageCon
        be able to break the homepage. normalizeCompanyExplorerConfig drops junk,
        collapses duplicate ids and re-numbers the order densely. */
     companyExplorer: normalizeCompanyExplorerConfig(stored.companyExplorer),
+    /* Normalized, never spread: this is read back from storage and every entry
+       is re-checked before anything renders it. */
+    companyLogos: normalizeCompanyLogoOverrides(stored.companyLogos),
   };
 }
 
@@ -142,6 +190,9 @@ export async function saveHomepageConfig(incoming: Partial<HomepageConfig>): Pro
     /* Same normalization on the way IN, so nothing invalid is ever persisted. */
     companyExplorer: normalizeCompanyExplorerConfig(
       incoming.companyExplorer ?? current.companyExplorer,
+    ),
+    companyLogos: normalizeCompanyLogoOverrides(
+      incoming.companyLogos ?? current.companyLogos,
     ),
     updatedAt: new Date().toISOString(),
   };

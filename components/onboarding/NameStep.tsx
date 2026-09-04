@@ -27,6 +27,8 @@
 
 import { UserRound } from 'lucide-react';
 import { OnboardingProgress, StepHeading } from './StepChrome';
+import ExtractionNotice from './ExtractionNotice';
+import type { ExtractionState } from '@/lib/onboarding-resume';
 
 /** A name is usable when it is not entirely whitespace. Nothing more. */
 export function isNameValid(value: string): boolean {
@@ -39,6 +41,8 @@ export default function NameStep({
   onContinue,
   step = 2,
   total = 6,
+  extraction,
+  onRetryExtraction,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -46,6 +50,10 @@ export default function NameStep({
   onContinue: () => void;
   step?: number;
   total?: number;
+  /* The résumé read lands HERE, so its progress and its failures are reported
+     here too — see ExtractionNotice. Optional so the step still stands alone. */
+  extraction?: ExtractionState;
+  onRetryExtraction?: () => void;
 }) {
   return (
     <div className="step-panel">
@@ -55,6 +63,8 @@ export default function NameStep({
         title="What's your name?"
         description="Let's personalize your Docrud experience."
       />
+
+      {extraction && <ExtractionNotice extraction={extraction} onRetry={onRetryExtraction} />}
 
       <label className="name-field" htmlFor="onboarding-profile-name">
         <span className="field-label">Full name</span>

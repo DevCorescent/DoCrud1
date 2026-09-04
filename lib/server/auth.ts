@@ -73,6 +73,43 @@ async function activateGoogleReferral(userId: string, email: string, referralCod
  * the credentials login guard. This is the single account-type authority; the
  * value is never taken from a request body.
  */
+/**
+ * The display name for a Google sign-in.
+ *
+ * ═══ THE PROVIDER AUTHENTICATES; ONBOARDING DESCRIBES ═══
+ *
+ * Google establishes WHO is signing in. It does not get to say what the person
+ * is called. Someone who typed "Yash" during onboarding and then authenticated
+ * with an account Google labels "Honey Kumar" must stay Yash — the email is the
+ * identity, the onboarding answer is the profile.
+ *
+ * The order below is that rule, and nothing else:
+ *
+ *   1. The name already stored. For an existing account this is the name the
+ *      person chose — through onboarding or by editing their profile — and a
+ *      later sign-in is not a request to change it. This line is the bug fix:
+ *      it used to be `profile.name || existing.name`, so EVERY Google login
+ *      re-imported Google's name and silently undid the onboarding answer.
+ *   2. The onboarding answer, for an account being created right now. Using it
+ *      here means the account is correct from the moment it exists, rather than
+ *      being created wrong and corrected a moment later by the handoff.
+ *   3. Google's name, only when there is genuinely nothing else to go on.
+ *   4. The local part of the email, as the last resort.
+ *
+ * Nothing here renames an existing profile; it only stops one being renamed.
+ */
+function googleDisplayName(
+  stored: string | null | undefined,
+  intent: OAuthIntent,
+  providerName: string | null | undefined,
+  email: string,
+): string {
+  return stored?.trim()
+    || intent.onboarding?.name?.trim()
+    || providerName?.trim()
+    || email.split('@')[0];
+}
+
 async function upsertGoogleUser(
   profile: { email: string; name?: string | null },
   intent: OAuthIntent,
@@ -85,7 +122,9 @@ async function upsertGoogleUser(
     // Existing account: log in, refresh metadata, but NEVER change accountType.
     const updated: StoredUser = {
       ...existing,
-      name: profile.name?.trim() || existing.name,
+      /* The stored name WINS. A repeat Google login is authentication, not a
+         request to be renamed to whatever Google currently shows. */
+      name: googleDisplayName(existing.name, intent, profile.name, normalizedEmail),
       lastLogin: now,
       isActive: true,
       policyAcceptance: buildPolicyAcceptance('login'),
@@ -105,7 +144,7 @@ async function upsertGoogleUser(
 
   // ── Brand-new account: create the type the user chose at the toggle ──
   if (intent.accountType === 'business') {
-    const displayName = profile.name?.trim() || normalizedEmail.split('@')[0];
+    const displayName = googleDisplayName(null, intent, profile.name, normalizedEmail);
     /* Lazy import to avoid a static import cycle back into this module through
        the business/referral chain (it broke build-time module init). */
     const { provisionBusinessAccount } = await import('@/lib/server/business-provisioning');
@@ -131,7 +170,7 @@ async function upsertGoogleUser(
   const createdUser: StoredUser = {
     id: `individual-google-${Date.now()}`,
     email: normalizedEmail,
-    name: profile.name?.trim() || normalizedEmail.split('@')[0],
+    name: googleDisplayName(null, intent, profile.name, normalizedEmail),
     role: 'individual',
     accountType: 'individual',
     permissions: ['self'],
@@ -345,6 +384,14 @@ export function buildAuthOptions(): NextAuthOptions {
             const suspended = Boolean(storedUser.safety?.suspendedUntil && new Date(storedUser.safety.suspendedUntil).getTime() > Date.now());
             const disabled = storedUser.isActive === false;
             token.id = storedUser.id;
+            /* The DISPLAY NAME comes from our own record, not the provider.
+               NextAuth seeds `token.name` from the OAuth profile, so without
+               this the session rendered Google's name ("Honey Kumar") while the
+               stored account correctly held the onboarding answer ("Yash") —
+               the visible half of that bug. Reading it back from storedUser
+               keeps the session and the database saying the same thing, and
+               makes a profile rename show up on the next token refresh. */
+            if (storedUser.name) token.name = storedUser.name;
             token.role = suspended || disabled ? 'suspended' : storedUser.role;
             token.permissions = suspended || disabled ? [] : storedUser.permissions;
             token.organizationName = storedUser.organizationName;

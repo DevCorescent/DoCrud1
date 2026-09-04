@@ -89,6 +89,7 @@ export default function PreviewClient() {
   /* ── Everything the person has told us ── */
   const [resume, setResume] = useState<File | null>(null);
   const [extraction, setExtraction] = useState<ExtractionState>({ status: 'none' });
+  const [retryNonce, setRetryNonce] = useState(0);
   /* Fields the person has edited themselves. Extraction never writes to these. */
   const [touched, setTouched] = useState<{ name: boolean; roles: boolean; skills: boolean }>(
     { name: false, roles: false, skills: false },
@@ -125,6 +126,15 @@ export default function PreviewClient() {
       if (!controller.signal.aborted) setExtraction(next);
     });
     return () => controller.abort();
+    /* `retryNonce` re-runs this for the SAME file after a failure. It is not a
+       second extraction path — it is this one, asked again. */
+  }, [resume, retryNonce]);
+
+  /* Read the attached résumé again. Only ever offered after a failure, so a
+     transient error is one click to recover from rather than a dead end that
+     forces the person to re-pick the file. */
+  const retryExtraction = useCallback(() => {
+    if (resume) setRetryNonce(n => n + 1);
   }, [resume]);
 
   /**
@@ -257,7 +267,14 @@ export default function PreviewClient() {
         />
       )}
       {step === 'name' && (
-        <NameStep value={name} onChange={editName} onContinue={goNext} total={7} />
+        <NameStep
+          value={name}
+          onChange={editName}
+          onContinue={goNext}
+          total={7}
+          extraction={extraction}
+          onRetryExtraction={retryExtraction}
+        />
       )}
       {step === 'persona' && (
         <PersonaStep value={accountKind} onChange={setAccountKind} onContinue={goNext} />
@@ -274,10 +291,19 @@ export default function PreviewClient() {
           onDraftChange={setRoleDraft}
           onContinue={goNext}
           total={7}
+          extraction={extraction}
+          onRetryExtraction={retryExtraction}
         />
       )}
       {step === 'skills' && (
-        <SkillsStep options={DEFAULT_SKILL_OPTIONS} value={skills} onChange={editSkills} total={7} />
+        <SkillsStep
+          options={DEFAULT_SKILL_OPTIONS}
+          value={skills}
+          onChange={editSkills}
+          total={7}
+          extraction={extraction}
+          onRetryExtraction={retryExtraction}
+        />
       )}
       {step === 'jobs' && (
         <JobPreviewStep

@@ -26,7 +26,7 @@ import type { AccountKind } from '@/lib/onboarding-personas';
 import { OnboardingProgress, StepHeading } from './StepChrome';
 
 export const ACCOUNT_KIND_OPTIONS: ReadonlyArray<{ value: AccountKind; label: string }> = [
-  { value: 'individual', label: 'Candidate / Individual' },
+  { value: 'individual', label: 'Individual' },
   { value: 'business', label: 'Business' },
 ];
 

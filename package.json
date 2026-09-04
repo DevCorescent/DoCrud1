@@ -17,6 +17,7 @@
     "test:post-job": "tsx scripts/post-job.selftest.ts",
     "test:homepage-counts": "tsx scripts/homepage-counts.selftest.ts",
     "test:public-jobs-equivalence": "tsx scripts/public-jobs-equivalence.selftest.ts",
+    "test:onboarding-name-authority": "tsx scripts/onboarding-name-authority.selftest.ts",
     "test:onboarding-job-count": "tsx scripts/onboarding-job-count.selftest.ts",
     "test:corpus-cache": "tsx scripts/corpus-cache.selftest.ts",
     "test:recommend-profile": "tsx scripts/recommend-profile.selftest.ts",

@@ -3,10 +3,13 @@ import { getAuthSession } from '@/lib/server/auth';
 import { generateAiText, getAiModelName, isAiConfigured } from '@/lib/server/ai';
 import { extractDocumentText } from '@/lib/server/document-parser';
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
+import { RESUME_MAX_BYTES } from '@/lib/onboarding-resume';
 
 export const dynamic = 'force-dynamic';
 
-const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
+/* Same shared résumé limit as the anonymous extract route — one number for the
+   whole résumé contract, kept under the platform's request-body ceiling. */
+const MAX_BYTES = RESUME_MAX_BYTES;
 
 type ParsedResume = {
   name?: string | null;

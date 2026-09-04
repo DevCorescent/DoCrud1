@@ -32,10 +32,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { extractDocumentText } from '@/lib/server/document-parser';
 import { extractFromResumeText } from '@/lib/server/onboarding-resume-extract';
 import { consumeRateLimit } from '@/lib/server/service-safety';
+import { RESUME_MAX_BYTES } from '@/lib/onboarding-resume';
 
 export const dynamic = 'force-dynamic';
+/* The parser is Node-only: pdf-parse, mammoth and the Buffer APIs below have no
+   Edge equivalent. Declared explicitly so a future default change, or someone
+   moving this to Edge for cold-start reasons, fails loudly here rather than at
+   runtime on a résumé upload. */
+export const runtime = 'nodejs';
 
-const MAX_BYTES = 8 * 1024 * 1024;
+/* The SHARED limit — see lib/onboarding-resume.ts. Imported, never retyped, so
+   the browser and this handler cannot disagree about what is acceptable. */
+const MAX_BYTES = RESUME_MAX_BYTES;
 const ALLOWED = ['pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'html', 'htm'] as const;
 
 function extensionOf(name: string): string {

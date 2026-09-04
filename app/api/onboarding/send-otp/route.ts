@@ -453,8 +453,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ sent: true });
 
   } catch (error) {
+    /* The DETAIL stays on the server. `dispatchOtpEmail` throws messages that
+       name the recipient address and point at the mail configuration
+       ("Check SMTP credentials in mail settings") — useful in a log, an
+       infrastructure disclosure in a response body to a caller who may not even
+       own the address. The failure is still a genuine 500; only its wording is
+       generic, and the outbox row above already records the real cause. */
     console.error('[onboarding/send-otp] POST error', error);
-    const message = error instanceof Error ? error.message : 'Failed to send OTP email.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'We could not send your code right now. Please try again in a moment.' },
+      { status: 500 },
+    );
   }
 }

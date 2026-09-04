@@ -64,9 +64,18 @@ check('and never rides the OAuth intent',
   !/password/.test(strip(src('lib/server/oauth-intent.ts'))));
 
 console.log('── 4. OTP is sent only after signup and sign-in ──');
+/* The send call now lives in `requestOtp`, shared by the first send and the
+   resend, so the ORDER is asserted inside submitEmail where the sequence
+   actually happens — not by where the URL string sits in the file. */
+const SUBMIT_EMAIL = GATE_CODE.slice(
+  GATE_CODE.indexOf('const submitEmail'),
+  GATE_CODE.indexOf('const submitOtp'),
+);
 check('the order is signup → signIn → send-otp',
-  GATE_CODE.indexOf('individual/signup') < GATE_CODE.indexOf("signIn('credentials'")
-  && GATE_CODE.indexOf("signIn('credentials'") < GATE_CODE.indexOf('onboarding/send-otp'));
+  SUBMIT_EMAIL.indexOf('individual/signup') < SUBMIT_EMAIL.indexOf("signIn('credentials'")
+  && SUBMIT_EMAIL.indexOf("signIn('credentials'") < SUBMIT_EMAIL.indexOf('await requestOtp()'));
+check('and the code is requested through the one shared sender',
+  /await requestOtp\(\)/.test(SUBMIT_EMAIL));
 check('a failed sign-in stops before the code is sent',
   /if \(!result\?\.ok\) throw new Error/.test(GATE_CODE));
 
@@ -181,6 +190,82 @@ check('an emptied business skill list is treated as absent, not as junk',
   coerceOnboarding({ businessSpace: 'technology', businessSkills: [] })?.businessSkills === undefined);
 check('business skills are capped',
   (coerceOnboarding({ businessSkills: Array.from({ length: 60 }, (_, i) => `s${i}`) })?.businessSkills?.length ?? 0) === 20);
+
+/* ═══ OTP: the first code is SENT, not requested by the person ═══════════
+   The reported bug was reaching the email form and going no further: no code,
+   no OTP screen. The sequence itself was correct — signup → credentials →
+   send-otp → setMode('otp') — so a send failure threw before the transition
+   and left the person on the form. What was genuinely missing was any way to
+   ask again, and the delivery failure itself proved to be environmental (the
+   configured relay host is unreachable), not a code defect. */
+
+check('the first OTP send is automatic, inside the email submit',
+  /await requestOtp\(\);\s*\n\s*setMode\('otp'\)/.test(GATE_CODE));
+check('reaching the OTP screen never depends on pressing Resend',
+  !/resendOtp\(\)[\s\S]{0,80}setMode\('otp'\)/.test(GATE_CODE));
+check('resend is never called on mount',
+  !/useEffect\([^)]*\)[\s\S]{0,200}resendOtp\(\)/.test(GATE_CODE));
+check('one send helper serves both the first send and the resend',
+  (GATE_CODE.match(/const requestOtp/g) ?? []).length === 1
+  && (GATE_CODE.match(/await requestOtp\(\)/g) ?? []).length === 2);
+check('there is no second OTP endpoint',
+  (GATE_CODE.match(/\/api\/onboarding\/send-otp/g) ?? []).length === 1);
+
+/* ── The OTP screen has everything it needs ── */
+check('the OTP screen takes a six-digit code', /maxLength=\{6\}/.test(GATE_CODE));
+check('the OTP screen has a Verify action', /Verifying…' : 'Verify'/.test(GATE_CODE));
+check('the OTP screen offers a resend', /auth-resend-button/.test(GATE_CODE) && /resendOtp/.test(GATE_CODE));
+check('the OTP screen names the address being verified',
+  /We sent a 6-digit code to \$\{email\}/.test(GATE_CODE));
+check('verification posts to the existing verify endpoint',
+  /\/api\/onboarding\/verify-otp/.test(GATE_CODE));
+
+/* ── The cooldown belongs to the server ── */
+check('a refused resend reads the server\'s Retry-After',
+  /res\.status === 429/.test(GATE_CODE) && /headers\.get\('Retry-After'\)/.test(GATE_CODE));
+check('and the wait shown is the one the server gave',
+  /setCooldown\(wait\)/.test(GATE_CODE));
+check('resend is blocked while a cooldown is running',
+  /if \(cooldown > 0 \|\| resending\) return;/.test(GATE_CODE));
+check('the remaining wait is stated, not merely implied by a disabled button',
+  /Resend code in \{cooldown\}s/.test(GATE_CODE));
+check('the courtesy cooldown is a named constant, not a magic number',
+  /RESEND_COOLDOWN_SECONDS = \d+/.test(GATE_CODE));
+
+/* ── Failure keeps the person where they are ── */
+check('a wrong code leaves the OTP screen up',
+  /const submitOtp[\s\S]*?catch \(e\) \{[\s\S]{0,120}setError/.test(GATE_CODE));
+check('a wrong code never advances to Home',
+  /if \(!res\.ok\) throw new Error[\s\S]{0,80}await persist\(\);\s*\n\s*onDone\(\);/.test(GATE_CODE));
+check('onboarding answers are persisted only after verification succeeds',
+  GATE_CODE.indexOf("verify-otp") < GATE_CODE.indexOf("await persist()"));
+
+/* ── The send route ── */
+check('send-otp stores a HASH, never the code itself',
+  /otpHash: hash/.test(SEND_OTP) && !/otp: otp,/.test(SEND_OTP));
+check('the OTP is never put in a cookie', !/cookies\(\)/.test(SEND_OTP));
+check('a delivery failure is a real failure, not a 200',
+  /throw dispatchErr/.test(SEND_OTP) && /status: 500/.test(SEND_OTP));
+check('the internal SMTP error is NOT returned to the caller',
+  !/error instanceof Error \? error\.message : 'Failed to send OTP email\.'/.test(SEND_OTP));
+check('the caller gets a safe, generic message instead',
+  /We could not send your code right now/.test(SEND_OTP));
+check('the real cause is still recorded server-side',
+  /console\.error\('\[onboarding\/send-otp\] POST error'/.test(SEND_OTP)
+  && /status: 'failed'/.test(SEND_OTP));
+check('anonymous senders still face the captcha',
+  /enforceCaptcha\(body\.captchaToken/.test(SEND_OTP));
+check('send is still rate limited per account and per IP',
+  /otpSendAccount/.test(SEND_OTP) && /otpSendIp/.test(SEND_OTP));
+/* The concern is a VALUE reaching a log, not the word "otp" appearing in a
+   route label like `[onboarding/send-otp]`. So this looks for the actual
+   variables being interpolated or passed into a console call. */
+const CONSOLE_ARGS = (SEND_OTP.match(/console\.(?:log|error|warn)\(([\s\S]*?)\);/g) ?? []).join('\n');
+check('the OTP value is never logged',
+  !/\$\{\s*otp\s*\}/.test(CONSOLE_ARGS) && !/[(,]\s*otp\s*[,)]/.test(CONSOLE_ARGS));
+check('no password or SMTP credential is logged',
+  !/\$\{[^}]*\b(password|pass|smtp\.password|smtp\.username)\b[^}]*\}/.test(CONSOLE_ARGS)
+  && !/[(,]\s*(password|smtp)\s*[,)]/.test(CONSOLE_ARGS));
 
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed}/${passed + failed} checks passed`);
 if (failed > 0) { console.error('FAILED'); process.exit(1); }

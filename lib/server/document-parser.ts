@@ -111,12 +111,58 @@ async function extractZipEntryText(buffer: Buffer, patterns: RegExp[]) {
   return preserveDocumentStructure(chunks.filter(Boolean).join('\n\n'));
 }
 
+/**
+ * Are the local command-line helpers usable at all?
+ *
+ * `pdftotext`, `pdftoppm` and `swift` are referenced by ABSOLUTE macOS paths
+ * (/opt/homebrew, /usr/bin/swift). On a Linux serverless runtime they cannot
+ * exist, so attempting them there spends a process spawn each to earn a
+ * guaranteed ENOENT, and — worse — buries the ONE real failure (pdf-parse)
+ * under three "failed" lines that look like the same class of problem. That is
+ * how production came to report
+ *
+ *     [doc-parser] all PDF extraction methods failed — throwing
+ *
+ * when in truth only one method was ever available.
+ */
+const NATIVE_HELPERS_AVAILABLE = process.platform === 'darwin';
+
+/** One structured line per stage. Never carries document text or PII. */
+function stage(name: string, outcome: string, detail?: Record<string, unknown>) {
+  const extra = detail
+    ? ' ' + Object.entries(detail).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(' ')
+    : '';
+  console.log(`[doc-parser] stage=${name} outcome=${outcome}${extra}`);
+}
+
+/**
+ * An error, reduced to something safe to log.
+ *
+ * Name and a TRUNCATED message only. A parser can put fragments of the document
+ * it choked on into its message, and this runs on résumés — so the message is
+ * capped hard and newlines are flattened rather than passed through.
+ */
+function safeError(err: unknown): { name: string; message: string } {
+  const e = err as Error;
+  return {
+    name: e?.name || 'Error',
+    message: String(e?.message ?? '').replace(/\s+/g, ' ').slice(0, 200),
+  };
+}
+
 export async function extractDocumentText(fileName: string, mimeType: string, buffer: Buffer) {
   const extension = getExtension(fileName);
   const normalizedMime = mimeType.toLowerCase();
   const readableTextFallback = extractReadableTextFromBuffer(buffer);
+  const startedAt = Date.now();
 
-  console.log(`[doc-parser] start file="${fileName}" mime="${normalizedMime}" ext="${extension}" size=${buffer.length}B`);
+  /* The NAME is not logged — a résumé filename is routinely "Firstname
+     Lastname CV.pdf", which is exactly the PII this must not emit. Type and
+     size are what a production diagnosis actually needs. */
+  stage('start', 'begin', {
+    mime: normalizedMime, ext: extension, bytes: buffer.length,
+    platform: process.platform, nativeHelpers: NATIVE_HELPERS_AVAILABLE,
+  });
 
   if (
     normalizedMime.startsWith('text/')
@@ -128,7 +174,7 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
   }
 
   if (normalizedMime === 'application/pdf' || extension === 'pdf') {
-    console.log('[doc-parser] PDF path — trying pdf-parse');
+    stage('pdf-parse', 'attempt');
     try {
       // pdf-parse v2 exports { PDFParse } as a class, not a default function
       const pdfParseModule = require('pdf-parse') as { PDFParse?: new (opts: { data: Uint8Array }) => { getText(): Promise<{ text: string }> }; default?: (buf: Buffer) => Promise<{ text: string }> };
@@ -145,44 +191,55 @@ export async function extractDocumentText(fileName: string, mimeType: string, bu
         text = preserveDocumentStructure(parsed.text || '');
       }
       if (text) {
-        console.log(`[doc-parser] pdf-parse OK → ${text.length} chars`);
+        stage('pdf-parse', 'ok', { chars: text.length, ms: Date.now() - startedAt });
         return text;
       }
-      console.warn('[doc-parser] pdf-parse returned empty text');
+      /* Parsed cleanly, contained no text layer — a scanned/image-only PDF.
+         A distinct outcome from a parser error, and the one OCR exists for. */
+      stage('pdf-parse', 'empty-text-layer', { ms: Date.now() - startedAt });
     } catch (err) {
-      console.error('[doc-parser] pdf-parse failed:', err instanceof Error ? err.message : err);
+      /* THE line that matters in production. Everything below this point is
+         macOS-only, so on a Linux runtime this error IS the whole story. */
+      stage('pdf-parse', 'failed', { ...safeError(err), ms: Date.now() - startedAt });
     }
 
-    console.log('[doc-parser] trying pdftotext binary');
-    try {
-      const text = await extractPdfTextWithPdftotext(buffer);
-      if (hasEnoughReadableText(text)) {
-        console.log(`[doc-parser] pdftotext OK → ${text.length} chars`);
-        return text;
+    if (NATIVE_HELPERS_AVAILABLE) {
+      try {
+        const text = await extractPdfTextWithPdftotext(buffer);
+        if (hasEnoughReadableText(text)) {
+          stage('pdftotext', 'ok', { chars: text.length, ms: Date.now() - startedAt });
+          return text;
+        }
+        stage('pdftotext', 'insufficient-text', { chars: text.length });
+      } catch (err) {
+        stage('pdftotext', 'failed', safeError(err));
       }
-      console.warn(`[doc-parser] pdftotext returned too little text: ${text.length} chars`);
-    } catch (err) {
-      console.error('[doc-parser] pdftotext failed (binary may not be installed on this server):', err instanceof Error ? err.message : err);
-    }
 
-    console.log('[doc-parser] trying OCR (Swift/pdftoppm) fallback');
-    try {
-      const text = await extractPdfTextWithOcr(buffer);
-      if (hasEnoughReadableText(text)) {
-        console.log(`[doc-parser] OCR OK → ${text.length} chars`);
-        return text;
+      try {
+        const text = await extractPdfTextWithOcr(buffer);
+        if (hasEnoughReadableText(text)) {
+          stage('ocr', 'ok', { chars: text.length, ms: Date.now() - startedAt });
+          return text;
+        }
+        stage('ocr', 'insufficient-text', { chars: text.length });
+      } catch (err) {
+        stage('ocr', 'failed', safeError(err));
       }
-      console.warn(`[doc-parser] OCR returned too little text: ${text.length} chars`);
-    } catch (err) {
-      console.error('[doc-parser] OCR failed (pdftoppm/swift not available on this server):', err instanceof Error ? err.message : err);
+    } else {
+      /* Said once, plainly, so a production log never again implies that three
+         extraction methods were tried when only one could run. */
+      stage('native-helpers', 'unavailable-on-platform', { platform: process.platform });
     }
 
     if (readableTextFallback) {
-      console.log(`[doc-parser] using raw-bytes UTF-8 fallback → ${readableTextFallback.length} chars`);
+      stage('raw-bytes', 'ok', { chars: readableTextFallback.length, ms: Date.now() - startedAt });
       return readableTextFallback;
     }
 
-    console.error('[doc-parser] all PDF extraction methods failed — throwing');
+    stage('pdf', 'exhausted', {
+      attempted: NATIVE_HELPERS_AVAILABLE ? 'pdf-parse,pdftotext,ocr,raw-bytes' : 'pdf-parse,raw-bytes',
+      ms: Date.now() - startedAt,
+    });
     throw new Error('This PDF could not be read clearly enough for analysis. Try a sharper PDF, or paste the resume text directly.');
   }
 

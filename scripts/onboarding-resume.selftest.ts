@@ -225,5 +225,65 @@ check('the rate limit is still applied', /consumeRateLimit\('resumeExtract'/.tes
 check('no résumé text is logged', !/console\.(log|info|warn|error)\([^)]*text/.test(EXTRACT_ROUTE));
 
 
+/* ═══ Production (serverless) parsing ════════════════════════════════════
+   The reported failure was Vercel-only:
+
+       POST /api/onboarding/resume-extract → 422
+       [doc-parser] all PDF extraction methods failed — throwing
+
+   "all methods" reads as though four things were tried. Three of them invoke
+   ABSOLUTE macOS paths (/opt/homebrew/bin/pdftotext, /opt/homebrew/bin/pdftoppm,
+   /usr/bin/swift) and cannot exist on Linux, so on Vercel pdf-parse is the only
+   path there has ever been — and its error was buried under three guaranteed
+   ENOENTs that looked like peers. */
+
+const PARSER = src('lib/server/document-parser.ts');
+
+check('macOS-only helpers are not attempted off macOS',
+  /NATIVE_HELPERS_AVAILABLE = process\.platform === 'darwin'/.test(PARSER)
+  && /if \(NATIVE_HELPERS_AVAILABLE\) \{/.test(PARSER));
+check('and the log says so, instead of implying they were tried',
+  /unavailable-on-platform/.test(PARSER));
+check('the exhausted line reports what was ACTUALLY attempted',
+  /attempted: NATIVE_HELPERS_AVAILABLE \? /.test(PARSER));
+
+/* Diagnostics a production failure can be read from. */
+check('every stage logs a structured outcome', /function stage\(/.test(PARSER));
+check('the parser error name and message are logged',
+  /stage\('pdf-parse', 'failed', \{ \.\.\.safeError\(err\)/.test(PARSER));
+check('duration is recorded', /ms: Date\.now\(\) - startedAt/.test(PARSER));
+check('file type, size and platform are recorded',
+  /mime: normalizedMime, ext: extension, bytes: buffer\.length/.test(PARSER)
+  && /platform: process\.platform/.test(PARSER));
+
+/* PII must not reach the logs. */
+check('the résumé FILENAME is never logged (it is usually the person\'s name)',
+  !/file="\$\{fileName\}"/.test(PARSER));
+check('error messages are truncated and flattened before logging',
+  /\.replace\(\/\\s\+\/g, ' '\)\.slice\(0, 200\)/.test(PARSER));
+check('no extracted text is ever logged, only its length',
+  !/console\.log\([^)]*\$\{text\}/.test(PARSER));
+
+/* An empty text layer is not a parser error. */
+check('a scanned PDF is reported as empty-text-layer, not as a failure',
+  /'empty-text-layer'/.test(PARSER));
+
+/* The route must stay on Node — the parser has no Edge equivalent. */
+check('the extract route pins the nodejs runtime',
+  /export const runtime = 'nodejs';/.test(EXTRACT_ROUTE));
+
+/* Every document-parsing route is traced for deployment. */
+const NEXT_CONFIG = src('next.config.js');
+check('the pdfjs worker list is shared, not retyped per route',
+  /const PDF_WORKER_FILES = \[/.test(NEXT_CONFIG));
+check('the onboarding extract route is traced',
+  /'\/api\/onboarding\/resume-extract': PDF_WORKER_FILES/.test(NEXT_CONFIG));
+check('and so is every other route that parses documents',
+  (NEXT_CONFIG.match(/: PDF_WORKER_FILES/g) ?? []).length >= 12);
+
+/* Still no fake success. */
+check('an unreadable PDF is still a 422, never a 200 with empty data',
+  /status: 422/.test(EXTRACT_ROUTE) && !/extraction: \{ roles: \[\], skills: \[\] \}, readable: true/.test(EXTRACT_ROUTE));
+
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed}/${passed + failed} checks passed`);
 if (failed > 0) { console.error('FAILED'); process.exit(1); }

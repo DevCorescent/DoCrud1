@@ -29,11 +29,16 @@
  * both actually succeeded.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { ArrowLeft, ArrowRight, Loader2, Mail } from 'lucide-react';
 import { SecurityVerification, isTurnstileEnabled } from '@/components/security/SecurityVerification';
 import { OnboardingProgress, StepHeading } from './StepChrome';
+
+/* A courtesy wait before Resend lights up. The SERVER's limit (three sends per
+   ten minutes, answered as 429 + Retry-After) is the real constraint; this only
+   stops the button being mashed between allowed sends. */
+const RESEND_COOLDOWN_SECONDS = 30;
 
 type Mode = 'choose' | 'email' | 'otp';
 
@@ -73,6 +78,10 @@ export default function AuthGate({
   const [organization, setOrganization] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /* Seconds until a resend is offered. Counts down in the effect below and is
+     re-armed from the SERVER's Retry-After whenever it refuses one. */
+  const [cooldown, setCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
 
   /* A token is required only when Turnstile is actually configured. */
   const verified = !isTurnstileEnabled() || Boolean(captcha);
@@ -113,6 +122,60 @@ export default function AuthGate({
     } catch {
       setBusy(false);
       setError('We could not start Google sign-in. Please try again.');
+    }
+  };
+
+  /* One interval while a cooldown is running, cleared when it reaches zero. */
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = window.setInterval(() => setCooldown(c => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => window.clearInterval(id);
+  }, [cooldown]);
+
+  /**
+   * Ask the existing OTP endpoint to send a code.
+   *
+   * ONE function for both the automatic first send and the manual resend —
+   * they are the same server operation, differing only in what triggers them.
+   * The first code is sent by `submitEmail` as part of signing in; resend is a
+   * deliberate second action the person takes on the OTP screen. Resend is
+   * never what STARTS the flow, and it is never called on mount.
+   *
+   * The cooldown is the SERVER's, not ours. `/api/onboarding/send-otp` allows
+   * three sends per ten minutes per account and answers 429 with `Retry-After`;
+   * when that happens the real wait is read from the header rather than guessed
+   * at, so the button can never invite a request the server will refuse.
+   */
+  const requestOtp = async (): Promise<void> => {
+    const res = await fetch('/api/onboarding/send-otp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: email.trim(), captchaToken: captcha }),
+    });
+    if (res.status === 429) {
+      const wait = Number(res.headers.get('Retry-After')) || 60;
+      setCooldown(wait);
+      throw new Error(`Too many codes requested. Try again in ${wait} seconds.`);
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error || 'We could not send your code.');
+    }
+    /* A short courtesy wait before the resend button lights up. Purely UX —
+       the server's limit above is the real constraint. */
+    setCooldown(RESEND_COOLDOWN_SECONDS);
+  };
+
+  /** The OTP screen's secondary action. Never runs by itself. */
+  const resendOtp = async () => {
+    if (cooldown > 0 || resending) return;
+    setResending(true); setError('');
+    try {
+      await requestOtp();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'We could not resend your code.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -157,16 +220,10 @@ export default function AuthGate({
       });
       if (!result?.ok) throw new Error('That email and password did not match.');
 
-      /* Session in hand, so this send is the authenticated resend path. */
-      const otpRes = await fetch('/api/onboarding/send-otp', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: email.trim(), captchaToken: captcha }),
-      });
-      if (!otpRes.ok) {
-        const b = await otpRes.json().catch(() => null);
-        throw new Error(b?.error || 'We could not send your code.');
-      }
+      /* Session in hand, so this send is the authenticated path. The FIRST
+         code is sent here, automatically — reaching the OTP screen is never
+         something the person has to trigger by pressing Resend. */
+      await requestOtp();
       setMode('otp');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -296,6 +353,18 @@ export default function AuthGate({
                 placeholder="000000" autoComplete="one-time-code" />
             </div>
           </label>
+          <p className="auth-resend">
+            {cooldown > 0 ? (
+              /* Not a disabled button with a tooltip: the wait itself is the
+                 information, so it is stated in words. */
+              <span className="auth-resend-wait">Resend code in {cooldown}s</span>
+            ) : (
+              <button type="button" className="auth-resend-button"
+                onClick={resendOtp} disabled={resending || busy}>
+                {resending ? 'Sending a new code…' : 'Resend code'}
+              </button>
+            )}
+          </p>
           <div className="auth-options">
             <button type="submit" className="primary-button" disabled={busy || otp.length !== 6}>
               {busy && <Loader2 className="auth-spin" aria-hidden="true" />}

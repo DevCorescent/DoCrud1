@@ -15,6 +15,7 @@ import {
 } from '@/lib/server/email-outbox';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 type EmailVerificationOtpSession = {
   id: string;
@@ -296,23 +297,20 @@ async function dispatchOtpEmail(to: string, otp: string, firstName: string): Pro
   };
 
   // ── 1. Configured SMTP relay — primary path (authenticated, SPF-aligned) ──
+  // Timeouts are kept tight (6 s each) so the serverless function always
+  // returns a response before the platform cuts it off.
   if (smtp.host) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const relayTransporter = nodemailer.createTransport({
-        host: smtp.host,
-        port: Number(smtp.port) || 465,
-        secure: Boolean(smtp.secure),
-        auth: smtp.requireAuth ? { user: smtp.username, pass: smtp.password } : undefined,
-        connectionTimeout: 30_000,
-        greetingTimeout:   20_000,
-        socketTimeout:     30_000,
-        /* Verification ON, matching lib/server/mailer.ts. This is an
-           authenticated connection to our own configured provider, where a
-           certificate mismatch is a real problem worth failing on. */
-      });
-      const ok = await trySend(relayTransporter, mailOptions, `relay-attempt-${attempt}(${smtp.host})`);
-      if (ok) return;
-    }
+    const relayTransporter = nodemailer.createTransport({
+      host: smtp.host,
+      port: Number(smtp.port) || 465,
+      secure: Boolean(smtp.secure),
+      auth: smtp.requireAuth ? { user: smtp.username, pass: smtp.password } : undefined,
+      connectionTimeout: 6_000,
+      greetingTimeout:   4_000,
+      socketTimeout:     6_000,
+    });
+    const ok = await trySend(relayTransporter, mailOptions, `relay(${smtp.host})`);
+    if (ok) return;
   }
 
   // ── 2. Direct MX fallback via port 587 + STARTTLS ──
@@ -324,17 +322,9 @@ async function dispatchOtpEmail(to: string, otp: string, firstName: string): Pro
       port: 587,
       secure: false,
       name: smtp.fromEmail.split('@')[1] ?? 'docrud.com',
-      connectionTimeout: 20_000,
-      greetingTimeout:   15_000,
-      socketTimeout:     20_000,
-      /* DELIBERATELY still permissive, unlike every other transport here.
-         This is opportunistic STARTTLS straight to a RECIPIENT's MX host,
-         which very often presents a certificate that does not match the MX
-         name. Strict verification would turn this last-resort fallback into a
-         guaranteed failure for many domains, so it keeps SMTP's normal
-         opportunistic-TLS behaviour: encrypt when possible, still deliver when
-         the certificate cannot be validated. Nothing we authenticate to is
-         reached over this transport. */
+      connectionTimeout: 5_000,
+      greetingTimeout:   3_000,
+      socketTimeout:     5_000,
       tls: { rejectUnauthorized: false },
     });
     const ok = await trySend(directTransporter, mailOptions, `direct-mx-587(${mxHost})`);

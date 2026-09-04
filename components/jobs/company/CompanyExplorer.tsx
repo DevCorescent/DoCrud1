@@ -239,7 +239,7 @@ export default function CompanyExplorer() {
           <div className="flex items-center gap-2">
             <span className="hp-sec text-[11px] font-semibold tracking-[0.10em]"
               style={{ color: 'rgba(255,255,255,0.28)' }}>
-              Company Explorer
+              Top Company
             </span>
           </div>
         </div>

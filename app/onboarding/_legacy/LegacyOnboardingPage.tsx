@@ -3685,7 +3685,7 @@ function OnboardingPageInner() {
   );
 }
 
-export default function OnboardingPage() {
+export default function LegacyOnboardingPage() {
   return (
     <Suspense>
       <OnboardingPageInner />

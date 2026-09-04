@@ -72,6 +72,10 @@ export default function AuthGate({
   const [mode, setMode] = useState<Mode>('choose');
   const [captcha, setCaptcha] = useState('');
   const [captchaNonce, setCaptchaNonce] = useState(0);
+  // Snapshot of the captcha token taken the moment the user clicks "Continue with Email".
+  // The Turnstile widget unmounts on mode change and may fire expired-callback which
+  // clears captcha state — the snapshot is immune to that race condition.
+  const captchaSnapshotRef = useRef('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -150,7 +154,7 @@ export default function AuthGate({
     const res = await fetch('/api/onboarding/send-otp', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), captchaToken: captcha }),
+      body: JSON.stringify({ email: email.trim(), captchaToken: captchaSnapshotRef.current || captcha }),
     });
     if (res.status === 429) {
       const wait = Number(res.headers.get('Retry-After')) || 60;
@@ -182,12 +186,14 @@ export default function AuthGate({
   /** Email + password → account → session → OTP sent. */
   const submitEmail = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!verified) return needVerification();
     if (password.length < 8) { setError('Use a password of at least 8 characters.'); return; }
     if (isBusiness && !organization.trim()) {
       setError('Tell us your organization name.');
       return;
     }
+    // Use the snapshot taken at transition time — the widget may have unmounted
+    // and fired expired-callback which clears the live captcha state.
+    const captchaToken = captchaSnapshotRef.current || captcha;
     setBusy(true); setError('');
     try {
       /* Each account kind goes to the signup endpoint that already owns it.
@@ -202,7 +208,7 @@ export default function AuthGate({
             email: email.trim(),
             password,
             policyAccepted: true,
-            captchaToken: captcha,
+            captchaToken,
             ...(isBusiness
               ? { organizationName: organization.trim(), industry: answers.businessSpace }
               : {}),
@@ -279,7 +285,12 @@ export default function AuthGate({
             <button
               type="button"
               className="continue-without-resume"
-              onClick={() => (verified ? (setError(''), setMode('email')) : needVerification())}
+              onClick={() => {
+                if (!verified) { needVerification(); return; }
+                captchaSnapshotRef.current = captcha; // immune to widget expired-callback after unmount
+                setError('');
+                setMode('email');
+              }}
               disabled={busy}
             >
               <Mail aria-hidden="true" />

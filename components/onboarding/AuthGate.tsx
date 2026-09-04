@@ -29,7 +29,7 @@
  * both actually succeeded.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { ArrowLeft, ArrowRight, Loader2, Mail } from 'lucide-react';
 import { SecurityVerification, isTurnstileEnabled } from '@/components/security/SecurityVerification';

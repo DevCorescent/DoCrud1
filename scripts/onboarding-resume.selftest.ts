@@ -12,7 +12,10 @@ import { readFileSync } from 'node:fs';
 import {
   extractName, extractRoles, extractSkills, extractFromResumeText,
 } from '../lib/server/onboarding-resume-extract';
-import { validateResumeUpload, RESUME_MAX_BYTES, RESUME_EXTENSIONS } from '../lib/onboarding-resume';
+import {
+  validateResumeUpload, RESUME_MAX_BYTES, RESUME_EXTENSIONS,
+  PLATFORM_REQUEST_BODY_LIMIT_BYTES,
+} from '../lib/onboarding-resume';
 import { SKILLS } from '../lib/server/ats/skill-taxonomy';
 import { JOB_DOMAINS } from '../lib/server/job-sources/taxonomy';
 
@@ -284,6 +287,46 @@ check('and so is every other route that parses documents',
 /* Still no fake success. */
 check('an unreadable PDF is still a 422, never a 200 with empty data',
   /status: 422/.test(EXTRACT_ROUTE) && !/extraction: \{ roles: \[\], skills: \[\] \}, readable: true/.test(EXTRACT_ROUTE));
+
+/* ═══ The size contract must match the PLATFORM, not just itself ═════════
+   The limit was 8 MB while the deployment rejects any request body over
+   4.5 MB at the edge — before the handler runs. So a 6 MB résumé passed
+   client validation, uploaded, and then died with an error the application
+   never saw and could not explain to the person. A client that permits more
+   than the deployment accepts is a promise the product cannot keep. */
+
+check('the resume limit sits under the platform request-body ceiling',
+  RESUME_MAX_BYTES < PLATFORM_REQUEST_BODY_LIMIT_BYTES);
+check('with real headroom for multipart overhead (>= 256 KB)',
+  PLATFORM_REQUEST_BODY_LIMIT_BYTES - RESUME_MAX_BYTES >= 256 * 1024);
+check('and it is no longer the old unreachable 8 MB',
+  RESUME_MAX_BYTES !== 8 * 1024 * 1024);
+
+/* Boundary behaviour, exercised rather than asserted about. */
+check('a file comfortably under the limit is accepted',
+  validateResumeUpload(file('cv.pdf', 1 * 1024 * 1024)) === null);
+check('a file one byte under the limit is accepted',
+  validateResumeUpload(file('cv.pdf', RESUME_MAX_BYTES - 1)) === null);
+check('a file exactly at the limit is accepted',
+  validateResumeUpload(file('cv.pdf', RESUME_MAX_BYTES)) === null);
+check('a file one byte over the limit is rejected',
+  validateResumeUpload(file('cv.pdf', RESUME_MAX_BYTES + 1))?.code === 'TOO_LARGE');
+check('a file that would have passed the OLD 8 MB limit is now rejected',
+  validateResumeUpload(file('cv.pdf', 6 * 1024 * 1024))?.code === 'TOO_LARGE');
+check('the rejection message names the real limit',
+  (validateResumeUpload(file('cv.pdf', RESUME_MAX_BYTES + 1))?.message ?? '').includes('4 MB'));
+
+/* One number, shared — the client and the server cannot drift. */
+check('the extract route imports the shared limit rather than retyping one',
+  /import \{ RESUME_MAX_BYTES \} from '@\/lib\/onboarding-resume'/.test(EXTRACT_ROUTE)
+  && /const MAX_BYTES = RESUME_MAX_BYTES;/.test(EXTRACT_ROUTE));
+check('and so does the authenticated parse route',
+  /const MAX_BYTES = RESUME_MAX_BYTES;/.test(src('app/api/onboarding/parse-resume/route.ts')));
+check('no resume route hardcodes 8 MB any more',
+  !/8 \* 1024 \* 1024/.test(EXTRACT_ROUTE)
+  && !/8 \* 1024 \* 1024/.test(src('app/api/onboarding/parse-resume/route.ts')));
+check('an oversized upload is a 413, never a success',
+  /status: 413/.test(EXTRACT_ROUTE));
 
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed}/${passed + failed} checks passed`);
 if (failed > 0) { console.error('FAILED'); process.exit(1); }

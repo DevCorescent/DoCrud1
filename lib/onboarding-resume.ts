@@ -20,8 +20,31 @@
  * post-auth the suggestions flow in without any step changing.
  */
 
-/** Mirrors the parser's own limit. */
-export const RESUME_MAX_BYTES = 8 * 1024 * 1024;
+/**
+ * The largest résumé the product accepts.
+ *
+ * ═══ WHY 4 MB AND NOT 8 ═══
+ *
+ * This used to be 8 MB, which the deployed platform could never honour. Vercel
+ * caps a serverless function's REQUEST BODY at 4.5 MB and rejects anything
+ * larger at the edge — before the route handler runs. So a 6 MB résumé was
+ * accepted by this validator, uploaded by the browser, and then killed by the
+ * platform with an error the application never saw and could not explain. The
+ * UI promised support for a file the deployment would always refuse.
+ *
+ * 4 MB sits safely under that ceiling with room for multipart boundaries,
+ * the filename and headers, all of which count toward the body size.
+ *
+ * THIS IS THE ONLY DEFINITION. The API routes import it rather than repeating
+ * a number, so the browser's limit and the server's limit cannot drift apart —
+ * a client that permits more than the server accepts is the same bug in the
+ * other direction.
+ */
+export const RESUME_MAX_BYTES = 4 * 1024 * 1024;
+
+/** The platform ceiling this must stay under. Documented so a future increase
+    is a deliberate decision about the deployment, not an unnoticed regression. */
+export const PLATFORM_REQUEST_BODY_LIMIT_BYTES = 4.5 * 1024 * 1024;
 
 /** The document types lib/server/document-parser.ts can actually read. */
 export const RESUME_EXTENSIONS = ['pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'html', 'htm'] as const;

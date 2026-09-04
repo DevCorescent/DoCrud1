@@ -197,7 +197,7 @@ export default function WelcomeStep({
         <button type="button" className="continue-without-resume" onClick={onContinue}>
           {/* Once a résumé is attached the "without" is no longer true — this is
               then just the way on, reached by coming back to this step. */}
-          <span>{resume ? 'Continue' : 'Continue Without Resume'}</span>
+          <span>Continue</span>
           <ArrowRight aria-hidden="true" />
         </button>
 

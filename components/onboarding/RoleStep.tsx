@@ -39,6 +39,8 @@ import { useState } from 'react';
 import { Check, ChevronDown, Plus, Search, X } from 'lucide-react';
 import type { RoleOption } from '@/lib/onboarding-roles';
 import { OnboardingProgress, StepHeading } from './StepChrome';
+import ExtractionNotice from './ExtractionNotice';
+import type { ExtractionState } from '@/lib/onboarding-resume';
 
 /** How many directions the list shows before "Show all". */
 const COLLAPSED_COUNT = 8;
@@ -60,6 +62,8 @@ export default function RoleStep({
   onContinue,
   step = 4,
   total = 6,
+  extraction,
+  onRetryExtraction,
 }: {
   options: readonly RoleOption[];
   /** Real active-job counts per direction id. Missing means "not known". */
@@ -74,6 +78,10 @@ export default function RoleStep({
   onContinue: () => void;
   step?: number;
   total?: number;
+  /* The résumé read feeds this step, so its progress and failures are reported
+     here too — see ExtractionNotice. Optional so the step still stands alone. */
+  extraction?: ExtractionState;
+  onRetryExtraction?: () => void;
 }) {
   const chosen = new Set(value);
   const [expanded, setExpanded] = useState(false);
@@ -118,6 +126,8 @@ export default function RoleStep({
         title="What role are you looking for?"
         description="Pick as many as you are open to. The counts are roles open on Docrud right now."
       />
+
+      {extraction && <ExtractionNotice extraction={extraction} onRetry={onRetryExtraction} />}
 
       <label className="role-field" htmlFor="onboarding-target-role">
         <span className="field-label">Search or add a role</span>

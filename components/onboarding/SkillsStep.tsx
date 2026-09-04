@@ -50,6 +50,8 @@ import { useMemo, useState } from 'react';
 import { Check, ChevronDown, Plus, Search } from 'lucide-react';
 import { MAX_SKILLS, type SkillOption } from '@/lib/onboarding-skills';
 import { OnboardingProgress, StepHeading } from './StepChrome';
+import ExtractionNotice from './ExtractionNotice';
+import type { ExtractionState } from '@/lib/onboarding-resume';
 
 /** How many unchosen skills are offered before "Show more". */
 const VISIBLE_COUNT = 20;
@@ -64,6 +66,8 @@ export default function SkillsStep({
   eyebrow = 'Skill signal / 05',
   title = 'What are your skills?',
   description = `Select up to ${MAX_SKILLS} skills that best represent you.`,
+  extraction,
+  onRetryExtraction,
 }: {
   options: readonly SkillOption[];
   value: readonly string[];
@@ -76,6 +80,10 @@ export default function SkillsStep({
   eyebrow?: string;
   title?: string;
   description?: string;
+  /* The résumé read feeds this step, so its progress and failures are reported
+     here too — see ExtractionNotice. Optional so the step still stands alone. */
+  extraction?: ExtractionState;
+  onRetryExtraction?: () => void;
 }) {
   /* View-only state. The chosen skills live in the flow, never here. */
   const [draft, setDraft] = useState('');
@@ -141,6 +149,8 @@ export default function SkillsStep({
     <div className="step-panel">
       <OnboardingProgress step={step} total={total} />
       <StepHeading eyebrow={eyebrow} title={title} description={description} />
+
+      {extraction && <ExtractionNotice extraction={extraction} onRetry={onRetryExtraction} />}
 
       {/* The count lives inside the field, small and out of the way, rather
           than as a heading of its own. */}

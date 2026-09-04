@@ -1319,3 +1319,53 @@
 @media (prefers-reduced-motion: reduce) {
   .docrud-onboarding .auth-spin { animation: none; }
 }
+
+/* ── Résumé-read status ───────────────────────────────────────────────────
+   Shown on the steps the read actually feeds (Name, Role, Skills), because
+   attaching a file advances past Welcome immediately — see ExtractionNotice.
+   Semantic classes only: a `bg-*` utility here would be repainted by the
+   globals.css dark-mode `!important` rule that targets [class*='bg-white']. */
+.docrud-onboarding .extraction-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -4px 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, .72);
+}
+.docrud-onboarding .extraction-note-failed { color: rgba(252, 165, 165, .92); }
+
+.docrud-onboarding .extraction-spinner {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(226, 232, 240, .25);
+  border-top-color: rgba(226, 232, 240, .85);
+  animation: docrudOnbSpin .9s linear infinite;
+}
+
+.docrud-onboarding .extraction-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: rgba(191, 219, 254, .95);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.docrud-onboarding .extraction-retry:hover { color: rgba(219, 234, 254, 1); }
+.docrud-onboarding .extraction-retry:focus-visible {
+  outline: 2px solid rgba(147, 197, 253, .8);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+/* A spinner that never stops is worse than no spinner for anyone who cannot
+   tolerate motion; the text still says what is happening. */
+@media (prefers-reduced-motion: reduce) {
+  .docrud-onboarding .extraction-spinner { animation: none; }
+}

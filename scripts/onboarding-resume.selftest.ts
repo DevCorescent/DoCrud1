@@ -165,5 +165,65 @@ check('a failed read never reads as an empty one',
 check('the welcome step only claims success on success',
   /extraction\.status === 'done'/.test(src('components/onboarding/WelcomeStep.tsx')));
 
+
+/* ═══ The read must be VISIBLE on the steps it feeds ═════════════════════
+   Attaching a résumé advances straight past Welcome, so a status rendered only
+   by WelcomeStep is a status nobody sees. That was the live bug: a 422 was
+   handled correctly and its message thrown away, leaving an empty Name field
+   and no explanation — indistinguishable from "extraction stopped". */
+
+const NOTICE = src('components/onboarding/ExtractionNotice.tsx');
+
+check('there is a status surface for the steps that use the result',
+  NOTICE.length > 0);
+check('it reports the parsing state', /'parsing'/.test(NOTICE) && /Reading your resume/i.test(NOTICE));
+check('it reports a failure with the server\'s own message',
+  /extraction\.message/.test(NOTICE));
+check('it distinguishes "read it, found nothing" from "could not read it"',
+  /'empty'/.test(NOTICE) && /extraction-note-failed/.test(NOTICE));
+check('it renders nothing on success, so a filled field is not narrated',
+  /status === 'done'\) return null/.test(NOTICE));
+check('the busy state is announced to assistive tech',
+  /aria-live="polite"/.test(NOTICE) && /role="status"/.test(NOTICE));
+
+for (const step of ['NameStep', 'RoleStep', 'SkillsStep']) {
+  const code = src(`components/onboarding/${step}.tsx`);
+  check(`${step} renders the extraction notice`, /<ExtractionNotice/.test(code));
+  check(`${step} accepts the extraction state`, /extraction\?: ExtractionState/.test(code));
+}
+
+check('the flow passes extraction to every step that consumes it',
+  (FLOW.match(/extraction=\{extraction\}/g) ?? []).length >= 4);
+
+/* ═══ Retry re-runs the EXISTING read, and is not a second system ════════ */
+
+check('a failed read can be retried', /onRetryExtraction/.test(FLOW));
+check('retry re-runs the same effect rather than adding a parse path',
+  /retryNonce/.test(FLOW) && (FLOW.match(/extractResume\(/g) ?? []).length === 1);
+check('retry does nothing without a file', /if \(resume\) setRetryNonce/.test(FLOW));
+check('the retry control is only offered when there is something to retry',
+  /onRetry && \(/.test(NOTICE));
+
+/* ═══ Still exactly one extraction, still no fabrication ═════════════════ */
+
+check('extraction is requested once per attached file, not per step',
+  /\}, \[resume, retryNonce\]\)/.test(FLOW));
+check('no step re-parses the résumé itself',
+  !/extractResume/.test(src('components/onboarding/NameStep.tsx'))
+  && !/extractResume/.test(src('components/onboarding/RoleStep.tsx'))
+  && !/extractResume/.test(src('components/onboarding/SkillsStep.tsx')));
+
+/* ═══ The route still refuses to fake a success ══════════════════════════ */
+
+const EXTRACT_ROUTE = src('app/api/onboarding/resume-extract/route.ts');
+check('a parser failure is a 422, never a 200 with empty data', /status: 422/.test(EXTRACT_ROUTE));
+check('an unreadable file is distinguished from an empty one',
+  /readable: false/.test(EXTRACT_ROUTE) && /status: 422/.test(EXTRACT_ROUTE));
+check('size, extension and magic bytes are all still enforced',
+  /MAX_BYTES/.test(EXTRACT_ROUTE) && /ALLOWED/.test(EXTRACT_ROUTE) && /contentMatchesExtension/.test(EXTRACT_ROUTE));
+check('the rate limit is still applied', /consumeRateLimit\('resumeExtract'/.test(EXTRACT_ROUTE));
+check('no résumé text is logged', !/console\.(log|info|warn|error)\([^)]*text/.test(EXTRACT_ROUTE));
+
+
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed}/${passed + failed} checks passed`);
 if (failed > 0) { console.error('FAILED'); process.exit(1); }

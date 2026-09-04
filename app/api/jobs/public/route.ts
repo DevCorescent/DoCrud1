@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getHiringJobsCached } from '@/lib/server/hiring';
 import { publicJobs } from '@/lib/server/job-api/queries';
+import { selectPublicJobsPage } from '@/lib/server/db/public-jobs-query';
 import { TTL, cached } from '@/lib/server/cache';
 
 export const dynamic = 'force-dynamic';
@@ -42,7 +43,21 @@ export async function GET(request: NextRequest) {
        scope, so this response is identical for every visitor by construction. */
     const payload = await cached(
       { ns: 'jobs:public', kind: 'list', params: query, ttlSeconds: TTL.publicList },
-      async () => publicJobs(await getHiringJobsCached(), query),
+      async () => {
+        /* THE WORK HAPPENS IN THE DATABASE. Every posting lives in one ~12 MB
+           app_state document, and slicing in JavaScript meant transferring all
+           of it to return twenty rows — 145 s cold for a pageSize=1 request.
+           `selectPublicJobsPage` filters, sorts, pages and applies
+           publicJobView's allow-list inside Mongo, so only the page crosses the
+           wire. Equivalence with the function below is pinned by
+           scripts/public-jobs-equivalence.selftest.ts. */
+        const fromDb = await selectPublicJobsPage(query);
+        if (fromDb) return fromDb;
+
+        /* Mongo unconfigured, or the document is not shaped for a projection.
+           Unchanged behaviour, unchanged cost — never an empty result. */
+        return publicJobs(await getHiringJobsCached(), query);
+      },
     );
     return NextResponse.json(payload);
   } catch {

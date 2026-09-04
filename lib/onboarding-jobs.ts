@@ -67,8 +67,11 @@ export function formatRecommendedJobCount(actual: number): string {
   return `${getCompanyJobDisplayCount(actual).toLocaleString('en-US')}+`;
 }
 
-/** How many cards the step shows. The count reported is the API's total. */
-export const JOB_PREVIEW_LIMIT = 4;
+/**
+ * The step reports a count, not a list, so one row is all the feed needs to
+ * return — `total` is the same either way and the response stays tiny.
+ */
+export const JOB_PREVIEW_LIMIT = 1;
 
 /**
  * The query for a chosen direction.

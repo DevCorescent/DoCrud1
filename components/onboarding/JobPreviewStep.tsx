@@ -18,44 +18,23 @@
  *    state and nothing else. There is no fake sign-in here; the CTA goes to the
  *    real /login route, which is where applying has to start.
  *
- * ═══ NOTHING IS INVENTED PER JOB ═══
+ * ═══ THE COUNT, NOT THE LISTINGS ═══
  *
- * Title, company, location, work mode, employment type and posted date are
- * printed only when the record carries them; a missing field is omitted rather
- * than filled in. Company marks come from CompanyLogo, which shows initials
- * rather than inventing a logo. There is no salary, no score and no badge that
- * the API did not supply.
+ * This step shows how much work is out there and then asks for an account. It
+ * deliberately does NOT list individual jobs: browsing belongs on /jobs, which
+ * already does it properly, and a four-row teaser here mostly showed four
+ * near-identical titles from one employer.
  *
- * Presentation of those fields is Docrud's own: formatJobLocation, the
- * employment-type labels, formatPosted and jobDetailHref all come from
- * lib/jobs-ui.ts, so a job reads here exactly as it reads everywhere else in
- * the app — "Full-time" rather than the raw `full_time`, and the same
- * India-aware location rules. None of it is re-implemented.
+ * The figure is still the job feed's own `total` for the person's chosen
+ * directions — nothing is estimated, and the empty and error states below stay
+ * distinct so a failed request is never dressed up as "no jobs".
  */
 
-import Link from 'next/link';
-import { ArrowRight, BriefcaseBusiness, RotateCcw } from 'lucide-react';
-import CompanyLogo from '@/components/jobs/company/CompanyLogo';
-import {
-  EMPLOYMENT_TYPE_LABELS, formatJobLocation, formatPosted, jobDetailHref,
-} from '@/lib/jobs-ui';
-import { formatRecommendedJobCount, type JobPreview } from '@/lib/onboarding-jobs';
+import { ArrowRight, RotateCcw } from 'lucide-react';
+import { formatRecommendedJobCount } from '@/lib/onboarding-jobs';
 import { OnboardingProgress, StepHeading } from './StepChrome';
 
-/**
- * The secondary line, built only from fields the record actually has, and
- * formatted by the app's own helpers rather than printed raw.
- */
-function metaLine(job: JobPreview): string {
-  return [
-    formatJobLocation(job.location, job.workMode),
-    job.employmentType ? EMPLOYMENT_TYPE_LABELS[job.employmentType] ?? job.employmentType : '',
-    formatPosted(job.postedAt),
-  ].filter(Boolean).join(' · ');
-}
-
 export default function JobPreviewStep({
-  jobs,
   total,
   status,
   direction,
@@ -65,7 +44,6 @@ export default function JobPreviewStep({
   step = 6,
   stepTotal = 6,
 }: {
-  jobs: readonly JobPreview[];
   /** The feed's own count for this query. */
   total: number;
   status: 'loading' | 'ready' | 'error';
@@ -101,7 +79,7 @@ export default function JobPreviewStep({
           title={`${possessive} shortlist`}
           description={
             status === 'ready' && total > 0
-              ? `${formatRecommendedJobCount(total)} open roles matching ${direction} right now. Here are the newest — sign in to apply.`
+              ? `${formatRecommendedJobCount(total)} open roles matching ${direction} right now. Create your account to see them and apply.`
               : `Open roles in ${direction}.`
           }
         />
@@ -121,38 +99,11 @@ export default function JobPreviewStep({
         </div>
       )}
 
-      {status === 'ready' && jobs.length === 0 && (
+      {status === 'ready' && total === 0 && (
         <p className="jobs-status" role="status">
           No open roles in {direction} right now. Your choices are saved — sign in
           and we&apos;ll tell you when something matching opens.
         </p>
-      )}
-
-      {status === 'ready' && jobs.length > 0 && (
-        <ul className="job-preview-list">
-          {jobs.map(job => {
-            const meta = metaLine(job);
-            return (
-              <li key={job.id}>
-                <Link href={jobDetailHref(job.id)} className="job-preview-card">
-                  {job.organizationName ? (
-                    <CompanyLogo name={job.organizationName} size={33} rounded={9} />
-                  ) : (
-                    <span className="job-icon" aria-hidden="true"><BriefcaseBusiness /></span>
-                  )}
-                  <span className="job-preview-body">
-                    <strong>{job.title}</strong>
-                    {(job.organizationName || meta) && (
-                      <span className="job-preview-meta">
-                        {[job.organizationName, meta].filter(Boolean).join(' — ')}
-                      </span>
-                    )}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
       )}
 
       <div className="job-preview-actions">

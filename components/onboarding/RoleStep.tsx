@@ -18,6 +18,15 @@
  * Anything the taxonomy does not cover can be typed in; a custom direction is
  * kept verbatim and is never silently mapped onto a domain it does not mean.
  *
+ * ═══ THE LIST OPENS SHORT ═══
+ *
+ * Seventeen chips is a wall on a phone, and the busiest directions are already
+ * first. So it shows the top few and offers the rest behind one button. Two
+ * rules keep that from hiding anything that matters: a chosen direction is
+ * ALWAYS visible even when collapsed, so nothing you picked can scroll out of
+ * existence; and a search shows every match, because collapsing results you
+ * asked for would be perverse.
+ *
  * ═══ A RESUME ONLY SUGGESTS ═══
  *
  * When the flow can pre-select from a resume it passes those ids in as the
@@ -26,9 +35,13 @@
  * cannot tell a resume-derived choice from a typed one, which is the point.
  */
 
-import { Check, Search, X } from 'lucide-react';
+import { useState } from 'react';
+import { Check, ChevronDown, Plus, Search, X } from 'lucide-react';
 import type { RoleOption } from '@/lib/onboarding-roles';
 import { OnboardingProgress, StepHeading } from './StepChrome';
+
+/** How many directions the list shows before "Show all". */
+const COLLAPSED_COUNT = 8;
 
 /** At least one direction — a chosen domain or a typed one. */
 export function isRoleSelectionValid(roles: readonly string[], custom: readonly string[]): boolean {
@@ -63,14 +76,23 @@ export default function RoleStep({
   total?: number;
 }) {
   const chosen = new Set(value);
+  const [expanded, setExpanded] = useState(false);
   const query = draft.trim();
   const lowered = query.toLowerCase();
 
   /* Typing filters the list. A direction already chosen stays visible so it can
      be unchosen without clearing the box first. */
-  const visible = query
+  const matching = query
     ? options.filter(o => o.label.toLowerCase().includes(lowered) || chosen.has(o.id))
     : options;
+
+  /* Collapsed: the busiest few, plus anything already chosen wherever it sits
+     in the order. Searching or expanding shows the lot. */
+  const collapsed = !expanded && !query && matching.length > COLLAPSED_COUNT;
+  const visible = collapsed
+    ? matching.filter((o, i) => i < COLLAPSED_COUNT || chosen.has(o.id))
+    : matching;
+  const hiddenCount = matching.length - visible.length;
 
   /* Offer to add the typed text only when it is not already a direction and
      not already added. */
@@ -118,10 +140,17 @@ export default function RoleStep({
         </div>
       </label>
 
-      {canAddCustom && (
+      {canAddCustom ? (
         <button type="button" className="role-add-custom" onClick={addCustom}>
-          Add &ldquo;{query}&rdquo; as your own role
+          <Plus aria-hidden="true" />
+          <span>Add &ldquo;{query}&rdquo; as your own role</span>
         </button>
+      ) : (
+        /* Standing hint, so adding your own is discoverable before you have
+           typed anything — the button above only exists once there is text. */
+        <p className="role-add-hint">
+          Not listed? Type it above and add it as your own.
+        </p>
       )}
 
       {/* Roles typed by the person. Kept apart from the taxonomy so nothing
@@ -146,7 +175,12 @@ export default function RoleStep({
         </ul>
       )}
 
-      <div className="role-suggestions" role="group" aria-label="Roles you are looking for">
+      <div
+        className="role-suggestions"
+        role="group"
+        aria-label="Roles you are looking for"
+        id="onboarding-role-options"
+      >
         {visible.map(option => {
           const selected = chosen.has(option.id);
           const count = availability[option.id];
@@ -170,6 +204,32 @@ export default function RoleStep({
           );
         })}
       </div>
+
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          className="role-show-more"
+          onClick={() => setExpanded(true)}
+          aria-expanded={false}
+          aria-controls="onboarding-role-options"
+        >
+          <ChevronDown aria-hidden="true" />
+          <span>Show {hiddenCount} more {hiddenCount === 1 ? 'direction' : 'directions'}</span>
+        </button>
+      )}
+
+      {expanded && !query && (
+        <button
+          type="button"
+          className="role-show-more"
+          onClick={() => setExpanded(false)}
+          aria-expanded
+          aria-controls="onboarding-role-options"
+        >
+          <ChevronDown aria-hidden="true" className="role-chevron-up" />
+          <span>Show fewer</span>
+        </button>
+      )}
 
       {visible.length === 0 && (
         <p className="role-empty">

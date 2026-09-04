@@ -47,3 +47,63 @@ export function validateResumeUpload(file: File | null | undefined): ResumeRejec
   }
   return null;
 }
+
+/* ── Extraction ────────────────────────────────────────────────────────── */
+
+/**
+ * What the résumé suggested. Every field is a suggestion the person may
+ * overwrite; none of it is treated as an answer.
+ */
+export type ResumeExtraction = {
+  name?: string;
+  /** JobDomain ids, for the Role step. */
+  roles: string[];
+  /** Canonical ATS skill names, for the Skills step. */
+  skills: string[];
+};
+
+/**
+ * The four outcomes, kept distinct on purpose.
+ *
+ * "read it, found nothing" is not the same as "could not read it", and neither
+ * is a failure the person should be blocked by. The UI says which happened and
+ * carries on either way.
+ */
+export type ExtractionState =
+  | { status: 'none' }
+  | { status: 'parsing' }
+  | { status: 'done'; extraction: ResumeExtraction }
+  | { status: 'empty' }
+  | { status: 'failed'; message: string };
+
+/**
+ * Reads a résumé through the anonymous onboarding route.
+ *
+ * Deliberately never throws: a résumé that cannot be read must not stop
+ * onboarding, so every outcome comes back as a state the caller can render.
+ */
+export async function extractResume(file: File, signal?: AbortSignal): Promise<ExtractionState> {
+  const body = new FormData();
+  body.append('file', file);
+  try {
+    const res = await fetch('/api/onboarding/resume-extract', { method: 'POST', body, signal });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      return { status: 'failed', message: data?.error || 'We could not read that file.' };
+    }
+    if (!data?.readable) return { status: 'empty' };
+    const extraction: ResumeExtraction = {
+      name: typeof data.extraction?.name === 'string' ? data.extraction.name : undefined,
+      roles: Array.isArray(data.extraction?.roles) ? data.extraction.roles : [],
+      skills: Array.isArray(data.extraction?.skills) ? data.extraction.skills : [],
+    };
+    /* Read cleanly but nothing to offer — say so rather than claiming success. */
+    if (!extraction.name && !extraction.roles.length && !extraction.skills.length) {
+      return { status: 'empty' };
+    }
+    return { status: 'done', extraction };
+  } catch (error) {
+    if ((error as Error)?.name === 'AbortError') return { status: 'none' };
+    return { status: 'failed', message: 'We could not read that file.' };
+  }
+}

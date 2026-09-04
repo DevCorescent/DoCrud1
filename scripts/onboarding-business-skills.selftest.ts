@@ -27,7 +27,7 @@ const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\
 
 const BSTEP = src('components/onboarding/BusinessSkillsStep.tsx');
 const SSTEP = src('components/onboarding/SkillsStep.tsx');
-const FLOW  = src('app/onboarding/preview/PreviewClient.tsx');
+const FLOW  = src('app/onboarding/OnboardingClient.tsx');
 const BSTEP_CODE = strip(BSTEP), SSTEP_CODE = strip(SSTEP);
 
 /* ═══ 1–2. Canonical taxonomy, nothing invented ═════════════════════════ */
@@ -82,14 +82,17 @@ check('a chosen skill stays removable at the limit',
   /if \(selected\.has\(id\)\) \{[\s\S]{0,120}onChange\(value\.filter/.test(SSTEP));
 check('removing is not gated by the limit',
   SSTEP.indexOf('selected.has(id)') < SSTEP.indexOf('if (selected.size >= maxSkills) return;'));
-check('the count is shown as "n / max"', /\{selected\.size\} \/ \{maxSkills\}/.test(SSTEP));
+/* The count now lives inside the search field as a compact "n/max". */
+check('the count is shown as "n/max"', /\{selected\.size\}\/\{maxSkills\}/.test(SSTEP));
+check('and it sits inside the search field, not in a heading',
+  /skills-count-inline/.test(SSTEP) && !/skills-header/.test(SSTEP));
 check('the count is announced to assistive tech', /aria-live="polite"/.test(SSTEP));
 check('the limit is explained, not just enforced silently',
   /remove one to choose a different skill/.test(SSTEP));
 
 console.log('── 6. Stable ids, not labels ──');
 check('selection is keyed on the option id', /toggle\(option\.id\)/.test(SSTEP));
-check('membership is tested by id', /selected\.has\(option\.id\)/.test(SSTEP));
+check('membership is tested by id', /selected\.has\(o\.id\)/.test(SSTEP));
 check('the label is rendered but never used as the key',
   /\{option\.label\}/.test(SSTEP) && !/selected\.has\(option\.label\)/.test(SSTEP));
 check('duplicates are impossible — a Set backs the lookup',
@@ -97,7 +100,14 @@ check('duplicates are impossible — a Set backs the lookup',
 
 /* ═══ 7. State lives in the flow ════════════════════════════════════════ */
 console.log('── 7. One state store ──');
-check('the shared step holds no state of its own', !/useState/.test(SSTEP));
+/* The step may keep VIEW state — the search text, whether the list is
+   expanded — but never the chosen skills, which belong to the flow so Back
+   cannot lose them. */
+check('the shared step keeps only view state',
+  /const \[draft, setDraft\]/.test(SSTEP) && /const \[expanded, setExpanded\]/.test(SSTEP));
+check('and never the skills it edits',
+  !/useState[^\n]*\bskills\b/i.test(SSTEP_CODE));
+check('the chosen skills arrive as a prop', /value: readonly string\[\]/.test(SSTEP));
 check('nor does the business wrapper', !/useState/.test(BSTEP));
 check('the flow owns the selection', /const \[businessSkills, setBusinessSkills\]/.test(FLOW));
 check('no second store was introduced',
@@ -119,13 +129,12 @@ check('Space is written by the Space step alone',
 check('and is never reset while moving through the branch',
   !/setSpace\((null|''|undefined)\)/.test(FLOW));
 check('the branch is decided by accountKind, not a persona label',
-  /accountKindForPersona\(persona\) === 'business'/.test(FLOW)
-  && !/persona === 'business'/.test(FLOW));
+  /accountKind === 'business'/.test(FLOW) && !/persona === 'business'/.test(FLOW));
 check('the Space label shown later is looked up from the stored id',
   /DEFAULT_BUSINESS_SPACE_OPTIONS\.find\(o => o\.id === space\)/.test(FLOW));
 
 console.log('── 9. Individual path untouched ──');
-check('individual still routes to Role', /accountKindForPersona\(persona\) === 'individual'\) setStep\('role'\)/.test(FLOW));
+check('individual still routes to Role', /accountKind === 'individual'\) setStep\('role'\)/.test(FLOW));
 check('Role → Skills', /step === 'role' && isRoleSelectionValid\(roles, customRoles\)\) setStep\('skills'\)/.test(FLOW));
 check('Skills → Jobs', /step === 'skills' && skills\.length > 0\) setStep\('jobs'\)/.test(FLOW));
 check('the two branches keep separate skill state',
@@ -158,6 +167,25 @@ check('nothing counted is called an applicant',
 check('the metric entity is a professional', /entityType: 'professional'/.test(src('lib/onboarding-talent.ts')));
 check('no candidate identity is read — counts only',
   !/(email|phone|resume|avatar)/i.test(strip(src('lib/onboarding-talent.ts'))));
+
+console.log('── 12. Compact list, read more, custom skills ──');
+check('only the first twenty unchosen skills are offered', /const VISIBLE_COUNT = 20;/.test(SSTEP));
+check('the rest are behind a Read more control', /Read more \(\{hiddenCount\}\)/.test(SSTEP));
+check('and can be collapsed again', /Show less/.test(SSTEP));
+check('a search shows every match, collapsed or not',
+  /const collapsed = !expanded && !query/.test(SSTEP));
+check('chosen skills always render, above the rest',
+  /skills-chosen/.test(SSTEP) && /chosen\.map\(option => pill\(option, true\)\)/.test(SSTEP));
+/* A résumé-suggested skill sitting deep in the taxonomy must not be hidden. */
+check('a chosen skill outside the visible slice still renders',
+  /const chosen = value\.map\(id => byId\.get\(id\) \?\? \{ id, label: id \}\)/.test(SSTEP));
+check('a typed skill that is canonical resolves to the canonical spelling',
+  /canonicalMatch \? canonicalMatch\.id : query/.test(SSTEP));
+check('a duplicate cannot be added', /const alreadyChosen =/.test(SSTEP));
+check('adding respects the cap', /const canAdd = query\.length > 0 && !alreadyChosen && !atLimit/.test(SSTEP));
+check('the list wraps rather than scrolling inside itself',
+  /\.skills-options \{[^}]*flex-wrap: wrap/.test(src('components/onboarding/onboarding.css'))
+  && !/\.skills-options \{[^}]*overflow/.test(src('components/onboarding/onboarding.css')));
 
 console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed}/${passed + failed} checks passed`);
 if (failed > 0) { console.error('FAILED'); process.exit(1); }

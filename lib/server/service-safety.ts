@@ -41,6 +41,10 @@ export const RATE_LIMITS = {
   enquiry: { limit: 5, windowMs: 60 * 60 * 1000, label: 'enquiries' },
   booking: { limit: 5, windowMs: 60 * 60 * 1000, label: 'booking requests' },
   daily: { limit: 20, windowMs: 24 * 60 * 60 * 1000, label: 'service requests' },
+  /* Anonymous onboarding résumé reads, counted per client address rather than
+     per user because there is no user yet. Deliberately small: parsing is
+     deterministic and cheap, but an open file endpoint still deserves a ceiling. */
+  resumeExtract: { limit: 10, windowMs: 60 * 60 * 1000, label: 'resume reads' },
 } as const;
 
 export type RateLimitAction = keyof typeof RATE_LIMITS;

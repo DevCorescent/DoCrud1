@@ -34,11 +34,23 @@ export const DEFAULT_PAGE_SIZE = 20;
  * applicants is the request that turns a listing endpoint into a memory
  * problem. Page numbers are 1-based to match the shape the API returns.
  */
-export function paginate<T>(all: readonly T[], page?: unknown, pageSize?: unknown): Page<T> {
+/**
+ * The clamp, alone.
+ *
+ * Extracted so the database-side feed query (`buildPublicJobsPipeline`) can
+ * compute its `$skip`/`$limit` from the SAME arithmetic this uses, rather than
+ * a second copy that drifts. A page boundary that differs by one between the
+ * two implementations would silently duplicate or drop a posting.
+ */
+export function pageParams(page?: unknown, pageSize?: unknown): { page: number; pageSize: number; skip: number } {
   const size = Math.max(1, Math.min(MAX_PAGE_SIZE, Number(pageSize) || DEFAULT_PAGE_SIZE));
   const p = Math.max(1, Math.floor(Number(page) || 1));
-  const start = (p - 1) * size;
-  return { items: all.slice(start, start + size), page: p, pageSize: size, total: all.length };
+  return { page: p, pageSize: size, skip: (p - 1) * size };
+}
+
+export function paginate<T>(all: readonly T[], page?: unknown, pageSize?: unknown): Page<T> {
+  const { page: p, pageSize: size, skip } = pageParams(page, pageSize);
+  return { items: all.slice(skip, skip + size), page: p, pageSize: size, total: all.length };
 }
 
 const lower = (v: unknown): string => String(v ?? '').trim().toLowerCase();

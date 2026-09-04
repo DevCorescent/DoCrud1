@@ -13,6 +13,22 @@ export interface UserProfileData {
   coverGradient?: string;
   coverPosition?: string;
   skills?: string[];
+  /**
+   * Career directions the person is looking for, as JobDomain ids — the same
+   * vocabulary lib/server/job-sources/taxonomy.ts assigns to every posting, so
+   * a stored role is a value the job corpus already understands.
+   *
+   * Optional, matching every other field here: profiles written before this
+   * existed simply have no key, and `profileRoles()` reads them as empty rather
+   * than a migration rewriting every record.
+   */
+  roles?: string[];
+  /**
+   * Directions the person typed themselves, kept verbatim because the taxonomy
+   * does not cover them. Held apart from `roles` so nothing later mistakes a
+   * free-text answer for a known domain with known job counts.
+   */
+  customRoles?: string[];
   experience?: Array<{ title: string; company: string; period: string; desc?: string }>;
   education?: Array<{ degree: string; school: string; year?: string }>;
   achievements?: Array<{ title: string; desc?: string }>;
@@ -79,6 +95,22 @@ export interface UserProfileData {
       socialLinks?: { linkedin?: string | null; github?: string | null; twitter?: string | null };
     };
   }>;
+}
+
+/**
+ * The roles on a profile, as concrete arrays.
+ *
+ * Every profile written before these fields existed has no key at all, so this
+ * is the one place that decides what "absent" means — empty, never null and
+ * never a guess. Read-time, so no stored record has to be migrated.
+ */
+export function profileRoles(profile: UserProfileData | null | undefined): {
+  roles: string[];
+  customRoles: string[];
+} {
+  const clean = (v: unknown) =>
+    Array.isArray(v) ? v.map((x) => String(x ?? '').trim()).filter(Boolean) : [];
+  return { roles: clean(profile?.roles), customRoles: clean(profile?.customRoles) };
 }
 
 export interface FollowsData {

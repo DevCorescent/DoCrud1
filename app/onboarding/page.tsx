@@ -1,15 +1,30 @@
 /**
- * /onboarding — the pre-auth signup funnel.
+ * /onboarding — the onboarding flow.
  *
- * The 3,700-line implementation this route has always rendered now lives
- * verbatim in ./_legacy/LegacyOnboardingPage.tsx. Nothing about its behaviour
- * changed; it was moved so that the new onboarding UI can be swapped in here
- * as a one-line edit, with the old flow still one line away from being
- * restored. `_legacy` is underscore-prefixed, so Next.js does not route it.
+ * This is the real route. The flow it renders was developed behind
+ * /onboarding/preview; that staging route is gone and this is now the only
+ * entry point.
+ *
+ * The previous 3,700-line signup funnel still sits in ./_legacy. It is no
+ * longer routed — Next does not route an underscore-prefixed directory — and
+ * is kept only as a rollback for as long as this flow is new. It can be
+ * deleted once this one has proven itself in production; nothing imports it
+ * any more.
  *
  * This route is a redirect target across the app (middleware.ts, app/page.tsx,
- * and every `signOut({ callbackUrl: '/onboarding' })`), so it must keep
- * rendering a working funnel until the replacement flow is authenticated
- * end to end.
+ * and every `signOut({ callbackUrl: '/onboarding' })`), so it must always
+ * render something usable to a signed-out visitor.
  */
-export { default } from './_legacy/LegacyOnboardingPage';
+import OnboardingClient from './OnboardingClient';
+import { buildPageMetadata } from '@/lib/seo';
+
+export const metadata = buildPageMetadata({
+  title: 'Get started | Docrud',
+  description: 'Tell us what you are looking for and see the roles open on Docrud right now.',
+  path: '/onboarding',
+  noIndex: true,
+});
+
+export default function OnboardingPage() {
+  return <OnboardingClient />;
+}

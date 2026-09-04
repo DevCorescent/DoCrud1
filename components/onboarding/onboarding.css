@@ -288,7 +288,14 @@
 
 /* ── Glass shell ────────────────────────────────────────────────── */
 .docrud-onboarding .onboarding-card-wrap { width: 100%; max-width: 640px; }
+/* A query container, so the footer below responds to the CARD's width rather
+   than the window's. That is what makes it correct in any layout — a narrow
+   card on a wide screen stacks, exactly as a narrow screen does. Only
+   inline-size is contained, so the card's glow pseudo-elements still paint
+   outside it. */
 .docrud-onboarding .onboarding-card {
+  container-type: inline-size;
+  container-name: onbcard;
   position: relative;
   width: 100%;
   overflow: visible;
@@ -334,19 +341,40 @@
   text-align: center;
 }
 .docrud-onboarding .onboarding-footer-note svg { width: 12px; height: 12px; color: rgba(255, 255, 255, .25); }
+/* ── The shared step footer ─────────────────────────────────────────────
+   ONE horizontal row at every width: Back left, Continue right, never
+   stacked, never wrapped. Narrow screens are handled by letting the buttons
+   shrink — padding and gap come down before anything else — rather than by
+   reflowing the row, so the navigation looks identical on every step.
+
+   Every onboarding step renders through OnboardingShell's `navigation` slot,
+   so this rule is the single definition. Do not add per-step overrides. */
 .docrud-onboarding .card-footer {
   position: relative;
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: nowrap;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
   border-top: 0;
   padding: 12px 24px;
   color: rgba(255, 255, 255, .24);
   font-size: 9px;
 }
+/* Neither button may wrap its own label, and neither may grow into the other's
+   space. Continue keeps its cap; Back keeps its natural width. */
+.docrud-onboarding .card-footer .back-button,
+.docrud-onboarding .card-footer .step-nav-continue {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+.docrud-onboarding .card-footer .back-button { justify-content: flex-start; }
 .docrud-onboarding .card-footer span:first-child { display: flex; align-items: center; gap: 6px; }
+
 .docrud-onboarding .step-panel { animation: docrudOnbStepEnter .42s cubic-bezier(.22, 1, .36, 1) both; }
 
 /* ── Step vocabulary ────────────────────────────────────────────────
@@ -802,7 +830,8 @@
   .docrud-onboarding .canvas-profile-card { width: 190px; flex-basis: 190px; padding: 11px; }
   .docrud-onboarding .canvas-floating-note { display: none; }
   .docrud-onboarding .onboarding-card { border-radius: 24px; }
-  .docrud-onboarding .card-footer { padding-inline: 18px; }
+
+
   .docrud-onboarding .hero-heading { font-size: 2.1rem; }
   .docrud-onboarding .step-copy { font-size: 15px; }
 }
@@ -825,8 +854,6 @@
    cannot be used inside this flow. */
 .docrud-onboarding .welcome-hero { margin-bottom: 28px; }
 .docrud-onboarding .welcome-description { margin-top: 0; max-width: 410px; }
-.docrud-onboarding .welcome-pills { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
-.docrud-onboarding .welcome-pills svg { width: 12px; height: 12px; flex-shrink: 0; }
 .docrud-onboarding .welcome-companies { margin-top: 28px; }
 .docrud-onboarding .welcome-company-plates { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 .docrud-onboarding .welcome-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
@@ -888,9 +915,7 @@
 .docrud-onboarding .role-empty { margin-top: 16px; color: rgba(255, 255, 255, .5); font-size: 13px; }
 
 /* ── Skills step ────────────────────────────────────────────────── */
-.docrud-onboarding .skills-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.docrud-onboarding .skills-header .skill-count { margin-top: 4px; }
-.docrud-onboarding .skills-options { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 8px; }
+.docrud-onboarding .skills-options { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 7px; }
 .docrud-onboarding .skills-note { margin-top: 20px; }
 
 /* Native checkbox, visually replaced by the pill beside it. Kept in the
@@ -1025,6 +1050,7 @@
   min-height: 48px;
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   border: 1px dashed rgba(255, 255, 255, .25);
   border-radius: 12px;
   background: rgba(255, 255, 255, .05);
@@ -1080,3 +1106,216 @@
 /* ── Persona: the catch-all's own words ─────────────────────────────── */
 .docrud-onboarding .persona-other { margin-top: 20px; display: block; }
 .docrud-onboarding .persona-other-input { padding-left: 15px; }
+
+/* ── Resume read status ─────────────────────────────────────────────── */
+.docrud-onboarding .resume-status { margin-top: 8px; color: rgba(255, 255, 255, .55); font-size: 13px; line-height: 1.5; }
+.docrud-onboarding .resume-status-ok { color: rgba(167, 243, 208, .85); }
+.docrud-onboarding .resume-status-warn { color: rgba(253, 230, 138, .85); }
+
+
+/* ── The homepage company marquee, inside the onboarding card ──────────
+   <TrustedCompanies/> is reused verbatim so the two rows share one source.
+   It was built to sit on the homepage's solid #0D0D0F, and two things need
+   adjusting for a translucent glass card. Both are scoped here; the shared
+   component is untouched. */
+.docrud-onboarding .welcome-company-marquee { margin-top: 12px; }
+
+/* 1. Its logo chip carries `bg-white/[0.06]`, and globals.css repaints
+      `body main [class*='bg-white']:not(button)` with !important — which this
+      row sits inside. Restoring the intended surface needs to out-specify
+      that rule, hence the id-free but deeper selector and the !important. */
+.docrud-onboarding .welcome-company-marquee .tc-viewport span[class*='bg-white'] {
+  background-color: rgba(255, 255, 255, .06) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 2. Its edge fades are solid-colour gradients matching the homepage
+      background. Over the glass card they read as two dark smudges, so they
+      are hidden and the viewport is masked instead — a mask fades to
+      transparent, which is what a translucent surface needs. */
+.docrud-onboarding .welcome-company-marquee .tc-viewport > [aria-hidden] { display: none; }
+.docrud-onboarding .welcome-company-marquee .tc-viewport {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+
+/* ── Role step: the collapsed list ──────────────────────────────────── */
+.docrud-onboarding .role-add-custom svg { width: 14px; height: 14px; flex-shrink: 0; }
+/* Standing hint that a direction of your own is possible, shown while the
+   add button has nothing to add. */
+.docrud-onboarding .role-add-hint {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, .45);
+  font-size: 13px;
+}
+.docrud-onboarding .role-show-more {
+  margin-top: 14px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .05);
+  padding: 0 14px;
+  color: rgba(255, 255, 255, .75);
+  font-size: 13px;
+  font-weight: 500;
+  transition: border-color .2s ease, background-color .2s ease;
+}
+.docrud-onboarding .role-show-more:hover {
+  border-color: rgba(255, 255, 255, .3);
+  background: rgba(255, 255, 255, .09);
+  color: #fff;
+}
+.docrud-onboarding .role-show-more:focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 3px; }
+.docrud-onboarding .role-show-more svg { width: 14px; height: 14px; flex-shrink: 0; transition: transform .2s ease; }
+.docrud-onboarding .role-chevron-up { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .docrud-onboarding .role-show-more,
+  .docrud-onboarding .role-show-more svg { transition: none; }
+}
+/* On a phone the control should span the card rather than sit as a stub. */
+@media (max-width: 640px) {
+  .docrud-onboarding .role-show-more,
+  .docrud-onboarding .role-add-custom { width: 100%; justify-content: center; }
+}
+
+
+/* ── Skills: search field, inline count, compact wrap ───────────────────
+   The count sits inside the field rather than in a heading of its own, so the
+   whole step is a field plus chips and the buttons stay on a laptop screen
+   without the page scrolling. */
+.docrud-onboarding .skills-search { position: relative; display: block; margin-top: 24px; }
+/* Room on the right for the count, on the left for the search icon. */
+.docrud-onboarding .skills-search-input { padding-right: 58px; }
+.docrud-onboarding .skills-count-inline {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-onb-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .45);
+  pointer-events: none;
+}
+
+/* Chosen skills sit in their own row above the rest, so a choice is never
+   hidden behind "Read more" and the current selection reads at a glance. */
+.docrud-onboarding .skills-chosen { margin-top: 14px; }
+
+/* Denser chips than the role step: there are far more of them, and the point
+   of this screen is to fit. */
+.docrud-onboarding .skills-options .choice-chip {
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.docrud-onboarding .skills-options .choice-chip svg { width: 11px; height: 11px; }
+
+
+
+/* ── Account type: a plain select ───────────────────────────────────────
+   Two mutually exclusive options do not need a screen of cards. A native
+   <select> is smaller, familiar, and brings its own keyboard handling and
+   mobile picker. Styled to match the underlined inputs; the arrow is drawn as
+   a background image because `appearance: none` removes the native one. */
+.docrud-onboarding .account-kind { display: block; margin-top: 28px; max-width: 380px; }
+.docrud-onboarding .account-kind-select {
+  padding-left: 15px;
+  padding-right: 34px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, .55) 50%),
+                    linear-gradient(135deg, rgba(255, 255, 255, .55) 50%, transparent 50%);
+  background-position: right 12px center, right 6px center;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+/* The dropdown itself is painted by the OS, so its options need a readable
+   surface of their own — inherited transparency renders white-on-white. */
+.docrud-onboarding .account-kind-select option { background: #14141a; color: #f4f4f5; }
+
+
+
+
+/* ── Footer at narrow widths ────────────────────────────────────────────
+   The row never reflows, so space is found by shrinking instead: the gap and
+   the buttons' own padding come down, in that order. Heights stay 46px, so the
+   targets remain comfortable — only the horizontal air is spent. Measured to
+   hold on a 320px screen, the narrowest supported. */
+@container onbcard (max-width: 400px) {
+  .docrud-onboarding .card-footer { gap: 10px; }
+  .docrud-onboarding .card-footer .step-nav-continue { padding-inline: 16px; }
+}
+@container onbcard (max-width: 320px) {
+  .docrud-onboarding .card-footer { gap: 8px; }
+  .docrud-onboarding .card-footer .step-nav-continue { padding-inline: 12px; font-size: 15px; }
+  .docrud-onboarding .card-footer .back-button { font-size: 13px; }
+}
+
+/* Fallback for engines without container queries — same intent, keyed to the
+   window rather than the card. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 440px) {
+    .docrud-onboarding .card-footer { gap: 10px; }
+    .docrud-onboarding .card-footer .step-nav-continue { padding-inline: 16px; }
+  }
+}
+
+/* Only the figure is emphasised; the sentence around it keeps .demo-note. */
+.docrud-onboarding .opportunity-count {
+  color: #fff;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The way past the résumé. Same shape and size as the primary above it —
+   full width, 48px, same radius, padding and type — but outlined instead of
+   filled, so the two read as one pair with a clear primary. */
+.docrud-onboarding .continue-without-resume {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  /* 1px less than the primary's padding on each side, so the 2px border does
+     not push this button 2px taller than the filled one beside it. */
+  padding: 11px 24px;
+  color: rgba(255, 255, 255, .85);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease, background-color .2s ease;
+}
+.docrud-onboarding .continue-without-resume:hover {
+  border-color: rgba(255, 255, 255, .45);
+  color: #fff;
+}
+.docrud-onboarding .continue-without-resume:active { transform: scale(.99); }
+.docrud-onboarding .continue-without-resume:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, .7);
+  outline-offset: 3px;
+}
+.docrud-onboarding .continue-without-resume svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* ── Auth gate ──────────────────────────────────────────────────────── */
+.docrud-onboarding .auth-captcha { margin-top: 24px; }
+.docrud-onboarding .auth-input { padding-left: 15px; }
+.docrud-onboarding .auth-otp { letter-spacing: .4em; font-variant-numeric: tabular-nums; }
+.docrud-onboarding .auth-back { justify-content: center; }
+.docrud-onboarding .auth-error { margin-top: 14px; }
+.docrud-onboarding .auth-spin { width: 16px; height: 16px; animation: docrudOnbSpin .9s linear infinite; }
+@keyframes docrudOnbSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .docrud-onboarding .auth-spin { animation: none; }
+}

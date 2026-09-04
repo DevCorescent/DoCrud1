@@ -2502,6 +2502,17 @@ export interface BusinessSettings {
   organizationName: string;
   displayName: string;
   industry?: string;
+  /**
+   * The skills this business hires for, as canonical ATS skill names — the same
+   * vocabulary lib/server/ats/skill-taxonomy.ts uses, so a stored skill matches
+   * what the platform reads out of a résumé or a posting.
+   *
+   * Added for the business onboarding branch. `industry` already held the
+   * business space, so only this needed a new home; both live here rather than
+   * on the individual's profile because a workspace outlives the person who
+   * signed it up.
+   */
+  talentSkills?: string[];
   companySize?: string;
   primaryUseCase?: string;
   workspacePreset?: string;

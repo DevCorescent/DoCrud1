@@ -47,6 +47,9 @@ import { Building2, FileSignature, GraduationCap, BriefcaseBusiness, UserRound, 
 /** Mirrors AccountKind in components/AccountTypeToggle.tsx, the existing owner. */
 export type PersonaAccountKind = 'individual' | 'business';
 
+/** The flow's branch discriminator. Same two values, named for how it is used. */
+export type AccountKind = PersonaAccountKind;
+
 export type PersonaOption = {
   /** Stable identifier. Persisted as the persona, never as the accountType. */
   id: string;

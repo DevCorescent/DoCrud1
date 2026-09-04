@@ -31,7 +31,7 @@ const path = (f: string) => new URL(`../${f}`, import.meta.url);
 const src = (f: string) => readFileSync(path(f), 'utf8');
 const strip = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
-const FLOW = src('app/onboarding/preview/PreviewClient.tsx');
+const FLOW = src('app/onboarding/OnboardingClient.tsx');
 const FLOW_CODE = strip(FLOW);
 
 /* ═══ 1. Every page exists ══════════════════════════════════════════════ */
@@ -58,8 +58,8 @@ for (const step of ['welcome','name','persona','role','skills','jobs','space','b
 const FORWARD: Array<[string, RegExp]> = [
   ['Welcome → Name', /setStep\('name'\)/],
   ['Name → Persona', /step === 'name' && isNameValid\(name\)\) setStep\('persona'\)/],
-  ['Persona → Role (individual)', /accountKindForPersona\(persona\) === 'individual'\) setStep\('role'\)/],
-  ['Persona → Space (business)', /accountKindForPersona\(persona\) === 'business'\) setStep\('space'\)/],
+  ['Persona → Role (individual)', /accountKind === 'individual'\) setStep\('role'\)/],
+  ['Persona → Space (business)', /accountKind === 'business'\) setStep\('space'\)/],
   ['Role → Skills', /step === 'role' && isRoleSelectionValid\(roles, customRoles\)\) setStep\('skills'\)/],
   ['Skills → Jobs', /step === 'skills' && skills\.length > 0\) setStep\('jobs'\)/],
   ['Space → Business Skills', /step === 'space' && space\) setStep\('businessSkills'\)/],
@@ -81,8 +81,15 @@ console.log('── 3. Login gate ──');
    the real login route. */
 check('both value pages lead to the account gate',
   /onLogin=\{\(\) => toAuth\('jobs'\)\}/.test(FLOW) && /onLogin=\{\(\) => toAuth\('talent'\)\}/.test(FLOW));
-check('the gate hands off to the existing /login route',
-  /router\.push\('\/login\?method=google'\)/.test(FLOW) && /router\.push\('\/login\?method=email'\)/.test(FLOW));
+/* The gate now authenticates in place, through the systems that already
+   exist, rather than punting to /login. */
+const GATE = src('components/onboarding/AuthGate.tsx');
+check('the gate authenticates through NextAuth',
+  /signIn\('google'/.test(GATE) && /signIn\('credentials'/.test(GATE));
+check('and through the existing signup and OTP endpoints',
+  /'\/api\/individual\/signup'/.test(GATE)
+  && /'\/api\/onboarding\/send-otp'/.test(GATE)
+  && /'\/api\/onboarding\/verify-otp'/.test(GATE));
 check('Back from the gate returns to the page it was reached from',
   /BACK\.auth = from/.test(FLOW));
 check('no second authentication was built',
@@ -95,11 +102,10 @@ check('Jobs offers the login CTA', /onLogin=\{\(\) => router\.push\('\/login'\)\
 console.log('── 4. Flow state ──');
 for (const [label, re] of [
   ['name', /const \[name, setName\] = useState/],
-  ['persona', /const \[persona, setPersona\] = useState/],
+  ['the account kind', /const \[accountKind, setAccountKind\] = useState<AccountKind \| null>/],
   ['roles', /const \[roles, setRoles\] = useState<string\[\]>/],
   ['custom roles', /const \[customRoles, setCustomRoles\] = useState<string\[\]>/],
   ['the attached resume', /const \[resume, setResume\] = useState<File \| null>/],
-  ['custom persona text', /const \[personaOther, setPersonaOther\] = useState/],
   ['individual skills', /const \[skills, setSkills\] = useState/],
   ['business space', /const \[space, setSpace\] = useState/],
   ['business skills', /const \[businessSkills, setBusinessSkills\] = useState/],
@@ -107,15 +113,37 @@ for (const [label, re] of [
   check(`the flow holds ${label}`, re.test(FLOW));
 }
 check('the two branches keep separate skill state', /\[skills,/.test(FLOW) && /\[businessSkills,/.test(FLOW));
+/* The rule is about ONBOARDING ANSWERS, not about local state as such. A step
+   may keep view-only state — an open/closed list, a file-picker error — but
+   the values the flow collects must live in the flow, so Back cannot lose them
+   and two steps cannot disagree. These are the steps with view-only state, and
+   each is named so a new one cannot be added silently. */
+const VIEW_ONLY_STATE = [
+  'WelcomeStep', 'JobPreviewStep', 'TalentPreviewStep', 'RoleStep', 'SkillsStep',
+  /* The gate holds the credentials being typed and which sub-screen is open.
+     None of it is an onboarding answer, and none of it outlives the step. */
+  'AuthGate',
+];
 check('no page keeps a competing store',
-  PAGES.every(([, f]) => !/useState/.test(strip(src(`components/onboarding/${f}.tsx`))
-    .replace(/useState<'loading'[^\n]*/g, ''))
-    || ['WelcomeStep', 'JobPreviewStep', 'TalentPreviewStep'].includes(f)));
+  PAGES.every(([, f]) => VIEW_ONLY_STATE.includes(f)
+    || !/useState/.test(strip(src(`components/onboarding/${f}.tsx`)))));
+/* And the answers themselves are never held by a step. */
+for (const [answer, f] of [['roles', 'RoleStep'], ['skills', 'SkillsStep'],
+  ['name', 'NameStep'], ['space', 'BusinessSpaceStep']] as Array<[string, string]>) {
+  check(`${f} does not keep the ${answer} it edits`,
+    !new RegExp(`useState[^\\n]*\\b${answer}\\b`, 'i').test(strip(src(`components/onboarding/${f}.tsx`))));
+}
 check('no localStorage persistence was smuggled in',
   !/(localStorage|sessionStorage)/.test(FLOW_CODE));
-check('the gate itself authenticates nobody',
-  !/(signIn\(|useSession|NextAuth)/.test(strip(src('components/onboarding/AuthGate.tsx'))));
-check('and writes no profile', !/(api\/profile|api\/onboarding)/.test(strip(src('components/onboarding/AuthGate.tsx'))));
+/* It must not become a SECOND auth system — no hashing, no token minting, no
+   credential storage in the browser. */
+check('the gate hashes nothing itself',
+  !/(bcrypt|scrypt|createHash|sha256)/i.test(strip(GATE)));
+check('and keeps no credential client-side',
+  !/(localStorage|sessionStorage|document\.cookie)/.test(strip(GATE)));
+check('the profile is written by the server, never from the browser',
+  /'\/api\/onboarding\/handoff'/.test(GATE)
+  && !/updateProfileData/.test(GATE));
 
 /* ═══ 5. Real data everywhere ═══════════════════════════════════════════ */
 console.log('── 5. Real data, no fixtures ──');
@@ -131,6 +159,11 @@ check('and at least one individual persona exists',
   DEFAULT_PERSONA_OPTIONS.some((p) => p.accountKind === 'individual'));
 check('a catch-all persona is offered', DEFAULT_PERSONA_OPTIONS.some((p) => p.id === 'other'));
 check('a recruiter persona is offered', DEFAULT_PERSONA_OPTIONS.some((p) => p.id === 'recruiter'));
+/* The persona list is kept for use INSIDE the individual flow, but it is no
+   longer what routes anybody. */
+check('the persona list survives for later use', DEFAULT_PERSONA_OPTIONS.length >= 5);
+check('but the flow no longer derives its branch from a persona',
+  !/accountKindForPersona/.test(FLOW_CODE));
 check('roles come from the job-domain taxonomy',
   DEFAULT_ROLE_OPTIONS.every((r) => JOB_DOMAIN_LABELS[r.id as keyof typeof JOB_DOMAIN_LABELS] === r.label));
 check('the "other" job domain is not offered as a career direction',

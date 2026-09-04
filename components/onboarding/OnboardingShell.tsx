@@ -19,8 +19,8 @@
  */
 import type { ReactNode } from 'react';
 import { Outfit, Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
-import { BriefcaseBusiness } from 'lucide-react';
 import OnboardingCanvas from './OnboardingCanvas';
+import OnboardingFooterNote from './OnboardingFooterNote';
 import './onboarding.css';
 
 const headingFont = Outfit({
@@ -70,10 +70,7 @@ export default function OnboardingShell({
                 {navigation && <div className="card-footer">{navigation}</div>}
               </div>
             </div>
-            <div className="onboarding-footer-note">
-              <BriefcaseBusiness aria-hidden="true" />
-              <span className="demo-note">A focused start for work, talent, and momentum.</span>
-            </div>
+            <OnboardingFooterNote />
           </section>
         </main>
       </div>

@@ -28,7 +28,7 @@ function check(label: string, cond: boolean) {
 const src = (f: string) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 
 const STEP = src('components/onboarding/BusinessSpaceStep.tsx');
-const FLOW = src('app/onboarding/preview/PreviewClient.tsx');
+const FLOW = src('app/onboarding/OnboardingClient.tsx');
 /* Comments state what the prototype used and why it was rejected, so the
    "no fake data" checks must read the CODE, not the prose about it. */
 const strip = (x: string) => stripComments(x);
@@ -115,11 +115,15 @@ check('no second onboarding state store was introduced',
 /* ═══ 6. Business routes to Business Skills ═════════════════════════════ */
 console.log('── 6. Business routing ──');
 check('Persona routes a business account to Space',
-  /accountKindForPersona\(persona\) === 'business'\) setStep\('space'\)/.test(FLOW));
+  /accountKind === 'business'\) setStep\('space'\)/.test(FLOW));
 check('Space routes forward to Business Skills', /setStep\('businessSkills'\)/.test(FLOW));
+/* The discriminator is now collected as itself, so no label is ever mapped
+   back into a route. */
 check('the branch is decided by accountKind, never by a persona id',
-  /accountKindForPersona\(persona\)/.test(FLOW)
-  && !/persona === '(business|student|freelancer|contract|professional)'/.test(FLOW));
+  /accountKind === 'business'/.test(FLOW) && /accountKind === 'individual'/.test(FLOW)
+  && !/persona === '(business|student|freelancer|professional|other|recruiter)'/.test(FLOW));
+check('and the account kind is chosen directly, not derived',
+  /useState<AccountKind \| null>/.test(FLOW));
 
 /* Every business persona really does resolve to the business branch. */
 for (const p of DEFAULT_PERSONA_OPTIONS.filter((o) => o.accountKind === 'business')) {
@@ -134,7 +138,7 @@ for (const p of DEFAULT_PERSONA_OPTIONS.filter((o) => o.accountKind === 'individ
     accountKindForPersona(p.id) === 'individual');
 }
 check('an individual still routes to Role, not Space',
-  /accountKindForPersona\(persona\) === 'individual'\) setStep\('role'\)/.test(FLOW));
+  /accountKind === 'individual'\) setStep\('role'\)/.test(FLOW));
 check('Role still leads to Skills then Jobs',
   /setStep\('skills'\)/.test(FLOW) && /setStep\('jobs'\)/.test(FLOW));
 check('an unknown persona resolves to neither branch', accountKindForPersona('nonsense') === null);

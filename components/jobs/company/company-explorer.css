@@ -1,0 +1,91 @@
+/**
+ * The Company Explorer rail.
+ *
+ * A real stylesheet rather than an inline <style> inside the component. The
+ * inline version produced a hydration mismatch — React compares the style
+ * element's TEXT, and the server and client emitted the block with different
+ * whitespace, so every page carrying this strip logged "Text content did not
+ * match" and re-rendered the document on the client. A stylesheet is not part
+ * of the reconciled tree, so the mismatch cannot happen.
+ *
+ * Follows the precedent of app/infinity/infinity.css and
+ * app/onboarding/onboarding.css: scoped rules in their own file, imported by
+ * the thing that needs them, kept out of globals.css and its substring
+ * selectors.
+ */
+
+.ce-rail{
+  overflow-x:auto;
+  overflow-y:hidden;
+  touch-action:pan-x;
+  overscroll-behavior-x:contain;
+  -webkit-overflow-scrolling:touch;
+
+  width:100%;
+  max-width:100%;
+  padding-bottom:2px;
+
+  scroll-behavior:auto;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+  cursor:grab;
+
+  --ce-fade-l:0px;
+  --ce-fade-r:0px;
+
+  -webkit-mask-image:linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--ce-fade-l),
+    #000 calc(100% - var(--ce-fade-r)),
+    transparent 100%
+  );
+
+  mask-image:linear-gradient(
+    to right,
+    transparent 0,
+    #000 var(--ce-fade-l),
+    #000 calc(100% - var(--ce-fade-r)),
+    transparent 100%
+  );
+}
+
+.ce-rail.ce-dragging{
+  cursor:grabbing;
+  user-select:none;
+}
+
+.ce-rail::-webkit-scrollbar{
+  display:none;
+}
+
+/* Edge shadow indicators */
+.ce-rail-wrap::before,
+.ce-rail-wrap::after{
+  content:"";
+  position:absolute;
+  top:0;
+  bottom:2px;
+  width:44px;
+  z-index:10;
+  pointer-events:none;
+  transition:opacity 150ms ease;
+}
+
+.ce-rail-wrap::before{
+  left:0;
+  background:linear-gradient(
+    to right,
+    rgba(0,0,0,0.60),
+    rgba(0,0,0,0)
+  );
+}
+
+.ce-rail-wrap::after{
+  right:0;
+  background:linear-gradient(
+    to left,
+    rgba(0,0,0,0.60),
+    rgba(0,0,0,0)
+  );
+}

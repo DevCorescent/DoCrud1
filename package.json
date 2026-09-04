@@ -79,9 +79,13 @@
     "test:job-performance": "tsx scripts/job-performance.selftest.ts",
     "test:job-scraper-health": "tsx scripts/job-scraper-health.selftest.ts",
     "test:job-redis-performance": "tsx scripts/job-redis-performance.selftest.ts",
+    "test:onboarding-flow": "tsx scripts/onboarding-flow.selftest.ts",
+    "test:onboarding-business-space": "tsx scripts/onboarding-business-space.selftest.ts",
+    "test:onboarding-business-skills": "tsx scripts/onboarding-business-skills.selftest.ts",
     "test:company-explorer": "tsx scripts/company-explorer.selftest.ts",
     "test:company-logo": "tsx scripts/company-logo.selftest.ts",
-    "test:job-microsoft": "tsx scripts/job-microsoft.selftest.ts"
+    "test:job-microsoft": "tsx scripts/job-microsoft.selftest.ts",
+    "test:company-logo-upload": "tsx scripts/company-logo-upload.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

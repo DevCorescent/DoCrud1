@@ -16,6 +16,7 @@ import { getSuperAdminSessionFromRequest } from '@/lib/server/super-admin-auth';
 import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { getHiringCompanies } from '@/lib/server/hiring-companies';
 import { buildCompanyExplorerTiles } from '@/lib/company-explorer';
+import { setCompanyLogoOverrides } from '@/lib/company-logos';
 import { TTL, cached } from '@/lib/server/cache';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,15 @@ export async function GET(req: NextRequest) {
           getHomepageConfig(),
           getHiringCompanies().catch(() => []),
         ]);
+        /* Feed the uploaded marks into the shared lookup BEFORE the tiles are
+           built, so a server-rendered tile already carries the operator's
+           logo. Without this the tile would ship the old URL and the browser
+           would swap it a moment later — a visible flash of the wrong mark. */
+        setCompanyLogoOverrides(
+          Object.fromEntries(
+            Object.entries(config.companyLogos ?? {}).map(([id, e]) => [id, e.url]),
+          ),
+        );
         return { companies: buildCompanyExplorerTiles(config.companyExplorer, live) };
       },
     );

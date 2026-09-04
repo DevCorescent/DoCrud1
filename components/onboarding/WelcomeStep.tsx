@@ -139,6 +139,7 @@ export default function WelcomeStep({
       </div>
 
       <div className="welcome-actions">
+        {/* Upload Resume button temporarily disabled
         <button
           type="button"
           className="primary-button"
@@ -147,7 +148,6 @@ export default function WelcomeStep({
           <UploadCloud aria-hidden="true" />
           <span>Upload Resume</span>
         </button>
-        {/* Optional. Continue works with or without it. */}
         <input
           ref={fileRef}
           type="file"
@@ -156,6 +156,7 @@ export default function WelcomeStep({
           id="onboarding-resume"
           onChange={event => pick(event.target.files?.[0] ?? null)}
         />
+        */}
         {resume ? (
           <div className="resume-chosen">
             <Check aria-hidden="true" />

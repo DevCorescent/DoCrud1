@@ -7,7 +7,6 @@ import { getThemeSettings } from '@/lib/server/settings';
 import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { isSearchCrawlerUserAgent } from '@/lib/search-crawler';
 import { getSeoSettings, resolveSeo, DEFAULT_SEO_SETTINGS } from '@/lib/server/seo-settings';
-import { getProfileFields } from '@/lib/server/user-profiles';
 import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { peekHiringCompanies } from '@/lib/server/hiring-companies';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
@@ -86,21 +85,16 @@ export default async function Home() {
     redirect('/onboarding');
   }
 
-  // First-run gate: an individual whose email is verified but who has never been
-  // through onboarding gets the welcome → interests → first-post flow once.
-  // Guests, business accounts and anyone already onboarded fall straight through.
-  const needsOnboarding = Boolean(
-    session?.user?.id
-    && session.user.accountType === 'individual'
-    && session.user.emailVerified === true
-    && (await getProfileFields(session.user.id, ['onboardingDone'])
-      .then((profile) => profile.onboardingDone !== true)
-      .catch(() => false)),
-  );
+  /* There is no first-run gate here any more. The post-auth welcome → interests
+     → first-post flow at /onboarding/start has been removed: /onboarding now
+     collects roles and skills BEFORE the account exists, so that flow asked a
+     signed-in user to describe themselves a second time. Removing it also takes
+     a per-request profile read off the path to the homepage's first byte.
 
-  if (needsOnboarding) {
-    redirect('/onboarding/start');
-  }
+     `onboardingDone` and `interests` are deliberately KEPT on the profile —
+     existing accounts carry real values and the recommendation engine reads
+     `interests`. Nothing writes `onboardingDone` from the homepage now; it is
+     simply no longer consulted here. */
 
   /* Warm cache only — deliberately NOT awaited into existence. Deriving this
      cold means reading the whole 2.7 MB job store, which must never sit on the

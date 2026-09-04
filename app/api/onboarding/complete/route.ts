@@ -33,8 +33,11 @@ export async function POST(req: NextRequest) {
 
     // `profileSetupDone` still marks "this user filled in their profile", which is
     // what every caller of this endpoint does. `onboardingDone` is the narrower
-    // first-run flag the /onboarding/start flow owns, so it is only written when a
-    // caller asks for it — never cleared, so re-running any flow is safe.
+    // first-run flag; the /onboarding/start flow that used to set it has been
+    // removed, so nothing writes it today. It is still honoured here rather than
+    // dropped, because existing accounts carry the value and no longer having a
+    // writer is not a reason to start REJECTING one. Never cleared, so re-running
+    // any flow is safe.
     const patch: Partial<UserProfileData> = { ...profilePayload, profileSetupDone: true };
     if (profilePayload.onboardingDone === true) {
       patch.onboardingDone = true;

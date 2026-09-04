@@ -327,6 +327,55 @@ async function main() {
       /setCompanyLogoOverrides/.test(src('app/api/company-explorer/route.ts')));
   }
 
+  console.log('\n── 11. Any company, not only the pinned ones ──');
+  {
+    /* The gap this section guards: the Logo control used to exist only on rows
+       already IN the explorer, so changing any other company's mark meant
+       pinning it first — which silently changed what the homepage shows.
+       Setting a logo and curating the strip are different decisions. */
+    const modal = src('components/jobs/company/CompanyExplorerManageModal.tsx');
+
+    check('the searchable company list offers a Logo control, not only Add',
+      /aria-label=\{`\$\{uploaded\[c\.id\] \? 'Replace' : 'Upload'\} logo for \$\{c\.name\}`\}/
+        .test(modal.split('Any company')[1] ?? ''));
+    check('an unpinned company gets the SAME uploader, not a second one',
+      (modal.match(/<CompanyLogoUploader/g) ?? []).length === 2);
+    check('and it is addressed by the same companyId the pinned rows use',
+      /companyId=\{logoForAddable\.id\}/.test(modal));
+    check('setting a logo there does not add the company to the explorer',
+      !/logoForAddable[\s\S]{0,400}\badd\(/.test(modal));
+    check('an unpinned company still shows its uploaded mark when it has one',
+      /uploaded\[logoForAddable\.id\] \|\| logoForAddable\.logoUrl/.test(modal));
+    check('the chip preview also prefers the uploaded mark',
+      /logoUrl=\{uploaded\[c\.id\] \|\| c\.logoUrl\}/.test(modal));
+
+    /* The server was always able to do this — it keys on logoKey(companyId)
+       and never checks explorer membership. These guard that it stays so. */
+    const api = src('app/api/super-admin/company-logo/route.ts');
+    check('the upload API keys on the company id alone',
+      /logoKey\(String\(form\.get\('companyId'\)/.test(api));
+    /* Membership in the explorer is only the FIRST of three ways a company is
+       recognised: a live hiring employer resolves too, and so does one that
+       already has an uploaded mark but has since stopped posting. That third
+       branch is what keeps a replacement working for a company that dropped
+       out of the hiring list. An unknown id resolves to null and is refused. */
+    check('a live hiring company resolves without being in the explorer',
+      /live\.find\(\(c\) => logoKey\(c\.name\) === id\)/.test(api));
+    check('a company with an existing upload resolves even if no longer hiring',
+      /config\.companyLogos\?\.\[id\]/.test(api));
+    check('an unrecognised company id is refused, not silently accepted',
+      /return null;/.test(api));
+    for (const verb of ['GET', 'POST', 'DELETE']) {
+      check(`${verb} refuses a caller who is not Super Admin`,
+        new RegExp(`export async function ${verb}[\\s\\S]{0,320}?getSuperAdminSessionFromRequest[\\s\\S]{0,220}?401`).test(api));
+    }
+    check('the public map exposes url only — no storage path, no uploader',
+      !/(storageKey|uploadedBy|r2|bucket)/i.test(src('app/api/company-logos/route.ts')));
+    check('onboarding renders through the shared resolver, so it inherits uploads',
+      /components\/jobs\/company\/CompanyLogo/.test(src('components/onboarding/WelcomeStep.tsx'))
+      && /components\/jobs\/company\/CompanyLogo/.test(src('components/onboarding/JobPreviewStep.tsx')));
+  }
+
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);
   if (failures > 0) { console.error('FAILED'); process.exit(1); }
 }

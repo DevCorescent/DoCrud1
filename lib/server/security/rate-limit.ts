@@ -46,8 +46,8 @@ const MIN = 60 * 1000;
 export const RATE_POLICIES = {
   loginAccount:           { limit: 5,  windowMs: 10 * MIN },
   loginIp:                { limit: 20, windowMs: 10 * MIN },
-  signupIp:               { limit: 5,  windowMs: 60 * MIN },
-  signupEmail:            { limit: 5,  windowMs: 15 * MIN },
+  signupIp:               { limit: 30, windowMs: 60 * MIN },
+  signupEmail:            { limit: 20, windowMs: 15 * MIN },
   otpSendAccount:         { limit: 3,  windowMs: 10 * MIN },
   otpSendIp:              { limit: 10, windowMs: 10 * MIN },
   otpVerifyAccount:       { limit: 5,  windowMs: 10 * MIN },

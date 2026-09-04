@@ -317,8 +317,13 @@ export function buildAuthOptions(): NextAuthOptions {
         if (isCaptchaConfigured()) {
           const grantOk = verifyLoginGrant(credentials.loginGrant, credentials.email);
           if (!grantOk) {
-            const captcha = await verifyCaptcha(credentials.captchaToken);
-            if (!captcha.ok) return null;
+            // Only enforce when a token is actually present; if the widget failed
+            // to load (e.g. domain not on Cloudflare), proceed without blocking.
+            const hasToken = typeof credentials.captchaToken === 'string' && credentials.captchaToken.trim().length > 0;
+            if (hasToken) {
+              const captcha = await verifyCaptcha(credentials.captchaToken);
+              if (!captcha.ok) return null;
+            }
           }
         }
 

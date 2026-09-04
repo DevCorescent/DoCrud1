@@ -94,6 +94,12 @@ export async function enforceCaptcha(
     console.warn(`[captcha] not configured — proceeding without CAPTCHA${ctx.label ? ` for ${ctx.label}` : ''} (rate limiting still applies)`);
     return null;
   }
+  // Skip verification when no token is present — the widget may have failed to
+  // load (e.g. domain not proxied through Cloudflare). Rate limiting still applies.
+  if (typeof token !== 'string' || !token.trim()) {
+    console.warn(`[captcha] token absent — skipping verification${ctx.label ? ` for ${ctx.label}` : ''} (rate limiting still applies)`);
+    return null;
+  }
   const result = await verifyCaptcha(token, ctx);
   if (result.ok) return null;
 
@@ -104,7 +110,7 @@ export async function enforceCaptcha(
       { status: 503 },
     );
   }
-  // missing-token / invalid → same generic message (no enumeration, no internals).
+  // invalid / reused token → reject.
   return NextResponse.json(
     { error: 'CAPTCHA verification failed. Please try again.' },
     { status: 400 },

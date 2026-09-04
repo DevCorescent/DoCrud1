@@ -173,6 +173,9 @@ export default function CompanyExplorerManageModal({
   const logoOf  = (id: string) => available.find((a) => a.id === id)?.logoUrl ?? '';
   const q = query.trim().toLowerCase();
   const addable = available.filter((c) => !configured.has(c.id) && (!q || c.name.toLowerCase().includes(q)));
+  /* The open logo panel when it belongs to a company that is not pinned. The
+     pinned rows render their own panel inline, so only one can be open. */
+  const logoForAddable = logoFor ? addable.find((c) => c.id === logoFor) ?? null : null;
 
   const ROW = 'flex items-center gap-2.5 rounded-xl px-2.5 py-2';
   const ROW_STYLE = { background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(255,255,255,0.08)' };
@@ -322,9 +325,14 @@ export default function CompanyExplorerManageModal({
             </ul>
           )}
 
+          {/* Every company Docrud knows about, whether or not it is in the
+              explorer. Each one can be added to the strip OR have its mark set
+              right here — setting a logo deliberately does NOT add the company
+              to the explorer, because changing a company's mark and changing
+              what the homepage shows are different decisions. */}
           <p className="mb-2 mt-5 text-[9.5px] font-bold uppercase tracking-[0.12em]"
             style={{ color: 'rgba(255,255,255,0.28)' }}>
-            Add a company
+            Any company — add to explorer, or set its logo
           </p>
           <label className="relative mb-2 block">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
@@ -341,17 +349,48 @@ export default function CompanyExplorerManageModal({
                 {query ? 'No companies match that search.' : 'Every company is already in the explorer.'}
               </p>
             ) : addable.slice(0, 40).map((c) => (
-              <button key={c.id} type="button" onClick={() => add(c)} disabled={busy}
-                className="inline-flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2.5 text-[11px] font-semibold transition"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.62)' }}>
-                <CompanyLogo name={c.name} logoUrl={c.logoUrl} size={20} rounded={6} />
-                {c.name}
-                <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.30)' }}>
-                  {formatCompanyJobCount(c.jobCount)}
-                </span>
-              </button>
+              <span key={c.id} className="inline-flex items-center rounded-full"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <button type="button" onClick={() => add(c)} disabled={busy}
+                  aria-label={`Add ${c.name} to the explorer`}
+                  className="inline-flex items-center gap-1.5 rounded-l-full py-1 pl-1 pr-2 text-[11px] font-semibold transition"
+                  style={{ color: 'rgba(255,255,255,0.62)' }}>
+                  <CompanyLogo name={c.name} logoUrl={uploaded[c.id] || c.logoUrl} size={20} rounded={6} />
+                  {c.name}
+                  <span className="tabular-nums" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                    {formatCompanyJobCount(c.jobCount)}
+                  </span>
+                </button>
+                {/* Same panel the pinned rows use, on the same companyId, so a
+                    mark set here is the identical override. */}
+                <button type="button" onClick={() => setLogoFor(logoFor === c.id ? null : c.id)}
+                  disabled={busy}
+                  aria-label={`${uploaded[c.id] ? 'Replace' : 'Upload'} logo for ${c.name}`}
+                  aria-expanded={logoFor === c.id}
+                  className="shrink-0 rounded-r-full py-1 pl-2 pr-2.5 text-[9.5px] font-bold transition"
+                  style={uploaded[c.id]
+                    ? { color: 'rgb(196,181,253)', borderLeft: '1px solid rgba(167,139,250,0.30)' }
+                    : { color: 'rgba(255,255,255,0.40)', borderLeft: '1px solid rgba(255,255,255,0.10)' }}>
+                  {uploaded[c.id] ? '\u2713 Logo' : 'Logo'}
+                </button>
+              </span>
             ))}
           </div>
+
+          {/* The panel for a company that is NOT in the explorer. Rendered
+              below the chips rather than inside one, so it gets full width and
+              the wrap does not reflow around it. */}
+          {logoForAddable && (
+            <div className="mt-2">
+              <CompanyLogoUploader
+                companyId={logoForAddable.id}
+                companyName={logoForAddable.name}
+                currentLogoUrl={uploaded[logoForAddable.id] || logoForAddable.logoUrl}
+                hasUpload={Boolean(uploaded[logoForAddable.id])}
+                onChanged={() => { void loadUploaded(); onSaved(); }}
+              />
+            </div>
+          )}
 
           {busy ? (
             <p className="mt-3 flex items-center gap-1.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.40)' }}>

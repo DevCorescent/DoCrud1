@@ -1,0 +1,1321 @@
+/**
+ * Onboarding visual foundation.
+ *
+ * Transferred from the standalone onboarding prototype's index.css. Everything
+ * here is scoped under `.docrud-onboarding` for two reasons:
+ *
+ *  1. It must not leak. The app's globals.css is 2,200 lines of themed rules
+ *     and this flow is deliberately dark-only, off-theme.
+ *  2. It must not be leaked *into*. globals.css carries substring rules such as
+ *     `:root[data-ui-mode='dark'] body article [class*='bg-white']:not(button)`
+ *     which repaint any matching element with `!important`. The prototype's
+ *     profile card is an <article> whose chips used `bg-white/[0.04]`, so those
+ *     chips would have been painted flat grey. That is why the markup in this
+ *     folder uses these semantic class names and NO Tailwind utilities — a
+ *     class named `canvas-profile-skill` is unreachable by those selectors.
+ *     Keep it that way when adding to this flow.
+ *
+ * Typography comes from CSS variables set by OnboardingShell via next/font, so
+ * no @fontsource packages are needed and the faces load on this route only.
+ */
+
+/* ── Keyframes ──────────────────────────────────────────────────── */
+@keyframes docrudOnbMarqueeForward { from { transform: translateX(0); }      to { transform: translateX(-50%); } }
+@keyframes docrudOnbMarqueeReverse { from { transform: translateX(-50%); }   to { transform: translateX(0); } }
+@keyframes docrudOnbFloat { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(0, -8px, 0); } }
+@keyframes docrudOnbFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes docrudOnbSheen { from { transform: translateX(-140%); } to { transform: translateX(140%); } }
+@keyframes docrudOnbStepEnter { from { opacity: 0; transform: translate3d(18px, 0, 0) scale(.985); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+@keyframes docrudOnbHeroWordIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Page root ──────────────────────────────────────────────────── */
+.docrud-onboarding {
+  position: relative;
+  min-height: 100svh;
+  overflow: hidden;
+  background: #0b0c10;
+  color: #f4f4f5;
+  font-family: var(--font-onb-sans), ui-sans-serif, system-ui, sans-serif;
+}
+.docrud-onboarding *,
+.docrud-onboarding *::before,
+.docrud-onboarding *::after { box-sizing: border-box; }
+.docrud-onboarding button,
+.docrud-onboarding input { font: inherit; }
+.docrud-onboarding button { -webkit-tap-highlight-color: transparent; }
+
+/* The layer the step content sits in — above the canvas and the wash. */
+.docrud-onboarding .onboarding-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-height: 100svh;
+  flex-direction: column;
+}
+.docrud-onboarding .onboarding-body {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+}
+@media (min-width: 640px) { .docrud-onboarding .onboarding-body { padding: 40px 28px; } }
+
+/* ── Decorative canvas ──────────────────────────────────────────── */
+.docrud-onboarding .onboarding-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #08090c;
+  pointer-events: none;
+}
+.docrud-onboarding .canvas-grid {
+  position: absolute;
+  inset: 0;
+  opacity: .2;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
+  background-size: 74px 74px;
+  transform: perspective(700px) rotateX(58deg) scale(1.5) translateY(23%);
+  transform-origin: center bottom;
+}
+.docrud-onboarding .canvas-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  padding: 80px 0;
+  opacity: 0;
+  animation: docrudOnbFade 1.1s ease .12s forwards;
+}
+.docrud-onboarding .canvas-row { width: 100%; overflow: hidden; }
+.docrud-onboarding .canvas-track {
+  display: flex;
+  width: max-content;
+  gap: 12px;
+  animation: docrudOnbMarqueeForward 45s linear infinite;
+  will-change: transform;
+}
+.docrud-onboarding .canvas-track-reverse {
+  animation-name: docrudOnbMarqueeReverse;
+  animation-duration: 55s;
+}
+
+/* Profile card. Semantic classes only — see the note at the top of the file. */
+.docrud-onboarding .canvas-profile-card {
+  width: 214px;
+  flex: 0 0 214px;
+  border: 1px solid rgba(255, 255, 255, .065);
+  border-radius: 14px;
+  padding: 13px 14px 12px;
+  background: rgba(11, 11, 17, .78);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .04);
+  backdrop-filter: blur(20px);
+}
+.docrud-onboarding .canvas-profile-header { display: flex; align-items: center; gap: 10px; }
+.docrud-onboarding .canvas-profile-ident { min-width: 0; flex: 1; }
+.docrud-onboarding .canvas-profile-name,
+.docrud-onboarding .canvas-profile-role,
+.docrud-onboarding .canvas-profile-location {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.docrud-onboarding .canvas-profile-name { font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, .8); }
+.docrud-onboarding .canvas-profile-role { font-size: 9px; color: rgba(255, 255, 255, .35); }
+.docrud-onboarding .canvas-profile-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: rgba(255, 255, 255, .35);
+}
+.docrud-onboarding .canvas-star { width: 10px; height: 10px; fill: #fcd34d; color: #fcd34d; }
+.docrud-onboarding .canvas-profile-meta {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.docrud-onboarding .canvas-profile-location {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  color: rgba(255, 255, 255, .25);
+}
+.docrud-onboarding .canvas-pin { width: 10px; height: 10px; flex-shrink: 0; }
+.docrud-onboarding .canvas-profile-status {
+  flex-shrink: 0;
+  border: 1px solid rgba(110, 231, 183, .15);
+  border-radius: 999px;
+  background: rgba(110, 231, 183, .06);
+  padding: 2px 6px;
+  font-size: 7px;
+  font-weight: 600;
+  color: rgba(167, 243, 208, .7);
+}
+.docrud-onboarding .canvas-profile-skills { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+.docrud-onboarding .canvas-profile-skill {
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .04);
+  padding: 2px 6px;
+  font-size: 8px;
+  color: rgba(255, 255, 255, .35);
+}
+.docrud-onboarding .canvas-profile-footer {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid rgba(255, 255, 255, .05);
+  padding-top: 8px;
+  font-size: 8px;
+  color: rgba(255, 255, 255, .2);
+}
+.docrud-onboarding .canvas-profile-connect { color: rgba(253, 230, 138, .55); }
+
+.docrud-onboarding .canvas-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+.docrud-onboarding .canvas-avatar-emerald { background: linear-gradient(135deg, #059669, #10b981); }
+.docrud-onboarding .canvas-avatar-blue    { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+.docrud-onboarding .canvas-avatar-violet  { background: linear-gradient(135deg, #7c3aed, #8b5cf6); }
+.docrud-onboarding .canvas-avatar-rose    { background: linear-gradient(135deg, #e11d48, #f43f5e); }
+.docrud-onboarding .canvas-avatar-cyan    { background: linear-gradient(135deg, #0e7490, #06b6d4); }
+.docrud-onboarding .canvas-avatar-fuchsia { background: linear-gradient(135deg, #a21caf, #d946ef); }
+.docrud-onboarding .canvas-avatar-teal    { background: linear-gradient(135deg, #0f766e, #14b8a6); }
+.docrud-onboarding .canvas-avatar-indigo  { background: linear-gradient(135deg, #6d28d9, #7c3aed); }
+.docrud-onboarding .canvas-avatar-sky     { background: linear-gradient(135deg, #1d4ed8, #3b82f6); }
+.docrud-onboarding .canvas-avatar-purple  { background: linear-gradient(135deg, #5b21b6, #7c3aed); }
+.docrud-onboarding .canvas-avatar-green   { background: linear-gradient(135deg, #047857, #10b981); }
+
+.docrud-onboarding .canvas-floating-note {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(11, 11, 17, .58);
+  color: rgba(255, 255, 255, .28);
+  font-size: 9px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(16px);
+  animation: docrudOnbFloat 7s ease-in-out infinite;
+}
+.docrud-onboarding .canvas-floating-note strong { color: rgba(255, 255, 255, .55); font-weight: 600; }
+.docrud-onboarding .canvas-floating-note svg { width: 14px; height: 14px; flex-shrink: 0; }
+.docrud-onboarding .canvas-floating-note-left   { left: 7%; top: 41%; }
+.docrud-onboarding .canvas-floating-note-right  { right: 8%; top: 57%; animation-delay: -2.5s; }
+.docrud-onboarding .canvas-floating-note-bottom { left: 17%; bottom: 10%; animation-delay: -4.5s; }
+.docrud-onboarding .canvas-note-jobs    { color: rgba(253, 230, 138, .55); }
+.docrud-onboarding .canvas-note-network { color: rgba(165, 243, 252, .55); }
+.docrud-onboarding .canvas-note-docs    { color: rgba(221, 214, 254, .55); }
+
+.docrud-onboarding .canvas-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(65% 54% at 50% 48%, rgba(5, 5, 8, .28) 0%, rgba(5, 5, 8, .64) 52%, rgba(5, 5, 8, .92) 100%),
+    linear-gradient(180deg, rgba(5, 5, 8, .55), transparent 26%, transparent 74%, rgba(5, 5, 8, .75));
+}
+.docrud-onboarding .onboarding-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(68% 58% at 50% 46%, rgba(5, 5, 8, .62), rgba(5, 5, 8, .22) 70%, rgba(5, 5, 8, .48));
+}
+
+/* ── Shell chrome ───────────────────────────────────────────────── */
+.docrud-onboarding .docrud-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: rgba(255, 255, 255, .9);
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -.03em;
+}
+.docrud-onboarding .docrud-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .1);
+  font-size: 13px;
+}
+.docrud-onboarding .header-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, .32);
+  font-family: var(--font-onb-mono), ui-monospace, monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+}
+.docrud-onboarding .status-dot,
+.docrud-onboarding .demo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 14px rgba(52, 211, 153, .7);
+}
+
+/* ── Glass shell ────────────────────────────────────────────────── */
+.docrud-onboarding .onboarding-card-wrap { width: 100%; max-width: 640px; }
+/* A query container, so the footer below responds to the CARD's width rather
+   than the window's. That is what makes it correct in any layout — a narrow
+   card on a wide screen stacks, exactly as a narrow screen does. Only
+   inline-size is contained, so the card's glow pseudo-elements still paint
+   outside it. */
+.docrud-onboarding .onboarding-card {
+  container-type: inline-size;
+  container-name: onbcard;
+  position: relative;
+  width: 100%;
+  overflow: visible;
+  border: 0;
+  border-radius: 28px;
+  background: transparent;
+  box-shadow: none;
+}
+.docrud-onboarding .onboarding-card::before {
+  position: absolute;
+  inset: -28px;
+  content: '';
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 48px;
+  background: radial-gradient(80% 85% at 50% 50%, rgba(5, 5, 8, .48) 0%, rgba(5, 5, 8, .26) 58%, transparent 100%);
+  filter: blur(26px);
+}
+.docrud-onboarding .onboarding-card::after {
+  position: absolute;
+  inset: -10px;
+  content: '';
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 40px;
+  backdrop-filter: blur(14px);
+  -webkit-mask-image: radial-gradient(78% 80% at 50% 50%, black 45%, transparent 92%);
+  mask-image: radial-gradient(78% 80% at 50% 50%, black 45%, transparent 92%);
+}
+/* The card content must sit above the two decorative pseudo-elements. */
+.docrud-onboarding .onboarding-card-inner { position: relative; z-index: 10; display: flex; flex-direction: column; }
+.docrud-onboarding .card-body { flex: 1; padding: 24px; }
+@media (min-width: 640px)  { .docrud-onboarding .card-body { padding: 36px; } }
+@media (min-width: 1024px) { .docrud-onboarding .card-body { padding: 48px; } }
+
+/* The quiet line beneath the card. */
+.docrud-onboarding .onboarding-footer-note {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+.docrud-onboarding .onboarding-footer-note svg { width: 12px; height: 12px; color: rgba(255, 255, 255, .25); }
+/* ── The shared step footer ─────────────────────────────────────────────
+   ONE horizontal row at every width: Back left, Continue right, never
+   stacked, never wrapped. Narrow screens are handled by letting the buttons
+   shrink — padding and gap come down before anything else — rather than by
+   reflowing the row, so the navigation looks identical on every step.
+
+   Every onboarding step renders through OnboardingShell's `navigation` slot,
+   so this rule is the single definition. Do not add per-step overrides. */
+.docrud-onboarding .card-footer {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+  border-top: 0;
+  padding: 12px 24px;
+  color: rgba(255, 255, 255, .24);
+  font-size: 9px;
+}
+/* Neither button may wrap its own label, and neither may grow into the other's
+   space. Continue keeps its cap; Back keeps its natural width. */
+.docrud-onboarding .card-footer .back-button,
+.docrud-onboarding .card-footer .step-nav-continue {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+.docrud-onboarding .card-footer .back-button { justify-content: flex-start; }
+.docrud-onboarding .card-footer span:first-child { display: flex; align-items: center; gap: 6px; }
+
+.docrud-onboarding .step-panel { animation: docrudOnbStepEnter .42s cubic-bezier(.22, 1, .36, 1) both; }
+
+/* ── Step vocabulary ────────────────────────────────────────────────
+   Transferred in full so this flow is self-contained even though the
+   individual screens land in later phases. Unused rules here are inert. */
+.docrud-onboarding .eyebrow,
+.docrud-onboarding .field-label {
+  color: rgba(255, 255, 255, .5);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.docrud-onboarding .hero-heading,
+.docrud-onboarding .section-heading {
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  color: #fff;
+  text-wrap: balance;
+  text-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+}
+.docrud-onboarding .hero-heading { margin-top: 12px; font-size: clamp(2.25rem, 4.5vw, 3rem); font-weight: 400; line-height: 1.08; }
+.docrud-onboarding .hero-heading span { color: rgba(255, 255, 255, .9); }
+.docrud-onboarding .hero-toggle-word {
+  display: inline-block;
+  font-weight: 700;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: docrudOnbHeroWordIn .5s cubic-bezier(.22, 1, .36, 1) both;
+}
+.docrud-onboarding .hero-word-jobs       { background-image: linear-gradient(120deg, #fbbf24, #fde68a); }
+.docrud-onboarding .hero-word-candidates { background-image: linear-gradient(120deg, #22d3ee, #a5f3fc); }
+.docrud-onboarding .section-heading { margin-top: 10px; font-size: clamp(1.9rem, 3.5vw, 2.25rem); line-height: 1.1; }
+.docrud-onboarding .step-copy {
+  margin-top: 12px;
+  max-width: 440px;
+  color: rgba(255, 255, 255, .9);
+  font-size: 17px;
+  line-height: 1.625;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+}
+.docrud-onboarding .step-orbit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .06);
+  color: rgba(255, 255, 255, .65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .09);
+}
+.docrud-onboarding .feature-pill,
+.docrud-onboarding .logo-plate {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .1);
+  color: rgba(255, 255, 255, .8);
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(6px);
+}
+.docrud-onboarding .feature-pill { padding: 6px 12px; }
+.docrud-onboarding .logo-plate { border-radius: 11px; padding: 9px 12px; color: rgba(255, 255, 255, .85); font-size: 13px; font-weight: 600; }
+.docrud-onboarding .logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+.docrud-onboarding .docrud-cta-mark {
+  border: 1px solid rgba(255, 255, 255, .25);
+  background: rgba(255, 255, 255, .1);
+  color: rgba(255, 255, 255, .9);
+}
+.docrud-onboarding .upload-mini-wrap { position: relative; display: flex; }
+.docrud-onboarding .upload-mini-button {
+  display: flex;
+  width: 52px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #18181b;
+  box-shadow: 0 0 30px rgba(255, 255, 255, .08), inset 0 1px 0 rgba(255, 255, 255, .75);
+  transition: background-color .2s ease, transform .2s cubic-bezier(.34, 1.56, .64, 1), box-shadow .2s ease;
+}
+.docrud-onboarding .upload-mini-button:hover { background: #e4e4e7; box-shadow: 0 0 36px rgba(255, 255, 255, .14); }
+.docrud-onboarding .upload-mini-button:active { transform: scale(.96); }
+.docrud-onboarding .upload-tooltip {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  z-index: 20;
+  padding: 7px 12px;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 9px;
+  background: rgba(16, 16, 20, .9);
+  color: rgba(255, 255, 255, .9);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, .4);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.docrud-onboarding .upload-mini-wrap:hover .upload-tooltip,
+.docrud-onboarding .upload-mini-button:focus-visible ~ .upload-tooltip { opacity: 1; transform: translateY(0); }
+.docrud-onboarding .match-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 200px;
+  min-height: 230px;
+  margin: 8px auto 0;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(90, 95, 110, .45) 0%, rgba(30, 38, 34, .75) 55%, rgba(8, 14, 11, .95) 100%);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .14);
+  backdrop-filter: blur(18px);
+  overflow: hidden;
+}
+.docrud-onboarding .match-card::before {
+  position: absolute;
+  inset: 0;
+  content: '';
+  pointer-events: none;
+  background: radial-gradient(120% 60% at 50% 0%, rgba(255, 255, 255, .12), transparent 60%);
+}
+.docrud-onboarding .match-card-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, .85);
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.docrud-onboarding .match-card-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  background: rgba(255, 255, 255, .12);
+  font-size: 11px;
+}
+.docrud-onboarding .match-card-number {
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: #fff;
+  line-height: 1;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, .4);
+}
+.docrud-onboarding .match-card-caption {
+  color: rgba(255, 255, 255, .6);
+  font-family: var(--font-onb-mono), ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+}
+.docrud-onboarding .primary-button {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px 24px;
+  color: #18181b;
+  font-size: 16px;
+  font-weight: 500;
+  box-shadow: 0 0 40px rgba(255, 255, 255, .07), inset 0 1px 0 rgba(255, 255, 255, .75);
+  transition: background-color .2s ease, transform .2s cubic-bezier(.34, 1.56, .64, 1), box-shadow .2s ease;
+}
+.docrud-onboarding .primary-button::before {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  content: '';
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .7), transparent);
+  transform: translateX(-140%);
+}
+.docrud-onboarding .primary-button:hover:not(:disabled) { background: #e4e4e7; box-shadow: 0 0 42px rgba(255, 255, 255, .12); }
+.docrud-onboarding .primary-button:hover:not(:disabled)::before { animation: docrudOnbSheen .75s ease; }
+.docrud-onboarding .primary-button:active:not(:disabled) { transform: scale(.98); }
+.docrud-onboarding .primary-button:disabled { cursor: not-allowed; opacity: .4; }
+.docrud-onboarding .login-link,
+.docrud-onboarding .back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, .7);
+  font-size: 14px;
+  transition: color .2s ease, transform .2s ease;
+}
+.docrud-onboarding .login-link { align-self: center; }
+/* The design source left Back at its 21px text height, which is well under a
+   comfortable tap target on a phone. The row already stands 48px tall for the
+   Continue button beside it, so claiming the full height costs no layout and
+   changes nothing visually — the label keeps its size and position. */
+.docrud-onboarding .back-button { min-height: 48px; }
+.docrud-onboarding .login-link:hover,
+.docrud-onboarding .back-button:hover { color: rgba(255, 255, 255, .8); transform: translateX(2px); }
+.docrud-onboarding .back-button:hover { transform: translateX(-2px); }
+.docrud-onboarding .demo-note { color: rgba(255, 255, 255, .45); font-family: var(--font-onb-mono), ui-monospace, monospace; font-size: 11px; line-height: 1.6; }
+.docrud-onboarding .glass-input {
+  width: 100%;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .1);
+  padding: 0 15px 0 42px;
+  color: rgba(255, 255, 255, .92);
+  font-size: 15px;
+  outline: none;
+  transition: border-color .2s ease, background-color .2s ease, box-shadow .2s ease;
+}
+.docrud-onboarding .glass-input::placeholder { color: rgba(255, 255, 255, .35); }
+.docrud-onboarding .glass-input:focus {
+  border-color: rgba(255, 255, 255, .35);
+  background: rgba(255, 255, 255, .12);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, .06);
+}
+.docrud-onboarding .field-icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, .3);
+}
+.docrud-onboarding .field-hint { margin-top: 9px; color: rgba(255, 255, 255, .5); font-size: 13px; }
+.docrud-onboarding .choice-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .1);
+  padding: 8px 12px;
+  color: rgba(255, 255, 255, .8);
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(6px);
+  transition: border-color .2s ease, background-color .2s ease, color .2s ease, transform .2s ease;
+}
+.docrud-onboarding .choice-chip:hover {
+  border-color: rgba(255, 255, 255, .32);
+  background: rgba(255, 255, 255, .14);
+  color: rgba(255, 255, 255, .95);
+  transform: translateY(-1px);
+}
+.docrud-onboarding .choice-chip-selected { border-color: rgba(255, 255, 255, .45); background: rgba(255, 255, 255, .18); color: #fff; }
+.docrud-onboarding .skill-count {
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: rgba(255, 255, 255, .7);
+  font-family: var(--font-onb-mono), ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.docrud-onboarding .persona-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .035);
+  padding: 14px;
+  text-align: left;
+  transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
+}
+.docrud-onboarding .persona-card:hover,
+.docrud-onboarding .persona-card-selected { border-color: rgba(255, 255, 255, .28); background: rgba(255, 255, 255, .09); transform: translateY(-1px); }
+.docrud-onboarding .persona-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .07);
+  color: rgba(255, 255, 255, .62);
+}
+.docrud-onboarding .persona-card strong {
+  display: block;
+  color: #fff;
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+}
+.docrud-onboarding .persona-card small { display: block; margin-top: 3px; color: rgba(255, 255, 255, .7); font-size: 13px; line-height: 1.6; }
+.docrud-onboarding .space-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .1);
+  padding: 12px;
+  color: rgba(255, 255, 255, .8);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
+}
+.docrud-onboarding .space-card:hover,
+.docrud-onboarding .space-card-selected { border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .16); color: #fff; transform: translateY(-1px); }
+.docrud-onboarding .job-preview-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .04);
+  padding: 12px;
+}
+.docrud-onboarding .job-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .06);
+  color: rgba(255, 255, 255, .6);
+}
+.docrud-onboarding .job-preview-card strong,
+.docrud-onboarding .job-preview-card span { display: block; }
+.docrud-onboarding .job-preview-card strong {
+  color: rgba(255, 255, 255, .82);
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+.docrud-onboarding .job-preview-card span { margin-top: 2px; color: rgba(255, 255, 255, .35); font-size: 9px; }
+.docrud-onboarding .job-match {
+  margin-left: auto;
+  border: 1px solid rgba(52, 211, 153, .18);
+  border-radius: 999px;
+  background: rgba(52, 211, 153, .07);
+  padding: 4px 7px;
+  color: rgba(167, 243, 208, .75) !important;
+  font-size: 8px !important;
+  white-space: nowrap;
+}
+.docrud-onboarding .talent-metric {
+  display: flex;
+  min-height: 122px;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .09);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .04);
+  padding: 13px;
+}
+.docrud-onboarding .talent-metric strong {
+  color: rgba(255, 255, 255, .9);
+  font-family: var(--font-onb-heading), ui-sans-serif, system-ui, sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+.docrud-onboarding .talent-metric span { color: rgba(255, 255, 255, .7); font-size: 13px; font-weight: 500; }
+.docrud-onboarding .talent-metric small { color: rgba(255, 255, 255, .45); font-size: 11px; line-height: 1.45; }
+.docrud-onboarding .login-option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 48px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .1);
+  color: rgba(255, 255, 255, .85);
+  font-size: 14px;
+  font-weight: 500;
+  transition: border-color .2s ease, background-color .2s ease, transform .2s ease;
+}
+.docrud-onboarding .login-option:hover { border-color: rgba(255, 255, 255, .35); background: rgba(255, 255, 255, .15); transform: translateY(-1px); }
+.docrud-onboarding .demo-panel,
+.docrud-onboarding .success-panel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .025);
+  padding: 11px 12px;
+  color: rgba(255, 255, 255, .32);
+  font-size: 10px;
+}
+.docrud-onboarding .success-panel { border-color: rgba(52, 211, 153, .18); background: rgba(52, 211, 153, .06); color: rgba(255, 255, 255, .6); }
+.docrud-onboarding .success-panel strong { display: block; color: rgba(167, 243, 208, .9); font-size: 11px; }
+.docrud-onboarding .success-panel p { margin-top: 2px; color: rgba(255, 255, 255, .38); font-size: 9px; }
+
+/* ── Focus ──────────────────────────────────────────────────────── */
+.docrud-onboarding .primary-button:focus-visible,
+.docrud-onboarding .back-button:focus-visible,
+.docrud-onboarding .login-link:focus-visible,
+.docrud-onboarding .login-option:focus-visible,
+.docrud-onboarding .choice-chip:focus-visible,
+.docrud-onboarding .persona-card:focus-visible,
+.docrud-onboarding .space-card:focus-visible,
+.docrud-onboarding .upload-mini-button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, .7);
+  outline-offset: 3px;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .docrud-onboarding .canvas-content { padding: 90px 0; }
+  .docrud-onboarding .canvas-profile-card { width: 190px; flex-basis: 190px; padding: 11px; }
+  .docrud-onboarding .canvas-floating-note { display: none; }
+  .docrud-onboarding .onboarding-card { border-radius: 24px; }
+
+
+  .docrud-onboarding .hero-heading { font-size: 2.1rem; }
+  .docrud-onboarding .step-copy { font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docrud-onboarding .canvas-track,
+  .docrud-onboarding .canvas-floating-note,
+  .docrud-onboarding .canvas-content,
+  .docrud-onboarding .step-panel,
+  .docrud-onboarding .hero-toggle-word {
+    animation: none;
+    opacity: 1;
+  }
+  .docrud-onboarding .primary-button::before { display: none; }
+}
+
+/* ── Welcome step ───────────────────────────────────────────────────
+   Layout the source expressed as Tailwind utilities, written as scoped
+   classes instead — see the note at the top of this file for why utilities
+   cannot be used inside this flow. */
+.docrud-onboarding .welcome-hero { margin-bottom: 28px; }
+.docrud-onboarding .welcome-description { margin-top: 0; max-width: 410px; }
+.docrud-onboarding .welcome-companies { margin-top: 28px; }
+.docrud-onboarding .welcome-company-plates { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.docrud-onboarding .welcome-actions { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.docrud-onboarding .welcome-actions svg { flex-shrink: 0; }
+.docrud-onboarding .primary-button svg { width: 16px; height: 16px; }
+.docrud-onboarding .login-option svg { width: 16px; height: 16px; }
+.docrud-onboarding .login-link svg { width: 12px; height: 12px; }
+.docrud-onboarding .login-link-emphasis { color: rgba(255, 255, 255, .75); }
+
+/* Back/Continue bar. The source caps Continue so it does not stretch. */
+.docrud-onboarding .step-nav-continue { max-width: 180px; }
+.docrud-onboarding .back-button svg { width: 12px; height: 12px; }
+
+/* Progress bar above the steps that have one. */
+.docrud-onboarding .onboarding-progress { margin-bottom: 24px; display: flex; align-items: center; gap: 12px; }
+.docrud-onboarding .onboarding-progress-track {
+  height: 4px;
+  flex: 1;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+}
+.docrud-onboarding .onboarding-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .75);
+  transition: width .5s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .docrud-onboarding .onboarding-progress-fill { transition: none; }
+}
+
+/* ── Name step ──────────────────────────────────────────────────── */
+.docrud-onboarding .name-field { margin-top: 32px; display: block; }
+.docrud-onboarding .name-field-control { position: relative; margin-top: 8px; }
+
+/* ── Persona step ───────────────────────────────────────────────── */
+.docrud-onboarding .persona-options { margin-top: 28px; display: grid; gap: 12px; }
+@media (min-width: 640px) {
+  .docrud-onboarding .persona-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* The label/description column must be allowed to shrink, or a long
+   description pushes the check mark out of the card. */
+.docrud-onboarding .persona-card-text { min-width: 0; flex: 1; }
+.docrud-onboarding .persona-icon svg { width: 16px; height: 16px; }
+.docrud-onboarding .persona-check {
+  margin-left: auto;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, .8);
+}
+
+/* ── Role step ──────────────────────────────────────────────────── */
+.docrud-onboarding .role-field { margin-top: 28px; display: block; }
+.docrud-onboarding .role-field-control { position: relative; margin-top: 8px; }
+.docrud-onboarding .role-suggestions { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.docrud-onboarding .choice-chip svg { width: 12px; height: 12px; flex-shrink: 0; }
+.docrud-onboarding .role-empty { margin-top: 16px; color: rgba(255, 255, 255, .5); font-size: 13px; }
+
+/* ── Skills step ────────────────────────────────────────────────── */
+.docrud-onboarding .skills-options { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 7px; }
+.docrud-onboarding .skills-note { margin-top: 20px; }
+
+/* Native checkbox, visually replaced by the pill beside it. Kept in the
+   accessibility tree and in the tab order — Space toggles it for free. */
+.docrud-onboarding .skill-pill-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.docrud-onboarding .skill-pill-input + .choice-chip { cursor: pointer; }
+.docrud-onboarding .skill-pill-input:focus-visible + .choice-chip {
+  outline: 2px solid rgba(255, 255, 255, .7);
+  outline-offset: 3px;
+}
+/* At the limit, the unchosen options say so rather than silently doing
+   nothing when clicked. */
+.docrud-onboarding .skill-pill-input:disabled + .choice-chip {
+  cursor: not-allowed;
+  opacity: .35;
+}
+.docrud-onboarding .skill-pill-input:disabled + .choice-chip:hover {
+  border-color: rgba(255, 255, 255, .2);
+  background: rgba(255, 255, 255, .1);
+  color: rgba(255, 255, 255, .8);
+  transform: none;
+}
+
+/* ── Job preview step ───────────────────────────────────────────── */
+.docrud-onboarding .preview-heading { margin-top: 28px; }
+.docrud-onboarding .job-preview-list { margin-top: 24px; display: flex; flex-direction: column; gap: 10px; list-style: none; padding: 0; }
+/* The card is a link. It must not read as body text. */
+.docrud-onboarding a.job-preview-card { text-decoration: none; transition: border-color .2s ease, background-color .2s ease, transform .2s ease; }
+.docrud-onboarding a.job-preview-card:hover { border-color: rgba(255, 255, 255, .2); background: rgba(255, 255, 255, .07); transform: translateY(-1px); }
+.docrud-onboarding a.job-preview-card:focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 3px; }
+.docrud-onboarding .job-preview-body { min-width: 0; flex: 1; }
+/* A job title is the one thing a person is reading for, so it wraps to two
+   lines rather than being cut with an ellipsis — real titles like "Staff
+   Engineer, ERP Oracle CPQ Technical Consultant" lose their meaning at the
+   truncation point on a phone. The secondary line still ellipsises. */
+.docrud-onboarding .job-preview-card strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+}
+.docrud-onboarding .job-preview-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Cards hold two lines of title now, so let them grow instead of centring. */
+.docrud-onboarding .job-preview-card { align-items: flex-start; }
+.docrud-onboarding .job-preview-card > span:first-child,
+.docrud-onboarding .job-preview-card > .job-icon { margin-top: 2px; }
+.docrud-onboarding .job-preview-actions { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+.docrud-onboarding .jobs-status { margin-top: 24px; color: rgba(255, 255, 255, .5); font-size: 13px; line-height: 1.6; }
+.docrud-onboarding .jobs-status-error { color: rgba(253, 186, 186, .85); }
+.docrud-onboarding .jobs-retry {
+  margin-top: 10px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .1);
+  padding: 0 16px;
+  color: rgba(255, 255, 255, .85);
+  font-size: 14px;
+}
+.docrud-onboarding .jobs-retry:hover { border-color: rgba(255, 255, 255, .35); background: rgba(255, 255, 255, .15); }
+.docrud-onboarding .jobs-retry:focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 3px; }
+
+/* ── Business space step ────────────────────────────────────────── */
+.docrud-onboarding .space-fieldset { margin: 0; padding: 0; border: 0; }
+/* The visible question is the step heading; the legend repeats it for
+   assistive tech without showing it twice. */
+.docrud-onboarding .onb-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.docrud-onboarding .space-options { margin-top: 28px; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 640px) {
+  .docrud-onboarding .space-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+/* Native radio, visually replaced by the card. Kept in the tab order and the
+   accessibility tree, so arrow keys and Space work without any script. */
+.docrud-onboarding .space-input + .space-card { cursor: pointer; height: 100%; }
+.docrud-onboarding .space-input:focus-visible + .space-card {
+  outline: 2px solid rgba(255, 255, 255, .7);
+  outline-offset: 3px;
+}
+.docrud-onboarding .space-card { flex-direction: column; align-items: flex-start; gap: 6px; }
+.docrud-onboarding .space-card-head { display: flex; align-items: center; gap: 8px; width: 100%; }
+.docrud-onboarding .space-card-head svg { width: 14px; height: 14px; flex-shrink: 0; }
+.docrud-onboarding .space-card-check { margin-left: auto; width: 12px; height: 12px; flex-shrink: 0; }
+.docrud-onboarding .space-card-label { font-weight: 600; }
+.docrud-onboarding .space-card small { color: rgba(255, 255, 255, .45); font-size: 11px; font-weight: 400; line-height: 1.45; }
+
+/* ── Talent preview step ────────────────────────────────────────── */
+.docrud-onboarding .talent-metrics {
+  margin-top: 24px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  list-style: none;
+  padding: 0;
+}
+@media (min-width: 640px) {
+  .docrud-onboarding .talent-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.docrud-onboarding .talent-metric { height: 100%; }
+.docrud-onboarding .talent-metric span { overflow-wrap: anywhere; }
+.docrud-onboarding .talent-actions { margin-top: 24px; display: flex; flex-direction: column; gap: 12px; }
+.docrud-onboarding .talent-note { margin-top: 18px; }
+
+/* ── Role step: custom roles and live counts ────────────────────────── */
+.docrud-onboarding .role-add-custom {
+  margin-top: 12px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed rgba(255, 255, 255, .25);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .05);
+  padding: 0 14px;
+  color: rgba(255, 255, 255, .8);
+  font-size: 13px;
+}
+.docrud-onboarding .role-add-custom:hover { border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .09); }
+.docrud-onboarding .role-add-custom:focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 3px; }
+.docrud-onboarding .role-custom-list { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; }
+.docrud-onboarding .role-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 2px;
+  color: rgba(255, 255, 255, .55);
+}
+.docrud-onboarding .role-chip-remove svg { width: 12px; height: 12px; }
+.docrud-onboarding .role-chip-remove:hover { color: #fff; }
+.docrud-onboarding .role-chip-remove:focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 2px; }
+/* The real open-role count for a direction. Never shown when unknown. */
+.docrud-onboarding .role-count {
+  margin-left: 2px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .55);
+}
+
+/* ── Welcome: the optional resume ───────────────────────────────────── */
+.docrud-onboarding .resume-chosen {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  border: 1px solid rgba(52, 211, 153, .28);
+  border-radius: 12px;
+  background: rgba(52, 211, 153, .08);
+  padding: 0 12px;
+  color: rgba(255, 255, 255, .85);
+  font-size: 14px;
+}
+.docrud-onboarding .resume-chosen svg { width: 16px; height: 16px; flex-shrink: 0; color: rgba(167, 243, 208, .9); }
+.docrud-onboarding .resume-chosen-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docrud-onboarding .resume-error { margin-top: 8px; color: rgba(253, 186, 186, .9); font-size: 13px; }
+
+/* ── Auth gate ──────────────────────────────────────────────────────── */
+.docrud-onboarding .auth-options { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.docrud-onboarding .auth-options .login-option svg { width: 16px; height: 16px; }
+.docrud-onboarding .auth-note { margin-top: 18px; }
+
+/* ── Persona: the catch-all's own words ─────────────────────────────── */
+.docrud-onboarding .persona-other { margin-top: 20px; display: block; }
+.docrud-onboarding .persona-other-input { padding-left: 15px; }
+
+/* ── Resume read status ─────────────────────────────────────────────── */
+.docrud-onboarding .resume-status { margin-top: 8px; color: rgba(255, 255, 255, .55); font-size: 13px; line-height: 1.5; }
+.docrud-onboarding .resume-status-ok { color: rgba(167, 243, 208, .85); }
+.docrud-onboarding .resume-status-warn { color: rgba(253, 230, 138, .85); }
+
+
+/* ── The homepage company marquee, inside the onboarding card ──────────
+   <TrustedCompanies/> is reused verbatim so the two rows share one source.
+   It was built to sit on the homepage's solid #0D0D0F, and two things need
+   adjusting for a translucent glass card. Both are scoped here; the shared
+   component is untouched. */
+.docrud-onboarding .welcome-company-marquee { margin-top: 12px; }
+
+/* 1. Its logo chip carries `bg-white/[0.06]`, and globals.css repaints
+      `body main [class*='bg-white']:not(button)` with !important — which this
+      row sits inside. Restoring the intended surface needs to out-specify
+      that rule, hence the id-free but deeper selector and the !important. */
+.docrud-onboarding .welcome-company-marquee .tc-viewport span[class*='bg-white'] {
+  background-color: rgba(255, 255, 255, .06) !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 2. Its edge fades are solid-colour gradients matching the homepage
+      background. Over the glass card they read as two dark smudges, so they
+      are hidden and the viewport is masked instead — a mask fades to
+      transparent, which is what a translucent surface needs. */
+.docrud-onboarding .welcome-company-marquee .tc-viewport > [aria-hidden] { display: none; }
+.docrud-onboarding .welcome-company-marquee .tc-viewport {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(to right, transparent, #000 6%, #000 94%, transparent);
+}
+
+
+/* ── Role step: the collapsed list ──────────────────────────────────── */
+.docrud-onboarding .role-add-custom svg { width: 14px; height: 14px; flex-shrink: 0; }
+/* Standing hint that a direction of your own is possible, shown while the
+   add button has nothing to add. */
+.docrud-onboarding .role-add-hint {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, .45);
+  font-size: 13px;
+}
+.docrud-onboarding .role-show-more {
+  margin-top: 14px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .05);
+  padding: 0 14px;
+  color: rgba(255, 255, 255, .75);
+  font-size: 13px;
+  font-weight: 500;
+  transition: border-color .2s ease, background-color .2s ease;
+}
+.docrud-onboarding .role-show-more:hover {
+  border-color: rgba(255, 255, 255, .3);
+  background: rgba(255, 255, 255, .09);
+  color: #fff;
+}
+.docrud-onboarding .role-show-more:focus-visible { outline: 2px solid rgba(255, 255, 255, .7); outline-offset: 3px; }
+.docrud-onboarding .role-show-more svg { width: 14px; height: 14px; flex-shrink: 0; transition: transform .2s ease; }
+.docrud-onboarding .role-chevron-up { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .docrud-onboarding .role-show-more,
+  .docrud-onboarding .role-show-more svg { transition: none; }
+}
+/* On a phone the control should span the card rather than sit as a stub. */
+@media (max-width: 640px) {
+  .docrud-onboarding .role-show-more,
+  .docrud-onboarding .role-add-custom { width: 100%; justify-content: center; }
+}
+
+
+/* ── Skills: search field, inline count, compact wrap ───────────────────
+   The count sits inside the field rather than in a heading of its own, so the
+   whole step is a field plus chips and the buttons stay on a laptop screen
+   without the page scrolling. */
+.docrud-onboarding .skills-search { position: relative; display: block; margin-top: 24px; }
+/* Room on the right for the count, on the left for the search icon. */
+.docrud-onboarding .skills-search-input { padding-right: 58px; }
+.docrud-onboarding .skills-count-inline {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-onb-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .45);
+  pointer-events: none;
+}
+
+/* Chosen skills sit in their own row above the rest, so a choice is never
+   hidden behind "Read more" and the current selection reads at a glance. */
+.docrud-onboarding .skills-chosen { margin-top: 14px; }
+
+/* Denser chips than the role step: there are far more of them, and the point
+   of this screen is to fit. */
+.docrud-onboarding .skills-options .choice-chip {
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+.docrud-onboarding .skills-options .choice-chip svg { width: 11px; height: 11px; }
+
+
+
+/* ── Account type: a plain select ───────────────────────────────────────
+   Two mutually exclusive options do not need a screen of cards. A native
+   <select> is smaller, familiar, and brings its own keyboard handling and
+   mobile picker. Styled to match the underlined inputs; the arrow is drawn as
+   a background image because `appearance: none` removes the native one. */
+.docrud-onboarding .account-kind { display: block; margin-top: 28px; max-width: 380px; }
+.docrud-onboarding .account-kind-select {
+  padding-left: 15px;
+  padding-right: 34px;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, .55) 50%),
+                    linear-gradient(135deg, rgba(255, 255, 255, .55) 50%, transparent 50%);
+  background-position: right 12px center, right 6px center;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+/* The dropdown itself is painted by the OS, so its options need a readable
+   surface of their own — inherited transparency renders white-on-white. */
+.docrud-onboarding .account-kind-select option { background: #14141a; color: #f4f4f5; }
+
+
+
+
+/* ── Footer at narrow widths ────────────────────────────────────────────
+   The row never reflows, so space is found by shrinking instead: the gap and
+   the buttons' own padding come down, in that order. Heights stay 46px, so the
+   targets remain comfortable — only the horizontal air is spent. Measured to
+   hold on a 320px screen, the narrowest supported. */
+@container onbcard (max-width: 400px) {
+  .docrud-onboarding .card-footer { gap: 10px; }
+  .docrud-onboarding .card-footer .step-nav-continue { padding-inline: 16px; }
+}
+@container onbcard (max-width: 320px) {
+  .docrud-onboarding .card-footer { gap: 8px; }
+  .docrud-onboarding .card-footer .step-nav-continue { padding-inline: 12px; font-size: 15px; }
+  .docrud-onboarding .card-footer .back-button { font-size: 13px; }
+}
+
+/* Fallback for engines without container queries — same intent, keyed to the
+   window rather than the card. */
+@supports not (container-type: inline-size) {
+  @media (max-width: 440px) {
+    .docrud-onboarding .card-footer { gap: 10px; }
+    .docrud-onboarding .card-footer .step-nav-continue { padding-inline: 16px; }
+  }
+}
+
+/* Only the figure is emphasised; the sentence around it keeps .demo-note. */
+.docrud-onboarding .opportunity-count {
+  color: #fff;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The way past the résumé. Same shape and size as the primary above it —
+   full width, 48px, same radius, padding and type — but outlined instead of
+   filled, so the two read as one pair with a clear primary. */
+.docrud-onboarding .continue-without-resume {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+  /* 1px less than the primary's padding on each side, so the 2px border does
+     not push this button 2px taller than the filled one beside it. */
+  padding: 11px 24px;
+  color: rgba(255, 255, 255, .85);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .2s ease, color .2s ease, background-color .2s ease;
+}
+.docrud-onboarding .continue-without-resume:hover {
+  border-color: rgba(255, 255, 255, .45);
+  color: #fff;
+}
+.docrud-onboarding .continue-without-resume:active { transform: scale(.99); }
+.docrud-onboarding .continue-without-resume:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, .7);
+  outline-offset: 3px;
+}
+.docrud-onboarding .continue-without-resume svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* ── Auth gate ──────────────────────────────────────────────────────── */
+.docrud-onboarding .auth-captcha { margin-top: 24px; }
+.docrud-onboarding .auth-input { padding-left: 15px; }
+.docrud-onboarding .auth-otp { letter-spacing: .4em; font-variant-numeric: tabular-nums; }
+.docrud-onboarding .auth-back { justify-content: center; }
+.docrud-onboarding .auth-error { margin-top: 14px; }
+.docrud-onboarding .auth-spin { width: 16px; height: 16px; animation: docrudOnbSpin .9s linear infinite; }
+@keyframes docrudOnbSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .docrud-onboarding .auth-spin { animation: none; }
+}

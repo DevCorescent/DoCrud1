@@ -174,9 +174,19 @@ export default function TrustedCompanies({
       {/* `flex-1`/`min-w-0` are gone with the flex row that held the icons —
           a block viewport simply fills the full width. */}
       <div className="tc-viewport relative overflow-hidden">
-          {/* Edge fades, so marks enter and leave instead of being cut off. */}
-          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#08080A] to-transparent" aria-hidden />
-          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#08080A] to-transparent" aria-hidden />
+          {/* Edge fades, so marks enter and leave instead of being cut off.
+
+              The colour must be the page's own background. It was #08080A
+              while the homepage shell paints #0D0D0F, so the gradient ran to a
+              colour DARKER than the page: instead of dissolving, a mark walked
+              into a dark smudge and then stopped, which read as a hard cut at
+              both ends. Same value as the shell (and globals.css's html
+              background), so the fade now resolves into the page exactly.
+
+              Kept as fixed overlays on the viewport, not on the track — they
+              must stay at the edges while the marks travel underneath. */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-[#0D0D0F] to-transparent sm:w-16" aria-hidden />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-10 bg-gradient-to-l from-[#0D0D0F] to-transparent sm:w-16" aria-hidden />
           <div className="flex w-max">
             <div className="tc-track flex w-max">
               {row(false)}

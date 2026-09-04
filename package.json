@@ -16,6 +16,8 @@
     "test:hiring": "tsx scripts/hiring-projection.selftest.ts",
     "test:post-job": "tsx scripts/post-job.selftest.ts",
     "test:homepage-counts": "tsx scripts/homepage-counts.selftest.ts",
+    "test:public-jobs-equivalence": "tsx scripts/public-jobs-equivalence.selftest.ts",
+    "test:onboarding-job-count": "tsx scripts/onboarding-job-count.selftest.ts",
     "test:corpus-cache": "tsx scripts/corpus-cache.selftest.ts",
     "test:recommend-profile": "tsx scripts/recommend-profile.selftest.ts",
     "test:recommended-view": "tsx scripts/recommended-view.selftest.ts",
@@ -79,9 +81,16 @@
     "test:job-performance": "tsx scripts/job-performance.selftest.ts",
     "test:job-scraper-health": "tsx scripts/job-scraper-health.selftest.ts",
     "test:job-redis-performance": "tsx scripts/job-redis-performance.selftest.ts",
+    "test:onboarding-auth": "tsx scripts/onboarding-auth.selftest.ts",
+    "test:onboarding-roles": "tsx scripts/onboarding-roles-persistence.selftest.ts",
+    "test:onboarding-resume": "tsx scripts/onboarding-resume.selftest.ts",
+    "test:onboarding-flow": "tsx scripts/onboarding-flow.selftest.ts",
+    "test:onboarding-business-space": "tsx scripts/onboarding-business-space.selftest.ts",
+    "test:onboarding-business-skills": "tsx scripts/onboarding-business-skills.selftest.ts",
     "test:company-explorer": "tsx scripts/company-explorer.selftest.ts",
     "test:company-logo": "tsx scripts/company-logo.selftest.ts",
-    "test:job-microsoft": "tsx scripts/job-microsoft.selftest.ts"
+    "test:job-microsoft": "tsx scripts/job-microsoft.selftest.ts",
+    "test:company-logo-upload": "tsx scripts/company-logo-upload.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

@@ -144,3 +144,59 @@ export async function selectPublishedJobRowById(
   if (found === null) return null;
   return { job: found[0] ?? null };
 }
+
+/**
+ * How many postings the public feed would return with no filters applied.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * The onboarding opportunity counter needs ONE NUMBER — the feed's `total`.
+ * Getting it used to mean `/api/jobs/public?pageSize=1`, which loads the whole
+ * corpus, filters it, sorts it, and throws all but one row away. Measured cold
+ * against the live cluster the corpus read alone was 136 s / 12.01 MB, because
+ * a document is the smallest unit Mongo returns and `paginate()` slices in JS
+ * *after* everything has already crossed the wire. A `pageSize` of 1 saves
+ * nothing.
+ *
+ * Here Mongo counts inside the document and returns an integer.
+ *
+ * ═══ THE PREDICATE IS `isJobActive`, TRANSLATED — NOT REINVENTED ═══
+ *
+ * lifecycle.ts is the single definition of active:
+ *
+ *     status === 'published' && isActive !== false && !expiresAt
+ *
+ * Each clause maps across exactly, including the parts that are easy to get
+ * subtly wrong:
+ *
+ *   • `isActive !== false` is NOT `isActive === true`. A posting with the field
+ *     absent is active, and `$ne` keeps it; `$eq: true` would silently drop
+ *     every job that never set the flag.
+ *
+ *   • `!expiresAt` is JavaScript truthiness, and Mongo's `$not` does not agree
+ *     with it: an EMPTY STRING is falsy in JS but truthy in an aggregation. So
+ *     the absent/null/'' cases are named explicitly via `$ifNull` rather than
+ *     left to `$not`, which would have counted `expiresAt: ''` as expired and
+ *     quietly undercounted.
+ *
+ * A drift here would put a wrong number on the first screen a user sees, so
+ * `scripts/onboarding-job-count.selftest.ts` runs this predicate and the real
+ * `isJobActive` over the same fixtures and requires identical answers.
+ *
+ * Returns null when Mongo is unconfigured or the document is absent — "ask the
+ * normal way", never "there are no jobs".
+ */
+export const ACTIVE_JOB_COND = {
+  $and: [
+    { $eq: ['$$j.status', 'published'] },
+    { $ne: ['$$j.isActive', false] },
+    { $eq: [{ $ifNull: ['$$j.expiresAt', ''] }, ''] },
+  ],
+};
+
+export async function selectActiveJobCount(): Promise<number | null> {
+  const value = await project<number>({
+    value: { $size: { $filter: { input: '$value', as: 'j', cond: ACTIVE_JOB_COND } } },
+  });
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}

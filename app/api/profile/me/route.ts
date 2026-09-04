@@ -57,6 +57,15 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'You can add up to 20 skills.' }, { status: 400 });
     }
 
+    /* Same shape of guard the skills list already has: a cap, so a client
+       cannot write an unbounded array into a profile row. */
+    if (body.roles && body.roles.length > 20) {
+      return NextResponse.json({ error: 'You can add up to 20 roles.' }, { status: 400 });
+    }
+    if (body.customRoles && body.customRoles.length > 20) {
+      return NextResponse.json({ error: 'You can add up to 20 custom roles.' }, { status: 400 });
+    }
+
     if (body.website && body.website !== '') {
       try {
         new URL(body.website.startsWith('http') ? body.website : `https://${body.website}`);

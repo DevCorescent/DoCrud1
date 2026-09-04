@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import nodemailer from 'nodemailer';
-import { getStoredUsers } from '@/lib/server/auth';
+import { getStoredUsers, getAuthSession } from '@/lib/server/auth';
+import { enforceCaptcha, isCaptchaConfigured } from '@/lib/server/security/captcha';
 import { otpSessionsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getMailSettings } from '@/lib/server/settings';
 import { resolveSystemEmail } from '@/lib/server/system-emails';
@@ -354,9 +355,28 @@ async function dispatchOtpEmail(to: string, otp: string, firstName: string): Pro
 // elevated access; it only marks that email as verified for that account.
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { email?: string };
+    const body = (await req.json()) as { email?: string; captchaToken?: string };
     const email = String(body.email ?? '').toLowerCase().trim();
     if (!email) return NextResponse.json({ error: 'Email is required.' }, { status: 400 });
+
+    /* An ANONYMOUS caller must pass the challenge before an email is sent.
+       Without this the endpoint was a free mailer: rate limits slow that down
+       but do not stop it, and the address being mailed is chosen by the caller.
+
+       A caller who already has a session is exempt, because they solved the
+       challenge to obtain it — this is the "resend my own verification code"
+       path, and re-challenging it would break the existing signup flow that
+       calls this immediately after an authenticated sign-in. */
+    if (isCaptchaConfigured()) {
+      const session = await getAuthSession().catch(() => null);
+      if (!session?.user) {
+        const captchaFail = await enforceCaptcha(body.captchaToken, {
+          remoteIp: getClientIp(req),
+          label: 'onboarding-send-otp',
+        });
+        if (captchaFail) return captchaFail;
+      }
+    }
 
     // Throttle OTP sends by account + IP (runs before the account lookup, so it
     // does not reveal whether the email is registered).

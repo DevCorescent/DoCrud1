@@ -222,7 +222,15 @@ export default function AuthGate({
       }
 
       const result = await signIn('credentials', {
-        email: email.trim(), password, policyAccepted: 'accepted', redirect: false,
+        email: email.trim(),
+        password,
+        policyAccepted: 'accepted',
+        redirect: false,
+        // loginGrant is a one-shot HMAC token minted by the signup endpoint
+        // so the credentials provider can skip captcha for the immediate
+        // post-signup auto-login (no fresh Turnstile token available here).
+        loginGrant: signupBody?.loginGrant || '',
+        captchaToken,
       });
       if (!result?.ok) throw new Error('That email and password did not match.');
 

@@ -47,10 +47,11 @@
  * The flow only leaves for Home once verification, account creation AND
  * sign-in have all actually succeeded.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { SecurityVerification, isTurnstileEnabled } from '@/components/security/SecurityVerification';
+import type { TurnstileStatus } from '@/components/security/TurnstileWidget';
 import { OnboardingProgress, StepHeading } from './StepChrome';
 
 /* A courtesy wait before Resend lights up. The SERVER's limit (three sends per
@@ -63,6 +64,10 @@ const RESEND_COOLDOWN_SECONDS = 30;
    whenever that takes longer — it only stops the confirmation flashing past
    unread when the server answers quickly. */
 const VERIFIED_HOLD_MS = 700;
+
+/* The email form's id. Its submit button sits outside the <form> element so the
+   security challenge can be placed between them, and reaches it by id. */
+const EMAIL_FORM_ID = 'onboarding-email-form';
 
 type Mode = 'choose' | 'email' | 'otp';
 
@@ -105,6 +110,9 @@ export default function AuthGate({
   const [mode, setMode] = useState<Mode>('choose');
   const [captcha, setCaptcha] = useState('');
   const [captchaNonce, setCaptchaNonce] = useState(0);
+  /* Turnstile's script never arrived — blocked by a network, an extension or a
+     proxy. Distinct from "not solved yet": there is nothing to wait for. */
+  const [captchaUnavailable, setCaptchaUnavailable] = useState(false);
   /* Last token the widget produced. The widget now stays mounted through the
      email form, so `captcha` is normally the live, current token; this covers
      only the brief window where Turnstile has fired expired-callback (clearing
@@ -134,18 +142,35 @@ export default function AuthGate({
   const [cooldown, setCooldown] = useState(0);
   const [resending, setResending] = useState(false);
 
-  /* A token is required only when Turnstile is actually configured. */
-  const verified = !isTurnstileEnabled() || Boolean(captcha);
+  /* A token is required only when Turnstile is actually configured AND its
+     challenge can actually be reached. Blocking a person behind a widget that
+     will never load protects nothing — the token is judged on the server, and
+     `enforceCaptcha` already decides for itself what to do when one is absent.
+     Refusing to submit here would simply mean nobody on that network can ever
+     sign up. */
+  const verified = !isTurnstileEnabled() || captchaUnavailable || Boolean(captcha);
   const isBusiness = accountKind === 'business';
   const who = firstName.trim() ? `${firstName.trim()}, save` : 'Save';
 
   /* Every token the widget produces, remembered as it arrives. `captcha` is
      the live value and is what gets sent; this is only the fallback for the
-     window between Turnstile's expired-callback and the widget re-arming. */
-  const takeCaptcha = (token: string) => {
+     window between Turnstile's expired-callback and the widget re-arming.
+
+     `useCallback` is not a micro-optimisation here, it is REQUIRED. A new
+     function identity on every render used to tear the Turnstile widget down
+     and rebuild it — on a form, once per keystroke — so the challenge was
+     destroyed as fast as it was solved and the gate never opened. The widget
+     no longer depends on this identity either (see TurnstileWidget), but
+     handing it a stable one is the other half of the same guarantee. */
+  const takeCaptcha = useCallback((token: string) => {
     captchaSnapshotRef.current = token || captchaSnapshotRef.current;
     setCaptcha(token);
-  };
+  }, []);
+
+  const noteCaptchaStatus = useCallback((next: TurnstileStatus) => {
+    setCaptchaUnavailable(next === 'unavailable');
+  }, []);
+
 
   /* A used token cannot be replayed, so the widget is reset after every attempt
      that spent one. This only produces a new token because the widget is still
@@ -403,53 +428,12 @@ export default function AuthGate({
         />
       )}
 
-      {/* ONE widget, rendered in ONE position, for both the choose screen and
-          the email form. It is deliberately outside the mode blocks: React
-          keeps the same instance across the transition, so the token survives
-          the move to the form AND — the part that matters — a failed attempt
-          can reset the widget and actually get a new token. When it lived
-          inside the choose block it unmounted on the way to the form, and
-          every retry then sent a spent token that the server refuses, with no
-          way for the person to produce a fresh one. */}
-      {mode !== 'otp' && (
-        <SecurityVerification
-          onToken={takeCaptcha}
-          action="onboarding"
-          resetSignal={captchaNonce}
-          className="auth-captcha"
-        />
-      )}
-
-      {mode === 'choose' && (
-        <>
-          <div className="auth-options">
-            <button type="button" className="primary-button" onClick={startGoogle} disabled={busy}>
-              {busy ? <Loader2 className="auth-spin" aria-hidden="true" />
-                    : <span className="logo-mark docrud-cta-mark" aria-hidden="true">G</span>}
-              <span>Continue with Google</span>
-            </button>
-            <button
-              type="button"
-              className="continue-without-resume"
-              onClick={() => {
-                if (!verified) { needVerification(); return; }
-                setError('');
-                /* The widget comes along to the form — see the render above —
-                   so nothing has to be snapshotted across the transition. */
-                setMode('email');
-              }}
-              disabled={busy}
-            >
-              <Mail aria-hidden="true" />
-              <span>Continue with Email</span>
-              <ArrowRight aria-hidden="true" />
-            </button>
-          </div>
-        </>
-      )}
-
+      {/* The FIELDS only. The submit button lives below the challenge and
+          reaches back to this form by id, so the challenge can sit where it
+          belongs — immediately above the button that spends its token — while
+          still being a single element in a single position (see below). */}
       {mode === 'email' && (
-        <form onSubmit={submitEmail}>
+        <form id={EMAIL_FORM_ID} onSubmit={submitEmail}>
           {isBusiness && (
             <label className="name-field" htmlFor="onboarding-organization">
               <span className="field-label">Organization name</span>
@@ -476,18 +460,67 @@ export default function AuthGate({
                 placeholder="At least 8 characters" autoComplete="new-password" />
             </div>
           </label>
-          <div className="auth-options">
-            <button type="submit" className="primary-button" disabled={busy}>
-              {busy && <Loader2 className="auth-spin" aria-hidden="true" />}
-              <span>{busy ? 'Sending your code…' : 'Continue'}</span>
-            </button>
-            <button type="button" className="back-button auth-back"
-              onClick={() => { setError(''); setMode('choose'); }} disabled={busy}>
-              <ArrowLeft aria-hidden="true" />
-              <span>Back</span>
-            </button>
-          </div>
         </form>
+      )}
+
+      {/* ONE widget, ONE position, on every screen that spends a token.
+
+          Position matters twice over. Visually it belongs with the action it
+          gates — after the fields on the form, above the button. Structurally
+          it must never move between modes: it is a sibling of the mode blocks
+          rather than a child of one, so React keeps the SAME instance as the
+          person goes from the choice screen to the form. When it lived inside
+          the choose block it unmounted on the way to the form, and every retry
+          afterwards sent a spent token the server refuses, with no way to
+          produce a fresh one. */}
+      {mode !== 'otp' && (
+        <SecurityVerification
+          onToken={takeCaptcha}
+          onStatusChange={noteCaptchaStatus}
+          action="onboarding"
+          resetSignal={captchaNonce}
+          className="auth-captcha"
+        />
+      )}
+
+      {mode === 'choose' && (
+        <div className="auth-options">
+          <button type="button" className="primary-button" onClick={startGoogle} disabled={busy}>
+            {busy ? <Loader2 className="auth-spin" aria-hidden="true" />
+                  : <span className="logo-mark docrud-cta-mark" aria-hidden="true">G</span>}
+            <span>Continue with Google</span>
+          </button>
+          <button
+            type="button"
+            className="continue-without-resume"
+            onClick={() => {
+              if (!verified) { needVerification(); return; }
+              setError('');
+              /* The widget comes along to the form — see above — so nothing
+                 has to be snapshotted across the transition. */
+              setMode('email');
+            }}
+            disabled={busy}
+          >
+            <Mail aria-hidden="true" />
+            <span>Continue with Email</span>
+            <ArrowRight aria-hidden="true" />
+          </button>
+        </div>
+      )}
+
+      {mode === 'email' && (
+        <div className="auth-options">
+          <button type="submit" form={EMAIL_FORM_ID} className="primary-button" disabled={busy}>
+            {busy && <Loader2 className="auth-spin" aria-hidden="true" />}
+            <span>{busy ? 'Sending your code…' : 'Continue'}</span>
+          </button>
+          <button type="button" className="back-button auth-back"
+            onClick={() => { setError(''); setMode('choose'); }} disabled={busy}>
+            <ArrowLeft aria-hidden="true" />
+            <span>Back</span>
+          </button>
+        </div>
       )}
 
       {mode === 'otp' && (

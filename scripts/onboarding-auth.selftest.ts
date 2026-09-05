@@ -48,7 +48,41 @@ check('a token is required before Google starts', /if \(!verified\) return needV
 check('Google is only reached after that guard',
   GATE_CODE.indexOf('const startGoogle') < GATE_CODE.indexOf("signIn('google'"));
 check('the gate stays usable where Turnstile is not configured',
-  /!isTurnstileEnabled\(\) \|\| Boolean\(captcha\)/.test(GATE_CODE));
+  /!isTurnstileEnabled\(\) \|\| captchaUnavailable \|\| Boolean\(captcha\)/.test(GATE_CODE));
+/* A challenge that cannot LOAD is not the same as one that has not been solved,
+   and blocking on it strands everyone behind a blocking network or extension —
+   for nothing, since the token is judged on the server and enforceCaptcha
+   already decides what to do when one is absent. */
+check('and usable when the challenge cannot be reached at all',
+  /captchaUnavailable/.test(GATE_CODE)
+  && /next === 'unavailable'/.test(GATE_CODE));
+
+/* ── The widget itself must survive the form it sits on ── */
+const WIDGET = strip(src('components/security/TurnstileWidget.tsx'));
+check('the token callback cannot restart the challenge',
+  /const tokenRef = useRef\(onToken\)/.test(WIDGET)
+  && !/\[scriptState, action, emit, status\]/.test(WIDGET));
+check('only the script arriving rebuilds the widget',
+  /\}, \[scriptState, emit, status\]\);/.test(WIDGET));
+check('and the parent hands it a stable callback anyway',
+  /const takeCaptcha = useCallback\(/.test(GATE_CODE));
+check('readiness is polled, not inferred from the script load event',
+  /setInterval\(\(\) => \{\s*if \(window\.turnstile\)/.test(WIDGET));
+check('a script that never arrives is reported rather than waited on forever',
+  /SCRIPT_TIMEOUT_MS/.test(WIDGET) && /'unavailable'/.test(WIDGET));
+check('an expired or failed challenge re-arms itself',
+  /retry: 'auto'/.test(WIDGET) && /'refresh-expired': 'auto'/.test(WIDGET));
+
+/* ── Placement ── */
+check('there is exactly one challenge, outside the mode blocks',
+  (GATE.match(/<SecurityVerification/g) ?? []).length === 1
+  && /\{mode !== 'otp' && \(\s*<SecurityVerification/.test(GATE));
+check('it sits between the form fields and the button that spends its token',
+  GATE.indexOf('<form id={EMAIL_FORM_ID}') < GATE.indexOf('<SecurityVerification')
+  && GATE.indexOf('<SecurityVerification') < GATE.indexOf('form={EMAIL_FORM_ID}'));
+check('the submit button reaches its form by id, so the challenge can sit between them',
+  /const EMAIL_FORM_ID = /.test(GATE_CODE)
+  && /<button type="submit" form=\{EMAIL_FORM_ID\}/.test(GATE));
 
 console.log('── 2. CAPTCHA gates email and OTP ──');
 check('the email form refuses to submit unverified', /submitEmail[\s\S]{0,300}if \(!verified\)/.test(GATE_CODE));

@@ -21,17 +21,28 @@ export function isTurnstileEnabled(): boolean {
 const MESSAGES: Record<TurnstileStatus, { text: string; className: string }> = {
   ready: { text: "Verify you're human", className: 'text-white/45' },
   solved: { text: 'Verification successful', className: 'text-emerald-300/80' },
-  expired: { text: 'Verification expired — please verify again', className: 'text-amber-300/80' },
-  error: { text: 'Verification failed — please try again', className: 'text-rose-300/80' },
+  expired: { text: 'Verification expired — refreshing…', className: 'text-amber-300/80' },
+  error: { text: 'Verification failed — retrying…', className: 'text-rose-300/80' },
+  /* The challenge could not load at all. The person is not at fault and must
+     not be blamed or blocked; the server still applies its own checks. */
+  unavailable: { text: 'Security check unavailable — you can continue', className: 'text-white/45' },
 };
 
 export function SecurityVerification({
   onToken,
+  onStatusChange,
   action,
   resetSignal,
   className,
 }: {
   onToken: (token: string) => void;
+  /**
+   * Passed straight through, so a form can tell the difference between "not
+   * solved yet" and "this challenge is never going to load". Blocking on the
+   * second is a dead end for the person and buys nothing: the token is judged
+   * on the server, which already decides what to do when one is absent.
+   */
+  onStatusChange?: (status: TurnstileStatus) => void;
   action?: string;
   resetSignal?: number;
   className?: string;
@@ -51,7 +62,12 @@ export function SecurityVerification({
         <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/35">Security verification</span>
       </div>
 
-      <TurnstileWidget onToken={onToken} onStatusChange={setStatus} action={action} resetSignal={resetSignal} />
+      <TurnstileWidget
+        onToken={onToken}
+        onStatusChange={(next) => { setStatus(next); onStatusChange?.(next); }}
+        action={action}
+        resetSignal={resetSignal}
+      />
 
       <div className="mt-2 flex items-center justify-between gap-2">
         <span className={`text-[11px] ${msg.className}`}>{msg.text}</span>

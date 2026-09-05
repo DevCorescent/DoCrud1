@@ -36,6 +36,14 @@ export interface RecommendationRow {
   employmentType?: string;
   createdAt?: string;
   matchReasons: string[];
+  /** One sentence naming why this suits the viewer. Absent when nothing does. */
+  matchSummary?: string;
+  /** Per-dimension breakdown from the relevance scorer, strongest first. */
+  matchFactors?: Array<{ kind: string; label: string; detail: string; points: number; max: number }>;
+  /** Requirements the viewer already has, by name. */
+  relevanceMatchedSkills?: string[];
+  /** Requirements the posting leans on that the viewer does not show. */
+  relevanceMissingSkills?: string[];
   atsScore: number | null;
   atsBand: string | null;
   matchedSkills: string[];

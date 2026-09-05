@@ -127,7 +127,16 @@ async function computeRecommendations(
         applyUrl: isValidApplyUrl(String(j.applyUrl ?? '')) ? String(j.applyUrl) : '',
         createdAt: recJob.createdAt,
       };
-      if (showMatch) { job.matchScore = match.score; job.matchReasons = match.reasons; }
+      if (showMatch) {
+        job.matchScore = match.score;
+        job.matchReasons = match.reasons;
+        /* The specifics behind the number. Empty fields are omitted rather
+           than sent as empty arrays, so a card can test for presence. */
+        if (match.summary) job.matchSummary = match.summary;
+        if (match.factors.length) job.matchFactors = match.factors;
+        if (match.matchedSkills.length) job.matchedSkills = match.matchedSkills.slice(0, 12);
+        if (match.missingSkills.length) job.missingSkills = match.missingSkills.slice(0, 8);
+      }
       return { score: showMatch ? match.score : 0, recommended: showMatch && isRecommended(match), job };
     });
 
@@ -202,6 +211,9 @@ async function computePersonalized(
   /* The SAME ranking pass the other scopes use, so the personalized feed and
      the carousel cannot disagree about which jobs matched or why. */
   const reasons = new Map<string, string[]>();
+  const summaries = new Map<string, string>();
+  const factors = new Map<string, Array<{ kind: string; label: string; detail: string; points: number; max: number }>>();
+  const missing = new Map<string, string[]>();
   const scored = (jobs as unknown as Array<Record<string, unknown>>).map((j) => {
     const recJob: RecJob = {
       id: String(j.id ?? ''),
@@ -217,7 +229,15 @@ async function computePersonalized(
       createdAt: String(j.createdAt ?? ''),
     };
     const match = recommendMatch(profile, recJob, now);
-    if (showMatch) reasons.set(recJob.id, match.reasons);
+    if (showMatch) {
+      reasons.set(recJob.id, match.reasons);
+      /* Filled in the SAME pass that produced the score, so the explanation a
+         person reads is the one that actually ranked the job — not a second
+         pass that could disagree with the first. */
+      if (match.summary) summaries.set(recJob.id, match.summary);
+      if (match.factors.length) factors.set(recJob.id, match.factors);
+      if (match.missingSkills.length) missing.set(recJob.id, match.missingSkills.slice(0, 8));
+    }
     return { score: showMatch ? match.score : 0, recommended: showMatch && isRecommended(match), raw: j, createdAt: recJob.createdAt };
   });
 
@@ -259,6 +279,9 @@ async function computePersonalized(
     appliedJobIds: new Set(applications.map((a) => String(a.jobId))),
     eligibilityProfile: hasPrefs ? prefs : null,
     reasonsByJobId: reasons,
+    summaryByJobId: summaries,
+    factorsByJobId: factors,
+    missingByJobId: missing,
     page,
     pageSize,
   });

@@ -1,42 +1,7 @@
 {
-  "signup:onboarding:ip:::1:1788598800000": {
-    "_id": "signup:onboarding:ip:::1:1788598800000",
-    "count": 3,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
-  },
-  "signup:onboarding:ip:127.0.0.1:1788598800000": {
-    "_id": "signup:onboarding:ip:127.0.0.1:1788598800000",
-    "count": 2,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
-  },
-  "signup:onboarding:email:zohan@yopmail.com:1788601500000": {
-    "_id": "signup:onboarding:email:zohan@yopmail.com:1788601500000",
-    "count": 1,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
-  },
-  "otp:send:signup:account:zohan@yopmail.com:1788601800000": {
-    "_id": "otp:send:signup:account:zohan@yopmail.com:1788601800000",
-    "count": 1,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
-  },
-  "otp:send:signup:ip:::1:1788601800000": {
-    "_id": "otp:send:signup:ip:::1:1788601800000",
-    "count": 1,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
-  },
-  "otp:verify:signup:account:zohan@yopmail.com:1788601800000": {
-    "_id": "otp:verify:signup:account:zohan@yopmail.com:1788601800000",
+  "login:account:suhas@yopmail.com:1788604800000": {
+    "_id": "login:account:suhas@yopmail.com:1788604800000",
     "count": 0,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
-  },
-  "otp:verify:signup:ip:::1:1788601800000": {
-    "_id": "otp:verify:signup:ip:::1:1788601800000",
-    "count": 1,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
-  },
-  "login:account:zohan@yopmail.com:1788601800000": {
-    "_id": "login:account:zohan@yopmail.com:1788601800000",
-    "count": 0,
-    "expiresAt": "2026-09-05T10:00:00.000Z"
+    "expiresAt": "2026-09-05T10:50:00.000Z"
   }
 }

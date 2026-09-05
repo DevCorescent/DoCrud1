@@ -161,7 +161,7 @@
     "createdFromSignup": true,
     "policyAcceptance": {
       "version": "2026.04.01",
-      "acceptedAt": "2026-09-05T09:05:14.079Z",
+      "acceptedAt": "2026-09-05T10:46:47.242Z",
       "via": "login",
       "requiredPolicyIds": [
         "terms",
@@ -188,8 +188,8 @@
     },
     "passwordHash": "0caecb72029f6b97a6b21f0531d29237959b1232c6329898d207a127df0861055d6fe19f5acfe85f66dc820acbebb77b9c76ac5337aeb4779da1fd95505d22ce",
     "passwordSalt": "b3b74a2e6119afa449bf511e6ee9bd71",
-    "lastLogin": "2026-09-05T09:05:14.079Z",
-    "lastSeenAt": "2026-09-05T09:31:46.775Z",
+    "lastLogin": "2026-09-05T10:46:47.242Z",
+    "lastSeenAt": "2026-09-05T11:04:40.786Z",
     "presenceEndedAt": "2026-09-05T09:32:02.773Z"
   },
   {
@@ -281,6 +281,7 @@
     "passwordHash": "09890b16ad5661f6deb120d43b64a6ef582a10147baaba9319e923668b95c5a99701e8703f1cf25a61bd24efc77fa333ab279b8760f1dec98d72a423fa3690a5",
     "passwordSalt": "82a67a3c9cb276786a2bde680ec492ff",
     "lastLogin": "2026-09-05T09:52:19.203Z",
-    "lastSeenAt": "2026-09-05T10:33:55.201Z"
+    "lastSeenAt": "2026-09-05T10:43:55.172Z",
+    "presenceEndedAt": "2026-09-05T10:44:00.168Z"
   }
 ]

@@ -39,10 +39,58 @@ export default function MatchBreakdown({ job, open, onClose }: {
   const scored = typeof job.atsScore === 'number';
   const band = atsBandLabel(job.atsBand);
   const reasons = job.matchReasons.filter(Boolean);
+  /* Every factor the scorer actually credited. A zero-point factor is still
+     worth showing when it EXPLAINS something — "they ask for 5+ years" is
+     useful precisely because it did not score. */
+  const factors = (job.matchFactors ?? []).filter((f) => f && f.detail);
 
   return (
     <Sheet open={open} title={`Why ${job.title}?`} onClose={onClose}>
       <div className="space-y-5">
+        {/* The one-sentence answer, first, in the viewer's own terms. It is
+            present only when there is a real overlap to describe. */}
+        {job.matchSummary ? (
+          <p className="text-[13px] leading-relaxed text-slate-700 dark:text-white/75">
+            {job.matchSummary}
+          </p>
+        ) : null}
+
+        {factors.length > 0 ? (
+          <section>
+            <h3 className={HEADING}>How this was scored</h3>
+            <ul className="mt-2 space-y-2">
+              {factors.map((f) => (
+                <li key={`${f.kind}-${f.label}`} className="flex items-start gap-2.5">
+                  {/* The contribution, so a person can see WHICH part carried
+                      the score rather than being handed one number. */}
+                  <span className={`mt-[1px] shrink-0 rounded px-1.5 py-[1px] text-[10px] font-semibold tabular-nums ${
+                    f.max > 0 && f.points > 0
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-slate-500/10 text-slate-600 dark:text-white/45'
+                  }`}>
+                    {f.max > 0 ? `${f.points}/${f.max}` : 'FYI'}
+                  </span>
+                  <span className={`min-w-0 break-words text-[12.5px] leading-relaxed ${MUTED}`}>{f.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        {job.relevanceMissingSkills?.length ? (
+          <section>
+            <h3 className={HEADING}>Named in the posting, not on your profile</h3>
+            <p className={`mt-2 text-[12.5px] leading-relaxed ${MUTED}`}>
+              {job.relevanceMissingSkills.join(' · ')}
+            </p>
+            {/* Stated as a gap in the DESCRIPTION, not a verdict on the person. */}
+            <p className={`mt-1.5 text-[11.5px] leading-relaxed ${FAINT}`}>
+              Add these to your profile if you have them — they are part of what this
+              score is measured against.
+            </p>
+          </section>
+        ) : null}
+
         {reasons.length > 0 ? (
           <section>
             <h3 className={HEADING}>Recommended because</h3>

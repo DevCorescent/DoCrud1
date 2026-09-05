@@ -47,6 +47,22 @@ export interface PersonalizedJobRow {
   /** The live relevance scorer's own explanations. Passed through, never invented. */
   matchReasons: string[];
   /**
+   * One sentence naming why this posting suits this viewer, from the same
+   * scorer. Empty when there is no real overlap to describe — a job with none
+   * of your skills is not made suitable by being nearby, and saying so would
+   * teach people to distrust every other sentence here.
+   */
+  matchSummary?: string;
+  /** Per-dimension breakdown from the relevance scorer, strongest first. */
+  matchFactors?: Array<{ kind: string; label: string; detail: string; points: number; max: number }>;
+  /**
+   * The RELEVANCE scorer's view of what the posting asks for and the profile
+   * does not show. Kept separate from `missingRequiredSkills`, which is the
+   * ATS résumé pass — two different questions, and merging them would make
+   * both unreadable.
+   */
+  relevanceMissingSkills?: string[];
+  /**
    * Phase 6 ATS. NULL — not 0 — when there is not enough of a candidate to
    * score: a member with no profile and no résumé has an unknown match, and
    * printing "0%" would tell them they are a bad fit when nobody has looked.
@@ -80,6 +96,12 @@ export interface PersonalizedInput {
   eligibilityProfile?: EligibilityProfile | null;
   /** Reasons from the live relevance scorer, keyed by job id. */
   reasonsByJobId?: ReadonlyMap<string, string[]>;
+  /** Same source, same pass: the scorer's one-sentence "why", by job id. */
+  summaryByJobId?: ReadonlyMap<string, string>;
+  /** Same source, same pass: the scorer's per-dimension breakdown, by job id. */
+  factorsByJobId?: ReadonlyMap<string, Array<{ kind: string; label: string; detail: string; points: number; max: number }>>;
+  /** Requirements the posting leans on that the viewer does not show, by job id. */
+  missingByJobId?: ReadonlyMap<string, string[]>;
   page?: unknown;
   pageSize?: unknown;
 }
@@ -126,6 +148,9 @@ export function personalizedPage(input: PersonalizedInput): Page<PersonalizedJob
       preferredSkills: Array.isArray(job.preferredSkills)
         ? job.preferredSkills.slice(0, 8) : undefined,
       matchReasons: input.reasonsByJobId?.get(String(job.id)) ?? [],
+      matchSummary: input.summaryByJobId?.get(String(job.id)) || undefined,
+      matchFactors: input.factorsByJobId?.get(String(job.id)),
+      relevanceMissingSkills: input.missingByJobId?.get(String(job.id)),
       atsScore: null,
       atsBand: null,
       matchedSkills: [],

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getStoredUsers, saveStoredUsers } from '@/lib/server/auth';
-import { createPasswordHash, isValidEmail, normalizeEmail } from '@/lib/server/security';
-import { applyRoadmapPromotionToSubscription, getDefaultPublicPlan } from '@/lib/server/saas';
-import { buildPolicyAcceptance } from '@/lib/policy-consent';
+import { getStoredUsers } from '@/lib/server/auth';
+import { isValidEmail, normalizeEmail } from '@/lib/server/security';
+import { getDefaultPublicPlan } from '@/lib/server/saas';
+import { provisionIndividualAccount } from '@/lib/server/individual-provisioning';
 import { processProfileActivation, markInviteSignedUp } from '@/lib/server/referrals';
 import { enforceRateLimits, getClientIp, RATE_POLICIES } from '@/lib/server/security/rate-limit';
 import { enforceCaptcha } from '@/lib/server/security/captcha';
@@ -58,37 +58,18 @@ export async function POST(request: NextRequest) {
     const selectedPlan = await getDefaultPublicPlan('business');
     const referralCode = typeof payload.referralCode === 'string' ? payload.referralCode.trim() : '';
 
-    const now = new Date().toISOString();
-    const userId = `individual-${Date.now()}`;
-    const newUser = {
-      id: userId,
+    /* Account creation is shared with the onboarding flow, which creates one
+       only after the emailed verification code comes back, so the two entry
+       points cannot produce different accounts. */
+    const { userId } = await provisionIndividualAccount({
       name: payload.name.trim(),
       email: normalizedEmail,
-      role: 'individual' as const,
-      accountType: 'individual' as const,
-      permissions: ['self'],
-      isActive: true,
-      createdAt: now,
-      organizationName: payload.profession?.trim() || 'Individual Workspace',
-      createdFromSignup: true,
-      referredByCode: referralCode || undefined,
-      policyAcceptance: buildPolicyAcceptance('individual_signup', request.headers.get('x-forwarded-for') || undefined),
-      subscription: applyRoadmapPromotionToSubscription({
-        planId: selectedPlan.id,
-        planName: selectedPlan.name,
-        status: 'trial' as const,
-        startedAt: now,
-        aiTrialLimit: selectedPlan.freeAiRuns || 0,
-        aiTrialUsed: 0,
-        monthlyAiCredits: selectedPlan.monthlyAiCredits || 0,
-        remainingAiCredits: selectedPlan.monthlyAiCredits || 0,
-        aiCreditsResetAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      }, now),
-      ...createPasswordHash(payload.password),
-    };
-
-    users.push(newUser);
-    await saveStoredUsers(users);
+      password: payload.password,
+      profession: payload.profession,
+      referralCode,
+      policyContext: 'individual_signup',
+      policyIp: request.headers.get('x-forwarded-for') || undefined,
+    });
 
     // Process referral activation (non-fatal — never block signup)
     if (referralCode) {

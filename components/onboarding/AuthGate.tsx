@@ -3,35 +3,53 @@
 /**
  * Create account — the gate that follows the value pages.
  *
- * ═══ IT AUTHENTICATES THROUGH THE EXISTING SYSTEM ═══
+ * ═══ THE CODE COMES FIRST; THE ACCOUNT COMES SECOND ═══
  *
- * Nothing here is a second implementation. Google goes through
- * /api/auth/oauth-intent then NextAuth's Google provider; email goes through
- * /api/individual/signup (which hashes the password server-side and enforces
- * the challenge), then NextAuth credentials, then the existing
- * send-otp / verify-otp pair. No password is stored, logged, or put in a
- * cookie — it is posted once, over HTTPS, and dropped.
+ * Email + password go to /api/onboarding/signup/start, which creates NOTHING.
+ * It stages the signup behind an opaque handle, hashes the password on the
+ * server, and mails a six-digit code. Only when that code is typed back does
+ * /api/onboarding/signup/verify create the account, mark the address verified,
+ * and store the onboarding answers — in one server-side step, from the record
+ * staged when the code was sent.
+ *
+ * This is the fix for two failures that shared a cause. The gate used to create
+ * the account, sign in, and only then try to mail a code: a delivery failure
+ * left a real, signed-in, unverified account behind, and the business branch
+ * never mailed anything at all, because /api/saas/signup refuses to create a
+ * workspace without a verified-OTP session it was never given. Neither can
+ * happen now — there is no account to leave behind, and both kinds take the
+ * same, single, code-first path.
+ *
+ * Google is unchanged: it goes through /api/auth/oauth-intent and NextAuth's
+ * Google provider, and Google has already verified the address.
+ *
+ * ═══ THE PASSWORD ═══
+ *
+ * Posted once over HTTPS to be hashed server-side, and held in component state
+ * only so the sign-in that follows verification can present it. It is never
+ * stored, logged, or put in a cookie, and never hashed in the browser.
  *
  * ═══ THE CHALLENGE GATES BOTH PATHS ═══
  *
  * Neither button does anything until Turnstile has produced a token, and the
- * token is only ever judged on the server: /api/individual/signup and
- * /api/onboarding/send-otp both call enforceCaptcha. Hiding a button is UX,
- * not security, which is why the server checks anyway.
+ * token is only ever judged on the server: /api/onboarding/signup/start calls
+ * enforceCaptcha. Hiding a button is UX, not security, which is why the server
+ * checks anyway. The resend carries no token — the widget is long gone by then
+ * — and is guarded instead by the unguessable handle plus the server's rate
+ * limits.
  *
- * When Turnstile is not configured for a deployment, the widget renders
- * nothing and the gate stays usable — the server then decides on its own terms.
+ * When Turnstile is not configured for a deployment, the widget renders nothing
+ * and the gate stays usable — the server then decides on its own terms.
  *
  * ═══ A FAILURE NEVER COSTS THE PERSON THEIR ANSWERS ═══
  *
  * Every error path returns to this screen with the onboarding state intact.
- * The flow only leaves for Home once authentication AND the profile write have
- * both actually succeeded.
+ * The flow only leaves for Home once verification, account creation AND
+ * sign-in have all actually succeeded.
  */
-
 import { useEffect, useRef, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { ArrowLeft, ArrowRight, Loader2, Mail } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Loader2, Mail } from 'lucide-react';
 import { SecurityVerification, isTurnstileEnabled } from '@/components/security/SecurityVerification';
 import { OnboardingProgress, StepHeading } from './StepChrome';
 
@@ -40,7 +58,22 @@ import { OnboardingProgress, StepHeading } from './StepChrome';
    stops the button being mashed between allowed sends. */
 const RESEND_COOLDOWN_SECONDS = 30;
 
+/* A FLOOR on how long "Code verified" stays on screen, not a delay added to it.
+   The sign-in that follows runs at the same time, so this costs nothing
+   whenever that takes longer — it only stops the confirmation flashing past
+   unread when the server answers quickly. */
+const VERIFIED_HOLD_MS = 700;
+
 type Mode = 'choose' | 'email' | 'otp';
+
+/** The code screen's own outcome, shown beneath the input. */
+type VerifyState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  /** The code was right. `detail` says what is happening next. */
+  | { kind: 'verified'; detail: string }
+  /** The code was refused. `attemptsLeft` is present when the server said. */
+  | { kind: 'failed'; detail: string; attemptsLeft?: number };
 
 export type OnboardingAnswers = {
   name?: string;
@@ -64,7 +97,7 @@ export default function AuthGate({
   answers: OnboardingAnswers;
   /** Decides which existing signup endpoint runs. Never read from a request. */
   accountKind?: 'individual' | 'business';
-  /** Called only after authentication AND persistence have both succeeded. */
+  /** Called only after verification, account creation AND sign-in succeed. */
   onDone: () => void;
   step?: number;
   total?: number;
@@ -72,16 +105,30 @@ export default function AuthGate({
   const [mode, setMode] = useState<Mode>('choose');
   const [captcha, setCaptcha] = useState('');
   const [captchaNonce, setCaptchaNonce] = useState(0);
-  // Snapshot of the captcha token taken the moment the user clicks "Continue with Email".
-  // The Turnstile widget unmounts on mode change and may fire expired-callback which
-  // clears captcha state — the snapshot is immune to that race condition.
+  /* Last token the widget produced. The widget now stays mounted through the
+     email form, so `captcha` is normally the live, current token; this covers
+     only the brief window where Turnstile has fired expired-callback (clearing
+     the live value) but has not yet handed over a replacement. It is cleared
+     whenever a token is spent, so a used token can never be resent. */
   const captchaSnapshotRef = useRef('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+  /* The handle for the staged signup. Opaque, server-issued, and the only
+     thing that ties the code screen to what was typed on the form — the
+     answers, the password hash and the account kind all live on the server
+     against it, so nothing here can be swapped between the two steps. */
+  const pendingIdRef = useRef('');
   const [organization, setOrganization] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  /* Set when the server says the address is already registered. The message
+     alone is a dead end — the person needs somewhere to go. */
+  const [existingAccount, setExistingAccount] = useState(false);
+  /* What the code screen says about the code. It owns its own outcome rather
+     than pushing it to the panel-wide error line at the bottom: the answer to
+     "did my code work?" belongs next to the box the code was typed into. */
+  const [verify, setVerify] = useState<VerifyState>({ kind: 'idle' });
   /* Seconds until a resend is offered. Counts down in the effect below and is
      re-armed from the SERVER's Retry-After whenever it refuses one. */
   const [cooldown, setCooldown] = useState(0);
@@ -92,24 +139,37 @@ export default function AuthGate({
   const isBusiness = accountKind === 'business';
   const who = firstName.trim() ? `${firstName.trim()}, save` : 'Save';
 
-  /* A used token cannot be replayed, so the widget is reset after every
-     attempt that spent one. */
-  const resetCaptcha = () => { setCaptcha(''); setCaptchaNonce(n => n + 1); };
+  /* Every token the widget produces, remembered as it arrives. `captcha` is
+     the live value and is what gets sent; this is only the fallback for the
+     window between Turnstile's expired-callback and the widget re-arming. */
+  const takeCaptcha = (token: string) => {
+    captchaSnapshotRef.current = token || captchaSnapshotRef.current;
+    setCaptcha(token);
+  };
+
+  /* A used token cannot be replayed, so the widget is reset after every attempt
+     that spent one. This only produces a new token because the widget is still
+     MOUNTED on the screen the retry happens on — resetting an unmounted widget
+     would leave the person with no way to ever get a fresh token, and every
+     retry rejected by enforceCaptcha. */
+  const resetCaptcha = () => {
+    setCaptcha('');
+    captchaSnapshotRef.current = '';
+    setCaptchaNonce(n => n + 1);
+  };
 
   const needVerification = () => {
     setError('Please complete the verification above to continue.');
     return false;
   };
 
-  /** Writes the answers onto the now-authenticated profile. */
-  const persist = async () => {
-    const res = await fetch('/api/onboarding/handoff', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ onboarding: answers }),
-    });
-    if (!res.ok) throw new Error('We signed you in but could not save your answers.');
-  };
+  /* There is no separate "save my answers" call on the email path any more.
+     /api/onboarding/signup/verify writes them from the record staged when the
+     code was sent, in the same step that creates the account — so answers can
+     no longer be lost between authentication and persistence, and cannot be
+     re-sent by the browser after the fact. The Google path still hands off
+     through /api/onboarding/handoff, from the flow's return leg, because its
+     answers travelled in the intent cookie. */
 
   const startGoogle = async () => {
     if (!verified) return needVerification();
@@ -136,46 +196,79 @@ export default function AuthGate({
     return () => window.clearInterval(id);
   }, [cooldown]);
 
-  /**
-   * Ask the existing OTP endpoint to send a code.
-   *
-   * ONE function for both the automatic first send and the manual resend —
-   * they are the same server operation, differing only in what triggers them.
-   * The first code is sent by `submitEmail` as part of signing in; resend is a
-   * deliberate second action the person takes on the OTP screen. Resend is
-   * never what STARTS the flow, and it is never called on mount.
-   *
-   * The cooldown is the SERVER's, not ours. `/api/onboarding/send-otp` allows
-   * three sends per ten minutes per account and answers 429 with `Retry-After`;
-   * when that happens the real wait is read from the header rather than guessed
-   * at, so the button can never invite a request the server will refuse.
-   */
-  const requestOtp = async (): Promise<void> => {
-    const res = await fetch('/api/onboarding/send-otp', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email: email.trim(), captchaToken: captchaSnapshotRef.current || captcha }),
-    });
-    if (res.status === 429) {
-      const wait = Number(res.headers.get('Retry-After')) || 60;
-      setCooldown(wait);
-      throw new Error(`Too many codes requested. Try again in ${wait} seconds.`);
-    }
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.error || 'We could not send your code.');
-    }
-    /* A short courtesy wait before the resend button lights up. Purely UX —
-       the server's limit above is the real constraint. */
-    setCooldown(RESEND_COOLDOWN_SECONDS);
+  /** Reads a 429's Retry-After and arms the countdown from it. */
+  const armServerCooldown = (res: Response) => {
+    const wait = Number(res.headers.get('Retry-After')) || 60;
+    setCooldown(wait);
+    return wait;
   };
 
-  /** The OTP screen's secondary action. Never runs by itself. */
+  /**
+   * Step one: stage the signup and have the server mail a code.
+   *
+   * Nothing is created by this call. It is also the only call in the flow that
+   * spends the Turnstile token, so the widget's single-use token is enough.
+   */
+  const startSignup = async (): Promise<void> => {
+    const res = await fetch('/api/onboarding/signup/start', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: email.trim(),
+        password,
+        name: answers.name?.trim() || email.split('@')[0],
+        accountKind,
+        organizationName: isBusiness ? organization.trim() : undefined,
+        industry: isBusiness ? answers.businessSpace : undefined,
+        onboarding: answers,
+        policyAccepted: true,
+        /* The LIVE token first. The widget stays mounted through this screen
+           (see the render below) precisely so there is always a fresh one; the
+           snapshot is only a last-known-good fallback for the moment between
+           an expired-callback and the widget re-arming itself. */
+        captchaToken: captcha || captchaSnapshotRef.current,
+      }),
+    });
+    if (res.status === 429) {
+      const wait = armServerCooldown(res);
+      throw new Error(`Too many attempts. Please try again in ${wait} seconds.`);
+    }
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !body?.pendingId) {
+      if (body?.code === 'account_exists') setExistingAccount(true);
+      throw new Error(body?.error || 'We could not send your code.');
+    }
+    pendingIdRef.current = String(body.pendingId);
+    /* A short courtesy wait before the resend button lights up. Purely UX —
+       the server's limit is the real constraint. */
+    setCooldown(Number(body.resendInSeconds) || RESEND_COOLDOWN_SECONDS);
+  };
+
+  /**
+   * The OTP screen's secondary action. Never runs by itself, and never on
+   * mount: reaching the code screen is something `submitEmail` did.
+   *
+   * The address is not sent — the server mails whatever address the handle was
+   * staged with, so this cannot be pointed anywhere else.
+   */
   const resendOtp = async () => {
-    if (cooldown > 0 || resending) return;
-    setResending(true); setError('');
+    if (cooldown > 0 || resending || !pendingIdRef.current) return;
+    if (verify.kind === 'checking' || verify.kind === 'verified') return;
+    setResending(true); setError(''); setVerify({ kind: 'idle' });
     try {
-      await requestOtp();
+      const res = await fetch('/api/onboarding/signup/resend', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pendingId: pendingIdRef.current }),
+      });
+      if (res.status === 429) {
+        const wait = armServerCooldown(res);
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `Too many codes requested. Try again in ${wait} seconds.`);
+      }
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error || 'We could not resend your code.');
+      setCooldown(Number(body?.resendInSeconds) || RESEND_COOLDOWN_SECONDS);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'We could not resend your code.');
     } finally {
@@ -183,61 +276,20 @@ export default function AuthGate({
     }
   };
 
-  /** Email + password → account → session → OTP sent. */
+  /** Email + password → a code in the inbox. No account yet. */
   const submitEmail = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!verified) { needVerification(); return; }
     if (password.length < 8) { setError('Use a password of at least 8 characters.'); return; }
     if (isBusiness && !organization.trim()) {
       setError('Tell us your organization name.');
       return;
     }
-    // Use the snapshot taken at transition time — the widget may have unmounted
-    // and fired expired-callback which clears the live captcha state.
-    const captchaToken = captchaSnapshotRef.current || captcha;
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setExistingAccount(false);
     try {
-      /* Each account kind goes to the signup endpoint that already owns it.
-         Both hash the password server-side and both enforce the challenge. */
-      const signup = await fetch(
-        isBusiness ? '/api/saas/signup' : '/api/individual/signup',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            name: answers.name?.trim() || email.split('@')[0],
-            email: email.trim(),
-            password,
-            policyAccepted: true,
-            captchaToken,
-            ...(isBusiness
-              ? { organizationName: organization.trim(), industry: answers.businessSpace }
-              : {}),
-          }),
-        },
-      );
-      const signupBody = await signup.json().catch(() => null);
-      /* An existing account is not an error — it signs in below instead. */
-      if (!signup.ok && signup.status !== 409) {
-        throw new Error(signupBody?.error || 'We could not create your account.');
-      }
-
-      const result = await signIn('credentials', {
-        email: email.trim(),
-        password,
-        policyAccepted: 'accepted',
-        redirect: false,
-        // loginGrant is a one-shot HMAC token minted by the signup endpoint
-        // so the credentials provider can skip captcha for the immediate
-        // post-signup auto-login (no fresh Turnstile token available here).
-        loginGrant: signupBody?.loginGrant || '',
-        captchaToken,
-      });
-      if (!result?.ok) throw new Error('That email and password did not match.');
-
-      /* Session in hand, so this send is the authenticated path. The FIRST
-         code is sent here, automatically — reaching the OTP screen is never
-         something the person has to trigger by pressing Resend. */
-      await requestOtp();
+      await startSignup();
+      /* The code screen is only ever reached once a code has actually been
+         sent — a delivery failure throws above and leaves the form up. */
       setMode('otp');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -247,21 +299,86 @@ export default function AuthGate({
     }
   };
 
+  /**
+   * Step two: the code creates the account, and the session follows it.
+   *
+   * The server does the creating, the verifying and the saving of answers in
+   * one call; this then signs in with the password already in hand, using the
+   * one-shot grant the server minted so the credentials CAPTCHA gate passes
+   * without a fresh widget token.
+   */
   const submitOtp = async (event: React.FormEvent) => {
     event.preventDefault();
-    setBusy(true); setError('');
+    setBusy(true); setError(''); setExistingAccount(false);
+    setVerify({ kind: 'checking' });
     try {
-      const res = await fetch('/api/onboarding/verify-otp', {
+      const res = await fetch('/api/onboarding/signup/verify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ otp: otp.trim(), email: email.trim() }),
+        body: JSON.stringify({
+          pendingId: pendingIdRef.current,
+          email: email.trim(),
+          otp: otp.trim(),
+        }),
       });
       const body = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(body?.error || 'That code did not work.');
-      await persist();
+
+      if (!res.ok) {
+        /* An expired or spent session cannot be rescued by another code — send
+           the person back to the form with their answers intact. The reason
+           travels to the panel error there, because the code screen they were
+           told it on is no longer the screen they are looking at. */
+        if (body?.code === 'restart') {
+          pendingIdRef.current = '';
+          setOtp('');
+          setVerify({ kind: 'idle' });
+          setMode('email');
+          resetCaptcha();
+          setError(body?.error || 'That code has expired. Please start again.');
+          return;
+        }
+        if (body?.code === 'account_exists') setExistingAccount(true);
+        setVerify({
+          kind: 'failed',
+          detail: body?.error || 'That code did not work.',
+          /* The server counts the guesses, so the count shown is the real one
+             rather than something the browser keeps its own tally of. */
+          attemptsLeft: typeof body?.attemptsLeft === 'number' ? body.attemptsLeft : undefined,
+        });
+        return;
+      }
+
+      /* Said before the sign-in rather than after it: the code IS verified at
+         this point and the account exists, and that is worth confirming even
+         if the step that follows goes wrong. */
+      setVerify({ kind: 'verified', detail: 'Signing you in…' });
+
+      const [result] = await Promise.all([
+        signIn('credentials', {
+          email: email.trim(),
+          password,
+          policyAccepted: 'accepted',
+          redirect: false,
+          loginGrant: body?.loginGrant || '',
+        }),
+        new Promise((resolve) => window.setTimeout(resolve, VERIFIED_HOLD_MS)),
+      ]);
+
+      if (!result?.ok) {
+        /* The account exists and is verified either way; only the session did
+           not take. Signing in is one step, so say so rather than implying the
+           verification failed — the tick above stays exactly as it is. */
+        setVerify({ kind: 'verified', detail: 'Your account is ready.' });
+        setError('We could not sign you in automatically. Please sign in to continue.');
+        return;
+      }
+
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      setVerify({
+        kind: 'failed',
+        detail: e instanceof Error ? e.message : 'We could not reach the server. Please try again.',
+      });
     } finally {
       setBusy(false);
     }
@@ -272,18 +389,39 @@ export default function AuthGate({
       <OnboardingProgress step={step} total={total} />
 
       {mode === 'choose' && (
+        <StepHeading
+          eyebrow="Account / 07"
+          title={`${who} your matches`}
+          description="Create your account to apply, keep these results, and let employers find you."
+        />
+      )}
+      {mode === 'email' && (
+        <StepHeading
+          eyebrow="Account / 07"
+          title="Create your account"
+          description="We'll email you a code to confirm it's you. Your account is created when you enter it — not before."
+        />
+      )}
+
+      {/* ONE widget, rendered in ONE position, for both the choose screen and
+          the email form. It is deliberately outside the mode blocks: React
+          keeps the same instance across the transition, so the token survives
+          the move to the form AND — the part that matters — a failed attempt
+          can reset the widget and actually get a new token. When it lived
+          inside the choose block it unmounted on the way to the form, and
+          every retry then sent a spent token that the server refuses, with no
+          way for the person to produce a fresh one. */}
+      {mode !== 'otp' && (
+        <SecurityVerification
+          onToken={takeCaptcha}
+          action="onboarding"
+          resetSignal={captchaNonce}
+          className="auth-captcha"
+        />
+      )}
+
+      {mode === 'choose' && (
         <>
-          <StepHeading
-            eyebrow="Account / 07"
-            title={`${who} your matches`}
-            description="Create your account to apply, keep these results, and let employers find you."
-          />
-          <SecurityVerification
-            onToken={setCaptcha}
-            action="onboarding"
-            resetSignal={captchaNonce}
-            className="auth-captcha"
-          />
           <div className="auth-options">
             <button type="button" className="primary-button" onClick={startGoogle} disabled={busy}>
               {busy ? <Loader2 className="auth-spin" aria-hidden="true" />
@@ -295,8 +433,9 @@ export default function AuthGate({
               className="continue-without-resume"
               onClick={() => {
                 if (!verified) { needVerification(); return; }
-                captchaSnapshotRef.current = captcha; // immune to widget expired-callback after unmount
                 setError('');
+                /* The widget comes along to the form — see the render above —
+                   so nothing has to be snapshotted across the transition. */
                 setMode('email');
               }}
               disabled={busy}
@@ -311,11 +450,6 @@ export default function AuthGate({
 
       {mode === 'email' && (
         <form onSubmit={submitEmail}>
-          <StepHeading
-            eyebrow="Account / 07"
-            title="Create your account"
-            description="We'll email you a code to confirm it's you."
-          />
           {isBusiness && (
             <label className="name-field" htmlFor="onboarding-organization">
               <span className="field-label">Organization name</span>
@@ -361,17 +495,66 @@ export default function AuthGate({
           <StepHeading
             eyebrow="Account / 07"
             title="Check your email"
-            description={`We sent a 6-digit code to ${email}.`}
+            description={`We sent a 6-digit code to ${email}. Entering it is what creates your account — nothing is saved until then.`}
           />
           <label className="name-field" htmlFor="onboarding-otp">
             <span className="field-label">Verification code</span>
             <div className="name-field-control">
               <input id="onboarding-otp" className="glass-input auth-input auth-otp"
                 inputMode="numeric" pattern="\d{6}" maxLength={6} required
-                value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                placeholder="000000" autoComplete="one-time-code" />
+                value={otp}
+                onChange={e => {
+                  setOtp(e.target.value.replace(/\D/g, ''));
+                  /* A refusal describes the code that was submitted, not the
+                     one being typed now. It clears the moment they differ. */
+                  if (verify.kind === 'failed') setVerify({ kind: 'idle' });
+                }}
+                aria-invalid={verify.kind === 'failed'}
+                aria-describedby="onboarding-otp-status"
+                placeholder="000000" autoComplete="one-time-code"
+                disabled={verify.kind === 'verified'} />
             </div>
           </label>
+
+          {/* The answer to "did my code work?", next to the box the code went
+              into. Announced politely while checking and assertively on a
+              refusal, so it is not a colour-only signal. */}
+          <p
+            id="onboarding-otp-status"
+            className={`auth-verify-status is-${verify.kind}`}
+            role={verify.kind === 'failed' ? 'alert' : 'status'}
+            aria-live={verify.kind === 'failed' ? 'assertive' : 'polite'}
+          >
+            {verify.kind === 'checking' && (
+              <>
+                <Loader2 className="auth-spin" aria-hidden="true" />
+                <span>Checking your code…</span>
+              </>
+            )}
+            {verify.kind === 'verified' && (
+              <>
+                <CheckCircle2 aria-hidden="true" />
+                <span>
+                  <strong>OTP verified</strong>
+                  {verify.detail ? ` — ${verify.detail}` : ''}
+                </span>
+              </>
+            )}
+            {verify.kind === 'failed' && (
+              <>
+                <AlertCircle aria-hidden="true" />
+                <span>
+                  <strong>Verification failed</strong> — {verify.detail}
+                  {typeof verify.attemptsLeft === 'number' && verify.attemptsLeft > 0 && (
+                    <> {verify.attemptsLeft} attempt{verify.attemptsLeft === 1 ? '' : 's'} left.</>
+                  )}
+                </span>
+              </>
+            )}
+          </p>
+          {/* Nothing to resend once the code has been accepted — a countdown
+              ticking beneath a green tick invites a pointless second code. */}
+          {verify.kind !== 'verified' && (
           <p className="auth-resend">
             {cooldown > 0 ? (
               /* Not a disabled button with a tooltip: the wait itself is the
@@ -384,13 +567,20 @@ export default function AuthGate({
               </button>
             )}
           </p>
+          )}
           <div className="auth-options">
-            <button type="submit" className="primary-button" disabled={busy || otp.length !== 6}>
-              {busy && <Loader2 className="auth-spin" aria-hidden="true" />}
-              <span>{busy ? 'Verifying…' : 'Verify'}</span>
+            <button type="submit" className="primary-button"
+              disabled={busy || otp.length !== 6 || verify.kind === 'verified'}>
+              {verify.kind === 'verified'
+                ? <CheckCircle2 aria-hidden="true" />
+                : busy && <Loader2 className="auth-spin" aria-hidden="true" />}
+              <span>
+                {verify.kind === 'verified' ? 'Verified' : busy ? 'Verifying…' : 'Verify'}
+              </span>
             </button>
             <button type="button" className="back-button auth-back"
-              onClick={() => { setError(''); setMode('email'); }} disabled={busy}>
+              onClick={() => { setError(''); setVerify({ kind: 'idle' }); setMode('email'); }}
+              disabled={busy || verify.kind === 'verified'}>
               <ArrowLeft aria-hidden="true" />
               <span>Back</span>
             </button>
@@ -398,7 +588,17 @@ export default function AuthGate({
         </form>
       )}
 
-      {error && <p className="resume-error auth-error" role="alert">{error}</p>}
+      {error && (
+        <p className="resume-error auth-error" role="alert">
+          {error}
+          {existingAccount && (
+            <>
+              {' '}
+              <a href="/login" className="auth-error-link">Go to sign in</a>
+            </>
+          )}
+        </p>
+      )}
 
       <p className="demo-note auth-note">
         We&apos;ll keep what you told us — your name, what you are looking for and

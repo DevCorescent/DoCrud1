@@ -327,7 +327,7 @@ async function main() {
     !MAILER.includes('mail-suppression') && !MAILER.includes('isSuppressed'));
   check('no transactional sender imports suppression',
     !read('lib/server/account-emails.ts').includes('mail-suppression')
-    && !read('app/api/onboarding/send-otp/route.ts').includes('mail-suppression'));
+    && !read('lib/server/otp-email.ts').includes('mail-suppression'));
   check('suppression is applied by the campaign loop alone',
     CAMPAIGNS.includes("from '@/lib/server/mail-suppression'"));
   check('the module says marketing only', LIB.includes('MARKETING ONLY'));

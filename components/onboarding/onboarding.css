@@ -1314,6 +1314,40 @@
 .docrud-onboarding .auth-otp { letter-spacing: .4em; font-variant-numeric: tabular-nums; }
 .docrud-onboarding .auth-back { justify-content: center; }
 .docrud-onboarding .auth-error { margin-top: 14px; }
+/* The way out of "you already have an account" — an error with no next step is
+   a dead end, so the link is part of the message rather than a separate row. */
+.docrud-onboarding .auth-error-link {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+/* ── Verification status ──────────────────────────────────────────────────
+   The outcome of the code, stated next to the box the code was typed into.
+   Colour is never the only carrier: each state has its own icon and its own
+   words, so it reads the same to somebody who cannot separate red from green. */
+.docrud-onboarding .auth-verify-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 19px;              /* reserved, so the panel does not jump */
+}
+.docrud-onboarding .auth-verify-status svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.docrud-onboarding .auth-verify-status strong { font-weight: 700; }
+.docrud-onboarding .auth-verify-status.is-idle { visibility: hidden; }
+.docrud-onboarding .auth-verify-status.is-checking { color: rgba(226, 232, 240, .7); }
+.docrud-onboarding .auth-verify-status.is-verified { color: rgba(134, 239, 172, .95); }
+.docrud-onboarding .auth-verify-status.is-failed { color: rgba(253, 186, 186, .95); }
+
 .docrud-onboarding .auth-spin { width: 16px; height: 16px; animation: docrudOnbSpin .9s linear infinite; }
 @keyframes docrudOnbSpin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {

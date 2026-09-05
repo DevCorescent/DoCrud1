@@ -450,12 +450,12 @@ async function main() {
     !/rejectUnauthorized:\s*false/.test(MAILER));
   check('the OTP relay transport verifies certificates',
     !/rejectUnauthorized:\s*false/.test(
-      read('app/api/onboarding/send-otp/route.ts').split('Direct MX fallback')[0]));
+      read('lib/server/otp-email.ts').split('Direct-to-MX')[0]));
   check('the drive send-email transport verifies certificates',
     !/rejectUnauthorized:\s*false/.test(read('app/api/drive/send-email/route.ts')));
   /* The direct-MX fallback stays opportunistic on purpose; it must be the only
      remaining exception, and it must say why. */
-  const OTP = read('app/api/onboarding/send-otp/route.ts');
+  const OTP = read('lib/server/otp-email.ts');
   check('only the direct-MX fallback remains permissive',
     (OTP.match(/rejectUnauthorized:\s*false/g) ?? []).length === 1);
   check('that exception is documented', OTP.includes('opportunistic-TLS behaviour'));

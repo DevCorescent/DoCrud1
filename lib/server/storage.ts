@@ -97,6 +97,11 @@ export const templateMarketplaceWithdrawalsPath = path.join(dataDir, 'template-m
 export const mailCampaignsPath = path.join(dataDir, 'mail-campaigns.json');
 export const mailPoliciesPath = path.join(dataDir, 'mail-policies.json');
 export const otpSessionsPath = path.join(dataDir, 'otp-sessions.json');
+/* Signups that have been PAID FOR with a verification code but not yet
+   redeemed. Nothing in here is an account: no user row, no profile, no
+   session — only what is needed to create one the moment the emailed code
+   comes back. See lib/server/pending-signups.ts. */
+export const pendingSignupsPath = path.join(dataDir, 'pending-signups.json');
 export const homepageAiChatsPath = path.join(dataDir, 'homepage-ai-chats.json');
 export const userProfilesPath = path.join(dataDir, 'user-profiles.json');
 export const followsPath = path.join(dataDir, 'follows.json');

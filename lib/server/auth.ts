@@ -1,3 +1,4 @@
+import { getAuthSecret } from '@/lib/auth-secret';
 import { type NextAuthOptions, getServerSession } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
@@ -16,9 +17,10 @@ import { readOAuthIntent, type OAuthIntent } from '@/lib/server/oauth-intent';
 export type { StoredUser };
 export { getStoredUsers, saveStoredUsers };
 
-function getAuthSecret() {
-  return process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
-}
+/* Resolved in lib/auth-secret.ts so the middleware — which cannot import this
+   module on the edge — reads the same value. See that file for what goes wrong
+   when the signer and the readers disagree. */
+export { getAuthSecret };
 
 function normalizeLoginId(value: string) {
   return value.trim().toLowerCase();

@@ -38,6 +38,13 @@ export type BusinessProvisionInput = {
   referralCode?: string;
   /** Omitted for OAuth (Google) accounts — never invent a fake password. */
   password?: string;
+  /**
+   * A password ALREADY hashed by `createPasswordHash`. The onboarding flow
+   * hashes the moment the password is received and keeps only the hash while
+   * the emailed code is outstanding, so it has nothing else to hand over when
+   * the account is finally created. Ignored when `password` is present.
+   */
+  credentials?: { passwordHash: string; passwordSalt: string };
   /** policy-consent context (the credentials and Google flows both use 'business_signup'). */
   policyContext: 'login' | 'business_signup' | 'individual_signup' | 'admin_created';
   policyIp?: string;
@@ -80,7 +87,11 @@ export async function provisionBusinessAccount(
       remainingAiCredits: defaultPlan.monthlyAiCredits || 0,
       aiCreditsResetAt: defaultPlan.billingModel === 'free' ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : undefined,
     }, now) : undefined,
-    ...(input.password ? createPasswordHash(input.password) : {}),
+    ...(input.password
+      ? createPasswordHash(input.password)
+      : input.credentials
+        ? { passwordHash: input.credentials.passwordHash, passwordSalt: input.credentials.passwordSalt }
+        : {}),
   } as StoredUser;
 
   const users = await getStoredUsers();

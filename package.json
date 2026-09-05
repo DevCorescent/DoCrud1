@@ -83,6 +83,7 @@
     "test:job-scraper-health": "tsx scripts/job-scraper-health.selftest.ts",
     "test:job-redis-performance": "tsx scripts/job-redis-performance.selftest.ts",
     "test:onboarding-auth": "tsx scripts/onboarding-auth.selftest.ts",
+    "test:onboarding-signup-otp": "tsx scripts/onboarding-signup-otp.selftest.ts",
     "test:onboarding-roles": "tsx scripts/onboarding-roles-persistence.selftest.ts",
     "test:onboarding-resume": "tsx scripts/onboarding-resume.selftest.ts",
     "test:onboarding-flow": "tsx scripts/onboarding-flow.selftest.ts",

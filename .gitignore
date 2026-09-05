@@ -21,6 +21,9 @@ data/collaboration-settings.json
 .devtools/
 data/custom/templates.json
 data/auth-settings.json
+# Staged signups and live OTP sessions — credentials-adjacent, never committed
+data/pending-signups.json
+data/otp-sessions.json
 
 # Migration backups — contain user image data, keep local only
 profile-image-migration-backup-*.json

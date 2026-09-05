@@ -32,7 +32,7 @@ function check(label: string, ok: boolean, detail = '') {
 const read = (p: string) => readFileSync(path.join(process.cwd(), p), 'utf8');
 const LIB = read('lib/server/system-emails.ts');
 const API = read('app/api/super-admin/mail/system-emails/route.ts');
-const OTP_ROUTE = read('app/api/onboarding/send-otp/route.ts');
+const OTP_ROUTE = read('lib/server/otp-email.ts');
 const UI = read('components/superadmin/mail/SystemEmails.tsx');
 /* The test send is no longer a system-email-specific action. It is the one
    shared endpoint every mail surface uses, so these assertions follow it

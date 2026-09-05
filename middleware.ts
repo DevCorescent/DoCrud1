@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { isSearchCrawlerUserAgent } from '@/lib/search-crawler';
+import { getAuthSecret } from '@/lib/auth-secret';
 
 /* ─── Paths that unverified-but-authenticated users may still access ──────── */
 const UNVERIFIED_ALLOWED_PREFIXES = [
@@ -9,6 +10,10 @@ const UNVERIFIED_ALLOWED_PREFIXES = [
   '/api/auth',
   '/api/onboarding/send-otp',
   '/api/onboarding/verify-otp',
+  /* Creating an account from onboarding: the code is mailed by /start and the
+     account is created by /verify. Both run for a caller with no session at
+     all, which is the point — there is nothing to have a session for yet. */
+  '/api/onboarding/signup',
   '/api/individual/signup',
   '/_next',
 ];
@@ -41,7 +46,11 @@ export async function middleware(request: NextRequest) {
   );
 
   if (!isApiRoute && !isAllowedPath) {
-    const token = await getToken({ req: request });
+    /* The SAME secret the session cookie was signed with. Reading
+       process.env.NEXTAUTH_SECRET implicitly — which is what getToken does when
+       no secret is passed — silently returned null wherever the variable was
+       unset, which turned this gate off without a word. */
+    const token = await getToken({ req: request, secret: getAuthSecret() });
     if (
       token &&
       token.accountType === 'individual' &&

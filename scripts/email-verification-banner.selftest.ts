@@ -161,7 +161,7 @@ function main() {
     }
 
     /* No other path in the app can inject it either. */
-    const signup = strip('app/api/onboarding/send-otp/route.ts');
+    const signup = strip('lib/server/otp-email.ts');
     check('the signup OTP route still has no image', !/<img/i.test(signup));
   }
 

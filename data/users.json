@@ -1,0 +1,286 @@
+[
+  {
+    "id": "1",
+    "email": "admin@company.com",
+    "name": "Admin User",
+    "role": "admin",
+    "accountType": "business",
+    "permissions": [
+      "all"
+    ],
+    "roleProfileId": "role-admin-control",
+    "roleProfileName": "Admin Control",
+    "isActive": true,
+    "createdAt": "2024-01-01T00:00:00Z",
+    "lastLogin": "2024-01-01T00:00:00Z",
+    "passwordHash": "3eb1fe3182169f137608a345218965269ebe8f86c1ccab58969d197cdeb78301ddd8da54f4a5da28803bc9d5cb6e78a0ab93368daf541d6ea12d86259bc3b974",
+    "passwordSalt": "335571a6fae402a4882e91e1020f6eb2"
+  },
+  {
+    "id": "2",
+    "email": "hr@company.com",
+    "name": "HR Manager",
+    "role": "hr",
+    "accountType": "business",
+    "permissions": [
+      "appointment-letter",
+      "offer-letter",
+      "termination-letter",
+      "resignation-letter",
+      "performance-appraisal",
+      "internship-letter"
+    ],
+    "roleProfileId": "role-hr-operations",
+    "roleProfileName": "HR Operations",
+    "isActive": true,
+    "createdAt": "2024-01-01T00:00:00Z",
+    "passwordHash": "a69bdb45fa30fbd37de4e3dd925295a12ecb94eddd61a28da26f552a71e42e24561b4675c1261ff9c8750854fd48bf5a6bca5d035a2e349a8e7f5d1714b31896",
+    "passwordSalt": "f68fe18018468ff36aa7235a9f25a5c9"
+  },
+  {
+    "id": "3",
+    "email": "legal@company.com",
+    "name": "Legal Advisor",
+    "role": "legal",
+    "accountType": "business",
+    "permissions": [
+      "nda",
+      "employment-contract",
+      "loan-agreement",
+      "service-agreement",
+      "partnership-agreement",
+      "contractual-agreement"
+    ],
+    "roleProfileId": "role-legal-governance",
+    "roleProfileName": "Legal Governance",
+    "isActive": true,
+    "createdAt": "2024-01-01T00:00:00Z",
+    "passwordHash": "cf0c18554a05bd5d348a6d0902e56166702ada6378156adb6e405dcedf41f15d5119398065eb907aa5843cf04b62879e3490f0baebeef03cebf0e92353c7d9f4",
+    "passwordSalt": "fee926226baf2e83bfa828509a46680b"
+  },
+  {
+    "id": "individual-1788596770002",
+    "name": "mahendra",
+    "email": "mahi@yopmail.com",
+    "role": "individual",
+    "accountType": "individual",
+    "permissions": [
+      "self"
+    ],
+    "isActive": true,
+    "createdAt": "2026-09-05T08:26:10.002Z",
+    "organizationName": "Individual Workspace",
+    "createdFromSignup": true,
+    "policyAcceptance": {
+      "version": "2026.04.01",
+      "acceptedAt": "2026-09-05T08:26:11.386Z",
+      "via": "login",
+      "requiredPolicyIds": [
+        "terms",
+        "privacy",
+        "refund-cancellation",
+        "generated-document-policy",
+        "shared-document-policy",
+        "signed-document-policy",
+        "encrypted-document-policy",
+        "data-privacy-policy",
+        "documents-legality"
+      ]
+    },
+    "subscription": {
+      "planId": "workspace-trial",
+      "planName": "docrud Free",
+      "status": "trial",
+      "startedAt": "2026-09-05T08:26:10.002Z",
+      "aiTrialLimit": 6,
+      "aiTrialUsed": 0,
+      "monthlyAiCredits": 0,
+      "remainingAiCredits": 0,
+      "aiCreditsResetAt": "2026-10-05T08:26:10.002Z"
+    },
+    "passwordHash": "c2909f59747cce0610f78845be9f49c15f37599b4635c8b84a7fb9b0e2789c424e594116df590abc20d96df582a8394435b376bd7f73eb42ac78c4e8a5c9e6eb",
+    "passwordSalt": "1f030c8dac3b5a0a3aa1be76699c7e6b",
+    "lastLogin": "2026-09-05T08:26:11.386Z"
+  },
+  {
+    "id": "individual-1788597926063",
+    "name": "virat",
+    "email": "virat@yopmail.com",
+    "role": "individual",
+    "accountType": "individual",
+    "permissions": [
+      "self"
+    ],
+    "isActive": true,
+    "createdAt": "2026-09-05T08:45:26.063Z",
+    "organizationName": "Individual Workspace",
+    "createdFromSignup": true,
+    "policyAcceptance": {
+      "version": "2026.04.01",
+      "acceptedAt": "2026-09-05T08:45:26.583Z",
+      "via": "login",
+      "requiredPolicyIds": [
+        "terms",
+        "privacy",
+        "refund-cancellation",
+        "generated-document-policy",
+        "shared-document-policy",
+        "signed-document-policy",
+        "encrypted-document-policy",
+        "data-privacy-policy",
+        "documents-legality"
+      ]
+    },
+    "subscription": {
+      "planId": "workspace-trial",
+      "planName": "docrud Free",
+      "status": "trial",
+      "startedAt": "2026-09-05T08:45:26.063Z",
+      "aiTrialLimit": 6,
+      "aiTrialUsed": 0,
+      "monthlyAiCredits": 0,
+      "remainingAiCredits": 0,
+      "aiCreditsResetAt": "2026-10-05T08:45:26.064Z"
+    },
+    "passwordHash": "e7bbb1d107af9ac4b785c398ea4d84b5fc01599caf855e9508afae36a0693e563f3f432ef60585a6ee8b6b727c5d94a2b5d5fcdbe9032edd40dad28b1bf95334",
+    "passwordSalt": "425b39cadac5a7edbbdcc353de192b4f",
+    "lastLogin": "2026-09-05T08:45:26.583Z"
+  },
+  {
+    "id": "individual-1788599113878",
+    "name": "suhas",
+    "email": "suhas@yopmail.com",
+    "role": "individual",
+    "accountType": "individual",
+    "permissions": [
+      "self"
+    ],
+    "isActive": true,
+    "createdAt": "2026-09-05T09:05:13.878Z",
+    "organizationName": "Individual Workspace",
+    "createdFromSignup": true,
+    "policyAcceptance": {
+      "version": "2026.04.01",
+      "acceptedAt": "2026-09-05T09:05:14.079Z",
+      "via": "login",
+      "requiredPolicyIds": [
+        "terms",
+        "privacy",
+        "refund-cancellation",
+        "generated-document-policy",
+        "shared-document-policy",
+        "signed-document-policy",
+        "encrypted-document-policy",
+        "data-privacy-policy",
+        "documents-legality"
+      ]
+    },
+    "subscription": {
+      "planId": "workspace-trial",
+      "planName": "docrud Free",
+      "status": "trial",
+      "startedAt": "2026-09-05T09:05:13.878Z",
+      "aiTrialLimit": 6,
+      "aiTrialUsed": 0,
+      "monthlyAiCredits": 0,
+      "remainingAiCredits": 0,
+      "aiCreditsResetAt": "2026-10-05T09:05:13.878Z"
+    },
+    "passwordHash": "0caecb72029f6b97a6b21f0531d29237959b1232c6329898d207a127df0861055d6fe19f5acfe85f66dc820acbebb77b9c76ac5337aeb4779da1fd95505d22ce",
+    "passwordSalt": "b3b74a2e6119afa449bf511e6ee9bd71",
+    "lastLogin": "2026-09-05T09:05:14.079Z",
+    "lastSeenAt": "2026-09-05T09:31:46.775Z",
+    "presenceEndedAt": "2026-09-05T09:32:02.773Z"
+  },
+  {
+    "id": "individual-1788600830323",
+    "name": "shahid",
+    "email": "shahid@yopmail.com",
+    "role": "individual",
+    "accountType": "individual",
+    "permissions": [
+      "self"
+    ],
+    "isActive": true,
+    "createdAt": "2026-09-05T09:33:50.323Z",
+    "organizationName": "Individual Workspace",
+    "createdFromSignup": true,
+    "policyAcceptance": {
+      "version": "2026.04.01",
+      "acceptedAt": "2026-09-05T09:33:52.669Z",
+      "via": "login",
+      "requiredPolicyIds": [
+        "terms",
+        "privacy",
+        "refund-cancellation",
+        "generated-document-policy",
+        "shared-document-policy",
+        "signed-document-policy",
+        "encrypted-document-policy",
+        "data-privacy-policy",
+        "documents-legality"
+      ]
+    },
+    "subscription": {
+      "planId": "workspace-trial",
+      "planName": "docrud Free",
+      "status": "trial",
+      "startedAt": "2026-09-05T09:33:50.323Z",
+      "aiTrialLimit": 6,
+      "aiTrialUsed": 0,
+      "monthlyAiCredits": 0,
+      "remainingAiCredits": 0,
+      "aiCreditsResetAt": "2026-10-05T09:33:50.323Z"
+    },
+    "passwordHash": "801e823d0b9ce2587d26575c0cc8280897f33b723f18bf75b497ee9e8f2dc59bb6649091bccbf451b5dbc79a783fc6c99f3ea0b6310797c55070ede4a794c0c4",
+    "passwordSalt": "e80c68227b1dc7906cffded3816a019a",
+    "lastLogin": "2026-09-05T09:33:52.669Z",
+    "lastSeenAt": "2026-09-05T09:34:40.005Z",
+    "presenceEndedAt": "2026-09-05T09:34:43.619Z"
+  },
+  {
+    "id": "individual-1788601938659",
+    "name": "zohan",
+    "email": "zohan@yopmail.com",
+    "role": "individual",
+    "accountType": "individual",
+    "permissions": [
+      "self"
+    ],
+    "isActive": true,
+    "createdAt": "2026-09-05T09:52:18.659Z",
+    "organizationName": "Individual Workspace",
+    "createdFromSignup": true,
+    "policyAcceptance": {
+      "version": "2026.04.01",
+      "acceptedAt": "2026-09-05T09:52:19.203Z",
+      "via": "login",
+      "requiredPolicyIds": [
+        "terms",
+        "privacy",
+        "refund-cancellation",
+        "generated-document-policy",
+        "shared-document-policy",
+        "signed-document-policy",
+        "encrypted-document-policy",
+        "data-privacy-policy",
+        "documents-legality"
+      ]
+    },
+    "subscription": {
+      "planId": "workspace-trial",
+      "planName": "docrud Free",
+      "status": "trial",
+      "startedAt": "2026-09-05T09:52:18.659Z",
+      "aiTrialLimit": 6,
+      "aiTrialUsed": 0,
+      "monthlyAiCredits": 0,
+      "remainingAiCredits": 0,
+      "aiCreditsResetAt": "2026-10-05T09:52:18.659Z"
+    },
+    "passwordHash": "09890b16ad5661f6deb120d43b64a6ef582a10147baaba9319e923668b95c5a99701e8703f1cf25a61bd24efc77fa333ab279b8760f1dec98d72a423fa3690a5",
+    "passwordSalt": "82a67a3c9cb276786a2bde680ec492ff",
+    "lastLogin": "2026-09-05T09:52:19.203Z",
+    "lastSeenAt": "2026-09-05T09:53:34.496Z"
+  }
+]

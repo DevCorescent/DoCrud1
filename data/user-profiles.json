@@ -1,0 +1,86 @@
+{
+  "individual-1788596770002": {
+    "emailVerified": true,
+    "emailVerifiedAt": "2026-09-05T08:35:04.484Z",
+    "profileSetupDone": true,
+    "roles": [
+      "software",
+      "data",
+      "sales",
+      "marketing",
+      "product"
+    ],
+    "skills": [
+      "SQL",
+      "Python",
+      "HTML",
+      "Kotlin"
+    ],
+    "updatedAt": "2026-09-05T08:35:04.486Z"
+  },
+  "individual-1788597926063": {
+    "emailVerified": true,
+    "emailVerifiedAt": "2026-09-05T08:45:26.063Z",
+    "profileSetupDone": true,
+    "roles": [
+      "software",
+      "finance",
+      "data"
+    ],
+    "skills": [
+      "Kotlin",
+      "Java",
+      "React"
+    ],
+    "updatedAt": "2026-09-05T08:45:26.067Z"
+  },
+  "individual-1788599113878": {
+    "emailVerified": true,
+    "emailVerifiedAt": "2026-09-05T09:05:13.877Z",
+    "profileSetupDone": true,
+    "roles": [
+      "software",
+      "data",
+      "ai"
+    ],
+    "skills": [
+      "TypeScript",
+      "SQL",
+      "Swift"
+    ],
+    "updatedAt": "2026-09-05T09:05:13.880Z"
+  },
+  "individual-1788600830323": {
+    "emailVerified": true,
+    "emailVerifiedAt": "2026-09-05T09:33:50.322Z",
+    "profileSetupDone": true,
+    "roles": [
+      "software",
+      "marketing",
+      "sales"
+    ],
+    "skills": [
+      "Swift",
+      "Ruby",
+      "CSS",
+      "Next.js"
+    ],
+    "updatedAt": "2026-09-05T09:33:50.324Z"
+  },
+  "individual-1788601938659": {
+    "emailVerified": true,
+    "emailVerifiedAt": "2026-09-05T09:52:18.659Z",
+    "profileSetupDone": true,
+    "roles": [
+      "data",
+      "sales"
+    ],
+    "skills": [
+      "Kotlin",
+      "Java",
+      "SQL",
+      "CSS"
+    ],
+    "updatedAt": "2026-09-05T09:52:18.663Z"
+  }
+}

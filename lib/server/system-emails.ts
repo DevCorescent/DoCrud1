@@ -59,7 +59,9 @@ export interface SystemEmailDefinition {
 /**
  * The registry.
  *
- * `signup_otp` is the email `/api/onboarding/send-otp` sends. Other
+ * `signup_otp` is the verification code every OTP path sends, built and
+ * delivered by `lib/server/otp-email.ts` — the onboarding signup flow, the
+ * re-verification endpoint and the legacy screens all go through it. Other
  * transactional senders exist in the codebase (account-action OTP, account
  * deactivation, business verification, public-face) but are NOT listed here:
  * until a sender reads this configuration, listing it would be a UI that edits
@@ -70,7 +72,7 @@ const DEFINITIONS: Omit<SystemEmailDefinition, 'sampleValues'>[] = [
     type: 'signup_otp',
     name: 'Email verification code',
     trigger: 'A user requests a verification code during signup or login',
-    sender: 'app/api/onboarding/send-otp',
+    sender: 'lib/server/otp-email',
     variables: ['otp', 'firstName', 'email'],
     required: true,
     defaultSubject: '{{otp}} is your Docrud verification code',

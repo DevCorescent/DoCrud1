@@ -1,6 +1,6 @@
 [
   {
-    "sessionId": "s-mto997qx-526dmm",
+    "sessionId": "s-mtpplyrw-082n9e",
     "visitorId": "v-mpceh0ng-f98p3a",
     "userId": "individual-1788599113878",
     "userEmail": "suhas@yopmail.com",
@@ -9,7 +9,7 @@
     "accountType": "individual",
     "planId": "workspace-trial",
     "userRole": "individual",
-    "path": "/",
+    "path": "/u/individual-1788599113878",
     "surface": "public",
     "ip": "::1",
     "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
@@ -18,22 +18,21 @@
     "os": "macOS",
     "tabVisible": false,
     "navigatorOnline": true,
-    "firstSeenAt": "2026-09-05T10:43:57.424Z",
-    "lastPingAt": "2026-09-05T11:04:50.751Z",
-    "lastInteractionAt": "2026-09-05T10:43:57.424Z",
-    "pageViews": 5,
+    "firstSeenAt": "2026-09-06T11:12:10.710Z",
+    "lastPingAt": "2026-09-06T11:26:45.529Z",
+    "lastInteractionAt": "2026-09-06T11:12:10.710Z",
+    "pageViews": 3,
     "pathHistory": [
-      "/",
-      "/login",
-      "/onboarding",
-      "/u/individual-1788601938659"
+      "/u/individual-1788596770002",
+      "/people",
+      "/u/individual-1788599113878"
     ],
-    "focusDurationMs": 356803,
-    "clickCount": 32,
-    "keystrokeCount": 2,
-    "scrollEventCount": 1529,
-    "idleMs": 4647,
+    "focusDurationMs": 381330,
+    "clickCount": 43,
+    "keystrokeCount": 4,
+    "scrollEventCount": 2452,
+    "idleMs": 1596,
     "connectionType": "4g",
-    "engagementScore": 40
+    "engagementScore": 46
   }
 ]

@@ -123,6 +123,18 @@ export interface RecProfile {
   unknownSkills?: ReadonlySet<string>;
   /** Years of experience, when the profile says enough to count them. */
   years?: number | null;
+  /**
+   * Places the member SAID they would work, lowercased.
+   *
+   * Held apart from `location`, which is where they are. Somebody in Pune who
+   * will work in Bengaluru is a match for a Bengaluru role, and reading that
+   * off their current city alone would never have found it.
+   */
+  preferredLocations?: ReadonlySet<string>;
+  /** Work modes they said they want. Empty means they did not say. */
+  preferredWorkModes?: ReadonlySet<string>;
+  /** Employment types they said they want. Empty means they did not say. */
+  preferredEmploymentTypes?: ReadonlySet<string>;
 }
 
 export interface RecJob {
@@ -234,12 +246,28 @@ export function buildRecProfile(fields: {
   location?: string;
   experience?: Array<{ title?: string; period?: string }>;
   interests?: string[];
+  /**
+   * What the member stated on purpose — see lib/server/match-preferences.ts.
+   * Optional throughout: a profile that has answered nothing scores exactly as
+   * it did before, and no absent answer is turned into a default.
+   */
+  preferences?: {
+    preferredLocations?: string[];
+    workModes?: string[];
+    employmentTypes?: string[];
+    desiredTitles?: string[];
+  };
 }): RecProfile {
+  const prefs = fields.preferences ?? {};
   const skills = uniqLower([...(fields.skills || []), ...(fields.interests || [])]);
   const roleTokens = uniqLower([
     ...tokens(fields.headline),
     ...(fields.experience || []).flatMap((e) => tokens(e?.title)),
     ...(fields.interests || []).map((i) => String(i)),
+    /* A title somebody TYPED to say what they want is the most direct
+       statement of intent in the whole profile — stronger than a headline,
+       which describes where they have been rather than where they are going. */
+    ...(prefs.desiredTitles || []).flatMap((t) => tokens(t)),
   ]).filter((t) => !STOP.has(t));
 
   /* Every spelling of a skill collapses to one canonical here, ONCE, so the
@@ -264,6 +292,9 @@ export function buildRecProfile(fields: {
     canonicalSkills,
     unknownSkills,
     years: deriveYears(fields.experience),
+    preferredLocations: new Set(uniqLower(prefs.preferredLocations || [])),
+    preferredWorkModes: new Set(uniqLower(prefs.workModes || [])),
+    preferredEmploymentTypes: new Set(uniqLower(prefs.employmentTypes || [])),
   };
 }
 
@@ -535,27 +566,76 @@ export function recommendMatch(profile: RecProfile, job: RecJob, now: number): R
     });
   }
 
-  /* ── Location and work mode ── */
+  /* ── Location and work mode ──
+     Measured against where the member IS *and* everywhere they SAID they would
+     work. Somebody in Pune who listed Bengaluru is a match for a Bengaluru
+     role, and reading their current city alone would never have found it. */
   const cityCanon = indiaCity(jobLoc).toLowerCase();
-  const locHit = Boolean(
-    profile.location && jobLoc
-    && (jobLoc.includes(profile.location) || (cityCanon && profile.location.includes(cityCanon))),
+  const placeMatches = (place: string) => Boolean(
+    place && jobLoc && (jobLoc.includes(place) || (cityCanon && place.includes(cityCanon))),
   );
+  const homeHit = placeMatches(profile.location);
+  const statedPlaces = Array.from(profile.preferredLocations ?? []);
+  const statedHit = statedPlaces.some(placeMatches);
+  const locHit = homeHit || statedHit;
+
   const isRemote = job.workMode === 'remote';
   const isHybrid = job.workMode === 'hybrid';
+  /* A stated work-mode list is a statement about what they will take. When one
+     exists, a mode outside it stops earning ranking credit here — the hard
+     filtering is the eligibility engine's job, this is only about order. */
+  const modes = profile.preferredWorkModes;
+  const modeStated = Boolean(modes && modes.size > 0);
+  const modeWanted = !modeStated || !job.workMode || modes!.has(String(job.workMode));
+
   let locationPoints = 0;
-  if (locHit) locationPoints = W_LOCATION;
-  else if (isRemote) locationPoints = W_LOCATION * 0.85;
-  else if (isHybrid) locationPoints = W_LOCATION * 0.3;
+  if (locHit && modeWanted) locationPoints = W_LOCATION;
+  else if (isRemote && modeWanted) locationPoints = W_LOCATION * 0.85;
+  else if (isHybrid && modeWanted) locationPoints = W_LOCATION * 0.3;
+  else if (locHit) locationPoints = W_LOCATION * 0.4;
 
   if (locHit) {
-    factors.push({ kind: 'location', label: 'Same location', detail: `Based in ${job.location}, which matches where you are.`, points: Math.round(locationPoints), max: W_LOCATION });
+    factors.push({
+      kind: 'location',
+      label: statedHit && !homeHit ? 'A place you chose' : 'Same location',
+      detail: statedHit && !homeHit
+        ? `Based in ${job.location}, one of the places you said you would work.`
+        : `Based in ${job.location}, which matches where you are.`,
+      points: Math.round(locationPoints), max: W_LOCATION,
+    });
     reasons.push('Location compatible');
   } else if (isRemote) {
     factors.push({ kind: 'location', label: 'Remote', detail: 'Remote, so where you are based does not restrict it.', points: Math.round(locationPoints), max: W_LOCATION });
     reasons.push('Remote-friendly');
   } else if (jobLoc) {
     factors.push({ kind: 'location', label: 'Different location', detail: `Based in ${job.location}${isHybrid ? ', hybrid' : ''}, which is not where your profile says you are.`, points: Math.round(locationPoints), max: W_LOCATION });
+  }
+
+  /* Stated work mode and employment type are EXPLAINED but not separately
+     scored: the eligibility engine already decides whether a role outside them
+     should be shown at all, and paying for the same answer twice would let one
+     preference outweigh the skills. */
+  if (modeStated && job.workMode) {
+    factors.push({
+      kind: 'location',
+      label: modeWanted ? 'Work mode you want' : 'Work mode you did not ask for',
+      detail: modeWanted
+        ? `This is ${job.workMode}, which is one of the work modes you chose.`
+        : `This is ${job.workMode}; you asked for ${Array.from(modes!).join(' or ')}.`,
+      points: 0, max: 0,
+    });
+  }
+  const types = profile.preferredEmploymentTypes;
+  if (types && types.size > 0 && job.employmentType) {
+    const typeWanted = types.has(String(job.employmentType).toLowerCase());
+    factors.push({
+      kind: 'location',
+      label: typeWanted ? 'Employment type you want' : 'Employment type you did not ask for',
+      detail: typeWanted
+        ? `This is a ${String(job.employmentType).replace(/_/g, ' ')} role, which is what you are looking for.`
+        : `This is a ${String(job.employmentType).replace(/_/g, ' ')} role; you asked for ${Array.from(types).map((t) => t.replace(/_/g, ' ')).join(' or ')}.`,
+      points: 0, max: 0,
+    });
   }
 
   /* ── Freshness ── */

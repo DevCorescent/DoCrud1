@@ -32,6 +32,7 @@
     "test:ats-modal": "tsx scripts/ats-modal.selftest.ts",
     "test:job-match": "tsx scripts/job-match-tone.selftest.ts",
     "test:job-match-accuracy": "tsx scripts/job-match-accuracy.selftest.ts",
+    "test:match-preferences": "tsx scripts/match-preferences.selftest.ts",
     "test:job-post-ui": "tsx scripts/job-post-ui.selftest.ts",
     "test:job-detail-ui": "tsx scripts/job-detail-ui.selftest.ts",
     "test:seo": "tsx scripts/seo-crawlability.selftest.ts",

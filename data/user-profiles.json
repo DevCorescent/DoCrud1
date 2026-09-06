@@ -48,7 +48,76 @@
       "SQL",
       "Swift"
     ],
-    "updatedAt": "2026-09-05T09:05:13.880Z"
+    "updatedAt": "2026-09-06T11:26:11.050Z",
+    "matchPreferences": {
+      "preferredLocations": [
+        "Bengaluru",
+        "Karnataka"
+      ],
+      "relocation": "yes",
+      "workModes": [
+        "remote"
+      ],
+      "employmentTypes": [
+        "full_time",
+        "part_time",
+        "contract",
+        "internship",
+        "freelance",
+        "temporary"
+      ],
+      "desiredTitles": [
+        "python engineer",
+        "java engineer"
+      ],
+      "experienceYears": 8,
+      "minSalary": 20000,
+      "salaryPeriod": "month",
+      "availability": "within_30_days",
+      "noticePeriodDays": 90,
+      "willingToTravel": true,
+      "languages": [
+        "English",
+        "Hindi"
+      ],
+      "companySizes": [
+        "1-10",
+        "51-200",
+        "201-1000",
+        "11-50",
+        "1000+"
+      ]
+    },
+    "matchPreferenceVisibility": {
+      "relocation": "public",
+      "preferredLocations": "public",
+      "workModes": "private",
+      "employmentTypes": "private",
+      "desiredTitles": "public",
+      "workAuthorization": "private",
+      "languages": "private",
+      "availability": "private",
+      "experienceYears": "private",
+      "companySizes": "private",
+      "willingToTravel": "private"
+    },
+    "publicMatchPreferences": {
+      "desiredTitles": [
+        "python engineer",
+        "java engineer"
+      ],
+      "preferredLocations": [
+        "Bengaluru",
+        "Karnataka"
+      ],
+      "relocation": "yes"
+    },
+    "bannerUrl": "/uploads/profile/banner_individual17_c17e29e84304.jpg",
+    "coverPosition": "50% 50%",
+    "avatarUrl": "/uploads/profile/avatar_individual17_87c4cafc3188.jpg",
+    "avatarPosition": "50% 50%",
+    "experience": [],
+    "education": []
   },
   "individual-1788600830323": {
     "emailVerified": true,

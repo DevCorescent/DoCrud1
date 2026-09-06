@@ -1,0 +1,13 @@
+{
+  "events": [
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788596770002",
+      "href": "/u/individual-1788599113878",
+      "id": "se_1788693142229_iytzpc",
+      "createdAt": "2026-09-06T11:12:22.229Z"
+    }
+  ]
+}

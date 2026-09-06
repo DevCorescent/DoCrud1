@@ -632,7 +632,26 @@
   html,
   body {
     max-width: 100%;
-    overflow-x: hidden;
+    /* `clip`, not `hidden`.
+
+       Both stop sideways scrolling, but `hidden` makes the element a SCROLL
+       CONTAINER — and a scroll container on <body> silently breaks
+       `position: sticky` for every descendant in the app, because sticky then
+       resolves against a scrollport that is not the one actually moving. That
+       is why the profile tab bar scrolled away instead of pinning.
+
+       `clip` was added to CSS for exactly this: same visual result, no scroll
+       container. The @supports block below keeps the old behaviour on browsers
+       that predate it (Safari < 16), so nothing regresses there — those
+       browsers simply do not get sticky, which is what they had before. */
+    overflow-x: clip;
+  }
+
+  @supports not (overflow-x: clip) {
+    html,
+    body {
+      overflow-x: hidden;
+    }
   }
 
   /* Prevent white overscroll flash on dark pages (catalogue, services) */

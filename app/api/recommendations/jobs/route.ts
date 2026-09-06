@@ -19,6 +19,7 @@ import { registerRecommendationCache, rememberViewerCount } from '@/lib/server/r
 import { getHiringApplications } from '@/lib/server/hiring';
 import { personalizedPage } from '@/lib/server/job-api/personalized';
 import { buildEligibilityProfile } from '@/lib/server/job-sources/eligibility';
+import { toEligibilityPreferences } from '@/lib/server/match-preferences';
 import type { MatchCandidate } from '@/lib/server/job-sources/ats-match';
 
 export const dynamic = 'force-dynamic';
@@ -84,7 +85,7 @@ async function computeRecommendations(
         /* resumeFiles joins the projection so an uploaded CV can fill in
            signals the member never typed — see lib/server/recommend-profile.ts.
            It is the same single read, one field wider. */
-        ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles']).catch(() => null)
+        ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences']).catch(() => null)
         : Promise.resolve(null),
     ]);
     if (!Array.isArray(jobs) || jobs.length === 0) return { jobs: [], total: 0 };
@@ -95,7 +96,11 @@ async function computeRecommendations(
       fields as Parameters<typeof mergeResumeSignals>[0],
       (fields as { resumeFiles?: Parameters<typeof mergeResumeSignals>[1] })?.resumeFiles,
     );
-    const profile = buildRecProfile(signals as Parameters<typeof buildRecProfile>[0]);
+    const profile = buildRecProfile({
+      ...(signals as Parameters<typeof buildRecProfile>[0]),
+      /* What the member stated on purpose. Absent answers stay absent. */
+      preferences: (fields as { matchPreferences?: Record<string, never> } | null)?.matchPreferences,
+    });
     const showMatch = hasProfileSignals(profile);
     const now = Date.now();
 
@@ -191,7 +196,7 @@ async function computePersonalized(
 
   const [jobs, fields, applications] = await Promise.all([
     getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>),
-    getProfileFields(meId, ['headline', 'bio', 'skills', 'location', 'experience', 'interests', 'resumeFiles']).catch(() => null),
+    getProfileFields(meId, ['headline', 'bio', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences']).catch(() => null),
     /* Scoped to THIS viewer. The applied set is the reason a job leaves the
        feed, so it must never be another member's. */
     getHiringApplications().then((all) => all.filter((a) => a?.candidateUserId === meId)).catch(() => []),
@@ -204,7 +209,10 @@ async function computePersonalized(
     fields as Parameters<typeof mergeResumeSignals>[0],
     (fields as { resumeFiles?: Parameters<typeof mergeResumeSignals>[1] })?.resumeFiles,
   );
-  const profile = buildRecProfile(signals as Parameters<typeof buildRecProfile>[0]);
+  const profile = buildRecProfile({
+    ...(signals as Parameters<typeof buildRecProfile>[0]),
+    preferences: (fields as { matchPreferences?: Record<string, never> } | null)?.matchPreferences,
+  });
   const showMatch = hasProfileSignals(profile);
   const now = Date.now();
 
@@ -264,13 +272,23 @@ async function computePersonalized(
       }
     : null;
 
-  /* Preferences the member actually stated. Today that is LOCATION ONLY: the
-     profile has no stored work-mode, employment-type, salary or domain
-     preference, so those Phase 5 rules cannot fire and correctly report
-     `unknown`. buildEligibilityProfile returns an empty profile when nothing
-     was stated, and an empty profile decides nothing — eligibility then stays
-     null rather than becoming a guess. */
-  const prefs = buildEligibilityProfile({ location: signals.location });
+  /* Preferences the member actually stated.
+     This used to be LOCATION ONLY, because the profile had nowhere to store a
+     work mode, an employment type, a salary floor or a domain — so the Phase 5
+     rules for all four sat dormant and honestly reported `unknown`. They are
+     stored now (lib/server/match-preferences.ts) and arrive here through the
+     shape the evaluator already expected, so those rules start applying without
+     a line changing inside it.
+
+     Still nothing is invented: buildEligibilityProfile returns an empty profile
+     when nothing was stated, and an empty profile decides nothing — eligibility
+     stays null rather than becoming a guess. */
+  const prefs = buildEligibilityProfile({
+    location: signals.location,
+    preferences: toEligibilityPreferences(
+      (fields as { matchPreferences?: Parameters<typeof toEligibilityPreferences>[0] } | null)?.matchPreferences,
+    ),
+  });
   const hasPrefs = Object.keys(prefs).length > 0;
 
   return personalizedPage({

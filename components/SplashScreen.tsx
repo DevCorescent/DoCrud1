@@ -77,7 +77,7 @@ export default function SplashScreen() {
         />
         {/* Docrud icon */}
         <img
-          src="/docrud-icon.png"
+          src="/icons/logo-192.png"
           alt="Docrud"
           width={iconSize}
           height={iconSize}

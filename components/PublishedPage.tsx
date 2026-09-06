@@ -26,6 +26,8 @@ import {
   readFeedLabelledValue,
 } from '@/components/feed/FeedCardMeta';
 import { FeedCardMenu } from '@/components/feed/FeedCardMenu';
+import { FEED_CARD, FEED_CARD_MEDIA, FEED_STACK } from '@/components/feed/cardShell';
+
 const PublishAnythingDialog = dynamic(() => import('@/components/PublishAnythingDialog'), { ssr: false });
 import {
   ArrowLeft,
@@ -1155,6 +1157,11 @@ function feedLabel(item: { title: string; body?: string; category?: string }): s
   return hasRealCaption(item.body) ? getBodySnippet(item.body!, 80) : '';
 }
 
+/** The one-pixel top highlight that reads as glass. Rendered inside each card. */
+function CardSheen() {
+  return <span aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/[0.14] to-transparent" />;
+}
+
 /* ─── featured card — same structure as PublishedCard + featured badge ── */
 function FeaturedCard({ item }: { item: PublishedItem }) {
   const [saved, toggleSaved] = useBookmark(item.id, item.category);
@@ -1172,7 +1179,8 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
     : (initials.slice(0, 2) || <TabIcon className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5 px-4 sm:px-0">
+    <article className={FEED_CARD}>
+      <CardSheen />
       {/* ── header ── */}
       <div className="flex items-center gap-3 mb-3.5">
         {profileHref ? (
@@ -1219,7 +1227,13 @@ function FeaturedCard({ item }: { item: PublishedItem }) {
 
       {/* ── thumbnail — full bleed, same as PublishedCard ── */}
       {item.thumbnailUrl && (
-        <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
+        /* Rounded and INSIDE the card. The old `-mx-4` pulled the image out to
+           the screen edges, which is what made a post look like a page section
+           rather than a card. */
+        <Link href={`/published/${item.id}`} /* `-mx-3.5` cancels the card's phone padding exactly, so the image runs
+   bezel to bezel. From `sm` the card floats and the media sits inside it,
+   rounded. */
+className="-mx-3.5 mb-3.5 block overflow-hidden border-y border-white/[0.06] sm:mx-0 sm:rounded-[13px] sm:border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={item.thumbnailUrl} alt={item.category === 'post' || isJunkTitle(item) ? '' : item.title} className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.01]" loading="lazy" decoding="async" />
         </Link>
@@ -1599,7 +1613,8 @@ function GigCard({ item }: { item: PublishedItem }) {
   };
 
   return (
-    <article className="group py-5 px-4 sm:px-0">
+    <article className={FEED_CARD}>
+      <CardSheen />
       {/* Author header */}
       <div className="flex items-center gap-3 mb-3.5">
         {profileHref ? (
@@ -1796,7 +1811,19 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
     : (initials || <ImageIcon className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5 px-4 sm:px-0">
+    /* A CARD, not a row.
+       This used to be a bare block separated from its neighbours by a divider,
+       with the image bleeding to both screen edges. One post therefore had no
+       boundary of its own: on a phone it read as a page of loose parts rather
+       than as a thing somebody posted.
+
+       The glass treatment is the same one the dialogs use — a translucent
+       surface over the page's ambient glows, a hairline border, and a soft
+       lift on hover. It is what gives the card an edge without drawing a hard
+       line around it. */
+    <article className={FEED_CARD}>
+      <CardSheen />
+
       {/* header */}
       <div className="flex items-center gap-3 mb-3.5">
         {/* clickable avatar */}
@@ -1829,13 +1856,21 @@ function PostCard({ item, searchQuery }: { item: PublishedItem; searchQuery: str
 
       {/* image — use feed thumbnailUrl (CDN / proxy), not per-card base64 fetch */}
       {thumbUrl && (
-        <Link href={`/published/${item.id}`} className="block mb-3.5 -mx-4 sm:mx-0 sm:rounded-xl overflow-hidden">
+        <Link href={`/published/${item.id}`} /* `-mx-3.5` cancels the card's phone padding exactly, so the image runs
+   bezel to bezel. From `sm` the card floats and the media sits inside it,
+   rounded. */
+className="-mx-3.5 mb-3.5 block overflow-hidden border-y border-white/[0.06] sm:mx-0 sm:rounded-[13px] sm:border">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={thumbUrl}
             alt=""
             /* Task 15 — same small-screen media cap as the shared card shell. */
-            className="w-full h-auto max-h-[70vh] object-cover sm:max-h-none"
+            /* Capped on EVERY screen, not only small ones. `sm:max-h-none`
+               removed the ceiling from the laptop up, so a portrait photo
+               filled the entire viewport and one post became the whole page.
+               A feed item should never be taller than most of a screen. */
+            /* Natural proportions, full width, nothing cut — as in PublishedFeedCard. */
+            className="w-full h-auto"
             loading="lazy"
             decoding="async"
           />
@@ -2171,7 +2206,8 @@ function ThreadCard({ item, searchQuery }: { item: PublishedItem; searchQuery: s
     : (initials || <MessageSquare className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5 px-4 sm:px-0">
+    <article className={FEED_CARD}>
+      <CardSheen />
       {/* header */}
       <div className="flex items-center gap-3 mb-3.5">
         {threadHref ? (
@@ -2324,7 +2360,8 @@ function MilestoneCard({ item, searchQuery }: { item: PublishedItem; searchQuery
     : (initials || <Award className="h-3.5 w-3.5 opacity-60" />);
 
   return (
-    <article className="group py-5 px-4 sm:px-0">
+    <article className={FEED_CARD}>
+      <CardSheen />
       {/* header */}
       <div className="flex items-center gap-3 mb-3.5">
         {milestoneHref ? (
@@ -2498,7 +2535,7 @@ function CategorySection({
 
       {/* feed layout: divide-y separator for post-style, 2-col grid for visual cards */}
       {tab.id === 'gig' ? (
-        <div className="divide-y divide-white/[0.05]">
+        <div className={FEED_STACK}>
           {shown.map(item => <GigCard key={item.id} item={item} />)}
         </div>
       ) : tab.id === 'poll' ? (
@@ -2522,19 +2559,19 @@ function CategorySection({
           {shown.map(item => <TutorialCard key={item.id} item={item} searchQuery={searchQuery} />)}
         </div>
       ) : tab.id === 'post' ? (
-        <div className="divide-y divide-white/[0.05]">
+        <div className={FEED_STACK}>
           {shown.map(item => <PostCard key={item.id} item={item} searchQuery={searchQuery} />)}
         </div>
       ) : tab.id === 'thread' ? (
-        <div className="divide-y divide-white/[0.05]">
+        <div className={FEED_STACK}>
           {shown.map(item => <ThreadCard key={item.id} item={item} searchQuery={searchQuery} />)}
         </div>
       ) : tab.id === 'milestone' ? (
-        <div className="divide-y divide-white/[0.05]">
+        <div className={FEED_STACK}>
           {shown.map(item => <MilestoneCard key={item.id} item={item} searchQuery={searchQuery} />)}
         </div>
       ) : (
-        <div className="divide-y divide-white/[0.05]">
+        <div className={FEED_STACK}>
           {shown.map(item => (
             <PublishedCard key={item.id} item={item} searchQuery={searchQuery} />
           ))}
@@ -2588,7 +2625,7 @@ function SearchResults({ items, query }: { items: PublishedItem[]; query: string
       <p className="mb-5 text-xs text-white/35">
         <span className="font-semibold text-white/70">{results.length}</span> result{results.length !== 1 ? 's' : ''} — sorted by relevance
       </p>
-      <div className="divide-y divide-white/[0.05]">
+      <div className={FEED_STACK}>
         {results.slice(0, limit).map(item => (
           item.category === 'gig' ? <GigCard key={item.id} item={item} />
           : item.category === 'poll' ? <PollCard key={item.id} item={item} />
@@ -2688,7 +2725,22 @@ export default function PublishedPage() {
   }, [activeTab]);
 
 
+  /* One ref PER input. Both search fields carried the same ref, so whichever
+     mounted last owned it — the mobile one — and on a desktop `searchRef.current`
+     pointed at an input that `lg:hidden` had taken out of the layout. Focusing
+     it did nothing visible, which is why ⌘K appeared to be dead there. */
   const searchRef = useRef<HTMLInputElement>(null);
+  const mobileSearchRef = useRef<HTMLInputElement>(null);
+
+  /** Focus whichever search field is actually visible at this width. */
+  const focusSearch = useCallback(() => {
+    for (const el of [searchRef.current, mobileSearchRef.current]) {
+      /* `offsetParent === null` is the cheap "not rendered" test: it covers
+         display:none on the element and on any ancestor, which is exactly how
+         the two bars are switched. */
+      if (el && el.offsetParent !== null) { el.focus(); el.select(); return; }
+    }
+  }, []);
 
   /* sync trend counts from localStorage */
   useEffect(() => {
@@ -3138,12 +3190,12 @@ export default function PublishedPage() {
     const h = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        searchRef.current?.focus();
+        focusSearch();
       }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, []);
+  }, [focusSearch]);
 
   /* sidebar nav item count */
   const tabCount = (id: string) =>
@@ -3171,98 +3223,92 @@ export default function PublishedPage() {
       </div>
 
       {/* ══════════════════════════════════════
-          DESKTOP SIDEBAR
+          QUICK ACTIONS  (replaces the 240px category sidebar)
+      ══════════════════════════════════════
+
+          What the sidebar held: a Back link, a title, and twenty-one category
+          rows. The categories are already a scrollable pill strip above the
+          feed on every screen — the sidebar was a second copy of the same
+          control, costing a quarter of a laptop's width to duplicate it.
+
+          What is left is what the sidebar had that the strip does not: the
+          actions. They are a narrow rail of icon buttons, so the feed itself
+          gets the width. Every one carries a label on hover and an aria-label
+          always, because an icon on its own is a guess.
       ══════════════════════════════════════ */}
-      <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col border-r border-white/[0.06] bg-[#0D0D0F]">
+      <aside className="hidden lg:flex w-[68px] shrink-0 flex-col items-center gap-1.5 border-r border-white/[0.06] bg-white/[0.015] py-4 backdrop-blur-xl">
+        <Link
+          href="/"
+          aria-label="Back to app"
+          title="Back to app"
+          className="group flex h-10 w-10 items-center justify-center rounded-[13px] border border-white/[0.07] bg-white/[0.03] text-white/40 transition hover:border-white/[0.16] hover:bg-white/[0.07] hover:text-white/85"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
 
-        {/* logo / title area */}
-        <div className="px-4 py-5 border-b border-white/[0.05]">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-xs font-medium text-white/40 transition hover:text-white/70"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to app
-          </Link>
-          <div className="mt-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/25">Docrud</p>
-            <h1 className="mt-0.5 text-lg font-bold tracking-tight text-white">Published</h1>
-          </div>
-          {/* live pill */}
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-[11px] text-white/35 tabular-nums">{allItems.length} items</span>
-            {realItems.length > 0 && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                {realItems.length} live
-              </span>
-            )}
-          </div>
-        </div>
+        <span aria-hidden className="my-1 h-px w-7 bg-white/[0.07]" />
 
-        {/* nav list */}
-        <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {TABS.map(tab => {
-            const isActive = activeTab === tab.id;
-            const count    = tabCount(tab.id);
-            const colorCls = TAG_CLS[tab.id] ?? TAG_CLS.all;
-            const isFeaturedTab = tab.id === 'featured';
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => { setActiveTab(tab.id as TabId); setSearch(''); }}
-                className={`group w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[12.5px] font-medium transition-all ${
-                  isActive
-                    ? 'bg-white/[0.08] text-white shadow-sm'
-                    : 'text-white/40 hover:bg-white/[0.04] hover:text-white/80'
-                }`}
-              >
-                <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-                  isActive
-                    ? isFeaturedTab ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : colorCls
-                    : 'border-white/[0.06] bg-transparent text-white/30 group-hover:border-white/[0.10] group-hover:text-white/50'
-                }`}>
-                  <tab.icon className="h-3.5 w-3.5" />
-                </span>
-                <span className="flex-1 text-left">{tab.label}</span>
-                {count > 0 && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums min-w-[18px] text-center ${
-                    isActive ? 'bg-white/[0.12] text-white' : 'bg-white/[0.05] text-white/20'
-                  }`}>{count}</span>
-                )}
-                {isFeaturedTab && (
-                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: isActive ? 'rgba(251,191,36,0.80)' : 'rgba(251,191,36,0.25)', flexShrink: 0, boxShadow: isActive ? '0 0 5px rgba(251,191,36,0.50)' : 'none' }} />
-                )}
-              </button>
-            );
-          })}
-        </nav>
+        <button
+          type="button"
+          onClick={() => setPublishOpen(true)}
+          aria-label="Publish something"
+          title="Publish something"
+          className="group flex h-10 w-10 items-center justify-center rounded-[13px] border border-white/[0.14] bg-white/[0.08] text-white/80 transition hover:border-white/25 hover:bg-white/[0.14] hover:text-white active:scale-95"
+        >
+          <Plus className="h-4 w-4 transition-transform duration-200 group-hover:rotate-90" />
+        </button>
 
-        {/* bottom: analytics portal (rendered in document.body) + publish CTA */}
+        <button
+          type="button"
+          onClick={focusSearch}
+          aria-label="Search published"
+          title="Search published"
+          className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-white/[0.07] bg-white/[0.03] text-white/40 transition hover:border-white/[0.16] hover:bg-white/[0.07] hover:text-white/85"
+        >
+          <Search className="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTrendDrawerOpen(true)}
+          aria-label="Trending and live feed"
+          title="Trending and live feed"
+          className={`flex h-10 w-10 items-center justify-center rounded-[13px] border transition ${
+            sortBy === 'trending'
+              ? 'border-orange-400/30 bg-orange-500/[0.12] text-orange-300'
+              : 'border-white/[0.07] bg-white/[0.03] text-white/40 hover:border-white/[0.16] hover:bg-white/[0.07] hover:text-white/85'
+          }`}
+        >
+          <TrendingUp className="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAnalyticsOpen(o => !o)}
+          aria-label="My CTA activity"
+          title="My CTA activity"
+          className={`flex h-10 w-10 items-center justify-center rounded-[13px] border transition ${
+            analyticsOpen
+              ? 'border-amber-500/30 bg-amber-500/[0.12] text-amber-300'
+              : 'border-white/[0.07] bg-white/[0.03] text-white/40 hover:border-white/[0.16] hover:bg-white/[0.07] hover:text-white/85'
+          }`}
+        >
+          <BarChart2 className="h-4 w-4" />
+        </button>
+
         {analyticsOpen && <CtaAnalyticsPanel onClose={() => setAnalyticsOpen(false)} />}
-        <div className="p-3 border-t border-white/[0.05] space-y-2">
-          <button
-            type="button"
-            onClick={() => setAnalyticsOpen(o => !o)}
-            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-[11.5px] font-semibold transition ${
-              analyticsOpen
-                ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                : 'border-white/[0.07] bg-white/[0.03] text-white/40 hover:bg-white/[0.06] hover:text-white/70'
-            }`}
+
+        {/* The live count, kept because it is the one fact the sidebar carried
+            that nothing else states. */}
+        {realItems.length > 0 && (
+          <span
+            title={`${realItems.length} live · ${allItems.length} items`}
+            className="mt-auto flex flex-col items-center gap-1 text-[9px] font-bold tabular-nums text-emerald-400/80"
           >
-            <TrendingUp className="h-3.5 w-3.5 shrink-0" />
-            My CTA Activity
-          </button>
-          <button
-            type="button"
-            onClick={() => setPublishOpen(true)}
-            className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-4 py-2.5 text-[11.5px] font-semibold text-white/55 transition hover:border-white/[0.18] hover:bg-white/[0.09] hover:text-white/85 active:scale-[0.98]"
-          >
-            <Plus className="h-3.5 w-3.5 transition-transform group-hover:rotate-90 duration-200" />
-            Publish something
-          </button>
-        </div>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+            {realItems.length}
+          </span>
+        )}
       </aside>
 
       {/* ══════════════════════════════════════
@@ -3363,7 +3409,7 @@ export default function PublishedPage() {
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" />
               <input
-                ref={searchRef}
+                ref={mobileSearchRef}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search published…"
@@ -3823,7 +3869,16 @@ export default function PublishedPage() {
 
         {/* ── Scrollable content area ── */}
         <div ref={feedScrollRef} className="flex-1 overflow-y-auto min-h-0 bg-[#0D0D0F]">
-          <div className="py-4 px-0 sm:p-4 lg:py-6 lg:px-8 pb-24 lg:pb-10 space-y-10 max-w-3xl mx-auto w-full">
+          {/* `px-3` on a phone rather than `px-0`: the cards need a gutter now
+              that they have edges of their own. `space-y-3.5` rather than
+              `space-y-10` — the gap between cards was tuned for divider-
+              separated rows, and 40px between bounded cards reads as unrelated
+              islands. `pb-28` clears the fixed bottom nav, which the old `pb-24`
+              left the action row tucked under. */}
+          {/* No horizontal gutter on a phone — the cards ARE the width, which
+              is what lets their media go bezel to bezel. `space-y-5` gives the
+              cards room to read as separate objects; at 3.5 they touched. */}
+          <div className="mx-auto w-full max-w-2xl space-y-5 px-0 py-4 pb-28 sm:space-y-6 sm:px-4 lg:px-8 lg:py-6 lg:pb-10">
 
             {isSearching ? (
               <SearchResults items={allItems} query={search} />
@@ -3841,7 +3896,7 @@ export default function PublishedPage() {
                     border-radius: 6px;
                   }
                 `}</style>
-                <div className="divide-y divide-white/[0.05]">
+                <div className={FEED_STACK}>
                   {Array.from({ length: 6 }).map((_, i) => (
                     <div key={i} className="py-5 flex flex-col gap-3">
                       <div className="flex items-center gap-2">
@@ -3869,7 +3924,7 @@ export default function PublishedPage() {
               </div>
             ) : (
               <>
-                <div className="divide-y divide-white/[0.05]">
+                <div className={FEED_STACK}>
                   {/* Posts are interleaved with the recommendation and
                       sponsored modules by the same shared planner the homepage
                       uses, so both surfaces place them on one cadence. Post
@@ -3884,6 +3939,12 @@ export default function PublishedPage() {
                     if (entry.type === 'job-recommendation') {
                       /* The Feed tab has no jobs module of its own; the slot is
                          simply not filled rather than inventing one here. */
+                      return null;
+                    }
+                    if (entry.type === 'person') {
+                      /* Only the homepage grid scatters suggested people among
+                         its posts; this feed never asks composeFeed for them,
+                         so the case exists to satisfy the union, not to run. */
                       return null;
                     }
                     const item = entry.data;
@@ -3977,24 +4038,12 @@ export default function PublishedPage() {
         </div>
       </div>
 
-      {/* ── Right Trending Panel (xl+) ── */}
-      <aside className="hidden xl:flex w-72 2xl:w-80 shrink-0 flex-col border-l border-white/[0.06] bg-[#0D0D0F] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.05] shrink-0">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-3.5 w-3.5 text-orange-400/60" />
-            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/40">Live Feed</span>
-          </div>
-          {sortBy === 'trending' && (
-            <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9.5px] font-bold text-orange-400">🔥 On</span>
-          )}
-        </div>
-        <TrendingPanel
-          allItems={allItems}
-          onTagClick={tag => setSearch(tag)}
-          onCategoryClick={cat => { setActiveTab(cat as TabId); setSearch(''); }}
-          setSortTrending={() => setSortBy('trending')}
-        />
-      </aside>
+      {/* The right-hand trending column is gone.
+          It was a permanent 288px of chrome for content that is browsable from
+          the Trending action instead — and on anything below `xl` it never
+          rendered at all, so the feed already had to work without it. The same
+          panel still opens as a drawer from the toolbar, so nothing was
+          removed, only un-pinned. */}
       </div>
 
       {/* ══════════════════════════════════════
@@ -4002,7 +4051,11 @@ export default function PublishedPage() {
       ══════════════════════════════════════ */}
       {trendDrawerOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[150] flex flex-col justify-end xl:hidden"
+          /* No `xl:hidden`. It was there because a pinned trending column
+             covered xl and up; that column is gone, and the quick-action rail
+             that replaced it opens THIS drawer — so hiding it above xl left the
+             button doing nothing on exactly the widths the rail appears at. */
+          className="fixed inset-0 z-[150] flex flex-col justify-end"
           onClick={() => setTrendDrawerOpen(false)}
         >
           {/* backdrop */}

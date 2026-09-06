@@ -9,7 +9,7 @@
     "accountType": "individual",
     "planId": "workspace-trial",
     "userRole": "individual",
-    "path": "/u/individual-1788599113878",
+    "path": "/",
     "surface": "public",
     "ip": "::1",
     "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
@@ -18,21 +18,20 @@
     "os": "macOS",
     "tabVisible": false,
     "navigatorOnline": true,
-    "firstSeenAt": "2026-09-06T11:12:10.710Z",
-    "lastPingAt": "2026-09-06T11:26:45.529Z",
-    "lastInteractionAt": "2026-09-06T11:12:10.710Z",
-    "pageViews": 3,
+    "firstSeenAt": "2026-09-06T20:11:27.013Z",
+    "lastPingAt": "2026-09-06T20:31:35.202Z",
+    "lastInteractionAt": "2026-09-06T20:11:27.013Z",
+    "pageViews": 2,
     "pathHistory": [
       "/u/individual-1788596770002",
-      "/people",
-      "/u/individual-1788599113878"
+      "/"
     ],
-    "focusDurationMs": 381330,
-    "clickCount": 43,
-    "keystrokeCount": 4,
-    "scrollEventCount": 2452,
-    "idleMs": 1596,
+    "focusDurationMs": 813165,
+    "clickCount": 3,
+    "keystrokeCount": 0,
+    "scrollEventCount": 6972,
+    "idleMs": 1244,
     "connectionType": "4g",
-    "engagementScore": 46
+    "engagementScore": 43
   }
 ]

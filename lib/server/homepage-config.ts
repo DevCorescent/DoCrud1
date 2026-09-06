@@ -20,7 +20,7 @@ type SectionVisibility = {
   trustedCompanies: boolean; homeHighlights: boolean;
   heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
-  gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
+  gigsGrid: boolean; leaderboards: boolean; footer: boolean;
 };
 import type { CompanyLogoOverrides } from '@/lib/company-logo-uploads';
 
@@ -102,7 +102,7 @@ export type HomepageConfig = {
 };
 
 export const DEFAULT_CONFIG: HomepageConfig = {
-  sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
+  sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, footer: true },
   trustedCompanies: {
     /* No caption by default — the logos speak for themselves. Super Admin can
        still type one here and it renders above the row. */

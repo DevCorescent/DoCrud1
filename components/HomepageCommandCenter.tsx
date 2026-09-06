@@ -14,7 +14,7 @@ type SectionVisibility = {
   trustedCompanies: boolean; homeHighlights: boolean;
   heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
-  gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
+  gigsGrid: boolean; leaderboards: boolean; footer: boolean;
 };
 type TrustedCompany = { id: string; name: string; logoUrl: string; href: string; visible: boolean };
 type SlotWord    = { word: string; subtitle: string; color: string };
@@ -41,7 +41,7 @@ type HomepageConfig = {
 
 /* ── Constants ─────────────────────────────────────────────────────────────── */
 const DEFAULT_CONFIG: HomepageConfig = {
-  sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, builtInIndia: true, footer: true },
+  sections: { trustedCompanies: true, homeHighlights: true, heroBanner: true, featureCards: true, publishHeading: true, contentDiscovery: true, adBanners: true, gigsGrid: false, leaderboards: false, footer: true },
   trustedCompanies: { label: '', items: [], autoFromJobs: true },
   greeting: { subtitle: '', illustrationUrl: '' },
   hero: { slotWords: [], backgroundImage: '', guestCtaPrimary: '', guestCtaSecondary: '', authCtaPrimary: '', authCtaSecondary: '' },
@@ -116,7 +116,6 @@ const SECTION_META: { key: keyof SectionVisibility; label: string; desc: string;
   { key: 'adBanners',        label: 'Ad Banners',           desc: 'Promotional image slider',             default: true },
   { key: 'gigsGrid',         label: 'Gigs Grid',            desc: 'Job & gig listing cards',              default: false },
   { key: 'leaderboards',     label: 'Live Leaderboards',    desc: 'Real-time ranking boards',             default: false },
-  { key: 'builtInIndia',     label: 'Built in India',       desc: 'India highlights section',             default: true },
   { key: 'footer',           label: 'Footer',               desc: 'Full site footer',                     default: true },
 ];
 

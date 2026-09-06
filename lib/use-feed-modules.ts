@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { cachedJson } from '@/lib/client/request-cache';
 import { getSessionSeed, planModuleSlots, type FeedModuleKind } from '@/lib/feed-composition';
 
 type FeedCompositionCfg = { minLeadPosts: number; minModuleGap: number; maxModulesPerPage: number };
@@ -34,9 +35,12 @@ export function useFeedModuleSlots(): Map<number, { kind: FeedModuleKind; adInde
        push the others out of the visible window. allSettled throughout: if any
        of these fail the feed still renders, just without that module. */
     void Promise.allSettled([
-      fetch('/api/recommendations/people').then((r) => (r.ok ? r.json() : { people: [] })),
+      /* Through the shared cache: the people strip and the jobs carousel each
+         ask for the same URL when they mount, so a raw fetch here made the
+         homepage request both endpoints twice per load. */
+      cachedJson<{ people?: unknown[] }>('/api/recommendations/people').catch(() => ({ people: [] })),
       fetch('/api/ads/serve').then((r) => (r.ok ? r.json() : { ads: [] })),
-      fetch('/api/recommendations/jobs').then((r) => (r.ok ? r.json() : { jobs: [] })),
+      cachedJson<{ jobs?: unknown[] }>('/api/recommendations/jobs').catch(() => ({ jobs: [] })),
       fetch('/api/feed-config').then((r) => (r.ok ? r.json() : {})),
     ]).then(([pe, ad, jb, conf]) => {
       if (pe.status === 'fulfilled') setHasPeople((pe.value?.people?.length ?? 0) > 0);

@@ -625,9 +625,14 @@ useEffect(() => {
                 willChange: 'transform',
               }}
             />
-            {/* Icon image */}
+            {/* Icon image.
+                192px of artwork for a 28px mark. It used to point at
+                /docrud-icon.png — the same picture at 1254px and 553 KB —
+                which every visitor downloaded, and `priority` put a preload
+                link at the top of the head so it competed with the stylesheet
+                for bandwidth. Same image, 14 KB. */}
             <Image
-              src="/docrud-icon.png"
+              src="/icons/logo-192.png"
               alt="Docrud"
               width={28}
               height={28}

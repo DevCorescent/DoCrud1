@@ -1,6 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
+import { FEED_CARD, FEED_STACK } from '@/components/feed/cardShell';
+import FeedBento from '@/components/feed/FeedBento';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
@@ -17,7 +19,7 @@ import { parseChartBody, ChartView, PostCtaButton } from '@/components/feed/Post
 import { CardCommentPanel } from '@/components/feed/CardCommentPanel';
 import { composeFeed } from '@/lib/feed-composition';
 import { useFeedModuleSlots } from '@/lib/use-feed-modules';
-import PeopleYouMayKnow from '@/components/recommendations/PeopleYouMayKnow';
+import PeopleYouMayKnow, { PersonCardStyles, PersonRow, usePeopleRecommendations } from '@/components/recommendations/PeopleYouMayKnow';
 import RecommendedJobs from '@/components/recommendations/RecommendedJobs';
 import SponsoredAdCard from '@/components/ads/SponsoredAdCard';
 import { buildCategoryMetaChips, FeedMetaChipRow, omitChipsPresentIn } from '@/components/feed/FeedCardMeta';
@@ -127,7 +129,7 @@ type HPSectionVisibility = {
   trustedCompanies: boolean; homeHighlights: boolean;
   heroBanner: boolean; featureCards: boolean;
   publishHeading: boolean; contentDiscovery: boolean; adBanners: boolean;
-  gigsGrid: boolean; leaderboards: boolean; builtInIndia: boolean; footer: boolean;
+  gigsGrid: boolean; leaderboards: boolean; footer: boolean;
 };
 type HPTrustedCompany = { id:string; name:string; logoUrl:string; href:string; visible:boolean };
 /** The derived "currently hiring" shape the marquee seeds from — see
@@ -151,7 +153,7 @@ const DEFAULT_HP_SECTIONS: HPSectionVisibility = {
   trustedCompanies:true, homeHighlights:true,
   heroBanner:true, featureCards:true, publishHeading:true,
   contentDiscovery:true, adBanners:true, gigsGrid:false, leaderboards:false,
-  builtInIndia:true, footer:true,
+  footer:true,
 };
 
 interface PublicHomepageProps {
@@ -2116,7 +2118,8 @@ const HomepageFeedCard = React.memo(function HomepageFeedCard({
       linkContent={false}
       /* Task 10 — category-relevant metadata only; nothing when no field applies. */
       renderMetadata={catMeta.length > 0 ? <FeedMetaChipRow chips={catMeta} /> : null}
-      articleClassName="group py-5 px-4 sm:px-0 cursor-pointer"
+      /* The shared shell, plus the pointer this feed's whole-card link needs. */
+      articleClassName={`${FEED_CARD} cursor-pointer`}
       articleProps={{
         role: 'link',
         tabIndex: 0,
@@ -2450,12 +2453,35 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
      cadences. Behaviour here is unchanged. */
   const moduleSlots = useFeedModuleSlots();
 
+  /* Suggested people, owned here so they can be scattered through the feed as
+     cards of their own. The strip component uses the same hook, so a Follow
+     registers once wherever it is pressed. */
+  const { people: suggestedPeople, following: peopleFollowing, pending: peoplePending,
+          toggle: togglePerson, upraised: peopleUpraised,
+          upraisePending: peopleUpraisePending, toggleUpraise: upraisePerson } =
+    usePeopleRecommendations();
+
+  /* Mixing people in among the posts only makes sense where the feed is a grid
+     wide enough to hold them beside a post. On a phone the feed is one column,
+     and a run of person cards down it would read as a second feed — so there
+     the module stays the horizontal strip it has always been. */
+  const [mixPeople, setMixPeople] = React.useState(false);
+  React.useEffect(() => {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const sync = () => setMixPeople(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
+
+  const peopleToMix = mixPeople ? (suggestedPeople?.length ?? 0) : 0;
+
   const composed = React.useMemo(
-    () => composeFeed(visible, (i) => i.id, moduleSlots),
+    () => composeFeed(visible, (i) => i.id, moduleSlots, peopleToMix),
     // visible is a fresh slice each render; its length and the active filter
     // are what actually change the composition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visible.length, activecat, tagSearch, sort, moduleSlots],
+    [visible.length, activecat, tagSearch, sort, moduleSlots, peopleToMix],
   );
 
   React.useEffect(() => { setPage(1); }, [activecat, tagSearch, sort]);
@@ -2524,29 +2550,56 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
           from { opacity: 0; transform: translateY(24px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        .hp-feed-card-enter { animation: hp-feed-fadein 0.50s cubic-bezier(0.22,1,0.36,1) both; }
+        /* display:grid so the card inside inherits the height of its bento cell.
+           Harmless in the single-column stack, where the height is auto. */
+        .hp-feed-card-enter {
+          display: grid;
+          /* See FeedBento: every level between the grid track and the card has
+             to be allowed to shrink below its content, or a horizontally
+             scrolling module inside it widens the whole cell. */
+          grid-template-columns: minmax(0, 1fr);
+          min-width: 0;
+          animation: hp-feed-fadein 0.50s cubic-bezier(0.22,1,0.36,1) both;
+        }
         @keyframes hp-glow-drift {
           0%, 100% { transform: translate(-10%, -10%) scale(1);   opacity: 0.30; }
           50%       { transform: translate(  6%,  8%) scale(1.15); opacity: 0.18; }
         }
-        .hp-feed-glow { animation: hp-glow-drift 14s ease-in-out infinite; }
-        .hp-feed-glow2 { animation: hp-glow-drift 18s ease-in-out infinite reverse; }
+        /* will-change promotes each glow to its own layer, so the drift is a
+           compositor transform rather than a repaint. These used to carry a
+           48-56px blur filter as well, which had to be re-rasterised on every
+           frame of an animation that never stops — a permanent cost on a page
+           whose only job while you scroll is to scroll. A radial gradient is
+           already a soft edge; the filter was buying almost nothing. */
+        .hp-feed-glow { animation: hp-glow-drift 14s ease-in-out infinite; will-change: transform, opacity; }
+        .hp-feed-glow2 { animation: hp-glow-drift 18s ease-in-out infinite reverse; will-change: transform, opacity; }
+        @media (prefers-reduced-motion: reduce) {
+          .hp-feed-glow, .hp-feed-glow2 { animation: none; }
+        }
       ` }} />
 
       {/* ── outer premium frame ── */}
-      <div className="relative sm:-mx-6 lg:-mx-10 xl:-mx-12 mt-2 mb-6"
+      {/* The premium frame.
+          Its 1px side border and corner radius are dropped on a phone: they held
+          every card 1px off each bezel, which is the difference between media
+          that reads as immersive and media that reads as very slightly inset.
+          A frame is worth having where there is margin around it to frame
+          against; at 390px there is none. */}
+      <div className="relative mt-2 mb-6 rounded-none border-x-0 sm:-mx-6 sm:rounded-[clamp(12px,1.5vw,24px)] sm:border-x lg:-mx-10 xl:-mx-12"
         style={{
           overflow: 'clip',
-          borderRadius: 'clamp(12px, 1.5vw, 24px)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 0 0 1px rgba(255,255,255,0.035) inset, 0 32px 80px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          borderLeftColor: 'rgba(255,255,255,0.08)',
+          borderRightColor: 'rgba(255,255,255,0.08)',
+          boxShadow: '0 32px 80px rgba(0,0,0,0.55), 0 8px 24px rgba(0,0,0,0.35)',
         }}
       >
         {/* ambient glow blobs */}
         <div className="hp-feed-glow pointer-events-none absolute -top-24 -left-24 h-80 w-80 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.22) 0%, transparent 70%)', filter: 'blur(48px)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.20) 0%, rgba(99,102,241,0.06) 45%, transparent 72%)' }} />
         <div className="hp-feed-glow2 pointer-events-none absolute -bottom-24 -right-24 h-96 w-96 rounded-full"
-          style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 70%)', filter: 'blur(56px)' }} />
+          style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.16) 0%, rgba(139,92,246,0.05) 45%, transparent 72%)' }} />
         {/* noise grain */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.025]"
           style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: '160px 160px' }} />
@@ -2561,82 +2614,11 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
             minHeight: '100vh',
           }}
         >
-        {/* ══ LEFT SIDEBAR (lg+) — exact match of PublishedPage ══ */}
-        <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col" style={{ position: 'sticky', top: 0, height: '100vh', borderRight: '1px solid rgba(255,255,255,0.07)' }}>
-
-          {/* logo / title area */}
-          <div className="px-4 py-5 border-b border-white/[0.05]">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-xs font-medium text-white/40 transition hover:text-white/70"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Back to app
-            </Link>
-            <div className="mt-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/25">Docrud</p>
-              <h2 className="mt-0.5 text-lg font-bold tracking-tight text-white">Published</h2>
-            </div>
-            {/* live pill */}
-            <div className="mt-3 flex items-center gap-2">
-              <span className="text-[11px] text-white/35 tabular-nums">{allItems.length} items</span>
-              {allItems.filter(i => i.isReal).length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  {allItems.filter(i => i.isReal).length} live
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* nav list */}
-          <nav className="flex-1 overflow-y-auto p-2 space-y-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {HP_TABS.map(tab => {
-              const isActive     = activecat === tab.id;
-              const count        = tab.id === 'all' ? allItems.length : (catCounts[tab.id] ?? 0);
-              const colorCls     = HP_TAG_CLS[tab.id] ?? HP_TAG_CLS.all;
-              const isFeatured   = tab.id === 'featured';
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => { setActivecat(tab.id); setTagSearch(''); }}
-                  className={`group w-full flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[12.5px] font-medium transition-all ${
-                    isActive ? 'bg-white/[0.08] text-white shadow-sm' : 'text-white/40 hover:bg-white/[0.04] hover:text-white/80'
-                  }`}
-                >
-                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border transition-colors ${
-                    isActive
-                      ? isFeatured ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : colorCls
-                      : 'border-white/[0.06] bg-transparent text-white/30 group-hover:border-white/[0.10] group-hover:text-white/50'
-                  }`}>
-                    <tab.icon className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="flex-1 text-left">{tab.label}</span>
-                  {count > 0 && (
-                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold tabular-nums min-w-[18px] text-center ${
-                      isActive ? 'bg-white/[0.12] text-white' : 'bg-white/[0.05] text-white/20'
-                    }`}>{count}</span>
-                  )}
-                  {isFeatured && (
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: isActive ? 'rgba(251,191,36,0.80)' : 'rgba(251,191,36,0.25)', flexShrink: 0, boxShadow: isActive ? '0 0 5px rgba(251,191,36,0.50)' : 'none' }} />
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-
-          {/* bottom CTA — matches PublishedPage */}
-          <div className="p-3 border-t border-white/[0.05] space-y-2">
-            <Link
-              href="/published"
-              className="group flex w-full items-center justify-center gap-2 rounded-xl border border-white/[0.10] bg-white/[0.05] px-4 py-2.5 text-[11.5px] font-semibold text-white/55 transition hover:border-white/[0.18] hover:bg-white/[0.09] hover:text-white/85 active:scale-[0.98]"
-            >
-              <Plus className="h-3.5 w-3.5 transition-transform group-hover:rotate-90 duration-200" />
-              Publish something
-            </Link>
-          </div>
-        </aside>
+        {/* The 68px quick-actions rail is gone. Every action it held is on the
+            floating dock at the bottom of the screen — publish, explore,
+            search, people, messages — so it was a second copy of those
+            controls charging the feed a column for the privilege. The feed now
+            starts at the frame's own edge. */}
 
         {/* ══ MAIN FEED ══ */}
         <div className="flex flex-1 flex-col min-w-0">
@@ -2651,9 +2633,10 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
           >
             {/* desktop row: title + tag pill (no sort — sort stays non-sticky below) */}
             <div className="hidden lg:flex items-center gap-2 px-4 sm:px-6 pt-3.5 pb-2">
-              <span className="text-[13px] font-semibold text-white/85 tracking-tight shrink-0">
-                {HP_TABS.find(t => t.id === activecat)?.label ?? 'All Posts'}
-              </span>
+              {/* The category name and its count used to sit here. The category
+                  is already the selected pill in the strip above, and the count
+                  is a number nobody acts on — together they were a heading for
+                  a list that does not need one. */}
               {tagSearch && (
                 <button
                   type="button"
@@ -2662,9 +2645,6 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                 >
                   #{tagSearch} <X className="h-2.5 w-2.5" />
                 </button>
-              )}
-              {filtered.length > 0 && (
-                <span className="rounded-full bg-white/[0.09] px-2 py-px text-[9.5px] font-semibold text-white/50 tabular-nums">{filtered.length}</span>
               )}
               <div className="ml-auto flex items-center gap-1.5">
                 {(['Recent', 'Popular', 'Oldest'] as const).map(s => (
@@ -2780,7 +2760,11 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
           )}
 
           {/* feed cards */}
-          <div className="flex-1 overflow-y-auto px-0 sm:px-6 lg:px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* `pt-*` so the first row of cards clears the sort bar above it instead
+              of starting flush against its border. It is padding on the SCROLLER,
+              not a margin on the grid, so cards still slide under the sticky bar
+              on the way past rather than stopping short of it. */}
+          <div className="flex-1 overflow-y-auto px-0 pt-4 sm:px-6 lg:px-8 lg:pt-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {/* mobile-only: sort row — hidden */}
             <div className="hidden flex items-center gap-2 py-3 max-w-3xl mx-auto w-full">
               <span className="text-[12px] font-semibold text-white/60 tracking-tight shrink-0">
@@ -2822,7 +2806,16 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                 </button>
               </div>
             </div>
-            <div className="mx-auto w-full max-w-3xl divide-y divide-white/[0.045]">
+            {/* A spaced stack, not a divided list: `divide-y` sets bounded
+                cards flush against each other. See components/feed/cardShell.
+                From `lg` up FeedBento lays that same stack out in aligned
+                rows; below it, it renders the stack verbatim. */}
+            <div className="mx-auto w-full max-w-2xl lg:max-w-[1600px]">
+              {/* Once, for the person cards scattered below — they are rendered
+                  here rather than by the module, which does not mount at all on
+                  the grid. */}
+              {peopleToMix > 0 && <PersonCardStyles />}
+              <FeedBento stackClassName={FEED_STACK}>
               {loading
                 ? Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="py-5 space-y-3 animate-pulse">
@@ -2852,9 +2845,29 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                           </div>
                         );
                       }
-                      if (entry.type === 'people-recommendation') {
+                      if (entry.type === 'person') {
+                        const person = suggestedPeople?.[entry.personIndex];
+                        if (!person) return null;
                         return (
                           <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
+                            <PersonRow
+                              person={person}
+                              following={peopleFollowing.has(person.userId)}
+                              pending={peoplePending.has(person.userId)}
+                              onToggle={togglePerson}
+                              upraised={peopleUpraised.has(person.userId)}
+                              upraisePending={peopleUpraisePending.has(person.userId)}
+                              onUpraise={upraisePerson}
+                            />
+                          </div>
+                        );
+                      }
+                      if (entry.type === 'people-recommendation') {
+                        /* A band, not a card: it runs the full width of the
+                           feed on desktop and splits the masonry either side
+                           of it. Below `lg` the mark is inert. */
+                        return (
+                          <div key={entry.key} data-feed-span="full" className="hp-feed-card-enter" style={{ animationDelay: delay }}>
                             <PeopleYouMayKnow />
                           </div>
                         );
@@ -2872,15 +2885,22 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                         </div>
                       );
                     })
-                  : (
-                      <div className="flex flex-col items-center gap-3 py-20 text-center">
-                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.03]">
-                          <Newspaper className="h-6 w-6 text-white/15" />
-                        </div>
-                        <p className="text-[13px] text-white/30">No posts in this category yet</p>
-                      </div>
-                    )
+                  : null
               }
+              </FeedBento>
+
+              {/* Everything below is page furniture, not a post, so it lives
+                  OUTSIDE the grid. Dropped in as a grid item, the sentinel
+                  would be packed into a column like a card and the loader
+                  would sit under whichever column happened to be shortest. */}
+              {!loading && visible.length === 0 && (
+                <div className="flex flex-col items-center gap-3 py-20 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/[0.07] bg-white/[0.03]">
+                    <Newspaper className="h-6 w-6 text-white/15" />
+                  </div>
+                  <p className="text-[13px] text-white/30">No posts in this category yet</p>
+                </div>
+              )}
 
               {/* sentinel */}
               {hasMore && (
@@ -2903,175 +2923,10 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
           </div>
         </div>
 
-        {/* ══ RIGHT SIDEBAR (xl+) — mirrors PublishedPage TrendingPanel ══ */}
-        <aside className="hidden xl:flex w-64 2xl:w-72 shrink-0 flex-col" style={{ position: 'sticky', top: 0, height: '100vh', borderLeft: '1px solid rgba(255,255,255,0.07)' }}>
-          {/* header */}
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.05] shrink-0">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-3.5 w-3.5 text-orange-400/60" />
-              <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-white/40">Live Feed</span>
-            </div>
-            {totalTrends > 0 && (
-              <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9.5px] font-bold text-orange-400">🔥 {totalTrends}</span>
-            )}
-          </div>
-
-          <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <div className="p-4 space-y-7 pb-20">
-
-              {/* ── Recent Posts ── */}
-              <section>
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-3">Recent</p>
-                <div className="space-y-3.5">
-                  {recentItems.length === 0 && <p className="text-[11px] text-white/20">No posts yet</p>}
-                  {recentItems.map((item, i) => {
-                    const label = hpFeedLabel(item);
-                    return (
-                    <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
-                      <span className="text-[11px] font-bold text-white/20 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        {label ? (
-                          <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{label}</p>
-                        ) : null}
-                        <p className={`text-[10.5px] text-white/25 ${label ? 'mt-0.5' : ''}`}>{item.uploadedByName || 'Docrud'} · {hpTimeAgo(item.postedAt)}</p>
-                      </div>
-                    </Link>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {/* ── Trending Now ── */}
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">Trending</p>
-                    {totalTrends > 0 && (
-                      <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9.5px] font-bold text-orange-400/80">{totalTrends} 🔥</span>
-                    )}
-                  </div>
-                  {totalTrends > 0 && (
-                    <button type="button" onClick={() => setSort('Popular')}
-                      className="text-[10.5px] font-semibold text-orange-400/60 hover:text-orange-400 transition">
-                      Sort feed →
-                    </button>
-                  )}
-                </div>
-
-                {topTrendingPosts.length > 0 ? (
-                  <div className="space-y-3.5 mb-4">
-                    {topTrendingPosts.map((item, i) => {
-                      const label = hpFeedLabel(item);
-                      return (
-                      <Link key={item.id} href={`/published/${item.id}`} className="group flex items-start gap-2.5">
-                        <span className="text-[11px] font-bold text-orange-400/40 tabular-nums mt-0.5 w-4 shrink-0">{i + 1}</span>
-                        <div className="min-w-0 flex-1">
-                          {label ? (
-                            <p className="text-[12px] font-semibold text-white/65 leading-snug line-clamp-2 group-hover:text-white transition-colors">{label}</p>
-                          ) : null}
-                          <div className={`flex items-center gap-1 ${label ? 'mt-0.5' : ''}`}>
-                            <TrendingUp className="h-3 w-3 text-orange-400/50" />
-                            <span className="text-[10.5px] font-bold text-orange-400/60">{trends[item.id]?.count} trending</span>
-                          </div>
-                        </div>
-                      </Link>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-white/20 mb-4 leading-relaxed">
-                    Hit 🔥 on any post to add it to trending. Top trends appear here.
-                  </p>
-                )}
-
-                {/* Trending tags (from localStorage) */}
-                {topTagsFromTrends.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {topTagsFromTrends.map(([tag, count]) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => { setTagSearch(tag); setActivecat('All'); }}
-                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10.5px] font-medium transition ${
-                          tagSearch === tag
-                            ? 'border-orange-400/40 bg-orange-500/10 text-orange-300'
-                            : 'border-white/[0.07] bg-white/[0.05] text-white/45 hover:bg-white/[0.09] hover:text-white/80'
-                        }`}
-                      >
-                        #{tag}
-                        <span className="font-bold tabular-nums text-orange-400/70">{count}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-white/15">Trending tags show here once posts are trended.</p>
-                )}
-              </section>
-
-              {/* ── Categories ── */}
-              <section>
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-3">Categories</p>
-                <div className="space-y-1">
-                  {categoryStats.map(([cat, count]) => {
-                    const trendCount = catTrends[cat] ?? 0;
-                    const maxCount   = Math.max(...categoryStats.map(([, c]) => c), 1);
-                    const isActive   = activecat === cat.toLowerCase();
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => { setActivecat(cat.toLowerCase()); setTagSearch(''); }}
-                        className={`group w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
-                          isActive ? 'bg-white/[0.07]' : 'hover:bg-white/[0.04]'
-                        }`}
-                      >
-                        <Newspaper className="h-3.5 w-3.5 text-white/25 shrink-0" />
-                        <span className={`text-[12px] font-medium transition flex-1 capitalize truncate ${isActive ? 'text-white/85' : 'text-white/50 group-hover:text-white/80'}`}>
-                          {cat}
-                        </span>
-                        <div className="w-14 h-1 rounded-full bg-white/[0.05] overflow-hidden shrink-0">
-                          <div className="h-full rounded-full bg-white/20" style={{ width: `${(count / maxCount) * 100}%` }} />
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0 min-w-[32px] justify-end">
-                          {trendCount > 0 && (
-                            <span className="flex items-center gap-0.5 text-[9.5px] font-bold text-orange-400/60">
-                              <TrendingUp className="h-2.5 w-2.5" />{trendCount}
-                            </span>
-                          )}
-                          <span className="text-[10.5px] font-semibold text-white/25 tabular-nums">{count}</span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-
-              {/* ── Your Trend History ── */}
-              {history.length > 0 && (
-                <section>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-3">Your Trends</p>
-                  <div className="space-y-3">
-                    {history.slice(0, 6).map((h, i) => (
-                      <div key={i} className="flex items-start gap-2.5">
-                        <TrendingUp className="h-3.5 w-3.5 text-orange-400/35 shrink-0 mt-0.5" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[11.5px] font-semibold text-white/50 leading-snug line-clamp-1">
-                            {hpIsJunkTitle({ title: h.title }) ? (h.category || 'Post') : h.title}
-                          </p>
-                          <p className="text-[10px] text-white/22 mt-0.5 capitalize">{h.category} · {hpTimeAgo(new Date(h.trendedAt).toISOString())}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {history.length > 6 && (
-                      <p className="text-[10.5px] text-white/20">+{history.length - 6} more in history</p>
-                    )}
-                  </div>
-                </section>
-              )}
-
-            </div>
-          </div>
-        </aside>
+        {/* The right-hand trending column is gone, as it is on the published
+            page. It was a permanent 256-288px of chrome that never rendered
+            below `xl`, so the feed already had to work without it — and on the
+            widths where it did render it pushed the posts off centre. */}
         </div>{/* end 3-column layout */}
       </div>{/* end outer premium frame */}
     </>
@@ -3155,97 +3010,6 @@ function FeedIllustration({ kind }: { kind: string }) {
       <line x1="46" y1="50" x2="42" y2="54" stroke="rgba(245,158,11,0.3)" strokeWidth="1.2" strokeLinecap="round" />
       <text x="60" y="72" textAnchor="middle" fontSize="8" fill="rgba(245,158,11,0.5)" fontWeight="700">AI</text>
     </svg>
-  );
-}
-
-/* ─────────────────────────────────────────────────────────────
-   BuiltInIndia — premium single-line brand statement
-───────────────────────────────────────────────────────────── */
-function BuiltInIndia() {
-  const ref = React.useRef<HTMLElement>(null);
-  const [vis, setVis] = React.useState(false);
-
-  React.useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setVis(true); obs.disconnect(); } },
-      { threshold: 0.1 },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  const tx = (delay: number): React.CSSProperties => ({
-    opacity: vis ? 1 : 0,
-    transform: vis ? 'none' : 'translateY(14px)',
-    transition: `opacity 0.7s ease ${delay}ms, transform 0.7s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
-  });
-
-  return (
-    <section ref={ref} className="relative w-full overflow-hidden mt-6">
-
-      {/* hairline */}
-      <div className="h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
-
-      {/* ambient glow */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ width: '70vw', height: '40vw',
-            background: 'radial-gradient(ellipse, rgba(255,153,51,0.04) 0%, rgba(19,136,8,0.025) 55%, transparent 75%)',
-            filter: 'blur(80px)' }} />
-      </div>
-
-      <div className="relative z-10 px-4 sm:px-6 lg:px-10 xl:px-12 py-14 sm:py-18 md:py-24 text-center">
-
-        {/* eyebrow */}
-        <p className="mb-6 inline-flex items-center gap-3 text-[8.5px] font-bold uppercase tracking-[0.38em] text-white/18"
-          style={tx(0)}>
-          <span className="h-px w-8 bg-gradient-to-r from-transparent to-white/[0.12]" />
-          Docrud · Crafted in Bharat
-          <span className="h-px w-8 bg-gradient-to-l from-transparent to-white/[0.12]" />
-        </p>
-
-        {/* single-line headline */}
-        <h2
-          className="whitespace-nowrap font-black leading-none tracking-[-0.04em] text-white/80"
-          style={{ ...tx(80), fontSize: 'min(4.4vw, 62px)' }}
-        >
-          Built In{' '}
-          <span className="india-word">Bharat</span>
-          {' '}for the World
-        </h2>
-
-        {/* tricolor bar */}
-        <div className="mt-6 flex items-center justify-center gap-[2px]">
-          {[
-            { c: 'rgba(255,153,51,0.32)', d: 300 },
-            { c: 'rgba(240,240,240,0.14)', d: 360 },
-            { c: 'rgba(19,136,8,0.28)', d: 420 },
-          ].map((s, i) => (
-            <div key={i} style={{
-              height: '2px', borderRadius: '99px', background: s.c,
-              width: 'clamp(40px, 5vw, 72px)',
-              transform: vis ? 'scaleX(1)' : 'scaleX(0)',
-              transformOrigin: 'center',
-              transition: `transform 0.8s cubic-bezier(0.22,1,0.36,1) ${s.d}ms`,
-            }} />
-          ))}
-        </div>
-
-        {/* tagline */}
-        <p className="mx-auto mt-5 max-w-xs text-[12px] font-medium leading-relaxed text-white"
-          style={tx(440)}>
-          Professional infrastructure crafted with Indian ingenuity,
-          trusted by teams across industries worldwide.
-        </p>
-
-      </div>
-
-      {/* hairline */}
-      <div className="h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent" />
-
-    </section>
   );
 }
 
@@ -3868,128 +3632,54 @@ function PremiumFooter() {
       {activeModal && (
         <FooterModal modalKey={activeModal} onClose={() => setActiveModal(null)} />
       )}
+      {/* ── Footer ──
+          One line, deliberately.
+
+          What stood here was five columns of links, a security badge strip, a
+          brand block and three legal lines — a site map at the bottom of a feed
+          nobody was going to read. It said a great deal and carried almost no
+          weight, which is the opposite of premium.
+
+          What is left is the sentence worth saying, and the two links a
+          visitor is entitled to find from any page. Everything else is reachable
+          from the app itself. */}
       <footer className="relative w-full border-t border-white/[0.05] bg-[#080809]">
+        <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 py-8 text-center sm:flex-row sm:justify-between sm:gap-6 sm:px-6 sm:text-left lg:px-10 xl:px-12">
 
-        {/* top gradient cap */}
-        <div className="h-px bg-gradient-to-r from-transparent via-white/[0.07] to-transparent" />
+          {/* Muted, but not below the floor. At white/30 on #080809 this line
+              measured 2.6:1 and the legal links 2.1:1 — subtle had crossed into
+              unreadable, and Privacy Policy and Terms are exactly the two links
+              a visitor is entitled to be able to FIND. These values are the
+              quietest that still clear WCAG AA (4.5:1): 4.6:1 for the sentence,
+              6.3:1 for the links. The separators are aria-hidden decoration, so
+              they stay dim. */}
+          <p className="text-[11.5px] leading-relaxed text-white/[0.46]">
+            {/* Two clauses, one line each on a phone and a single line from `sm`
+                up. Left to flow, 390px broke it wherever the words happened to
+                run out — first splitting the company name, then "change /
+                everything". A two-line sentence whose lines are the sentence's
+                own clauses reads as deliberate; a mid-phrase break reads as a
+                bug. The separator is decoration, so it goes where it is not
+                needed. */}
+            <span className="block sm:inline">A right connection can change everything</span>
+            <span aria-hidden className="mx-1.5 hidden text-white/20 sm:inline">·</span>
+            <span className="block sm:inline">
+              <span className="text-white/60">a product by Corescent Technologies</span>
+              <span aria-hidden className="mx-1.5 text-white/20">·</span>
+              India
+            </span>
+          </p>
 
-        {/* ── Brand strip ── */}
-        <div className="border-b border-white/[0.04] px-4 py-8 sm:px-6 lg:px-10 xl:px-12">
-          <div className="mx-auto flex max-w-7xl flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[18px] font-black tracking-[-0.03em] text-white/85">docrud</p>
-              <p className="mt-0.5 text-[10.5px] font-medium text-white/25">
-                A product by{' '}
-                <span className="font-semibold text-white/40">Corescent Technologies Private Limited</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-white/25">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400/70 animate-pulse" />
-                All systems operational
-              </span>
-            </div>
-          </div>
+          <nav aria-label="Legal" className="flex shrink-0 items-center gap-4">
+            <Link href="/privacy-policy" className="-my-2 py-2 text-[11px] text-white/55 transition-colors hover:text-white/90">
+              Privacy Policy
+            </Link>
+            <Link href="/terms-and-conditions" className="-my-2 py-2 text-[11px] text-white/55 transition-colors hover:text-white/90">
+              Terms &amp; Conditions
+            </Link>
+          </nav>
+
         </div>
-
-        {/* ── Link columns ── */}
-        <div className="px-4 py-10 sm:px-6 lg:px-10 xl:px-12">
-          <div className="mx-auto max-w-7xl grid grid-cols-2 gap-8 sm:grid-cols-2 lg:grid-cols-4">
-            {FOOTER_COLS.map(col => (
-              <div key={col.heading}>
-                <p className="mb-4 text-[9px] font-bold uppercase tracking-[0.22em] text-white/25">
-                  {col.heading}
-                </p>
-                <ul className="space-y-2.5">
-                  {col.links.map(link => (
-                    <li key={link.label}>
-                      {link.modal ? (
-                        <button
-                          type="button"
-                          onClick={() => setActiveModal(link.modal!)}
-                          className="text-left text-[12px] font-medium text-white/35 transition-colors duration-150 hover:text-white/70"
-                        >
-                          {link.label}
-                        </button>
-                      ) : (
-                        <Link
-                          href={link.href!}
-                          className="text-[12px] font-medium text-white/35 transition-colors duration-150 hover:text-white/70"
-                        >
-                          {link.label}
-                        </Link>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Security badges ── */}
-        <div className="border-t border-white/[0.04] px-4 py-5 sm:px-6 lg:px-10 xl:px-12">
-          <div className="mx-auto max-w-7xl">
-            <p className="mb-3 text-[8.5px] font-bold uppercase tracking-[0.2em] text-white/15">
-              Data Security &amp; Trust
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {SECURITY_BADGES.map(b => (
-                <span
-                  key={b.label}
-                  className="flex items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-1 text-[10.5px] font-medium text-white/30"
-                >
-                  <span className="text-[11px] leading-none">{b.icon}</span>
-                  {b.label}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Copyright bar ── */}
-        <div className="border-t border-white/[0.04] px-4 py-5 sm:px-6 lg:px-10 xl:px-12">
-          <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-
-            <div className="flex flex-col gap-0.5">
-              <p className="text-[11px] font-medium text-white/22">
-                © {yr} Corescent Technologies Private Limited. All rights reserved.
-              </p>
-              <p className="text-[10px] text-white/13">
-                Docrud and the Docrud logo are trademarks of Corescent Technologies Pvt Ltd.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <span className="text-[10px] text-white/15 font-medium">
-                Made with ❤ in India
-              </span>
-              <div className="flex items-center gap-2">
-                {[
-                  { label: 'Privacy', modal: 'privacy' },
-                  { label: 'Terms',   modal: 'terms' },
-                ].map(l => (
-                  <button
-                    key={l.label}
-                    type="button"
-                    onClick={() => setActiveModal(l.modal)}
-                    className="text-[10px] font-semibold text-white/20 transition hover:text-white/50"
-                  >
-                    {l.label}
-                  </button>
-                ))}
-                <Link
-                  href="/contact"
-                  className="text-[10px] font-semibold text-white/20 transition hover:text-white/50"
-                >
-                  Contact
-                </Link>
-              </div>
-            </div>
-
-          </div>
-        </div>
-
       </footer>
     </>
   );
@@ -7033,7 +6723,11 @@ function NewHomepageContent({
         {false && <div className="cv-auto"><LiveLeaderboards /></div>}
 
         {/* ── Row 7: Built in India ──────────────────────────────── */}
-        {hpSections.builtInIndia && <div className="sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><BuiltInIndia /></div>}
+        {/* The "Built In Bharat for the World" band is gone. A full-width
+            marketing statement above a one-line footer was the flashiest thing
+            on the page, and the footer now says the same thing quietly. Its
+            superadmin toggle went with it: a switch that renders nothing is
+            worse than no switch. */}
 
         {/* ── Footer ───────────────────────────────────────────────── */}
         {hpSections.footer && <div className="sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><PremiumFooter /></div>}

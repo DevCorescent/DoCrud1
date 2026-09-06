@@ -14,21 +14,23 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: 'en-IN',
     dir: 'ltr',
     icons: [
+      /* Sized files, not one 1024px source declared at three different
+         sizes — an installing browser fetched 1.36 MB per entry. */
       {
-        src: '/docrud-favicon.png',
+        src: '/icons/icon-192.png',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/docrud-favicon.png',
+        src: '/icons/icon-512.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/docrud-favicon.png',
-        sizes: '1024x1024',
+        src: '/icons/icon-512.png',
+        sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',
       },
@@ -39,14 +41,14 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: 'People',
         description: 'Discover professionals and talent',
         url: '/people',
-        icons: [{ src: '/docrud-favicon.png', sizes: '192x192' }],
+        icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }],
       },
       {
         name: 'Browse Gigs',
         short_name: 'Gigs',
         description: 'Find freelance work and opportunities',
         url: '/gigs',
-        icons: [{ src: '/docrud-favicon.png', sizes: '192x192' }],
+        icons: [{ src: '/icons/icon-192.png', sizes: '192x192' }],
       },
     ],
   }

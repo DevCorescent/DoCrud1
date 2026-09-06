@@ -21,6 +21,8 @@ export type FeedModuleKind = 'people-recommendation' | 'sponsored-ad' | 'job-rec
 export type FeedItem<Post> =
   | { type: 'post'; key: string; data: Post }
   | { type: 'people-recommendation'; key: string }
+  /* One suggested person, as a card of its own among the posts. */
+  | { type: 'person'; key: string; personIndex: number }
   | { type: 'sponsored-ad'; key: string; adIndex: number }
   | { type: 'job-recommendation'; key: string };
 
@@ -130,19 +132,59 @@ export function planModuleSlots(
  * `posts` is the already-paginated, already-ordered list the feed renders.
  * Post order is never touched — modules are only inserted between them.
  */
+/** Posts between one suggested person and the next, once they start. */
+const PERSON_STRIDE = 3;
+
 export function composeFeed<Post>(
   posts: Post[],
   keyOf: (p: Post) => string,
   slots: Map<number, { kind: FeedModuleKind; adIndex: number }>,
+  /**
+   * How many suggested people to scatter through the feed as their own cards.
+   *
+   * 0 keeps the old behaviour — one `people-recommendation` entry, which the
+   * caller renders as the horizontal strip. Above 0, that single entry is
+   * replaced by this many `person` entries, one every PERSON_STRIDE posts from
+   * where the module would have gone: the people end up among the posts rather
+   * than in a block of their own, which is only worth doing where the feed is
+   * a grid wide enough to mix them into.
+   */
+  peopleCount = 0,
 ): Array<FeedItem<Post>> {
   const out: Array<FeedItem<Post>> = [];
+  let peopleLeft = 0;
+  let nextPerson = 0;
+  let sincePerson = 0;
+
   posts.forEach((post, i) => {
     out.push({ type: 'post', key: keyOf(post), data: post });
+
     const slot = slots.get(i);
-    if (!slot) return;
-    if (slot.kind === 'people-recommendation') out.push({ type: 'people-recommendation', key: `pymk-${i}` });
-    else if (slot.kind === 'job-recommendation') out.push({ type: 'job-recommendation', key: `jobs-${i}` });
-    else out.push({ type: 'sponsored-ad', key: `ad-${i}`, adIndex: slot.adIndex });
+    if (slot) {
+      if (slot.kind === 'people-recommendation') {
+        if (peopleCount > 0) {
+          /* Start the run here; the first card goes in below. */
+          peopleLeft = peopleCount;
+          sincePerson = PERSON_STRIDE;
+        } else {
+          out.push({ type: 'people-recommendation', key: `pymk-${i}` });
+        }
+      } else if (slot.kind === 'job-recommendation') {
+        out.push({ type: 'job-recommendation', key: `jobs-${i}` });
+      } else {
+        out.push({ type: 'sponsored-ad', key: `ad-${i}`, adIndex: slot.adIndex });
+      }
+    }
+
+    if (peopleLeft > 0) {
+      sincePerson += 1;
+      if (sincePerson >= PERSON_STRIDE) {
+        out.push({ type: 'person', key: `person-${nextPerson}`, personIndex: nextPerson });
+        nextPerson += 1;
+        peopleLeft -= 1;
+        sincePerson = 0;
+      }
+    }
   });
   return out;
 }

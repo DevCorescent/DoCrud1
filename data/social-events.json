@@ -6,6 +6,24 @@
       "actorName": "suhas",
       "targetUserId": "individual-1788596770002",
       "href": "/u/individual-1788599113878",
+      "id": "se_1788726375771_28mez9",
+      "createdAt": "2026-09-06T20:26:15.771Z"
+    },
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788596770002",
+      "href": "/u/individual-1788599113878",
+      "id": "se_1788700066887_b8z39x",
+      "createdAt": "2026-09-06T13:07:46.887Z"
+    },
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788596770002",
+      "href": "/u/individual-1788599113878",
       "id": "se_1788693142229_iytzpc",
       "createdAt": "2026-09-06T11:12:22.229Z"
     }

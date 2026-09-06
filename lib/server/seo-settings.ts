@@ -55,7 +55,11 @@ export const DEFAULT_SEO_SETTINGS: SeoSettings = {
   twitterImage: '',
 
   logoUrl: '/docrud-logo.png',
-  faviconUrl: '/docrud-favicon.png',
+  /* The sized icon, not the 1024x1024, 1.36 MB source it used to name. This
+     value is rendered into <link rel="icon"> AND <link rel="shortcut icon">,
+     so the browser fetched that file twice on every page load. An admin who
+     has uploaded their own favicon still overrides this. */
+  faviconUrl: '/icons/icon-32.png',
 
   googleSiteVerification: '',
 };

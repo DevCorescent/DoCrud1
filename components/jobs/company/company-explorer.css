@@ -23,7 +23,16 @@
 
   width:100%;
   max-width:100%;
-  padding-bottom:2px;
+
+  /* ── Room for the hover ──
+     This rail clips vertically (overflow-x:auto forces overflow-y to a
+     clipping value, so `visible` is not available), and a tile lifts 1px and
+     grows a shadow on hover. Without this padding the raised tile had its top
+     edge and its shadow sliced off at exactly the moment the pointer drew
+     attention to it. The header above gave up the same 6px from its margin,
+     so the strip is the height it always was. */
+  padding-top:6px;
+  padding-bottom:10px;
 
   scroll-behavior:auto;
   scrollbar-width:none;
@@ -88,4 +97,52 @@
     rgba(0,0,0,0.60),
     rgba(0,0,0,0)
   );
+}
+
+
+/* ══ The tile ══
+   Glass: a light top edge falling away down the card, a real blur behind it,
+   a hairline, and a lifted inner highlight. There are only ever a handful of
+   these and the rail does not move while the page scrolls, so the backdrop
+   filter here costs nothing like it would on a column of feed cards. */
+.ce-tile{
+  background:linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.028) 100%);
+  border:1px solid rgba(255,255,255,0.085);
+  backdrop-filter:blur(16px) saturate(150%);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:
+    0 6px 18px rgba(0,0,0,0.20),
+    inset 0 1px 0 rgba(255,255,255,0.07);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.ce-tile:hover{
+  border-color:rgba(255,255,255,0.18);
+  background:linear-gradient(180deg, rgba(255,255,255,0.105) 0%, rgba(255,255,255,0.04) 100%);
+  box-shadow:
+    0 10px 26px rgba(0,0,0,0.26),
+    inset 0 1px 0 rgba(255,255,255,0.09);
+  transform:translateY(-1px);
+}
+
+.ce-tile:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}
+
+/* The name carries the tile. Bright enough to read at a glance, which the
+   old 0.70 on a 10.5px two-line clamp was not. */
+.ce-name{
+  color:rgba(255,255,255,0.90);
+  letter-spacing:-0.01em;
+}
+
+.ce-count{
+  color:rgb(203,190,255);
+  background:rgba(167,139,250,0.16);
+  border:1px solid rgba(167,139,250,0.28);
 }

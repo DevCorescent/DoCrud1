@@ -1,0 +1,40 @@
+[
+  {
+    "id": "job-1788730972501",
+    "organizationId": "individual-1788599113878",
+    "organizationName": "Individual Workspace",
+    "createdByUserId": "individual-1788599113878",
+    "createdByEmail": "suhas@yopmail.com",
+    "title": "fhhfhgf",
+    "department": "hgjhgjgj",
+    "location": "Bengaluru",
+    "employmentType": "full_time",
+    "workMode": "onsite",
+    "experienceLevel": "associate",
+    "description": "gjhgjgjhg",
+    "responsibilities": [
+      "hjhgjhg"
+    ],
+    "requirements": [
+      "hjgjhgj"
+    ],
+    "preferredSkills": [
+      "jhgjgjh"
+    ],
+    "targetRoleKeywords": [
+      "fhhfhgf"
+    ],
+    "requiredDocuments": [
+      "fhgfhg"
+    ],
+    "minimumAtsScore": 72,
+    "salaryMin": 7878,
+    "salaryMax": 68686,
+    "salaryCurrency": "INR",
+    "salaryPeriod": "year",
+    "status": "published",
+    "shareUrl": "/jobs/job-1788730972501",
+    "createdAt": "2026-09-06T21:42:52.501Z",
+    "updatedAt": "2026-09-06T21:42:52.501Z"
+  }
+]

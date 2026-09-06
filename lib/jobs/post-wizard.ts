@@ -21,6 +21,8 @@ export interface JobDraft {
   department: string;
   employmentType: string;
   experienceLevel: string;
+  /** '' means the poster did not say — see lib/job-urgency.ts. */
+  hiringUrgency: string;
   responsibilities: string;
   requirements: string;
   preferredSkills: string;
@@ -46,6 +48,10 @@ export const EMPTY_DRAFT: JobDraft = {
   department: '',
   employmentType: 'full_time',
   experienceLevel: 'associate',
+  /* Deliberately empty rather than a default. Urgency is a claim about the
+     employer's own timeline; pre-selecting one would put words in their mouth
+     and tint the card on the strength of it. */
+  hiringUrgency: '',
   responsibilities: '',
   requirements: '',
   preferredSkills: '',
@@ -227,6 +233,7 @@ export function buildJobPayload(
     location: draft.location,
     employmentType: draft.employmentType,
     workMode: draft.workMode,
+    hiringUrgency: draft.hiringUrgency || undefined,
     experienceLevel: draft.experienceLevel,
     description: draft.description,
     status: options.status ?? draft.status,
@@ -259,6 +266,7 @@ export function draftFromJob(job: Record<string, unknown>): JobDraft {
     location: text(job.location),
     employmentType: text(job.employmentType, 'full_time'),
     workMode: text(job.workMode, 'hybrid'),
+    hiringUrgency: text(job.hiringUrgency, ''),
     experienceLevel: text(job.experienceLevel, 'associate'),
     description: text(job.description),
     responsibilities: list(job.responsibilities),

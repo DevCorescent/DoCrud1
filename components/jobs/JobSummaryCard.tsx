@@ -19,6 +19,7 @@
  */
 
 import { useState } from 'react';
+import { jobUrgencyLabel, jobUrgencyTint } from '@/lib/job-urgency';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MapPin, ArrowUpRight, ArrowRight, Check } from 'lucide-react';
@@ -48,6 +49,8 @@ export type JobSummary = {
   targetRoleKeywords?: string[];
   status?: string;
   createdAt?: string;
+  /** See lib/job-urgency.ts. Absent means the employer did not state one. */
+  hiringUrgency?: string | null;
   applyUrl?: string;
   /** Present only in the profile-matched "Recommended for You" context. */
   matchScore?: number;
@@ -125,6 +128,12 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
   const canApply = isValidApplyUrl(job.applyUrl);
   const reasons = (job.matchReasons ?? []).filter(Boolean).slice(0, 3);
   const hasMatch = typeof job.matchScore === 'number';
+  /* The employer's own timeline, when they gave one. It tints the card's
+     surface rather than adding a badge to it, so a hurried role reads as
+     urgent at a glance without shouting — and a role with no stated urgency
+     gets no tint at all rather than the calmest one. */
+  const urgency = jobUrgencyTint(job.hiringUrgency);
+  const urgencyLabel = jobUrgencyLabel(job.hiringUrgency);
   /* Panel and Apply take their hue from the SAME score the badge prints, so a
      weak match can never be dressed as a strong one. */
   const panelTone = hasMatch ? jobMatchPanelClasses(job.matchScore as number) : null;
@@ -139,7 +148,13 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
       onClick={open} role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') open(); }}
     >
-      <article className={`relative overflow-hidden rounded-2xl border bg-white/[0.02] transition-all duration-200 hover:bg-white/[0.035] ${jobMatchCardClasses(job.matchScore)}`}>
+      <article
+        className={`relative overflow-hidden rounded-2xl border transition-all duration-200 ${urgency ? '' : 'bg-white/[0.02] hover:bg-white/[0.035]'} ${jobMatchCardClasses(job.matchScore)}`}
+        /* Inline, because the tint is data rather than a class: it comes from
+           the posting. The match-score classes still apply above it, so a
+           scored card keeps its border and this only changes the fill. */
+        style={urgency ? { background: urgency.background, borderColor: urgency.borderColor } : undefined}
+      >
         <div className="p-4 sm:p-5">
           {/* header: company mark + identity + match badge */}
           <div className="flex items-start gap-3">
@@ -149,6 +164,14 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
                 <h3 className="min-w-0 flex-1 text-[15px] font-bold leading-tight tracking-tight text-white transition-colors group-hover:text-white/90 line-clamp-2">
                   {job.title}
                 </h3>
+                {urgencyLabel && (
+                  <span
+                    className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+                    style={{ background: urgency!.chipBackground, borderColor: urgency!.chipBorderColor, color: urgency!.chipColor }}
+                  >
+                    {urgencyLabel}
+                  </span>
+                )}
                 {hasMatch && (
                   /* The hue tracks the job-match score (lib/job-match-tone.ts);
                      the percentage itself is unchanged and still the primary

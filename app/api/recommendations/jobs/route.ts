@@ -8,6 +8,7 @@
  * postings; when there are no jobs it returns an empty list.
  */
 import { NextResponse } from 'next/server';
+import { coerceJobUrgency } from '@/lib/job-urgency';
 import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
@@ -132,6 +133,10 @@ async function computeRecommendations(
         applyUrl: isValidApplyUrl(String(j.applyUrl ?? '')) ? String(j.applyUrl) : '',
         createdAt: recJob.createdAt,
       };
+      /* Only when the employer stated one. Omitted rather than sent empty, so
+         a card can test for presence and show no tint when it is absent. */
+      const urgency = coerceJobUrgency(j.hiringUrgency);
+      if (urgency) job.hiringUrgency = urgency;
       if (showMatch) {
         job.matchScore = match.score;
         job.matchReasons = match.reasons;

@@ -151,7 +151,7 @@ export async function countPublishedJobs(): Promise<number | null> {
 const LIST_PROJECTION = {
   _id: 0,
   id: 1, title: 1, organizationName: 1, location: 1, department: 1,
-  employmentType: 1, workMode: 1, experienceLevel: 1,
+  employmentType: 1, workMode: 1, experienceLevel: 1, hiringUrgency: 1,
   preferredSkills: 1, applyUrl: 1, shareUrl: 1, createdAt: 1, updatedAt: 1,
 } as const;
 

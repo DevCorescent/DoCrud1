@@ -1,7 +1,12 @@
 {
-  "login:account:cardux@example.com:1788693000000": {
-    "_id": "login:account:cardux@example.com:1788693000000",
-    "count": 0,
-    "expiresAt": "2026-09-06T11:20:00.000Z"
+  "job-post:account:individual-1788599113878:1788728400000": {
+    "_id": "job-post:account:individual-1788599113878:1788728400000",
+    "count": 1,
+    "expiresAt": "2026-09-06T22:00:00.000Z"
+  },
+  "job-post:ip:::1:1788728400000": {
+    "_id": "job-post:ip:::1:1788728400000",
+    "count": 1,
+    "expiresAt": "2026-09-06T22:00:00.000Z"
   }
 }

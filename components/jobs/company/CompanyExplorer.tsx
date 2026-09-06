@@ -234,11 +234,14 @@ export default function CompanyExplorer() {
 
   return (
     <div className="w-full min-w-0">
-      <div className="mb-2 flex items-center justify-between gap-3 px-2 sm:px-3">
+      <div className="mb-1 flex items-center justify-between gap-3 px-2 sm:px-3">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
-            <span className="hp-sec text-[11px] font-semibold tracking-[0.10em]"
-              style={{ color: 'rgba(255,255,255,0.28)' }}>
+            {/* 0.28 measured 2.4:1 against the page — a heading nobody could
+                read, over a strip whose whole job is to be noticed. This is
+                still quiet; it is just above the floor rather than below it. */}
+            <span className="hp-sec text-[11px] font-semibold uppercase tracking-[0.14em]"
+              style={{ color: 'rgba(255,255,255,0.52)' }}>
               Top Company
             </span>
           </div>
@@ -277,33 +280,39 @@ export default function CompanyExplorer() {
           {companies === null
             ? Array.from({ length: 7 }).map((_, i) => (
                 <div key={i} aria-hidden
-                  className="h-[86px] w-[92px] shrink-0 animate-pulse rounded-2xl"
+                  className="h-[64px] w-[224px] shrink-0 animate-pulse rounded-[16px] sm:w-[248px]"
                   style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }} />
               ))
             : companies.map((c) => (
+                /* ── Horizontal ──
+                   The mark on the left, the name and the count stacked beside
+                   it. The tile used to be a 92px column with the name wrapped
+                   to two lines under the logo, which truncated most real
+                   company names and made every tile the same shape regardless
+                   of what was in it. Reading left to right gives the name most
+                   of the width, so it fits on one line, and the whole strip
+                   scans as a list rather than as a row of stamps. */
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => router.push(companyJobsHref(c.id))}
                   aria-label={`${c.name}, ${formatCompanyJobCount(c.jobCount)}`}
-                  className="ce-tile flex w-[92px] shrink-0 flex-col items-center gap-1.5 rounded-2xl px-2 py-2.5 text-center transition sm:w-[100px]"
-                  style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}
+                  className="ce-tile group flex w-[224px] shrink-0 items-center gap-2.5 rounded-[16px] px-2.5 py-2.5 text-left transition sm:w-[248px]"
                 >
                   {/* One component everywhere: white plate, no filter, and a
                       broken URL degrades to initials instead of a broken icon. */}
-                  <CompanyLogo name={c.name} logoUrl={c.logoUrl} size={38} rounded={11} />
-                  <span className="line-clamp-2 text-[10.5px] font-semibold leading-tight"
-                    style={{ color: 'rgba(255,255,255,0.70)' }}>
-                    {c.name}
-                  </span>
-                  {/* The count is the reason to click a tile, so it is the
-                      brightest thing on it after the mark itself. Same violet
-                      the header's BETA badge uses — an accent already in this
-                      strip, not a new colour. */}
-                  <span className="rounded-full px-1.5 py-[1px] text-[9.5px] font-extrabold tabular-nums"
-                    style={{ color: 'rgb(196,181,253)', background: 'rgba(167,139,250,0.14)',
-                      border: '1px solid rgba(167,139,250,0.24)' }}>
-                    {formatCompanyJobCount(c.jobCount)}
+                  <CompanyLogo name={c.name} logoUrl={c.logoUrl} size={40} rounded={12} />
+                  <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                    <span className="ce-name w-full truncate text-[12.5px] font-semibold leading-tight">
+                      {c.name}
+                    </span>
+                    {/* The count is the reason to click a tile, so it is the
+                        brightest thing on it after the mark itself. Same violet
+                        the header's BETA badge uses — an accent already in this
+                        strip, not a new colour. */}
+                    <span className="ce-count rounded-full px-1.5 py-[1px] text-[9.5px] font-extrabold tabular-nums">
+                      {formatCompanyJobCount(c.jobCount)}
+                    </span>
                   </span>
                 </button>
               ))}

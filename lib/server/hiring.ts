@@ -1,4 +1,5 @@
 import { HiringJobApplication, HiringJobPosting, User } from '@/types/document';
+import { coerceJobUrgency } from '@/lib/job-urgency';
 import { hiringApplicationsPath, hiringJobsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/server/business-pages';
 import {
@@ -403,7 +404,7 @@ export function toPublicHiringJob(job: HiringJobPosting): PublicHiringJob {
 export type PublicHiringJobListItem = Pick<
   PublicHiringJob,
   'id' | 'title' | 'organizationName' | 'location' | 'department'
-  | 'employmentType' | 'workMode' | 'experienceLevel'
+  | 'employmentType' | 'workMode' | 'experienceLevel' | 'hiringUrgency'
   | 'preferredSkills' | 'applyUrl' | 'shareUrl' | 'createdAt' | 'updatedAt'
 >;
 
@@ -417,6 +418,7 @@ export function toPublicHiringJobListItem(job: HiringJobPosting): PublicHiringJo
     employmentType: job.employmentType,
     workMode: job.workMode,
     experienceLevel: job.experienceLevel,
+    hiringUrgency: job.hiringUrgency,
     preferredSkills: job.preferredSkills,
     applyUrl: job.applyUrl,
     shareUrl: job.shareUrl,
@@ -593,6 +595,11 @@ export async function upsertHiringJob(
     employmentType: payload.employmentType || 'full_time',
     workMode: payload.workMode || 'hybrid',
     experienceLevel: payload.experienceLevel || 'associate',
+    /* Absent stays absent. `coerceJobUrgency` returns undefined for anything
+       that is not one of the three known values, so a bad or missing value
+       stores nothing rather than defaulting to a claim about the employer's
+       timeline. On an edit, clearing it clears the stored value. */
+    hiringUrgency: coerceJobUrgency(payload.hiringUrgency),
     description: payload.description.trim(),
     responsibilities: Array.isArray(payload.responsibilities) ? payload.responsibilities.map((item) => item.trim()).filter(Boolean) : [],
     requirements: Array.isArray(payload.requirements) ? payload.requirements.map((item) => item.trim()).filter(Boolean) : [],

@@ -3941,6 +3941,10 @@ export default function PublishedPage() {
                          simply not filled rather than inventing one here. */
                       return null;
                     }
+                    if (entry.type === 'job') {
+                      /* Same as 'person' below: this feed never asks for them. */
+                      return null;
+                    }
                     if (entry.type === 'person') {
                       /* Only the homepage grid scatters suggested people among
                          its posts; this feed never asks composeFeed for them,

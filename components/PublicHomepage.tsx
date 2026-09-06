@@ -3,6 +3,8 @@
 
 import { FEED_CARD, FEED_STACK } from '@/components/feed/cardShell';
 import FeedBento from '@/components/feed/FeedBento';
+import { cachedJson } from '@/lib/client/request-cache';
+import FeedJobCard, { FeedJobCardStyles, type FeedJob } from '@/components/feed/FeedJobCard';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
@@ -2302,7 +2304,12 @@ function hpWriteTrend(item: HpFeedItem, next: boolean) {
   } catch {}
 }
 
-function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
+function HomepageLiveFeed({ onPublish, guestMode = false }: { onPublish?: () => void; guestMode?: boolean }) {
+  /* Which actions the toolbar offers depends on whether anyone is signed in —
+     the same rule the dock applies, so the two never disagree about whether to
+     show Messages or Sign Up. */
+  const { status: feedAuthStatus } = useSession();
+  const feedSignedIn = feedAuthStatus === 'authenticated' && !guestMode;
   const [allItems,   setAllItems]   = React.useState<HpFeedItem[]>([]);
   const [page,       setPage]       = React.useState(1);
   const [loading,    setLoading]    = React.useState(true);
@@ -2476,12 +2483,24 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
 
   const peopleToMix = mixPeople ? (suggestedPeople?.length ?? 0) : 0;
 
+  /* Open roles, scattered through the feed the same way. One request, shared
+     with everything else that asks for this endpoint. */
+  const [feedJobs, setFeedJobs] = React.useState<FeedJob[]>([]);
+  React.useEffect(() => {
+    let cancelled = false;
+    cachedJson<{ jobs?: FeedJob[] }>('/api/recommendations/jobs')
+      .then((d) => { if (!cancelled && Array.isArray(d.jobs)) setFeedJobs(d.jobs.filter((j) => j?.id && j?.title)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const jobsToMix = mixPeople ? Math.min(feedJobs.length, 4) : 0;
+
   const composed = React.useMemo(
-    () => composeFeed(visible, (i) => i.id, moduleSlots, peopleToMix),
+    () => composeFeed(visible, (i) => i.id, moduleSlots, peopleToMix, jobsToMix),
     // visible is a fresh slice each render; its length and the active filter
     // are what actually change the composition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [visible.length, activecat, tagSearch, sort, moduleSlots, peopleToMix],
+    [visible.length, activecat, tagSearch, sort, moduleSlots, peopleToMix, jobsToMix],
   );
 
   React.useEffect(() => { setPage(1); }, [activecat, tagSearch, sort]);
@@ -2633,10 +2652,59 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
           >
             {/* desktop row: title + tag pill (no sort — sort stays non-sticky below) */}
             <div className="hidden lg:flex items-center gap-2 px-4 sm:px-6 pt-3.5 pb-2">
-              {/* The category name and its count used to sit here. The category
-                  is already the selected pill in the strip above, and the count
-                  is a number nobody acts on — together they were a heading for
-                  a list that does not need one. */}
+              {/* ── The actions, where the heading used to be ──
+                  These are the buttons that were in the floating dock. On a
+                  phone that dock is fine; on a desktop it was a slab hovering
+                  over the middle of the feed, permanently covering two cards.
+                  Here they are labelled, reachable, and out of the way — and
+                  the toolbar, which had gone empty on the left, is balanced
+                  again: what you can do on one side, how it is sorted on the
+                  other. Search is deliberately absent; it has the whole search
+                  field in the header above. */}
+              <nav aria-label="Feed actions" className="flex items-center gap-2">
+                {[
+                  ...(feedSignedIn && onPublish
+                    ? [{ id: 'publish', label: 'Publish', Icon: Plus, onClick: onPublish }]
+                    : []),
+                  /* Feed, People and Messages moved to the header, which is on
+                     every page; keeping them here as well would be two copies
+                     of the same navigation a hand's width apart. What is left
+                     is the two things you can CREATE from the feed. */
+                  ...(feedSignedIn
+                    ? [{ id: 'post-job', label: 'Post a job', Icon: Briefcase, href: '/jobs/post' }]
+                    : [{ id: 'signup', label: 'Sign Up', Icon: UserPlus, href: '/onboarding?start=signup' }]),
+                ].map((action, index) => {
+                  /* These two MAKE something; the pills on the other end of the
+                     bar only sort what is already there. Dressed the same they
+                     were invisible — a row of five identical grey pills, and
+                     the two that matter were the two nobody could find. So the
+                     hierarchy is explicit: the first action is solid, the
+                     second is outlined and brighter than the sort pills, and
+                     the sort pills are unchanged and quietest. */
+                  const base = 'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold whitespace-nowrap transition active:scale-95';
+                  const cls = index === 0
+                    ? `${base} bg-white text-slate-950 hover:bg-white/90 shadow-[0_1px_10px_rgba(255,255,255,0.10)]`
+                    : `${base} text-white/90 hover:text-white`;
+                  /* Inline for the outlined one. A global dark-mode rule in
+                     app/globals.css sets the fill and hairline of pills in this
+                     bar and outranks a utility class, so the secondary action
+                     came out the same weight as the sort pills — the exact
+                     thing this change exists to fix. Publish needs no such
+                     help: a solid fill wins on its own. */
+                  const style = index === 0
+                    ? undefined
+                    : { background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.28)' };
+                  const inner = (
+                    <>
+                      <action.Icon className="h-3 w-3 shrink-0" aria-hidden />
+                      {action.label}
+                    </>
+                  );
+                  return 'href' in action && action.href
+                    ? <Link key={action.id} href={action.href} className={cls} style={style}>{inner}</Link>
+                    : <button key={action.id} type="button" onClick={action.onClick} className={cls} style={style}>{inner}</button>;
+                })}
+              </nav>
               {tagSearch && (
                 <button
                   type="button"
@@ -2815,6 +2883,7 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                   here rather than by the module, which does not mount at all on
                   the grid. */}
               {peopleToMix > 0 && <PersonCardStyles />}
+              {jobsToMix > 0 && <FeedJobCardStyles />}
               <FeedBento stackClassName={FEED_STACK}>
               {loading
                 ? Array.from({ length: 4 }).map((_, i) => (
@@ -2842,6 +2911,15 @@ function HomepageLiveFeed({ onPublish }: { onPublish?: () => void }) {
                               commentOpen={activeCommentPostId === entry.data.id}
                               onToggleComment={(id) => setActiveCommentPostId(prev => (prev === id ? null : id))}
                             />
+                          </div>
+                        );
+                      }
+                      if (entry.type === 'job') {
+                        const job = feedJobs[entry.jobIndex];
+                        if (!job) return null;
+                        return (
+                          <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
+                            <FeedJobCard job={job} />
                           </div>
                         );
                       }
@@ -6491,7 +6569,7 @@ function NewHomepageContent({
         </div>}
 
 
-        <HomepageLiveFeed onPublish={() => onPublishClick()} />
+        <HomepageLiveFeed onPublish={() => onPublishClick()} guestMode={guestMode} />
 
         {/* ── Live Gigs section + Gig CTA banner ── DISABLED */}
         {false && <><div className="mb-3 flex items-center justify-between gap-3">
@@ -8357,7 +8435,11 @@ export default function PublicHomepage({
               )}
             </div>
 
-            {/* ── Premium Glass Dock — Publish · Feed · Search · People · Messages ── */}
+            {/* ── Premium Glass Dock — Publish · Feed · Search · People · Messages ──
+                 Phones and tablets only. From `lg` the same actions live in the
+                 feed's own toolbar, beside the sort pills, where they are a
+                 row of labelled buttons rather than a slab floating over the
+                 posts you are trying to read. */}
             {isMounted && (() => {
               // Fixed-order dock — positions never change between renders.
               const dockItems: Array<{ id: string; label: string; Icon: React.ElementType; href?: string; onClick?: () => void }> = [
@@ -8379,7 +8461,7 @@ export default function PublicHomepage({
 
               return (
                 <div
-                  className="hidden sm:flex"
+                  className="hidden sm:flex lg:hidden"
                   style={{
                     position: 'fixed',
                     left: '50%',

@@ -9,7 +9,7 @@
     "accountType": "individual",
     "planId": "workspace-trial",
     "userRole": "individual",
-    "path": "/",
+    "path": "/jobs/company/individualworkspace",
     "surface": "public",
     "ip": "::1",
     "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
@@ -19,20 +19,21 @@
     "tabVisible": false,
     "navigatorOnline": true,
     "firstSeenAt": "2026-09-06T21:43:32.453Z",
-    "lastPingAt": "2026-09-06T21:43:35.349Z",
+    "lastPingAt": "2026-09-06T22:16:25.341Z",
     "lastInteractionAt": "2026-09-06T21:43:32.453Z",
-    "pageViews": 0,
+    "pageViews": 1,
     "pathHistory": [
+      "/jobs/company/individualworkspace",
       "/",
       "/jobs/post"
     ],
-    "focusDurationMs": 0,
-    "clickCount": 0,
+    "focusDurationMs": 541050,
+    "clickCount": 2,
     "keystrokeCount": 0,
-    "scrollEventCount": 0,
-    "idleMs": 991,
+    "scrollEventCount": 255,
+    "idleMs": 72394,
     "connectionType": "4g",
-    "engagementScore": 50
+    "engagementScore": 23
   },
   {
     "sessionId": "s-mtqc8xfm-g25kya",
@@ -54,7 +55,7 @@
     "tabVisible": false,
     "navigatorOnline": true,
     "firstSeenAt": "2026-09-06T21:43:35.133Z",
-    "lastPingAt": "2026-09-06T21:56:31.416Z",
+    "lastPingAt": "2026-09-06T22:00:47.259Z",
     "lastInteractionAt": "2026-09-06T21:47:53.929Z",
     "pageViews": 13,
     "pathHistory": [
@@ -70,8 +71,8 @@
     "clickCount": 26,
     "keystrokeCount": 4,
     "scrollEventCount": 1886,
-    "idleMs": 3442,
+    "idleMs": 259223,
     "connectionType": "4g",
-    "engagementScore": 68
+    "engagementScore": 20
   }
 ]

@@ -32,6 +32,12 @@ interface Payload {
   company: { id: string; name: string; logoUrl: string; jobCount: number };
   insights: { averageMatch: number; topMatch: number; scoredJobs: number } | null;
   jobs: Job[];
+  /* The route has always returned these; this view simply never read them,
+     which is why a company showing "40+ jobs" only ever rendered the first
+     twenty and offered no way to reach the rest. */
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 const PANEL = 'rounded-2xl border border-white/[0.07] bg-white/[0.02]';
@@ -41,20 +47,37 @@ export default function CompanyJobsView({ companyId }: { companyId: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  /* `page` 1 replaces what is on screen; anything higher APPENDS. Paging that
+     swapped the list would make someone lose their place every time they asked
+     for more of it. */
+  const load = useCallback(async (page = 1) => {
     setError('');
+    if (page > 1) setLoadingMore(true);
     try {
-      const res = await fetch(`/api/company-explorer/${encodeURIComponent(companyId)}/jobs`, { cache: 'no-store' });
+      const res = await fetch(
+        `/api/company-explorer/${encodeURIComponent(companyId)}/jobs?page=${page}`,
+        { cache: 'no-store' },
+      );
       if (res.status === 404) { setError('That company has no open jobs on DoCrud.'); return; }
       const body = await res.json().catch(() => null);
       if (!res.ok || !body) throw new Error(body?.error || 'Unable to load this company.');
-      setData(body as Payload);
+      const next = body as Payload;
+      setData((prev) => (page > 1 && prev
+        ? { ...next, jobs: [...prev.jobs, ...next.jobs] }
+        : next));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to load this company.');
+    } finally {
+      setLoadingMore(false);
     }
   }, [companyId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(1); }, [load]);
+
+  const shown = data?.jobs.length ?? 0;
+  const hasMore = Boolean(data && shown < data.total);
 
   return (
     <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#0A0A0C] text-white">
@@ -178,6 +201,26 @@ export default function CompanyJobsView({ companyId }: { companyId: string }) {
                   );
                 })}
               </ul>
+
+              {/* ── How far through the list you are, and how to see more ──
+                  Both matter: without the count, "20 shown" of a company
+                  advertising 40+ jobs looks like the rest failed to load,
+                  which is exactly how this read before. */}
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <p className="text-[11.5px] text-white/45 tabular-nums">
+                  Showing {shown} of {data.total} {data.total === 1 ? 'role' : 'roles'}
+                </p>
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={() => load(data.page + 1)}
+                    disabled={loadingMore}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-full border border-white/[0.14] bg-white/[0.06] px-4 text-[12.5px] font-semibold text-white/80 transition hover:border-white/25 hover:bg-white/[0.11] hover:text-white disabled:opacity-50"
+                  >
+                    {loadingMore ? 'Loading…' : `Load ${Math.min(data.pageSize, data.total - shown)} more`}
+                  </button>
+                )}
+              </div>
             </>
           )}
         </div>

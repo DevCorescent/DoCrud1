@@ -291,13 +291,29 @@ export default function CompanyExplorer() {
                    company names and made every tile the same shape regardless
                    of what was in it. Reading left to right gives the name most
                    of the width, so it fits on one line, and the whole strip
-                   scans as a list rather than as a row of stamps. */
+                   scans as a list rather than as a row of stamps.
+
+                   The width ADAPTS to the name rather than being fixed. A
+                   fixed width has to be set for the longest name any employer
+                   might have, which leaves "Zeta" sitting in a card two thirds
+                   empty; sizing to content makes each tile as wide as what is
+                   in it. The bounds are the two failure modes: below the
+                   minimum a tile stops reading as a card, and above the
+                   maximum one employer with a long legal name would push every
+                   other tile off the rail — past it the name ellipses. */
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => router.push(companyJobsHref(c.id))}
+                  /* Warm the route before it is asked for. A company page is a
+                     fresh document plus a ranked query, and the gap between
+                     pressing a tile and seeing jobs is most of what made this
+                     feel like nothing had happened. Next dedupes prefetches, so
+                     running the rail costs one per tile, once. */
+                  onPointerEnter={() => router.prefetch(companyJobsHref(c.id))}
+                  onFocus={() => router.prefetch(companyJobsHref(c.id))}
                   aria-label={`${c.name}, ${formatCompanyJobCount(c.jobCount)}`}
-                  className="ce-tile group flex w-[224px] shrink-0 items-center gap-2.5 rounded-[16px] px-2.5 py-2.5 text-left transition sm:w-[248px]"
+                  className="ce-tile group flex w-auto min-w-[164px] max-w-[290px] shrink-0 items-center gap-2.5 rounded-[16px] px-2.5 py-2.5 text-left transition"
                 >
                   {/* One component everywhere: white plate, no filter, and a
                       broken URL degrades to initials instead of a broken icon. */}

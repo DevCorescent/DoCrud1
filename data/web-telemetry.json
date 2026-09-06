@@ -1,5 +1,20 @@
 [
   {
+    "id": "te-1788732951155-c97uu4",
+    "createdAt": "2026-09-06T22:15:51.155Z",
+    "type": "page_view",
+    "surface": "public",
+    "path": "/jobs/company/individualworkspace",
+    "title": "Company jobs | Docrud | Docrud",
+    "referrer": "direct",
+    "visitorId": "v-mpceh0ng-f98p3a",
+    "sessionId": "s-mtpplyrw-082n9e",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+    "ip": "::1",
+    "userId": "individual-1788599113878",
+    "userRole": "individual"
+  },
+  {
     "id": "te-1788731722341-k57tzt",
     "createdAt": "2026-09-06T21:55:22.341Z",
     "type": "page_view",

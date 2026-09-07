@@ -231,6 +231,25 @@ export async function runCanonicalIngestion(
 
   /* ONE read for the whole run. Each source's plan is chained onto the
      previous result, so two sources cannot each overwrite the other's work. */
+  /* ═══ THE INJECTION IS NOT AVAILABLE IN PRODUCTION ═══
+
+     `loadJobs`/`saveJobs` exist so the orchestrator can be exercised as a pure
+     function with no database at all — two self-tests rely on it and no
+     production caller passes either. Left unguarded it is still an escape hatch
+     around the ONE write funnel: anything supplying `saveJobs` would persist
+     nothing to app_state and mirror nothing to hiring_jobs, while the run
+     reported inserts and updates as though it had.
+
+     So it THROWS rather than being silently ignored. Quietly falling back to
+     the real save would run a production write that the caller explicitly asked
+     not to happen; quietly honouring the override would be the hole itself.
+     Refusing loudly is the only option that cannot surprise anyone. */
+  if (process.env.NODE_ENV === 'production' && (options.saveJobs || options.loadJobs)) {
+    throw new Error(
+      'run-ingestion: loadJobs/saveJobs injection is test-only and must not be used in production — '
+      + 'every production job write goes through saveHiringJobs()',
+    );
+  }
   const load = options.loadJobs ?? getHiringJobs;
   const save = options.saveJobs ?? saveHiringJobs;
   let jobs: HiringJobPosting[] = await load();

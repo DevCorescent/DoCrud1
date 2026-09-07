@@ -72,7 +72,10 @@ const BY_ORDER = { [ORDER_FIELD]: 1 } as const;
    KB of writes. */
 const FP_FIELD = '_fp';
 
-/** Stable across key order, so a re-serialised but identical job hashes equal. */
+/** Stable across key order, so a re-serialised but identical job hashes equal.
+    Exported as `fingerprintJob` so the reconciliation planner and its dry-run
+    decide "changed" with THIS function rather than a second copy that could
+    drift from it. Pure — it hashes its argument and touches nothing else. */
 function fingerprint(job: Record<string, unknown>): string {
   const canonical = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(canonical);
@@ -86,6 +89,8 @@ function fingerprint(job: Record<string, unknown>): string {
   };
   return createHash('sha1').update(JSON.stringify(canonical(job))).digest('hex');
 }
+
+export { fingerprint as fingerprintJob };
 
 /* One failed mirror means the replica may be behind app_state. Rather than
    serve possibly-stale jobs, this process stops trusting the collection and
@@ -151,7 +156,7 @@ export async function countPublishedJobs(): Promise<number | null> {
 const LIST_PROJECTION = {
   _id: 0,
   id: 1, title: 1, organizationName: 1, location: 1, department: 1,
-  employmentType: 1, workMode: 1, experienceLevel: 1, hiringUrgency: 1,
+  employmentType: 1, workMode: 1, experienceLevel: 1,
   preferredSkills: 1, applyUrl: 1, shareUrl: 1, createdAt: 1, updatedAt: 1,
 } as const;
 

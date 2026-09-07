@@ -9,6 +9,7 @@
  */
 import { NextResponse } from 'next/server';
 import { coerceJobUrgency } from '@/lib/job-urgency';
+import { recommendedSet, rowScope, scoreRecommendations } from '@/lib/server/recommendation-compute';
 import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
@@ -81,7 +82,13 @@ async function computeRecommendations(
     /* The job list and the viewer's profile are independent reads; they were
        being awaited one after the other. */
     const [jobs, fields] = await Promise.all([
-      getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>),
+      /* NOT `.catch(() => [])`. Swallowing a corpus read failure turns
+         infrastructure being down into a response carrying zero
+         recommendations — indistinguishable from "we found nothing for you".
+         A StorageReadError now reaches the route's catch, which answers
+         honestly. Scoring, ranking, eligibility and applied-job exclusion are
+         untouched. */
+      getPublishedHiringJobs(),
       meId
         /* resumeFiles joins the projection so an uploaded CV can fill in
            signals the member never typed — see lib/server/recommend-profile.ts.
@@ -105,50 +112,13 @@ async function computeRecommendations(
     const showMatch = hasProfileSignals(profile);
     const now = Date.now();
 
-    const scored = (jobs as unknown as Array<Record<string, unknown>>).map((j) => {
-      const recJob: RecJob = {
-        id: String(j.id ?? ''),
-        title: String(j.title ?? ''),
-        organizationName: String(j.organizationName ?? ''),
-        location: String(j.location ?? ''),
-        employmentType: String(j.employmentType ?? ''),
-        workMode: String(j.workMode ?? ''),
-        experienceLevel: String(j.experienceLevel ?? ''),
-        description: String(j.description ?? ''),
-        preferredSkills: Array.isArray(j.preferredSkills) ? (j.preferredSkills as string[]) : [],
-        targetRoleKeywords: Array.isArray(j.targetRoleKeywords) ? (j.targetRoleKeywords as string[]) : [],
-        createdAt: String(j.createdAt ?? ''),
-      };
-      const match = recommendMatch(profile, recJob, now);
-      const job: Record<string, unknown> = {
-        id: recJob.id,
-        title: recJob.title || 'Open role',
-        organizationName: recJob.organizationName,
-        location: recJob.location,
-        employmentType: recJob.employmentType,
-        workMode: recJob.workMode,
-        preferredSkills: (recJob.preferredSkills ?? []).slice(0, 4),
-        // The REAL original application URL (Ashby/Lever/Greenhouse) carried through
-        // untouched — powers the "Apply Now" action + source attribution in the UI.
-        applyUrl: isValidApplyUrl(String(j.applyUrl ?? '')) ? String(j.applyUrl) : '',
-        createdAt: recJob.createdAt,
-      };
-      /* Only when the employer stated one. Omitted rather than sent empty, so
-         a card can test for presence and show no tint when it is absent. */
-      const urgency = coerceJobUrgency(j.hiringUrgency);
-      if (urgency) job.hiringUrgency = urgency;
-      if (showMatch) {
-        job.matchScore = match.score;
-        job.matchReasons = match.reasons;
-        /* The specifics behind the number. Empty fields are omitted rather
-           than sent as empty arrays, so a card can test for presence. */
-        if (match.summary) job.matchSummary = match.summary;
-        if (match.factors.length) job.matchFactors = match.factors;
-        if (match.matchedSkills.length) job.matchedSkills = match.matchedSkills.slice(0, 12);
-        if (match.missingSkills.length) job.missingSkills = match.missingSkills.slice(0, 8);
-      }
-      return { score: showMatch ? match.score : 0, recommended: showMatch && isRecommended(match), job };
-    });
+    /* THE SCORING ITSELF LIVES IN lib/server/recommendation-compute.ts.
+       Lifted out so a batch can score many profiles against ONE corpus read
+       instead of re-reading ~7.4 MB per user — the measured ~86 s read that
+       makes this endpoint slow. Same scorer, same field projection, same
+       ranking and tie-break; this route supplies the corpus and profile it
+       already loaded. `hiringUrgency` and `preferences` are preserved. */
+    const scored = scoreRecommendations({ profile, showMatch, jobs: jobs as unknown as Array<Record<string, unknown>>, now });
 
     scored.sort((a, b) => b.score - a.score || Date.parse(String(b.job.createdAt)) - Date.parse(String(a.job.createdAt)));
     /* THE RECOMMENDED SET: roles that genuinely overlap the viewer's profile
@@ -159,15 +129,14 @@ async function computeRecommendations(
 
        `total` is that set's real size, BEFORE maxCards trims the carousel, so
        the homepage headline never shrinks to the size of a row. */
-    const recommended = scored.filter((s) => s.recommended);
-    const total = recommended.length;
+    const { recommended, total } = recommendedSet(scored);
 
     /* scope 'recommended' returns the whole recommended set instead of the
        carousel's worth — what /jobs?recommended=1 renders, so the page can
        never show fewer roles than the headline promised. */
     const list = scope === 'recommended'
       ? recommended.map((s) => s.job)
-      : scored.slice(0, config.jobs.maxCards).map((s) => s.job);
+      : rowScope(scored, config.jobs.maxCards);
 
     const payload: RecsPayload = { jobs: list, total };
     cache.set(`${meId ?? 'anon'}:${scope}`, { payload, ts: Date.now() });
@@ -200,7 +169,13 @@ async function computePersonalized(
   }
 
   const [jobs, fields, applications] = await Promise.all([
-    getPublishedHiringJobs().catch(() => [] as Awaited<ReturnType<typeof getPublishedHiringJobs>>),
+    /* NOT `.catch(() => [])`. Swallowing a corpus read failure turns
+       infrastructure being down into a response carrying zero
+       recommendations — indistinguishable from "we found nothing for you".
+       A StorageReadError now reaches the route's catch, which answers
+       honestly. Scoring, ranking, eligibility and applied-job exclusion are
+       untouched. */
+    getPublishedHiringJobs(),
     getProfileFields(meId, ['headline', 'bio', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences']).catch(() => null),
     /* Scoped to THIS viewer. The applied set is the reason a job leaves the
        feed, so it must never be another member's. */
@@ -362,7 +337,16 @@ export async function GET(request: Request) {
     const payload = await computeRecommendations(meId, scope);
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
+    /* A 200 carrying an empty list was the last place a storage failure could
+       still pass for an answer: the caller cannot tell "nothing matched you"
+       from "the database is unreachable", and the empty state renders as though
+       it were real. The status now says which it is. The body keeps the same
+       SHAPE so a client reading `jobs`/`total` does not crash on the error
+       path — it simply learns that this was not a successful empty result. */
     console.error('[recommendations/jobs] GET error', error);
-    return NextResponse.json({ jobs: [], total: 0 }, { status: 200 });
+    return NextResponse.json(
+      { jobs: [], total: 0, error: 'Recommendations are temporarily unavailable.' },
+      { status: 503 },
+    );
   }
 }

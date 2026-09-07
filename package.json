@@ -94,7 +94,15 @@
     "test:company-explorer": "tsx scripts/company-explorer.selftest.ts",
     "test:company-logo": "tsx scripts/company-logo.selftest.ts",
     "test:job-microsoft": "tsx scripts/job-microsoft.selftest.ts",
-    "test:company-logo-upload": "tsx scripts/company-logo-upload.selftest.ts"
+    "test:company-logo-upload": "tsx scripts/company-logo-upload.selftest.ts",
+    "test:hiring-jobs-canonical": "tsx scripts/hiring-jobs-canonical.selftest.ts",
+    "test:storage-failure-semantics": "tsx scripts/storage-failure-semantics.selftest.ts",
+    "test:job-read-cutover": "tsx scripts/job-read-cutover.selftest.ts",
+    "test:recommendation-precompute": "tsx scripts/recommendation-precompute.selftest.ts",
+    "test:profile-version": "tsx scripts/profile-version.selftest.ts",
+    "test:security-hardening": "tsx scripts/security-hardening.selftest.ts",
+    "jobs:migrate": "tsx scripts/hiring-jobs-migrate.ts",
+    "jobs:dryrun": "tsx scripts/hiring-jobs-dryrun.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",
@@ -117,7 +125,7 @@
     "mammoth": "^1.12.0",
     "mongodb": "^7.3.0",
     "next": "^14.2.35",
-    "next-auth": "^4.24.13",
+    "next-auth": "^4.24.15",
     "nodemailer": "^7.0.13",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",

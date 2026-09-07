@@ -1,6 +1,5 @@
 import { HiringJobApplication, HiringJobPosting, User } from '@/types/document';
-import { coerceJobUrgency } from '@/lib/job-urgency';
-import { hiringApplicationsPath, hiringJobsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
+import { hiringApplicationsPath, hiringJobsPath, readJsonFile, readJsonFileStrict, writeJsonFile } from '@/lib/server/storage';
 import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/server/business-pages';
 import {
   selectPublishedJobCompanyNames, selectPublishedJobListRows, selectPublishedJobRowById,
@@ -75,8 +74,20 @@ function jobOwnerName(user: User) {
   return user.organizationName || user.name || 'Business Workspace';
 }
 
+/**
+ * The job corpus. THROWS when the read fails.
+ *
+ * Strict on purpose — see StorageReadError. Every other store in this codebase
+ * may degrade to a fallback; the job corpus may not, because an empty corpus is
+ * a valid-looking answer that is wrong in two dangerous ways: it publishes "no
+ * jobs" to visitors over HTTP 200, and it tells the reconciliation planner that
+ * every stored posting has been deleted at source.
+ *
+ * An absent key still yields `[]` — a genuinely empty board stays empty. Only a
+ * FAILED read throws.
+ */
 export async function getHiringJobs() {
-  return readJsonFile<HiringJobPosting[]>(hiringJobsPath, []);
+  return readJsonFileStrict<HiringJobPosting[]>(hiringJobsPath, []);
 }
 
 /* ─── raw-corpus cache ────────────────────────────────────────────────────
@@ -285,7 +296,19 @@ export async function getPublishedHiringJobList(): Promise<PublicHiringJobListIt
   ]);
 
   let value: PublicHiringJobListItem[];
-  if (docs) {
+  /* `docs.length`, NOT just `docs`.
+     A reachable-but-EMPTY collection returns [], which is truthy, so this used
+     to publish an empty job board as though it were the answer. The selectors
+     signal "unavailable" with null, but they cannot signal "migrated yet?" —
+     and the moment hiring_jobs becomes canonical, a collection that is merely
+     empty is indistinguishable here from one that is broken.
+
+     Falling back on empty is always SAFE and never wrong: if the board is
+     genuinely empty, app_state returns empty too and the answer is identical —
+     only slower. If the collection is empty because something failed, the
+     fallback is the whole point. An infrastructure failure must never render
+     as "there are no jobs". */
+  if (docs && docs.length) {
     value = [...docs.map(toPublicHiringJobListItem), ...business.map(toPublicHiringJobListItem)];
   } else {
     const rows = await selectPublishedJobListRows();
@@ -316,7 +339,9 @@ export async function getPublishedHiringJobCompanyNames(): Promise<string[]> {
   const businessNames = business.map((j) => j.organizationName ?? '');
 
   let value: string[];
-  if (fromCollection) {
+  /* Same rule as the list above: an empty collection falls through to the
+     projection and then to app_state, rather than emptying the marquee. */
+  if (fromCollection && fromCollection.length) {
     value = [...fromCollection, ...businessNames];
   } else {
     const projected = await selectPublishedJobCompanyNames();
@@ -404,7 +429,7 @@ export function toPublicHiringJob(job: HiringJobPosting): PublicHiringJob {
 export type PublicHiringJobListItem = Pick<
   PublicHiringJob,
   'id' | 'title' | 'organizationName' | 'location' | 'department'
-  | 'employmentType' | 'workMode' | 'experienceLevel' | 'hiringUrgency'
+  | 'employmentType' | 'workMode' | 'experienceLevel'
   | 'preferredSkills' | 'applyUrl' | 'shareUrl' | 'createdAt' | 'updatedAt'
 >;
 
@@ -418,7 +443,6 @@ export function toPublicHiringJobListItem(job: HiringJobPosting): PublicHiringJo
     employmentType: job.employmentType,
     workMode: job.workMode,
     experienceLevel: job.experienceLevel,
-    hiringUrgency: job.hiringUrgency,
     preferredSkills: job.preferredSkills,
     applyUrl: job.applyUrl,
     shareUrl: job.shareUrl,
@@ -427,7 +451,15 @@ export function toPublicHiringJobListItem(job: HiringJobPosting): PublicHiringJo
   };
 }
 
-export async function saveHiringJobs(jobs: HiringJobPosting[]) {
+export interface SaveHiringJobsResult {
+  /** Whether the `hiring_jobs` replica is in step with what was just written. */
+  mirrored: boolean;
+  mirrorMs: number;
+  rewritten: number;
+  removed: number;
+}
+
+export async function saveHiringJobs(jobs: HiringJobPosting[]): Promise<SaveHiringJobsResult> {
   // app_state remains the source of truth and is written FIRST.
   await writeJsonFile(hiringJobsPath, jobs);
 
@@ -437,11 +469,27 @@ export async function saveHiringJobs(jobs: HiringJobPosting[]) {
      has already succeeded, so a mirror failure must not fail the save — it
      marks the replica untrusted instead, and every read falls back to
      app_state until the next successful mirror. */
+  const mirrorStartedAt = Date.now();
   const mirror = await mirrorPublishedJobs(jobs as unknown as Array<Record<string, unknown>>);
-  if (mirror.ok && (mirror.rewritten || mirror.removed)) {
-    console.info(
-      `[hiring_jobs] mirrored: ${mirror.rewritten} rewritten, `
-      + `${mirror.reordered} reordered, ${mirror.removed} removed`,
+  const mirrorMs = Date.now() - mirrorStartedAt;
+  if (mirror.ok) {
+    if (mirror.rewritten || mirror.removed) {
+      console.info(
+        `[hiring_jobs] mirrored: ${mirror.rewritten} rewritten, `
+        + `${mirror.reordered} reordered, ${mirror.removed} removed in ${mirrorMs}ms`,
+      );
+    }
+  } else {
+    /* A FAILED MIRROR IS SAID OUT LOUD.
+       It stays non-fatal — app_state is already written and remains the source
+       of truth, and every read falls back to it — but it must never pass as
+       success. This is the exact condition that left 5,118 mirrored rows behind
+       5,276 stored postings with nothing in the logs pointing at it: the run
+       reported success because the save had succeeded, and the replica quietly
+       drifted. The caller now gets the outcome back and can report it too. */
+    console.error(
+      `[hiring_jobs] MIRROR FAILED after ${mirrorMs}ms for ${jobs.length} jobs — `
+      + 'the replica is now stale and reads will fall back to app_state',
     );
   }
 
@@ -464,6 +512,12 @@ export async function saveHiringJobs(jobs: HiringJobPosting[]) {
      posted now stayed invisible to recommendations until the entry aged out. */
   invalidateRecommendationCaches();
   invalidateHiringCompanies();
+  return {
+    mirrored: mirror.ok,
+    mirrorMs,
+    rewritten: mirror.rewritten,
+    removed: mirror.removed,
+  };
 }
 
 export async function getHiringApplications() {
@@ -595,11 +649,6 @@ export async function upsertHiringJob(
     employmentType: payload.employmentType || 'full_time',
     workMode: payload.workMode || 'hybrid',
     experienceLevel: payload.experienceLevel || 'associate',
-    /* Absent stays absent. `coerceJobUrgency` returns undefined for anything
-       that is not one of the three known values, so a bad or missing value
-       stores nothing rather than defaulting to a claim about the employer's
-       timeline. On an edit, clearing it clears the stored value. */
-    hiringUrgency: coerceJobUrgency(payload.hiringUrgency),
     description: payload.description.trim(),
     responsibilities: Array.isArray(payload.responsibilities) ? payload.responsibilities.map((item) => item.trim()).filter(Boolean) : [],
     requirements: Array.isArray(payload.requirements) ? payload.requirements.map((item) => item.trim()).filter(Boolean) : [],

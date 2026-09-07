@@ -9,7 +9,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getHiringJobsCached } from '@/lib/server/hiring';
 import { publicJobs } from '@/lib/server/job-api/queries';
-import { selectPublicJobsPage } from '@/lib/server/db/public-jobs-query';
+import {
+  comparePages, describeQuery, jobReadSource, readPublicJobsPage,
+  verifySampleRate, type JobReadSource,
+} from '@/lib/server/db/public-jobs-source';
 import { TTL, cached } from '@/lib/server/cache';
 
 export const dynamic = 'force-dynamic';
@@ -51,11 +54,65 @@ export async function GET(request: NextRequest) {
            publicJobView's allow-list inside Mongo, so only the page crosses the
            wire. Equivalence with the function below is pinned by
            scripts/public-jobs-equivalence.selftest.ts. */
-        const fromDb = await selectPublicJobsPage(query);
-        if (fromDb) return fromDb;
+        /* WHICH STORE — decided server-side by JOB_READ_FROM_HIRING_JOBS, which
+           defaults to app_state. See lib/server/db/public-jobs-source.ts. No
+           request input can select a source. */
+        const source = jobReadSource();
+        const fromDb = await readPublicJobsPage(query, source);
 
-        /* Mongo unconfigured, or the document is not shaped for a projection.
-           Unchanged behaviour, unchanged cost — never an empty result. */
+        if (fromDb) {
+          /* Verification is SAMPLED and never blocks the answer. Running both
+             stores on every request would double the cost of the endpoint this
+             migration exists to make cheap; running neither would make "dual
+             read" a claim rather than a check. The response returned is always
+             the selected source's — a mismatch is a signal to investigate, not
+             a licence to serve the other store's answer. */
+          const rate = verifySampleRate();
+          if (rate > 0 && Math.random() < rate) {
+            const other: JobReadSource = source === 'hiring_jobs' ? 'app_state' : 'hiring_jobs';
+            void readPublicJobsPage(query, other)
+              .then((alt) => {
+                const a = source === 'app_state' ? fromDb : alt;
+                const b = source === 'app_state' ? alt : fromDb;
+                const verdict = comparePages(a, b);
+                if (!verdict.match) {
+                  /* Loud, structured, and free of job or user content. */
+                  console.error('[jobs:public] DUAL-READ MISMATCH', {
+                    kinds: verdict.kinds,
+                    query: describeQuery(query),
+                    ...verdict.detail,
+                  });
+                }
+              })
+              .catch((error) => {
+                console.error('[jobs:public] dual-read verification failed', error);
+              });
+          }
+          return fromDb;
+        }
+
+        /* ═══ THE SELECTED SOURCE COULD NOT ANSWER ═══
+
+           There is NO automatic fallback when hiring_jobs is the selected
+           source. Quietly answering from app_state would make a broken
+           collection path invisible — the endpoint would look healthy while the
+           thing being rolled out was failing, which is precisely the signal a
+           controlled rollout exists to surface. It would also mean the flag no
+           longer describes what is serving traffic.
+
+           Rollback is the FLAG, not a hidden runtime path:
+           JOB_READ_FROM_HIRING_JOBS=false restores app_state on the next
+           request. So this throws and becomes the 500 below — a failure the
+           operator can see, never an empty page dressed as success. */
+        if (source === 'hiring_jobs') {
+          throw new Error('hiring_jobs read returned no result — refusing to serve app_state silently');
+        }
+
+        /* app_state is the selected source, and the projection could not run —
+           Mongo unconfigured, or the document not shaped for it. This is the
+           behaviour that predates the migration and is not a cross-source
+           fallback: it is the same store, read the original way. A read that
+           genuinely fails still throws from getHiringJobsCached. */
         return publicJobs(await getHiringJobsCached(), query);
       },
     );

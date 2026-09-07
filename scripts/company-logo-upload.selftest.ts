@@ -371,9 +371,24 @@ async function main() {
     }
     check('the public map exposes url only — no storage path, no uploader',
       !/(storageKey|uploadedBy|r2|bucket)/i.test(src('app/api/company-logos/route.ts')));
-    check('onboarding renders through the shared resolver, so it inherits uploads',
-      /components\/jobs\/company\/CompanyLogo/.test(src('components/onboarding/WelcomeStep.tsx'))
-      && /components\/jobs\/company\/CompanyLogo/.test(src('components/onboarding/JobPreviewStep.tsx')));
+    /* Onboarding's Welcome step now renders <TrustedCompanies/> — the SAME
+       marquee the homepage uses — and JobPreviewStep deliberately lists no jobs
+       at all, so it has no company mark to draw. Both were intentional product
+       changes, so requiring a CompanyLogo import here pinned a component that
+       neither screen uses any more.
+
+       THE PROPERTY IS UNCHANGED and is what is asserted instead: an operator's
+       uploaded logo still wins wherever a company mark is drawn, because the
+       marquee resolves through getCompanyLogo, which consults the uploaded
+       overrides BEFORE the curated registry. */
+    check('onboarding draws company marks through the same marquee as the homepage',
+      /components\/home\/TrustedCompanies/.test(src('components/onboarding/WelcomeStep.tsx')));
+    check('that marquee resolves logos through the shared resolver',
+      /getCompanyLogo\(/.test(src('lib/server/hiring-companies.ts')));
+    check('and an uploaded override still beats the curated registry',
+      /const uploaded = overrides\[key\];[\s\S]{0,120}return REGISTRY\[key\]/.test(src('lib/company-logos.ts')));
+    check('the job preview lists no jobs, so it renders no company mark',
+      !/<ul/.test(src('components/onboarding/JobPreviewStep.tsx')));
   }
 
   console.log(`\n${failures === 0 ? '✅' : '❌'} ${checks - failures}/${checks} checks passed`);

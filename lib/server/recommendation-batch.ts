@@ -32,8 +32,19 @@ import { buildRecProfile, hasProfileSignals } from '@/lib/server/job-recommend';
 import { mergeResumeSignals } from '@/lib/server/recommend-profile';
 import { recommendedSet, scoreRecommendations } from '@/lib/server/recommendation-compute';
 
-/** Bumped when a change to the scorer invalidates every stored result. */
-export const SCORER_VERSION = 1;
+/* SCORER_VERSION, freshness and the replace guard live in the PERSISTENCE
+   module and are re-exported here. They were briefly defined in both places,
+   with subtly different rules — this module compared only `profileVersion`
+   while the store also weighs corpus and scorer. Two functions of the same name
+   disagreeing about what "newer" means is precisely how a stale worker ends up
+   overwriting a fresh result, so there is now one definition. */
+export {
+  SCORER_VERSION, mayReplace, freshnessOf, type Freshness,
+} from '@/lib/server/db/recommendation-results';
+import {
+  SCORER_VERSION, freshnessOf as freshnessOfImported,
+  type StoredRecommendation,
+} from '@/lib/server/db/recommendation-results';
 
 /** The fields the scorer needs, plus applyUrl for the card. Twelve, and
     `description` is NOT among the droppable ones — see ranking-parity. */
@@ -45,11 +56,9 @@ export const REC_JOB_FIELDS = [
 
 /** One persisted recommendation. Canonical job data stays in `hiring_jobs`;
     this stores the SCORING outcome, not a copy of the posting. */
-export interface StoredRecommendation {
-  jobId: string;
-  score: number;
-  reasons: string[];
-}
+/* Re-exported from the persistence layer so there is ONE definition of what a
+   stored recommendation contains. */
+export type { StoredRecommendation } from '@/lib/server/db/recommendation-results';
 
 export interface RecommendationRecord {
   userId: string;
@@ -119,11 +128,22 @@ export function computeRecordForProfile(
        It must never be confused with a failed computation — see the status
        field, which names which of the two happened. */
     status: showMatch ? 'ready' : 'empty_profile',
-    results: recommended.map((s) => ({
-      jobId: String(s.job.id),
-      score: s.score,
-      reasons: Array.isArray(s.job.matchReasons) ? (s.job.matchReasons as string[]) : [],
-    })),
+    /* The FULL match payload — see StoredRecommendation. Fields the live card
+       omits when empty are omitted here too, so a reconstructed card and a live
+       one serialise identically rather than merely carrying the same score. */
+    results: recommended.map((s) => {
+      const job = s.job as Record<string, unknown>;
+      const entry: StoredRecommendation = {
+        jobId: String(job.id),
+        score: s.score,
+        reasons: Array.isArray(job.matchReasons) ? (job.matchReasons as string[]) : [],
+      };
+      if (typeof job.matchSummary === 'string') entry.summary = job.matchSummary;
+      if (Array.isArray(job.matchFactors)) entry.factors = job.matchFactors as StoredRecommendation['factors'];
+      if (Array.isArray(job.matchedSkills)) entry.matchedSkills = job.matchedSkills as string[];
+      if (Array.isArray(job.missingSkills)) entry.missingSkills = job.missingSkills as string[];
+      return entry;
+    }),
     total,
   };
 }
@@ -177,30 +197,12 @@ export async function runRecommendationBatch(
 /**
  * Is a stored record still current?
  *
- * Version comparison, not timestamps: a batch that started against profile
- * version 10 must never overwrite a result generated from version 11, and
- * wall-clock ordering cannot prove that ordering across processes.
+ * Thin wrapper over the store's `freshnessOf`, kept so existing callers read
+ * naturally. The DECISION lives in one place.
  */
 export function isRecordCurrent(
-  record: Pick<RecommendationRecord, 'profileVersion' | 'corpusVersion' | 'scorerVersion'> | null,
+  record: { profileVersion: number; corpusVersion: string; scorerVersion: number } | null,
   expected: { profileVersion: number; corpusVersion: string },
 ): boolean {
-  if (!record) return false;
-  return record.profileVersion === expected.profileVersion
-    && record.corpusVersion === expected.corpusVersion
-    && record.scorerVersion === SCORER_VERSION;
-}
-
-/**
- * May a freshly computed record replace what is stored?
- *
- * Refuses to move a profile version BACKWARDS. A slow batch finishing after a
- * newer one must discard its work rather than resurrect a stale ranking.
- */
-export function mayReplace(
-  existing: Pick<RecommendationRecord, 'profileVersion'> | null,
-  incoming: Pick<RecommendationRecord, 'profileVersion'>,
-): boolean {
-  if (!existing) return true;
-  return incoming.profileVersion >= existing.profileVersion;
+  return freshnessOfImported(record, expected) === 'fresh';
 }

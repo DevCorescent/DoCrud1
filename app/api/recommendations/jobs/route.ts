@@ -18,6 +18,9 @@ import { buildRecProfile, hasProfileSignals, isRecommended, recommendMatch, type
 import { mergeResumeSignals } from '@/lib/server/recommend-profile';
 import { isValidApplyUrl } from '@/lib/jobs-ui';
 import { registerRecommendationCache, rememberViewerCount } from '@/lib/server/recommendation-cache';
+import { readFreshRecommendationRecord, renderPrecomputed } from '@/lib/server/db/recommendation-read-source';
+import { selectPublishedJobsByIds, readHiringCorpusVersion } from '@/lib/server/db/hiring-jobs-collection';
+import { corpusVersionKey } from '@/lib/server/recommendation-refresh';
 import { getHiringApplications } from '@/lib/server/hiring';
 import { personalizedPage } from '@/lib/server/job-api/personalized';
 import { buildEligibilityProfile } from '@/lib/server/job-sources/eligibility';
@@ -72,12 +75,62 @@ const refreshing = new Map<string, Promise<void>>();
  * The ranking pass. Identical to what the route always did — extracted only so
  * a background refresh can run it without duplicating a line of logic.
  */
+/**
+ * Serve this scope from the precomputed store, or return null to compute live.
+ *
+ * Ordered BEFORE the corpus read on purpose. The whole point of the store is to
+ * avoid that read; loading ~5,276 postings and then rendering a stored ranking
+ * from them would cost exactly what it was built to save. So the record is
+ * settled first, and only the postings it names are fetched — a few hundred
+ * documents by _id.
+ *
+ * Every uncertainty returns null, which means "compute live". None of them
+ * means "no matches", and none of them is visible to the client.
+ */
+async function tryPrecomputed(
+  meId: string | null,
+  scope: 'row' | 'recommended',
+): Promise<RecsPayload | null> {
+  try {
+    const corpusVersion = corpusVersionKey(await readHiringCorpusVersion());
+    if (!corpusVersion) return null;
+
+    const versionFields = meId
+      ? await getProfileFields(meId, ['profileVersion']).catch(() => null)
+      : null;
+    const profileVersion = Number((versionFields as { profileVersion?: unknown } | null)?.profileVersion) || 0;
+
+    const record = await readFreshRecommendationRecord(meId, scope, { profileVersion, corpusVersion });
+    if (!record) return null;
+
+    const canonical = await selectPublishedJobsByIds(record.results.map((r) => r.jobId));
+    const rendered = renderPrecomputed(record, canonical as ReadonlyMap<string, Record<string, unknown>> | null);
+    if (!rendered) return null;
+
+    return { jobs: rendered.jobs as RecsPayload['jobs'], total: rendered.total };
+  } catch (error) {
+    /* A precomputed read must never be able to fail the request — the live
+       path below is always available and always correct. */
+    console.error('[recommendations] precomputed path errored; computing live', error);
+    return null;
+  }
+}
+
 async function computeRecommendations(
   meId: string | null,
   scope: 'row' | 'recommended',
 ): Promise<RecsPayload> {
     const config = await getFeedConfig();
     if (!config.jobs.enabled) return { jobs: [], total: 0 };
+
+    /* Phase 3.5 read cutover, default OFF. Null means the store could not
+       answer for certain, and the live computation below runs unchanged. */
+    const precomputed = await tryPrecomputed(meId, scope);
+    if (precomputed) {
+      cache.set(`${meId ?? 'anon'}:${scope}`, { payload: precomputed, ts: Date.now() });
+      if (meId) rememberViewerCount(meId, 'jobs', precomputed.total);
+      return precomputed;
+    }
 
     /* The job list and the viewer's profile are independent reads; they were
        being awaited one after the other. */

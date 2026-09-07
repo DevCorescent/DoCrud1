@@ -137,12 +137,18 @@ for (const [label, raw] of PROFILES) {
 /* ═══ 4. Stale-worker protection ════════════════════════════════════════ */
 
 {
-  const v10 = { profileVersion: 10 };
-  const v11 = { profileVersion: 11 };
+  /* Full version triples: the guard now weighs corpus and scorer as well as
+     profile, because it is the SAME function the persistence layer uses. */
+  const v10 = { profileVersion: 10, corpusVersion: 'c1', scorerVersion: SCORER_VERSION };
+  const v11 = { profileVersion: 11, corpusVersion: 'c1', scorerVersion: SCORER_VERSION };
   check('a newer result may replace an older one', mayReplace(v10, v11));
   check('a STALE worker cannot overwrite a newer result', !mayReplace(v11, v10));
   check('the same version may replace itself (a retry is safe)', mayReplace(v10, v10));
   check('a first write with nothing stored is allowed', mayReplace(null, v10));
+  check('with equal profiles, a newer corpus still wins',
+    mayReplace(v10, { ...v10, corpusVersion: 'c2' }));
+  check('and an older corpus does not',
+    !mayReplace({ ...v10, corpusVersion: 'c2' }, v10));
 
   const stored = { profileVersion: 10, corpusVersion: 'c1', scorerVersion: SCORER_VERSION };
   check('a record matching both versions is current',

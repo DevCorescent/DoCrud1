@@ -207,6 +207,58 @@ export async function selectPublishedJobDocById(
   }
 }
 
+/** What a recommendation card renders. LIST_PROJECTION plus `hiringUrgency`,
+    which the card shows and the list view does not. */
+const CARD_PROJECTION = {
+  _id: 0,
+  id: 1, title: 1, organizationName: 1, location: 1,
+  employmentType: 1, workMode: 1, preferredSkills: 1,
+  applyUrl: 1, createdAt: 1, hiringUrgency: 1,
+} as const;
+
+/**
+ * The postings named by a stored recommendation, and nothing else.
+ *
+ * This is what makes reading from the precomputed store worth doing. Rebuilding
+ * cards needs the CURRENT text of the ranked postings, but only of those — a
+ * few hundred documents by _id, not the ~5,276-document corpus whose read was
+ * measured at 145.6 s. Fetching the whole corpus to render a stored ranking
+ * would spend the entire saving the store exists to create.
+ *
+ * Still filtered by PUBLISHED, so a posting unpublished since it was scored is
+ * simply absent from the map and drops out of the rendered ranking rather than
+ * being served from a stale record.
+ *
+ * Returns null when the replica cannot answer — never a partial map, which the
+ * caller could not tell apart from "these postings are gone".
+ */
+export async function selectPublishedJobsByIds(
+  ids: ReadonlyArray<string>,
+): Promise<Map<string, HiringJobPosting> | null> {
+  if (!healthy) return null;
+  const db = await getMongoDb();
+  if (!db) return null;
+  const wanted = Array.from(new Set(ids.filter(Boolean)));
+  if (wanted.length === 0) return new Map();
+  try {
+    const docs = await db.collection(COL)
+      .find({ _id: { $in: wanted as never[] }, ...PUBLISHED }, { projection: CARD_PROJECTION })
+      .toArray();
+    const out = new Map<string, HiringJobPosting>();
+    for (const doc of docs) {
+      const job = strip(doc as Record<string, unknown>) as unknown as HiringJobPosting;
+      /* Keyed by the posting's own `id`, NOT by `_id` — the projection drops
+         `_id`, so keying on it would collapse every document onto one empty
+         key and silently return a single job. */
+      out.set(String((job as unknown as { id?: unknown }).id ?? ''), job);
+    }
+    out.delete('');
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Re-points the replica at what was just written to app_state.
  *

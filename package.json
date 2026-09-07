@@ -102,7 +102,13 @@
     "test:profile-version": "tsx scripts/profile-version.selftest.ts",
     "test:security-hardening": "tsx scripts/security-hardening.selftest.ts",
     "jobs:migrate": "tsx scripts/hiring-jobs-migrate.ts",
-    "jobs:dryrun": "tsx scripts/hiring-jobs-dryrun.ts"
+    "jobs:dryrun": "tsx scripts/hiring-jobs-dryrun.ts",
+    "test:recommendation-persistence": "tsx scripts/recommendation-persistence.selftest.ts",
+    "test:recommendation-equivalence": "tsx scripts/recommendation-equivalence.selftest.ts",
+    "test:recommendation-ats-equivalence": "tsx scripts/recommendation-ats-equivalence.selftest.ts",
+    "test:recommendation-storage-shape": "tsx scripts/recommendation-storage-shape.selftest.ts",
+    "test:recommendation-scheduler": "tsx scripts/recommendation-scheduler.selftest.ts",
+    "test:recommendation-read-cutover": "tsx scripts/recommendation-read-cutover.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

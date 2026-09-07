@@ -37,11 +37,31 @@ const individual = (id: string, email: string): User => ({
   id, email, name: `User ${id}`, role: 'user', accountType: 'individual',
 } as unknown as User);
 
-async function main() {
+/** Puts the repository's real data files back, however this suite exits. */
+let restoreAll: (() => Promise<void>) | null = null;
+
+async function main(): Promise<number> {
   const dir = path.join(process.cwd(), 'data');
   await fs.mkdir(dir, { recursive: true });
   const jobsFile = path.join(dir, 'hiring-jobs.json');
   const appsFile = path.join(dir, 'hiring-applications.json');
+
+  /* These are REAL repository files, not scratch space. This suite used to
+     overwrite them and then unlink them unconditionally, which deleted two
+     tracked files on every run and left the working tree dirty — the deletions
+     then had to be restored by hand before any commit. Snapshot first, restore
+     in a finally, and a file that did not exist beforehand is removed again. */
+  const snapshot = async (file: string) => fs.readFile(file, 'utf8').then(
+    (content) => ({ file, content }), () => ({ file, content: null as string | null }));
+  const restore = async (snap: { file: string; content: string | null }) => {
+    if (snap.content === null) await fs.unlink(snap.file).catch(() => {});
+    else await fs.writeFile(snap.file, snap.content);
+  };
+  const saved = await Promise.all([
+    snapshot(jobsFile), snapshot(appsFile), snapshot(path.join(dir, 'auth-rate-limits.json')),
+  ]);
+  restoreAll = async () => { for (const snap of saved) await restore(snap); };
+
   await fs.writeFile(jobsFile, '[]');
   await fs.writeFile(appsFile, '[]');
   invalidatePublishedHiringJobs();
@@ -181,13 +201,14 @@ async function main() {
 
   const otherAccount = await rateLimit('selftest:job-post:account:bob', policy);
   check('one account hitting the limit does not block another', otherAccount.allowed);
-  await fs.unlink(rateFile).catch(() => {});
-
-  await fs.unlink(jobsFile).catch(() => {});
-  await fs.unlink(appsFile).catch(() => {});
-
   console.log(`\n${checks - failures}/${checks} checks passed.`);
-  if (failures > 0) { console.log('SELF-TEST FAILED'); process.exit(1); }
+  /* Reported by RETURNING, not by process.exit — exiting here would skip the
+     restore below and delete the repository's data files on a failing run,
+     which is exactly the case where a clean working tree matters most. */
+  if (failures > 0) { console.log('SELF-TEST FAILED'); return 1; }
   console.log('SELF-TEST OK');
+  return 0;
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+main()
+  .then(async (code) => { await restoreAll?.(); process.exit(code); })
+  .catch(async (e) => { await restoreAll?.(); console.error(e); process.exit(1); });

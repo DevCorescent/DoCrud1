@@ -18,7 +18,7 @@ import { fingerprintJob } from '../lib/server/db/hiring-jobs-collection';
 import {
   saveReserveMs, SAVE_RESERVE_BASE_MS, SAVE_RESERVE_MAX_SHARE,
 } from '../lib/server/scraper-client';
-import { HIRING_JOBS_INDEXES } from './db-indexes-hiring-jobs.mjs';
+import { HIRING_JOBS_INDEXES, BUSINESS_PAGE_JOBS_INDEXES, INDEX_PLAN } from './db-indexes-hiring-jobs.mjs';
 
 let passed = 0, failed = 0;
 function check(label: string, cond: boolean) {
@@ -200,6 +200,51 @@ check('importing the file creates nothing — the runner is guarded',
   && /if \(!invokedDirectly\)/.test(IDXSCRIPT));
 check('createIndex is only reachable from the guarded runner',
   IDXSCRIPT.indexOf('function createIndexes') > IDXSCRIPT.indexOf('invokedDirectly'));
+
+/* ── Phase 4.1: the two evidence-backed indexes ───────────────────────────
+   Both were added because a MEASUREMENT said so, not because they sounded
+   useful — every index is paid for on every write. */
+
+check('the freshness probe has an index',
+  HIRING_JOBS_INDEXES.some((i: any) => i.options.name === 'published_freshness'));
+const freshness = HIRING_JOBS_INDEXES.find((i: any) => i.options.name === 'published_freshness') as any;
+check('it is a compound index on status and updatedAt',
+  freshness?.keys.status === 1 && freshness?.keys.updatedAt === -1);
+check('updatedAt descends, so max() is the FIRST key rather than the last',
+  freshness?.keys.updatedAt === -1);
+
+check('business_page_jobs has an index plan of its own',
+  Array.isArray(BUSINESS_PAGE_JOBS_INDEXES) && BUSINESS_PAGE_JOBS_INDEXES.length > 0);
+check('it indexes the status the freshness probe matches on',
+  BUSINESS_PAGE_JOBS_INDEXES.some((i: any) => i.keys.status === 1 && i.options?.name));
+
+check('every collection in the plan is named and non-empty',
+  INDEX_PLAN.every((p: any) => p.collection && Array.isArray(p.indexes) && p.indexes.length));
+check('both collections are covered',
+  INDEX_PLAN.map((p: any) => p.collection).sort().join(',') === 'business_page_jobs,hiring_jobs');
+check('every index in every collection is named, justified and costed',
+  INDEX_PLAN.every((p: any) => p.indexes.every((i: any) => i.options?.name && i.supports && i.cost)));
+
+/* No two indexes may share a name within a collection, and no two may share an
+   identical key pattern — a duplicate would be a second copy of the same index
+   paid for on every write. */
+for (const { collection, indexes } of INDEX_PLAN as any[]) {
+  const names = indexes.map((i: any) => i.options.name);
+  check(`${collection}: index names are unique`, new Set(names).size === names.length);
+  const shapes = indexes.map((i: any) => JSON.stringify(i.keys));
+  check(`${collection}: no duplicate key pattern`, new Set(shapes).size === shapes.length);
+}
+
+/* The runner ADDS. It must never drop, rebuild or replace, and it must notice
+   if an index it did not touch disappears. */
+check('the runner walks every collection in the plan',
+  /for \(const \{ collection, indexes \} of INDEX_PLAN\)/.test(IDXSCRIPT));
+check('nothing is ever dropped or rebuilt',
+  !/dropIndex|dropIndexes|reIndex|drop\(\)/.test(IDXSCRIPT));
+check('a vanished pre-existing index stops the run',
+  /indexes disappeared/.test(IDXSCRIPT) && /process\.exit\(1\)/.test(IDXSCRIPT));
+check('creation stays idempotent — createIndex only, no delete-then-create',
+  /col\.createIndex\(idx\.keys/.test(IDXSCRIPT));
 
 /* ═══ 9. The dry-run cannot write ════════════════════════════════════════ */
 

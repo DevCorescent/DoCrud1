@@ -71,6 +71,42 @@ export const HIRING_JOBS_INDEXES = [
     supports: 'ingestion upserts locating an existing posting by provenance',
     cost: 'low; write-path only',
   },
+  {
+    keys: { status: 1, updatedAt: -1 },
+    options: { name: 'published_freshness' },
+    supports: 'readHiringCorpusVersion() max(updatedAt) — the freshness probe '
+      + 'every recommendation read and every scheduler pass performs',
+    cost: 'low: two scalar fields',
+    /* MEASURED, not assumed. Without this the max is obtained by scanning the
+       whole published keyspace: explain reported totalKeysExamined=5276 to
+       return ONE document, 145 ms of execution. A descending compound index
+       answers it from the first key. */
+  },
+];
+
+/**
+ * Business Page jobs are merged into the same public corpus, and the freshness
+ * probe aggregates over them too — but this collection has only its `_id`
+ * index, so that `$match: { status: 'open' }` is a full collection scan today.
+ *
+ * It holds 3 documents, so the scan is currently free. That is precisely why it
+ * is worth fixing now: the cost is invisible until the collection grows, and
+ * the probe runs on every recommendation read.
+ */
+export const BUSINESS_PAGE_JOBS_INDEXES = [
+  {
+    keys: { status: 1 },
+    options: { name: 'open_status' },
+    supports: "readHiringCorpusVersion() $match { status: 'open' }, and the "
+      + 'business-jobs feed merge in lib/server/hiring.ts',
+    cost: 'low: one scalar field on a small collection',
+  },
+];
+
+/** Every collection this script manages, so the runner has one list to walk. */
+export const INDEX_PLAN = [
+  { collection: 'hiring_jobs', indexes: HIRING_JOBS_INDEXES },
+  { collection: 'business_page_jobs', indexes: BUSINESS_PAGE_JOBS_INDEXES },
 ];
 
 /* ── Runner ───────────────────────────────────────────────────────────────
@@ -94,12 +130,14 @@ if (!invokedDirectly) {
 function runPlan() {
 const apply = process.argv.includes('--apply');
 
-console.log(`hiring_jobs index plan — ${HIRING_JOBS_INDEXES.length} indexes\n`);
-for (const idx of HIRING_JOBS_INDEXES) {
-  console.log(`  ${idx.options.name}`);
-  console.log(`    keys     : ${JSON.stringify(idx.keys)}`);
-  console.log(`    supports : ${idx.supports}`);
-  console.log(`    cost     : ${idx.cost}\n`);
+for (const { collection, indexes } of INDEX_PLAN) {
+  console.log(`${collection} index plan — ${indexes.length} indexes\n`);
+  for (const idx of indexes) {
+    console.log(`  ${idx.options.name}`);
+    console.log(`    keys     : ${JSON.stringify(idx.keys)}`);
+    console.log(`    supports : ${idx.supports}`);
+    console.log(`    cost     : ${idx.cost}\n`);
+  }
 }
 console.log('  NOT created: a text index — see the note at the top of this file.\n');
 
@@ -139,38 +177,51 @@ async function createIndexes() {
   const client = new MongoClient(uri);
   await client.connect();
   const db = client.db(process.env.MONGODB_DB || undefined);
-  const col = db.collection('hiring_jobs');
-
-  console.log(`Creating indexes on ${db.databaseName}.hiring_jobs\n`);
-  const before = new Set((await col.indexes()).map((i) => i.name));
 
   let created = 0, already = 0;
-  for (const idx of HIRING_JOBS_INDEXES) {
-    const t0 = Date.now();
-    try {
-      /* `background: true` is a no-op on modern MongoDB (index builds no longer
-         block readers or writers) but is harmless and explicit about intent. */
-      const name = await col.createIndex(idx.keys, { ...idx.options, background: true });
-      const ms = Date.now() - t0;
-      if (before.has(name)) { already += 1; console.log(`  = ${name} (already present, ${ms}ms)`); }
-      else { created += 1; console.log(`  + ${name} created in ${ms}ms`); }
-    } catch (err) {
-      console.error(`  ! ${idx.options.name} FAILED: ${err.message}`);
+  for (const { collection, indexes } of INDEX_PLAN) {
+    const col = db.collection(collection);
+    console.log(`Creating indexes on ${db.databaseName}.${collection}\n`);
+    /* Read BEFORE creating, so "already present" is decided by what existed
+       rather than by createIndex's return value alone. */
+    const before = new Set((await col.indexes()).map((i) => i.name));
+
+    for (const idx of indexes) {
+      const t0 = Date.now();
+      try {
+        /* `createIndex` is idempotent: an identical definition is a no-op, so
+           this script is safe to run repeatedly. Nothing here drops, replaces
+           or rebuilds an existing index. */
+        const name = await col.createIndex(idx.keys, { ...idx.options, background: true });
+        const ms = Date.now() - t0;
+        if (before.has(name)) { already += 1; console.log(`  = ${name} (already present, ${ms}ms)`); }
+        else { created += 1; console.log(`  + ${name} created in ${ms}ms`); }
+      } catch (err) {
+        console.error(`  ! ${collection}.${idx.options.name} FAILED: ${err.message}`);
+        await client.close();
+        process.exit(1);
+      }
+    }
+
+    const after = await col.indexes();
+    /* Every index that existed before must still exist. This script adds; it
+       never removes, and a surprise removal should stop the run loudly. */
+    const lost = [...before].filter((n) => !after.some((i) => i.name === n));
+    if (lost.length) {
+      console.error(`  ! ${collection}: indexes disappeared: ${lost.join(', ')}`);
       await client.close();
       process.exit(1);
     }
+    console.log(`  ${collection} now has ${after.length} indexes:`);
+    for (const i of after) console.log(`    ${i.name} ${JSON.stringify(i.key)}`);
+
+    const stats = await db.command({ collStats: collection }).catch(() => null);
+    if (stats) {
+      console.log(`  total index size: ${(stats.totalIndexSize / 1048576).toFixed(2)} MB\n`);
+    }
   }
 
-  const after = await col.indexes();
-  console.log(`\n  created ${created}, already present ${already}`);
-  console.log(`  collection now has ${after.length} indexes:`);
-  for (const i of after) console.log(`    ${i.name} ${JSON.stringify(i.key)}`);
-
-  const stats = await db.command({ collStats: 'hiring_jobs' }).catch(() => null);
-  if (stats) {
-    console.log(`\n  total index size: ${(stats.totalIndexSize / 1048576).toFixed(2)} MB`);
-    console.log(`  index sizes: ${JSON.stringify(stats.indexSizes)}`);
-  }
+  console.log(`created ${created}, already present ${already}`);
   await client.close();
   process.exit(0);
 }

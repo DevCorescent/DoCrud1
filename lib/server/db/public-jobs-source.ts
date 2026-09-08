@@ -3,8 +3,9 @@
  *
  * ═══ THE FLAG ═══
  *
- *     JOB_READ_FROM_HIRING_JOBS=true    read hiring_jobs
- *     anything else (or absent)         read app_state   ← DEFAULT
+ *     hiring_jobs is now the ONLY source. JOB_READ_FROM_HIRING_JOBS is ignored:
+ *     app_state stopped receiving job writes at the Phase 2.6+2.7E cutover, so
+ *     selecting it would serve a frozen corpus.
  *
  * Server-side only, and read from the environment rather than from a request:
  * no query parameter, header or body can select a store. That is deliberate —
@@ -34,7 +35,20 @@ export type JobReadSource = 'app_state' | 'hiring_jobs';
 
 /** Exactly "true" enables it. Everything else, including absence, is OFF. */
 export function jobReadSource(): JobReadSource {
-  return process.env.JOB_READ_FROM_HIRING_JOBS === 'true' ? 'hiring_jobs' : 'app_state';
+  /* ═══ THE FLAG IS OVER ═══
+     Phase 2.6+2.7E made hiring_jobs canonical and REMOVED the app_state job
+     write. app_state still holds a ~12 MB job document in production, but it is
+     frozen at the moment of cutover: no create, edit, unpublish or deletion has
+     reached it since.
+     Reading it would therefore serve a corpus that silently stopped changing —
+     a public feed that looks healthy and is months out of date. That is a worse
+     failure than an error, because nothing surfaces it.
+     So the source is no longer selectable. The environment variable is ignored
+     rather than honoured, because honouring `false` now means serving stale
+     data, and a rollback switch that points at a dead store is not a rollback.
+     Rolling back requires re-materialising app_state first — see
+     scripts/db-rebalance-job-order.mjs and the 2.7D rollback contract. */
+  return 'hiring_jobs';
 }
 
 /** Sampling rate for dual-read verification. 0 disables it entirely. */

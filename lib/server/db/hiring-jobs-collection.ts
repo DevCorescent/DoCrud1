@@ -104,9 +104,12 @@ export function hiringJobsCollectionUsable(): boolean {
   return healthy;
 }
 
-/** Marks the replica untrusted, sending every read back to app_state. */
+/** Marks the collection untrusted for the projection-based readers below.
+    Since Phase 2.6+2.7E there is NO app_state fallback — the canonical reader
+    throws instead — so the old wording would send an operator looking for a
+    fallback that no longer exists. */
 export function markHiringJobsCollectionStale(reason: string) {
-  if (healthy) console.warn(`[hiring_jobs] falling back to app_state: ${reason}`);
+  if (healthy) console.warn(`[hiring_jobs] collection marked untrusted: ${reason}`);
   healthy = false;
 }
 
@@ -173,6 +176,34 @@ const LIST_PROJECTION = {
  * more here than anywhere, because the corpus this returns is what write paths
  * reconcile against.
  */
+/**
+ * ONE job by id, any status. The targeted counterpart to selectAllJobDocs.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * Ownership validation, employer job detail and the applicant/contact routes
+ * all needed a single posting and were reading the ENTIRE corpus to find it —
+ * `(await getHiringJobs()).find(j => j.id === jobId)`. That was tolerable when
+ * the corpus lived in one already-loaded document. Against a per-document
+ * collection it means fetching every job to answer a question about one, which
+ * at 100K is ~150 MB pulled into Node per request.
+ *
+ * `_id` is the primary key, so this is a single indexed lookup regardless of
+ * corpus size.
+ *
+ * NO STATUS FILTER, deliberately: employers manage drafts and closed postings,
+ * and `selectPublishedJobDocById` (which does filter) would make those
+ * invisible to their owner. Callers apply their own visibility rules, exactly
+ * as they did when scanning the full array.
+ */
+export async function selectJobDocById(id: string): Promise<HiringJobPosting | null> {
+  if (!id) return null;
+  const db = await getMongoDb();
+  if (!db) throw new Error('canonical job store unavailable: no database');
+  const doc = await db.collection(COL).findOne({ _id: id as never });
+  return doc ? (strip(doc as Record<string, unknown>) as unknown as HiringJobPosting) : null;
+}
+
 export async function selectAllJobDocs(): Promise<HiringJobPosting[]> {
   const db = await getMongoDb();
   if (!db) throw new Error('canonical job store unavailable: no database');

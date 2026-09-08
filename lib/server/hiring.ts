@@ -9,7 +9,7 @@ import {
 import { invalidateRecommendationCaches } from '@/lib/server/recommendation-cache';
 import { invalidateHiringCompanies } from '@/lib/server/hiring-companies';
 import { writeHiringJobs, retireHiringJobById } from '@/lib/server/hiring-write';
-import { selectAllJobDocs } from '@/lib/server/db/hiring-jobs-collection';
+import { selectAllJobDocs, selectJobDocById } from '@/lib/server/db/hiring-jobs-collection';
 import { invalidateNamespaces } from '@/lib/server/cache';
 import {
   countPublishedJobs, mirrorPublishedJobs, readHiringCorpusVersion,
@@ -578,8 +578,9 @@ export async function assertCanManageHiringJob(
   actor: User,
   jobId: string,
 ): Promise<JobOwnershipResult> {
-  const jobs = await getHiringJobs();
-  const job = jobs.find((entry) => entry.id === jobId);
+  /* ONE indexed lookup. This used to read the whole corpus to find a single
+     posting, which is O(corpus) per authorization check. */
+  const job = await selectJobDocById(jobId);
   /* A job the actor may not touch is reported as 403 rather than 404: the id
      came from them, so its existence is not a secret worth protecting, and a
      404 here would be misleading during debugging. */
@@ -635,7 +636,6 @@ export async function upsertHiringJob(
   actor: User,
   payload: Partial<HiringJobPosting> & { title: string; description: string; minimumAtsScore: number },
 ) {
-  const jobs = await getHiringJobs();
   const now = new Date().toISOString();
   const jobId = payload.id || `job-${Date.now()}`;
 
@@ -643,7 +643,9 @@ export async function upsertHiringJob(
      arbitrary `id` rewrote someone else's posting and transferred ownership to
      the caller. Throwing here covers every caller — the Hiring Desk and the
      marketplace composer alike — rather than trusting each route to remember. */
-  const existing = payload.id ? jobs.find((entry) => entry.id === payload.id) : undefined;
+  /* ONE lookup for the posting being edited, rather than the whole corpus.
+     A create looks nothing up at all. */
+  const existing = payload.id ? await selectJobDocById(payload.id) : undefined;
   if (payload.id && !existing) throw new Error('Job not found.');
   if (existing && !userOwnsHiringJob(actor, existing)) {
     throw new Error('You can only manage jobs you posted.');

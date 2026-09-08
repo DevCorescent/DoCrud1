@@ -31,32 +31,25 @@ const page = (over: Partial<{ items: Record<string, unknown>[]; page: number; pa
   page: 1, pageSize: 20, total: 2, ...over,
 });
 
-/* ═══ 1–4. The flag ══════════════════════════════════════════════════════ */
+/* ═══ 1–4. The source is no longer selectable ════════════════════════════
+   Phase 2.6+2.7E removed the app_state job write, so app_state is frozen at
+   the cutover. Honouring a flag that selects it would serve a corpus that
+   silently stopped changing — worse than an error, because nothing surfaces
+   it. These checks are STRONGER than the ones they replace: where those
+   verified the flag switched correctly, these verify it cannot switch at all. */
 
 const original = process.env.JOB_READ_FROM_HIRING_JOBS;
 try {
   delete process.env.JOB_READ_FROM_HIRING_JOBS;
-  check('the flag DEFAULTS to app_state when absent', jobReadSource() === 'app_state');
-
-  process.env.JOB_READ_FROM_HIRING_JOBS = 'true';
-  check('exactly "true" selects hiring_jobs', jobReadSource() === 'hiring_jobs');
-
-  process.env.JOB_READ_FROM_HIRING_JOBS = 'false';
-  check('"false" selects app_state', jobReadSource() === 'app_state');
-
-  for (const bad of ['TRUE', 'True', '1', 'yes', 'on', '', ' true', 'hiring_jobs']) {
-    process.env.JOB_READ_FROM_HIRING_JOBS = bad;
-    check(`a malformed value ${JSON.stringify(bad)} is treated as OFF`, jobReadSource() === 'app_state');
+  check('with the variable absent the source is hiring_jobs', jobReadSource() === 'hiring_jobs');
+  for (const value of ['false', 'app_state', '0', '', 'no', 'off', 'TRUE', 'true', '1']) {
+    process.env.JOB_READ_FROM_HIRING_JOBS = value;
+    check(`"${value}" cannot select the frozen app_state store`, jobReadSource() === 'hiring_jobs');
   }
-
-  /* Rollback: on → off → on, with no other state involved. */
-  process.env.JOB_READ_FROM_HIRING_JOBS = 'true';
-  const on1 = jobReadSource();
-  process.env.JOB_READ_FROM_HIRING_JOBS = 'false';
-  const off = jobReadSource();
-  process.env.JOB_READ_FROM_HIRING_JOBS = 'true';
-  check('rollback is a single flag flip, and is reversible',
-    on1 === 'hiring_jobs' && off === 'app_state' && jobReadSource() === 'hiring_jobs');
+  check('no request input can select a source',
+    !/searchParams|headers|req\.|request\./.test(read('lib/server/db/public-jobs-source.ts')));
+  check('and the reason is recorded where the next reader will find it',
+    /frozen at the moment of cutover/.test(read('lib/server/db/public-jobs-source.ts')));
 } finally {
   if (original === undefined) delete process.env.JOB_READ_FROM_HIRING_JOBS;
   else process.env.JOB_READ_FROM_HIRING_JOBS = original;
@@ -64,8 +57,10 @@ try {
 
 check('the source is never selectable from a request',
   !/searchParams\.get\('source'\)|body\.source|headers\.get\('x-source'\)/.test(ROUTE + SOURCE));
-check('and the flag is read from the environment, server-side only',
-  /process\.env\.JOB_READ_FROM_HIRING_JOBS === 'true'/.test(SOURCE));
+/* The environment no longer decides the source at all — a stronger property
+   than "it is read server-side". */
+check('the source is a constant, not an environment lookup',
+  /return 'hiring_jobs';/.test(SOURCE) && !/process\.env\.JOB_READ_FROM_HIRING_JOBS ===/.test(SOURCE));
 check('no environment value can become a collection name',
   !/collection\(process\.env/.test(read('lib/server/db/public-jobs-query.ts')));
 

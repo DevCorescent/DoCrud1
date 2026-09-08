@@ -110,7 +110,8 @@
     "test:recommendation-scheduler": "tsx scripts/recommendation-scheduler.selftest.ts",
     "test:recommendation-read-cutover": "tsx scripts/recommendation-read-cutover.selftest.ts",
     "test:job-write-contract": "tsx scripts/job-write-contract.selftest.ts",
-    "test:job-write-equivalence": "tsx scripts/job-write-equivalence.selftest.ts"
+    "test:job-write-equivalence": "tsx scripts/job-write-equivalence.selftest.ts",
+    "bench:job-scale": "tsx scripts/job-scale.bench.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

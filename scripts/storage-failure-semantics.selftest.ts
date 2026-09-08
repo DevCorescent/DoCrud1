@@ -141,6 +141,25 @@ check('isPlanSafe was not weakened',
 check('getHiringJobs still returns [] for an absent key, not an error',
   /readJsonFileStrict<HiringJobPosting\[\]>\(hiringJobsPath, \[\]\)/.test(HIRING));
 
+/* ═══ Phase 2.7A — the same lesson, applied to the WRITE path ═════════════
+   Phase 2.4 stopped a failed READ from becoming []. The write path inherits
+   that guarantee only while the corpus it writes comes from a strict read: if
+   getHiringJobs() ever degrades to [] again, saveHiringJobs would write an
+   empty corpus and the mirror's $nin reconciliation would delete every job. */
+{
+  const HIRING = readFileSync('lib/server/hiring.ts', 'utf8');
+  check('the write funnel builds its corpus from a STRICT read',
+    /readJsonFileStrict<HiringJobPosting\[\]>\(hiringJobsPath/.test(HIRING));
+  check('no non-strict readJsonFile supplies the job corpus',
+    !/readJsonFile<HiringJobPosting\[\]>\(hiringJobsPath/.test(HIRING));
+
+  const COLLECTION = readFileSync('lib/server/db/hiring-jobs-collection.ts', 'utf8');
+  check('reconciliation is scoped to the corpus the funnel just wrote',
+    /deleteMany\(\{ _id: \{ \$nin: ids as never\[\] \} \}\)/.test(COLLECTION));
+  check('and a mirror failure marks the replica stale rather than reporting success',
+    /markHiringJobsCollectionStale/.test(COLLECTION));
+}
+
 console.log(`\n${passed} checks passed, ${failed} failed.`);
 if (failed > 0) { console.error('FAILED'); process.exit(1); }
 console.log('ALL CHECKS PASSED');

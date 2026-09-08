@@ -184,8 +184,17 @@ const opts = (over: Record<string, unknown> = {}) => ({
     check('the empty key is never served as a posting', /out\.delete\(''\);/.test(COLL));
     check('the card projection carries hiringUrgency, which the card renders',
       /const CARD_PROJECTION = \{[\s\S]*?hiringUrgency: 1,/.test(COLL));
+    /* Scoped to the FUNCTION, not to its position in the file. The previous
+       form matched the catch block only while `/** Re-points` happened to be
+       the next thing in the source, so inserting any function between them
+       broke CI without changing a line of behaviour. It passes at HEAD by
+       coincidence, which is worse than failing. */
+    const byIds = COLL.slice(COLL.indexOf('export async function selectPublishedJobsByIds'));
+    const byIdsBody = byIds.slice(0, byIds.indexOf('\n}\n') + 2);
     check('it returns null rather than a partial map on failure',
-      /catch \{\s*\n\s*return null;\s*\n\s*\}\s*\n\}\s*\n\s*\/\*\*\s*\n \* Re-points/.test(COLL));
+      /catch \{[\s\S]{0,80}return null;/.test(byIdsBody));
+    check('and the failure path cannot return a partially-filled map',
+      !/catch \{[\s\S]{0,120}return out;/.test(byIdsBody));
   }
 
   console.log(`\n${passed} checks passed, ${failed} failed.`);

@@ -53,6 +53,7 @@
 import { createHash } from 'crypto';
 import type { HiringJobPosting } from '@/types/document';
 import { getMongoDb } from '@/lib/server/database';
+import { derivePublicSortKeys } from '@/lib/server/db/public-sort-keys';
 
 const COL = 'hiring_jobs';
 const PUBLISHED = { status: 'published' } as const;
@@ -122,7 +123,10 @@ export function markHiringJobsCollectionStale(reason: string) {
  * byte for byte precisely to catch that.
  */
 function strip<T extends Record<string, unknown>>(doc: T): Omit<T, '_id' | 'migratedAt' | '_order' | '_fp'> {
-  const { _id: _a, migratedAt: _b, _order: _c, _fp: _d, ...rest } = doc as Record<string, unknown>;
+  const { _id: _a, migratedAt: _b, _order: _c, _fp: _d,
+    /* Persisted sort keys are bookkeeping, exactly like _order and _fp: they
+       must never reach an API response or change a job's shape. */
+    _skNewest: _e, _skSalary: _f, _skRelevance: _g, ...rest } = doc as Record<string, unknown>;
   return rest as Omit<T, '_id' | 'migratedAt' | '_order' | '_fp'>;
 }
 
@@ -404,7 +408,12 @@ export async function upsertHiringJobs(
       const fp = fingerprint(input.job);
       if (priors.get(id) === fp) { unchanged += 1; return; } // identical: no write
 
-      const set: Record<string, unknown> = { ...input.job, _id: id, [FP_FIELD]: fp };
+      /* The persisted public sort keys, derived from THIS document's own
+         fields by the single shared function. Stamped on every write so a
+         posting can never be indexed under a stale key. */
+      const set: Record<string, unknown> = {
+        ...input.job, _id: id, [FP_FIELD]: fp, ...derivePublicSortKeys(input.job),
+      };
       /* Only stamp a position when the caller supplied one, so an update never
          moves a posting that the caller had no opinion about. */
       if (typeof input.order === 'number') set[ORDER_FIELD] = input.order;
@@ -583,7 +592,10 @@ export async function mirrorPublishedJobs(
         ops.push({
           updateOne: {
             filter: { _id: id },
-            update: { $set: { ...job, _id: id, [ORDER_FIELD]: index, [FP_FIELD]: fp } },
+            /* Sort keys stamped here too: this writer is rollback-only, but a
+               rollback that produced keyless documents would break the feed
+               ordering it was meant to restore. */
+            update: { $set: { ...job, _id: id, [ORDER_FIELD]: index, [FP_FIELD]: fp, ...derivePublicSortKeys(job) } },
             upsert: true,
           },
         });

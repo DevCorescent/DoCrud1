@@ -50,6 +50,7 @@
  *     `$indexOfCP` treats the needle as literal text, so there is nothing to
  *     escape and nothing to exploit.
  */
+import { SK_NEWEST, SK_SALARY, SK_RELEVANCE } from '@/lib/server/db/public-sort-keys';
 import type { PublicJobQuery } from '@/lib/server/job-api/queries';
 import { pageParams } from '@/lib/server/job-api/queries';
 import { getMongoDb } from '@/lib/server/database';
@@ -119,6 +120,15 @@ const activeCond = (ref: FieldRef) => ({
 const ACTIVE = activeCond(ARRAY_REF);
 
 /** The sort key expression for each order publicJobs supports. */
+/** Which persisted field carries this sort mode's precomputed key. */
+function persistedSortField(sort: PublicJobQuery['sort']): string {
+  switch (sort) {
+    case 'salary': return SK_SALARY;
+    case 'relevance': return SK_RELEVANCE;
+    default: return SK_NEWEST;
+  }
+}
+
 function sortKeyExpr(sort: PublicJobQuery['sort'], ref: FieldRef = ARRAY_REF): { key: unknown; direction: 1 | -1 } {
   switch (sort) {
     /* (b.salaryMax ?? b.salaryMin ?? 0) - (a…) — descending numeric. */
@@ -321,7 +331,7 @@ export async function selectPublicJobsPage(query: PublicJobQuery = {}): Promise<
 export function buildPublicJobsCollectionPipeline(query: PublicJobQuery = {}): Record<string, unknown>[] {
   const conds = buildPublicJobsConditions(query, DOC_REF);
   const { pageSize, skip } = pageParams(query.page, query.pageSize);
-  const { key, direction } = sortKeyExpr(query.sort, DOC_REF);
+  const { direction } = sortKeyExpr(query.sort, DOC_REF);
 
   return [
     /* Indexable prefilter. Redundant with the $expr below on purpose: it is
@@ -329,8 +339,15 @@ export function buildPublicJobsCollectionPipeline(query: PublicJobQuery = {}): R
        because the $expr repeats it. */
     { $match: { status: 'published' } },
     { $match: { $expr: { $and: conds } } },
-    { $addFields: { [SORT_KEY]: key } },
-    { $sort: { [SORT_KEY]: direction, id: 1 } },
+    /* Phase 2.7H: sort on the PERSISTED key rather than computing one.
+       `$addFields` + a computed `$sort` forced MongoDB to derive a key for
+       every match and sort them all in memory — 1,493 ms at 100K to return
+       twenty rows, with published_newest/salary/relevance unused because no
+       index can serve a computed expression.
+       The stored key holds the identical coalesced value (see
+       derivePublicSortKeys), so the ordering is unchanged and the index can
+       now provide it. */
+    { $sort: { [persistedSortField(query.sort)]: direction, id: 1 } },
     {
       $facet: {
         items: [

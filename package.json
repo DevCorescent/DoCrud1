@@ -111,7 +111,8 @@
     "test:recommendation-read-cutover": "tsx scripts/recommendation-read-cutover.selftest.ts",
     "test:job-write-contract": "tsx scripts/job-write-contract.selftest.ts",
     "test:job-write-equivalence": "tsx scripts/job-write-equivalence.selftest.ts",
-    "bench:job-scale": "tsx scripts/job-scale.bench.ts"
+    "bench:job-scale": "tsx scripts/job-scale.bench.ts",
+    "test:public-sort-parity": "tsx scripts/public-sort-parity.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

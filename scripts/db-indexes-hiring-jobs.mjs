@@ -72,6 +72,24 @@ export const HIRING_JOBS_INDEXES = [
     cost: 'low; write-path only',
   },
   {
+    keys: { status: 1, _skNewest: -1, id: 1 },
+    options: { name: 'published_sk_newest' },
+    supports: 'sort=newest on the PERSISTED coalesced key, with the id tie-break',
+    cost: 'low: one short ISO string plus the id already carried by the others',
+  },
+  {
+    keys: { status: 1, _skSalary: -1, id: 1 },
+    options: { name: 'published_sk_salary' },
+    supports: 'sort=salary on the persisted key',
+    cost: 'low: one number',
+  },
+  {
+    keys: { status: 1, _skRelevance: -1, id: 1 },
+    options: { name: 'published_sk_relevance' },
+    supports: 'sort=relevance on the persisted key',
+    cost: 'low: one number',
+  },
+  {
     keys: { status: 1, updatedAt: -1 },
     options: { name: 'published_freshness' },
     supports: 'readHiringCorpusVersion() max(updatedAt) — the freshness probe '

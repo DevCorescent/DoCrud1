@@ -139,7 +139,6 @@ export default function WelcomeStep({
       </div>
 
       <div className="welcome-actions">
-        {/* Upload Resume button temporarily disabled
         <button
           type="button"
           className="primary-button"
@@ -156,7 +155,6 @@ export default function WelcomeStep({
           id="onboarding-resume"
           onChange={event => pick(event.target.files?.[0] ?? null)}
         />
-        */}
         {resume ? (
           <div className="resume-chosen">
             <Check aria-hidden="true" />
@@ -198,7 +196,7 @@ export default function WelcomeStep({
         <button type="button" className="continue-without-resume" onClick={onContinue}>
           {/* Once a résumé is attached the "without" is no longer true — this is
               then just the way on, reached by coming back to this step. */}
-          <span>Continue</span>
+          <span>{resume ? 'Continue' : 'Continue Without Resume'}</span>
           <ArrowRight aria-hidden="true" />
         </button>
 

@@ -260,6 +260,149 @@ export async function selectPublishedJobsByIds(
 }
 
 /**
+ * Phase 2.7B — write SOME jobs, without touching the rest.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * `saveHiringJobs()` takes the entire corpus and rewrites all of it to change
+ * one posting. app_state is a single MongoDB document now at 12.28 MB against a
+ * 16 MB hard limit, so that costs O(corpus) per write and puts a hard ceiling
+ * near 6,800 jobs. This writes only what changed: O(changed).
+ *
+ * ═══ WHAT MAKES IT DIFFERENT FROM THE MIRROR BELOW ═══
+ *
+ * `mirrorPublishedJobs` ends by deleting everything absent from its input. That
+ * is correct there — its input is the whole corpus by definition, so absence
+ * really does mean "gone". It would be catastrophic here: this function's input
+ * is ONE BATCH, and a scraper returning 40 of 5,276 jobs would delete 5,236
+ * live postings.
+ *
+ * SO THIS FUNCTION NEVER DELETES ANYTHING. Absence of evidence is not evidence
+ * of absence. Removal is a lifecycle decision made elsewhere, from positive
+ * evidence that a posting is gone.
+ *
+ * ═══ POSITION IS THE CALLER'S TO KNOW, NOT THIS FUNCTION'S TO GUESS ═══
+ *
+ * `_order` is a position within the whole corpus, and the corpus is exactly
+ * what a batch writer cannot see. It is not simply "append", either: an import
+ * PREPENDS new postings (`[...valid, ...current]` in job-import.ts). Inventing
+ * a position here would silently reorder the public feed, and leaving it unset
+ * would be worse — the list read sorts on `_order` ascending, and a missing
+ * value sorts FIRST, so every new job would jump to the top of the board.
+ *
+ * So `order` is required on insert and supplied by the caller, which is the
+ * same arrangement as today: planIngest decides positions, this only records
+ * them. On update the stored position is left alone unless a new one is given.
+ *
+ * ═══ NO app_state, ANYWHERE ═══
+ *
+ * Neither read nor written. That independence is the entire point of the phase.
+ */
+export interface UpsertJobInput {
+  job: Record<string, unknown>;
+  /** Corpus position. REQUIRED when the job is new — there is no safe default;
+      see the note above `upsertHiringJobs`. Optional for a known job, whose
+      stored position is then left untouched. */
+  order?: number;
+}
+
+export interface UpsertResult {
+  ok: boolean;
+  /** Documents written because they were new or their fingerprint changed. */
+  written: number;
+  /** Jobs whose fingerprint already matched — no write was issued at all. */
+  unchanged: number;
+  /** Individual write failures from an unordered bulk. Never silently dropped. */
+  failed: number;
+  error?: string;
+}
+
+export async function upsertHiringJobs(
+  inputs: ReadonlyArray<UpsertJobInput>,
+): Promise<UpsertResult> {
+  const empty: UpsertResult = { ok: true, written: 0, unchanged: 0, failed: 0 };
+  if (!Array.isArray(inputs)) throw new Error('upsertHiringJobs: inputs must be an array');
+  /* An empty batch is a no-op, NOT an instruction to empty the collection. */
+  if (inputs.length === 0) return empty;
+
+  const db = await getMongoDb();
+  if (!db) return { ok: false, written: 0, unchanged: 0, failed: inputs.length, error: 'no database' };
+  const col = db.collection(COL);
+
+  const ids: string[] = [];
+  for (const input of inputs) {
+    const id = String((input?.job as { id?: unknown })?.id ?? '');
+    /* A job with no id cannot be addressed. Skipping it silently is how a
+       corpus quietly loses postings, so it is refused outright. */
+    if (!id) throw new Error('upsertHiringJobs: a job without an id cannot be written');
+    ids.push(id);
+  }
+
+  try {
+    /* Fingerprints for THIS BATCH only — a bounded $in, never a full scan. */
+    const priors = new Map<string, string | undefined>(
+      (await col.find({ _id: { $in: ids as never[] } }, { projection: { _id: 1, [FP_FIELD]: 1 } }).toArray())
+        .map((d) => [String(d._id), (d as Record<string, unknown>)[FP_FIELD] as string | undefined]),
+    );
+
+    const ops: Array<Record<string, unknown>> = [];
+    let unchanged = 0;
+
+    inputs.forEach((input, i) => {
+      const id = ids[i];
+      const fp = fingerprint(input.job);
+      if (priors.get(id) === fp) { unchanged += 1; return; } // identical: no write
+
+      const set: Record<string, unknown> = { ...input.job, _id: id, [FP_FIELD]: fp };
+      /* Only stamp a position when the caller supplied one, so an update never
+         moves a posting that the caller had no opinion about. */
+      if (typeof input.order === 'number') set[ORDER_FIELD] = input.order;
+
+      const update: Record<string, unknown> = { $set: set };
+      /* A NEW document with no caller position is refused, not defaulted.
+         Phase 2.7C established that there is no safe default: planIngest
+         PREPENDS new postings (`jobs.unshift(record)`), so "append at the end"
+         — the obvious guess, and this function's first draft — puts a new job
+         at the opposite end of the board from where production puts it today.
+         Leaving `_order` unset is worse still: the list read sorts ascending
+         and a missing value sorts FIRST.
+         Both choices silently reorder the public feed, so the caller must say. */
+      if (typeof input.order !== 'number' && !priors.has(id)) {
+        throw new Error(
+          `upsertHiringJobs: job ${id} is new and no order was supplied — `
+          + 'position must come from the caller (see planIngest)',
+        );
+      }
+      /* A non-integer position would collide or sort unpredictably once the
+         gaps are halved; positions come from lib/server/db/job-order.ts, which
+         only ever produces integers. */
+      if (typeof input.order === 'number' && !Number.isSafeInteger(input.order)) {
+        throw new Error(`upsertHiringJobs: job ${id} was given a non-integer order`);
+      }
+
+      ops.push({ updateOne: { filter: { _id: id }, update, upsert: true } });
+    });
+
+    if (ops.length === 0) return { ok: true, written: 0, unchanged, failed: 0 };
+
+    /* Unordered: one bad document must not abandon the rest of the batch. */
+    const res = await col.bulkWrite(ops as never[], { ordered: false });
+    const written = (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
+    const failed = Math.max(0, ops.length - written);
+
+    healthy = true;
+    return { ok: true, written, unchanged, failed };
+  } catch (error) {
+    /* A write failure is REPORTED, never returned as a successful empty write.
+       Some documents may have been written before the failure, so the replica
+       is marked untrusted rather than assumed intact. */
+    const message = error instanceof Error ? error.message : 'bulk upsert failed';
+    markHiringJobsCollectionStale(`upsert failed: ${message}`);
+    return { ok: false, written: 0, unchanged: 0, failed: inputs.length, error: message };
+  }
+}
+
+/**
  * Re-points the replica at what was just written to app_state.
  *
  * Called from `saveHiringJobs()` — the single write funnel — AFTER app_state has

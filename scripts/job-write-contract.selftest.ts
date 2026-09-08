@@ -35,6 +35,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { fingerprintJob } from '../lib/server/db/hiring-jobs-collection';
+import { upsertHiringJobs } from '../lib/server/db/hiring-jobs-collection';
 
 let passed = 0, failed = 0;
 function check(label: string, cond: boolean) {
@@ -239,8 +240,12 @@ const job = (id: string, over: Record<string, unknown> = {}): Job =>
     /app_state remains the source of truth and is written FIRST[\s\S]{0,80}writeJsonFile\(hiringJobsPath, jobs\)/.test(HIRING));
   check('the mirror is still called from the funnel',
     /mirrorPublishedJobs\(jobs as unknown/.test(HIRING));
-  check('upsertHiringJobs does NOT exist yet — 2.7A must not implement it',
-    !/export (async )?function upsertHiringJobs/.test(HIRING + COLLECTION));
+  /* 2.7B: the writer now EXISTS. What must remain true is that no production
+     caller uses it — the cutover is 2.7D, deliberately separate. */
+  check('2.7B: upsertHiringJobs exists',
+    /export async function upsertHiringJobs/.test(COLLECTION));
+  check('2.7B: NO production caller has switched to it yet',
+    !/upsertHiringJobs/.test(HIRING + INGEST));
   check('no write feature flag was introduced',
     !/JOB_WRITE_TO_HIRING_JOBS/.test(HIRING + COLLECTION + INGEST));
 }
@@ -284,6 +289,51 @@ const job = (id: string, over: Record<string, unknown> = {}): Job =>
      the contract, recorded now; it cannot fail until the cutover happens. */
   check('M6: app_state is still canonical TODAY, and that is expected in 2.7A',
     /app_state remains the source of truth/.test(HIRING));
+}
+
+/* ═══ 9b. THE REAL upsertHiringJobs ════════════════════════════════════════
+   Structural assertions against the shipped implementation. It reaches a
+   database, so behaviour is exercised by the contract model above; these prove
+   the real function has the shape the contract requires. */
+{
+  const fn = COLLECTION.slice(COLLECTION.indexOf('export async function upsertHiringJobs'));
+  const body = fn.slice(0, fn.indexOf('\n}\n') + 2);
+
+  check('R1: it writes with an _id filter and upsert',
+    /filter: \{ _id: id \}, update, upsert: true/.test(body));
+  check('R2: it NEVER deletes — no deleteMany, deleteOne or $nin',
+    !/deleteMany|deleteOne|\$nin/.test(body));
+  check('R3: it never reads or writes app_state',
+    !/app_state|hiringJobsPath|writeJsonFile|readJsonFile|getHiringJobs/.test(body));
+  check('R4: an empty batch returns early and writes nothing',
+    /if \(inputs\.length === 0\) return empty/.test(body));
+  check('R5: a job without an id is refused, not skipped',
+    /a job without an id cannot be written/.test(body));
+  check('R6: unchanged fingerprints issue NO write',
+    /if \(priors\.get\(id\) === fp\) \{ unchanged \+= 1; return; \}/.test(body));
+  check('R7: the fingerprint it compared against is stamped',
+    /\[FP_FIELD\]: fp/.test(body));
+  check('R8: prior fingerprints are read with a bounded $in, not a full scan',
+    /_id: \{ \$in: ids as never\[\] \}/.test(body));
+  check('R9: the bulk write is unordered, so one bad document spares the rest',
+    /ordered: false/.test(body));
+  check('R10: a failure is reported, never returned as empty success',
+    /ok: false/.test(body) && /markHiringJobsCollectionStale/.test(body));
+  check('R11: failure does not claim documents were written',
+    /ok: false, written: 0/.test(body));
+  check('R12: order is stamped only when the caller supplies one',
+    /if \(typeof input\.order === 'number'\) set\[ORDER_FIELD\]/.test(body));
+  /* R13 was written in 2.7B asserting an "append at the end" default. Phase
+     2.7C proved that default WRONG — planIngest prepends, so appending puts a
+     new job at the opposite end of the board. The writer now refuses instead
+     of guessing, and this check follows the corrected behaviour. */
+  check('R13: a new document without a caller position is REFUSED, not defaulted',
+    /is new and no order was supplied/.test(body));
+  check('R13b: no invented ordering default survives',
+    !/MAX_SAFE_INTEGER/.test(body));
+  check('R14: it is exported for 2.7D to call', typeof upsertHiringJobs === 'function');
+  check('R15: no lock, no Redis — atomic per-document upserts only',
+    !/lock|redis|Redis/.test(body));
 }
 
 /* ═══ 10. Rollback contract ════════════════════════════════════════════════ */

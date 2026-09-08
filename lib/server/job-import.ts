@@ -12,7 +12,8 @@
  */
 import { createHash, randomUUID } from 'crypto';
 import { HiringJobPosting } from '@/types/document';
-import { getHiringJobs, saveHiringJobs } from '@/lib/server/hiring';
+import { getHiringJobs } from '@/lib/server/hiring';
+import { writeHiringJobs } from '@/lib/server/hiring-write';
 import { parseCsv } from '@/lib/server/csv';
 
 // Enums are the source of truth from HiringJobPosting (types/document.ts).
@@ -390,9 +391,15 @@ export async function importJobsFromCsv(
 
   let imported = 0;
   if (opts.commit && valid.length > 0) {
-    // Single bulk write for the whole batch.
-    const current = await getHiringJobs();
-    await saveHiringJobs([...valid, ...current]);
+    /* Phase 2.7E: only the imported rows are written, not the whole corpus.
+       They are all new and they PREPEND, exactly as `[...valid, ...current]`
+       did — expressed now as sparse positions, so nothing already stored is
+       renumbered. */
+    const write = await writeHiringJobs(
+      valid as unknown as Array<Record<string, unknown>>,
+      new Set(valid.map((j) => String((j as { id?: unknown }).id ?? ''))),
+    );
+    if (!write.ok) throw new Error(write.error || 'import could not be saved');
     imported = valid.length;
   }
 

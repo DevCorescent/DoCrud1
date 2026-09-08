@@ -236,8 +236,10 @@ const job = (id: string, over: Record<string, unknown> = {}): Job =>
 
 /* ═══ 8. STRUCTURAL — production must still be untouched ═══════════════════ */
 {
-  check('saveHiringJobs still writes app_state FIRST (unchanged in 2.7A)',
-    /app_state remains the source of truth and is written FIRST[\s\S]{0,80}writeJsonFile\(hiringJobsPath, jobs\)/.test(HIRING));
+  /* 2.6+2.7E cut over: the app_state job write is GONE. The INVARIANT this
+     replaced — one source of truth for the corpus — is now asserted directly. */
+  check('the app_state job write is gone — one source of truth',
+    !/writeJsonFile\(hiringJobsPath/.test(HIRING));
   check('the mirror is still called from the funnel',
     /mirrorPublishedJobs\(jobs as unknown/.test(HIRING));
   /* 2.7B: the writer now EXISTS. What must remain true is that no production
@@ -258,14 +260,21 @@ const job = (id: string, over: Record<string, unknown> = {}): Job =>
      writer whose input is one source's batch. */
   check('M4: the ingestion path contains no $nin reconciliation',
     !/\$nin/.test(INGEST));
+  /* Count CODE occurrences: retireHiringJob's doc comment names $nin to
+     explain what it deliberately does NOT do. */
+  const collectionCode = COLLECTION.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   check('M4: $nin appears ONLY in the whole-corpus mirror',
-    (COLLECTION.match(/\$nin/g) || []).length === 1);
+    (collectionCode.match(/\$nin/g) || []).length === 1);
   check('M4: and that one use is documented as corpus-scoped',
     /A job removed from app_state must disappear here too/.test(COLLECTION));
 
   /* M3: a failed read must throw, never degrade to []. */
-  check('M3: the corpus read is STRICT — failure throws, never returns []',
-    /readJsonFileStrict<HiringJobPosting\[\]>\(hiringJobsPath/.test(HIRING));
+  /* M3 unchanged in SUBSTANCE — a failed corpus read must never become [] —
+     but the mechanism moved from readJsonFileStrict to the canonical selector,
+     which throws rather than returning null. */
+  check('M3: a failed canonical corpus read THROWS, never returns []',
+    /return selectAllJobDocs\(\)/.test(HIRING)
+    && /if \(!db\) throw new Error\('canonical job store unavailable/.test(COLLECTION));
 
   /* M5: fingerprint change-detection must survive. */
   check('M5: the mirror still skips unchanged documents by fingerprint',
@@ -282,13 +291,16 @@ const job = (id: string, over: Record<string, unknown> = {}): Job =>
   /* M7: an empty batch must never reach the funnel as a corpus. */
   check('M7: ingestion returns early on an empty source',
     /if \(!Array\.isArray\(jobs\) \|\| jobs\.length === 0\) return emptyReport\(\)/.test(INGEST));
+  /* 2.7E moved the write to the canonical path; the GUARD is what matters and
+     it is unchanged — a run where nothing changed still writes nothing. */
   check('M7: ingestion writes only when something actually changed',
-    /if \(report\.created \|\| report\.updated\) await saveHiringJobs\(next\)/.test(INGEST));
+    /if \(report\.created \|\| report\.updated\) \{/.test(INGEST));
 
   /* M6: app_state must not quietly regain canonical status after 2.7E. This is
      the contract, recorded now; it cannot fail until the cutover happens. */
-  check('M6: app_state is still canonical TODAY, and that is expected in 2.7A',
-    /app_state remains the source of truth/.test(HIRING));
+  check('M6: app_state is NO LONGER canonical for jobs',
+    !/readJsonFileStrict<HiringJobPosting/.test(HIRING)
+    && !/writeJsonFile\(hiringJobsPath/.test(HIRING));
 }
 
 /* ═══ 9b. THE REAL upsertHiringJobs ════════════════════════════════════════
@@ -340,8 +352,12 @@ const job = (id: string, over: Record<string, unknown> = {}): Job =>
 {
   /* Until 2.7E, app_state holds the full corpus, so rollback is a flag. After
      2.7E it is not, and re-materialisation must exist BEFORE that ships. */
-  check('rollback is currently trivial: app_state still holds every job',
-    /writeJsonFile\(hiringJobsPath, jobs\)/.test(HIRING));
+  /* 2.6+2.7E changed this contract, exactly as 2.7D predicted it would: with
+     the app_state job write removed, rollback is no longer a flag flip and
+     REQUIRES re-materialisation from hiring_jobs. Asserted so the change is
+     recorded rather than discovered during an incident. */
+  check('rollback now REQUIRES re-materialisation — app_state no longer holds the corpus',
+    !/writeJsonFile\(hiringJobsPath, jobs\)/.test(HIRING));
   check('the mirror can reproduce a full corpus, so re-materialisation is possible',
     /deleteMany\(\{ _id: \{ \$nin: ids as never\[\] \} \}\)/.test(COLLECTION));
   /* NOT TESTABLE UNTIL 2.7B: that canonical persistence survives app_state

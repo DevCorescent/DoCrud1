@@ -184,8 +184,12 @@ check('a source that cannot answer returns null, never an empty page',
   /Promise<PublicJobsPage \| null>/.test(read('lib/server/db/public-jobs-query.ts')));
 check('a genuine read failure still becomes a 500',
   /catch \{[\s\S]{0,140}status: 500/.test(ROUTE));
-check('the Phase 2.4 strict corpus read is untouched',
-  /readJsonFileStrict<HiringJobPosting\[\]>/.test(read('lib/server/hiring.ts')));
+/* The Phase 2.4 GUARANTEE survives the cutover, by a new mechanism: the
+   canonical selector throws rather than returning an empty corpus. */
+check('a failed corpus read still throws rather than becoming []',
+  /return selectAllJobDocs\(\)/.test(read('lib/server/hiring.ts'))
+  && /throw new Error\('canonical job store unavailable/.test(
+    read('lib/server/db/hiring-jobs-collection.ts')));
 
 /* ═══ 9b. NO hidden cross-source fallback ═══════════════════════════════
    Quietly answering from app_state when hiring_jobs cannot would make a broken
@@ -204,10 +208,12 @@ check('a thrown read still becomes a 500, never an empty page',
 /* ═══ 10. Writes are unchanged ══════════════════════════════════════════ */
 
 const HIRING = read('lib/server/hiring.ts');
-check('app_state is still written FIRST by the one write funnel',
-  /await writeJsonFile\(hiringJobsPath, jobs\);/.test(HIRING));
-check('and the mirror still follows it',
-  HIRING.indexOf('writeJsonFile(hiringJobsPath') < HIRING.indexOf('mirrorPublishedJobs('));
+/* After the cutover there is no app_state job write at all — that is the
+   point of the phase, and its absence is what makes hiring_jobs canonical. */
+check('the app_state job write is gone',
+  !/writeJsonFile\(hiringJobsPath/.test(HIRING));
+check('reads and writes now share ONE store',
+  /return selectAllJobDocs\(\)/.test(HIRING));
 check('this phase deletes nothing',
   !/deleteMany|drop\(/.test(SOURCE) && !/deleteMany|drop\(/.test(ROUTE));
 

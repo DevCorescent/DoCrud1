@@ -60,8 +60,11 @@ check('saveHiringJobs returns the mirror outcome to its caller',
   /Promise<SaveHiringJobsResult>/.test(HIRING) && /mirrored: mirror\.ok/.test(HIRING));
 check('and a mirror failure is logged as an error, not swallowed',
   /MIRROR FAILED/.test(HIRING));
-check('but it still does not fail the save — app_state is already written',
-  /app_state remains the source of truth/.test(HIRING) || /remains authoritative/i.test(HIRING));
+/* saveHiringJobs is legacy/rollback code after the 2.6+2.7E cutover and has
+   zero production callers. What must remain true is that it no longer writes
+   app_state, so there is only ONE canonical store. */
+check('the legacy writer no longer maintains a second copy in app_state',
+  !/writeJsonFile\(hiringJobsPath/.test(HIRING));
 
 /* ═══ 3. The production bypass is closed ═════════════════════════════════ */
 
@@ -72,7 +75,7 @@ check('injecting saveJobs/loadJobs in production throws',
 check('it refuses loudly rather than silently ignoring the override',
   /test-only and must not be used in production/.test(INGEST));
 check('injection still works outside production, so tests keep their seam',
-  /options\.saveJobs \?\? saveHiringJobs/.test(INGEST));
+  /options\.saveJobs \?\? defaultSave/.test(INGEST));
 
 /* ═══ 4. Reconciliation planning — executed, not described ═══════════════ */
 

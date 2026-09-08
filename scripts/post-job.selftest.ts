@@ -9,7 +9,11 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 
-process.env.MONGODB_URI = '';
+/* Phase 2.7E-INFRA: canonical hiring-job persistence is MongoDB, so this suite
+   runs against an ISOLATED in-memory mongod rather than forcing file mode. The
+   developer's Atlas URI is replaced for the run and restored afterwards — it is
+   never read or connected to. */
+import { startTestMongo } from './support/mongo-test-env';
 
 import { RATE_POLICIES, rateLimit } from '@/lib/server/security/rate-limit';
 
@@ -39,8 +43,12 @@ const individual = (id: string, email: string): User => ({
 
 /** Puts the repository's real data files back, however this suite exits. */
 let restoreAll: (() => Promise<void>) | null = null;
+/** Shuts the isolated database down however this suite exits. */
+let stopMongo: (() => Promise<void>) | null = null;
 
 async function main(): Promise<number> {
+  const mongo = await startTestMongo();
+  stopMongo = mongo.stop;
   const dir = path.join(process.cwd(), 'data');
   await fs.mkdir(dir, { recursive: true });
   const jobsFile = path.join(dir, 'hiring-jobs.json');
@@ -210,5 +218,5 @@ async function main(): Promise<number> {
   return 0;
 }
 main()
-  .then(async (code) => { await restoreAll?.(); process.exit(code); })
-  .catch(async (e) => { await restoreAll?.(); console.error(e); process.exit(1); });
+  .then(async (code) => { await restoreAll?.(); await stopMongo?.(); process.exit(code); })
+  .catch(async (e) => { await restoreAll?.(); await stopMongo?.(); console.error(e); process.exit(1); });

@@ -39,7 +39,8 @@
  */
 import type { HiringJobPosting } from '@/types/document';
 import type { NormalizedJob, ProviderDeps } from '@/lib/server/job-scraper/types';
-import { getHiringJobs, saveHiringJobs } from '@/lib/server/hiring';
+import { getHiringJobs } from '@/lib/server/hiring';
+import { writeHiringJobs } from '@/lib/server/hiring-write';
 import { getAdapter, isPartnershipBlocked, listSourceConfigs, safeMessage } from './registry';
 import { normalizeSourceJob } from './normalize';
 import { planIngest, type IngestReport } from './ingest';
@@ -247,11 +248,23 @@ export async function runCanonicalIngestion(
   if (process.env.NODE_ENV === 'production' && (options.saveJobs || options.loadJobs)) {
     throw new Error(
       'run-ingestion: loadJobs/saveJobs injection is test-only and must not be used in production — '
-      + 'every production job write goes through saveHiringJobs()',
+      + 'every production job write goes through the canonical writer',
     );
   }
+  /* Filled when the write happens, so the default writer knows which postings
+     are new and therefore need a board position. */
+  let createdIds = new Set<string>();
+  const defaultSave = async (toWrite: HiringJobPosting[]) => {
+    const write = await writeHiringJobs(
+      toWrite as unknown as Array<Record<string, unknown>>, createdIds,
+    );
+    if (!write.ok) throw new Error(write.error || 'ingestion write failed');
+  };
+
   const load = options.loadJobs ?? getHiringJobs;
-  const save = options.saveJobs ?? saveHiringJobs;
+  /* Phase 2.7E: the default writer is the per-document canonical path. The
+     injectable seam stays for tests and is still refused in production. */
+  const save = options.saveJobs ?? defaultSave;
   let jobs: HiringJobPosting[] = await load();
   const before = jobs;
   const matchedIds = new Set<string>();
@@ -370,7 +383,16 @@ export async function runCanonicalIngestion(
      unchanged rewrites nothing and leaves the read caches warm — the common
      case once a board is steady. */
   const changed = totals.inserted > 0 || totals.updated > 0 || stamps.length > 0;
-  if (commit && changed) await save(jobs);
+  if (commit && changed) {
+    /* Only the postings this run touched. `matchedIds` names them; anything not
+       present before the run is a create and is positioned at the front. */
+    const beforeIds = new Set(before.map((j) => String(j.id)));
+    const touched = jobs.filter((j) => matchedIds.has(String(j.id)));
+    createdIds = new Set(
+      touched.map((j) => String(j.id)).filter((id) => !beforeIds.has(id)),
+    );
+    await save(touched);
+  }
   /* Nothing changed: hand back the array we read, unmodified. */
   if (!changed) jobs = before;
 

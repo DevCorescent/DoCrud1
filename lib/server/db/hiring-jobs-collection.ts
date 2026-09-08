@@ -160,6 +160,26 @@ const LIST_PROJECTION = {
   preferredSkills: 1, applyUrl: 1, shareUrl: 1, createdAt: 1, updatedAt: 1,
 } as const;
 
+/**
+ * THE CANONICAL CORPUS: every job, every status, in board order.
+ *
+ * This is what `getHiringJobs()` now reads. Unlike the list selector below it
+ * applies NO status filter and NO projection — employer paths need drafts and
+ * closed postings, and ownership validation needs the whole document. The board
+ * order is `_order` ascending, exactly as the app_state array order was.
+ *
+ * Throws rather than returning null. A failed canonical read must never be
+ * mistaken for an empty board — that is the Phase 2.4 lesson, and it matters
+ * more here than anywhere, because the corpus this returns is what write paths
+ * reconcile against.
+ */
+export async function selectAllJobDocs(): Promise<HiringJobPosting[]> {
+  const db = await getMongoDb();
+  if (!db) throw new Error('canonical job store unavailable: no database');
+  const docs = await db.collection(COL).find({}).sort(BY_ORDER).toArray();
+  return docs.map((d) => strip(d as Record<string, unknown>) as unknown as HiringJobPosting);
+}
+
 export async function selectPublishedJobListDocs(): Promise<HiringJobPosting[] | null> {
   if (!healthy) return null;
   const db = await getMongoDb();
@@ -399,6 +419,74 @@ export async function upsertHiringJobs(
     const message = error instanceof Error ? error.message : 'bulk upsert failed';
     markHiringJobsCollectionStale(`upsert failed: ${message}`);
     return { ok: false, written: 0, unchanged: 0, failed: inputs.length, error: message };
+  }
+}
+
+/**
+ * Retire ONE named posting. The only way a job leaves the canonical store.
+ *
+ * ═══ WHY THIS IS NOT PART OF upsertHiringJobs ═══
+ *
+ * `upsertHiringJobs` cannot delete, and that refusal is the safety property the
+ * whole of Phase 2.7 is built on: a batch writer that deletes what its input
+ * omits will eventually be handed a truncated scrape and take the board down.
+ *
+ * But "an employer deleted their job" is a real operation with real evidence —
+ * an authenticated owner asked for it. That deserves a primitive of its own,
+ * not a loophole in the batch writer. The distinction is the architecture:
+ *
+ *     deleteMany({_id: {$nin: incoming}})  "remove everything I did not see"
+ *     retireHiringJob(id)                  "remove this one, because I was told to"
+ *
+ * The first infers removal from absence. The second is told, names its target,
+ * and can remove exactly one document because `_id` is unique.
+ *
+ * AUTHORIZATION IS THE CALLER'S. This is the storage primitive; the ownership
+ * gate lives in removeHiringJob, which is where it already was. This function
+ * is deliberately not exported as a general-purpose delete helper.
+ */
+export type RetireOutcome = 'retired' | 'not_found' | 'failed';
+
+export interface RetireResult {
+  outcome: RetireOutcome;
+  error?: string;
+}
+
+export async function retireHiringJob(id: string): Promise<RetireResult> {
+  if (!id || typeof id !== 'string') return { outcome: 'failed', error: 'no job id' };
+  const db = await getMongoDb();
+  if (!db) return { outcome: 'failed', error: 'no database' };
+  try {
+    /* deleteOne, by _id. Not deleteMany, not a filter that could widen: one
+       named document, or nothing. */
+    const res = await db.collection(COL).deleteOne({ _id: id as never });
+    /* Already gone is NOT a failure — a retry of a delete that succeeded must
+       be safe, or every network timeout becomes a stuck job. */
+    return { outcome: (res.deletedCount ?? 0) > 0 ? 'retired' : 'not_found' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'retire failed';
+    markHiringJobsCollectionStale(`retire failed: ${message}`);
+    return { outcome: 'failed', error: message };
+  }
+}
+
+/**
+ * The smallest `_order` currently stored, or null when the collection is empty.
+ *
+ * Needed to place a new posting at the FRONT, which is where planIngest and the
+ * employer create path both put one. Served from the index in a single read.
+ */
+export async function minJobOrder(): Promise<number | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    const row = await db.collection(COL)
+      .find({}, { projection: { _id: 0, [ORDER_FIELD]: 1 } })
+      .sort({ [ORDER_FIELD]: 1 }).limit(1).toArray();
+    const value = (row[0] as Record<string, unknown> | undefined)?.[ORDER_FIELD];
+    return typeof value === 'number' ? value : null;
+  } catch {
+    return null;
   }
 }
 

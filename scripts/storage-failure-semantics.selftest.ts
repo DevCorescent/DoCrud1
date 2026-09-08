@@ -60,8 +60,10 @@ check('a failing row-adapter throws too',
 
 check('readJsonFileStrict has no catch that returns a fallback on failure',
   !/catch[\s\S]{0,120}return fallbackWhenAbsent;[\s\S]{0,40}\}\s*catch/.test(STRICT));
-check('the job corpus reads through the STRICT reader',
-  /readJsonFileStrict<HiringJobPosting\[\]>\(hiringJobsPath, \[\]\)/.test(HIRING));
+check('the job corpus reads through the canonical selector, which throws on failure',
+  /return selectAllJobDocs\(\)/.test(HIRING)
+  && /if \(!db\) throw new Error\('canonical job store unavailable/.test(
+    readFileSync('lib/server/db/hiring-jobs-collection.ts', 'utf8')));
 check('and the permissive reader still exists for the ~245 other stores',
   /export async function readJsonFile</.test(STORAGE));
 check('the two are separate functions, so nothing else changed behaviour',
@@ -138,8 +140,12 @@ check('isPlanSafe was not weakened',
   check('an empty source against an empty target is allowed',
     isPlanSafe(plan).safe === true);
 }
-check('getHiringJobs still returns [] for an absent key, not an error',
-  /readJsonFileStrict<HiringJobPosting\[\]>\(hiringJobsPath, \[\]\)/.test(HIRING));
+/* An empty COLLECTION is a genuinely empty board and must stay []; only a
+   FAILED read throws. find().toArray() yields [] naturally, and nothing
+   converts that into an error. */
+check('an EMPTY canonical corpus still yields [], not an error',
+  /\.find\(\{\}\)\.sort\(BY_ORDER\)\.toArray\(\)/.test(
+    readFileSync('lib/server/db/hiring-jobs-collection.ts', 'utf8')));
 
 /* ═══ Phase 2.7A — the same lesson, applied to the WRITE path ═════════════
    Phase 2.4 stopped a failed READ from becoming []. The write path inherits
@@ -148,10 +154,10 @@ check('getHiringJobs still returns [] for an absent key, not an error',
    empty corpus and the mirror's $nin reconciliation would delete every job. */
 {
   const HIRING = readFileSync('lib/server/hiring.ts', 'utf8');
-  check('the write funnel builds its corpus from a STRICT read',
-    /readJsonFileStrict<HiringJobPosting\[\]>\(hiringJobsPath/.test(HIRING));
-  check('no non-strict readJsonFile supplies the job corpus',
-    !/readJsonFile<HiringJobPosting\[\]>\(hiringJobsPath/.test(HIRING));
+  check('the corpus comes from the canonical store, which throws on failure',
+    /return selectAllJobDocs\(\)/.test(HIRING));
+  check('no app_state reader supplies the job corpus any more',
+    !/readJsonFile(Strict)?<HiringJobPosting/.test(HIRING));
 
   const COLLECTION = readFileSync('lib/server/db/hiring-jobs-collection.ts', 'utf8');
   check('reconciliation is scoped to the corpus the funnel just wrote',

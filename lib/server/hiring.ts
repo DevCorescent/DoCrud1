@@ -1,11 +1,15 @@
 import { HiringJobApplication, HiringJobPosting, User } from '@/types/document';
-import { hiringApplicationsPath, hiringJobsPath, readJsonFile, readJsonFileStrict, writeJsonFile } from '@/lib/server/storage';
+/* Job applications still live in app_state — that store is untouched by the
+   job-corpus cutover and remains legitimate for unrelated state. */
+import { hiringApplicationsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/server/business-pages';
 import {
   selectPublishedJobCompanyNames, selectPublishedJobListRows, selectPublishedJobRowById,
 } from '@/lib/server/db/hiring-jobs-rows';
 import { invalidateRecommendationCaches } from '@/lib/server/recommendation-cache';
 import { invalidateHiringCompanies } from '@/lib/server/hiring-companies';
+import { writeHiringJobs, retireHiringJobById } from '@/lib/server/hiring-write';
+import { selectAllJobDocs } from '@/lib/server/db/hiring-jobs-collection';
 import { invalidateNamespaces } from '@/lib/server/cache';
 import {
   countPublishedJobs, mirrorPublishedJobs, readHiringCorpusVersion,
@@ -86,8 +90,18 @@ function jobOwnerName(user: User) {
  * An absent key still yields `[]` — a genuinely empty board stays empty. Only a
  * FAILED read throws.
  */
-export async function getHiringJobs() {
-  return readJsonFileStrict<HiringJobPosting[]>(hiringJobsPath, []);
+export async function getHiringJobs(): Promise<HiringJobPosting[]> {
+  /* Phase 2.6+2.7E: the canonical corpus is `hiring_jobs`. Every reader in the
+     application funnels through here — public feed, employer views, ownership
+     validation, recommendations — so moving this one function moves all of them
+     together, which is the only way the cutover is coherent: an employer edit
+     validates ownership against the same store the create wrote to.
+
+     There is NO app_state fallback. A failed canonical read throws, because
+     falling back would resurrect the second source of truth this phase exists
+     to remove, and would silently serve a corpus that no longer receives
+     writes. */
+  return selectAllJobDocs();
 }
 
 /* ─── raw-corpus cache ────────────────────────────────────────────────────
@@ -460,8 +474,12 @@ export interface SaveHiringJobsResult {
 }
 
 export async function saveHiringJobs(jobs: HiringJobPosting[]): Promise<SaveHiringJobsResult> {
-  // app_state remains the source of truth and is written FIRST.
-  await writeJsonFile(hiringJobsPath, jobs);
+  /* LEGACY / ROLLBACK ONLY — zero production callers since Phase 2.7E.
+     The app_state write is GONE: keeping it would maintain a second copy of the
+     corpus that nothing reads and every canonical write would have to keep in
+     step, which is precisely the two-sources-of-truth problem this phase
+     removes. What remains is the whole-corpus mirror, retained so a rollback
+     path exists while the migration settles. */
 
   /* The `hiring_jobs` collection is a read replica of what was just written.
      Re-pointing it here is what stops the switched read paths from serving a
@@ -676,11 +694,15 @@ export async function upsertHiringJob(
     updatedAt: now,
   };
 
-  const nextJobs = payload.id
-    ? jobs.map((job) => (job.id === payload.id ? nextJob : job))
-    : [nextJob, ...jobs];
-
-  await saveHiringJobs(nextJobs);
+  /* Phase 2.7E: ONE document, not the whole corpus. A create is positioned at
+     the front — the same place `[nextJob, ...jobs]` used to put it — and an
+     edit keeps whatever position it already has. */
+  const isCreate = !payload.id;
+  const write = await writeHiringJobs(
+    [nextJob as unknown as Record<string, unknown>],
+    isCreate ? new Set([nextJob.id]) : new Set(),
+  );
+  if (!write.ok) throw new Error(write.error || 'could not save the job');
   return nextJob;
 }
 
@@ -700,14 +722,22 @@ export async function removeHiringJob(
   const permission = await assertCanManageHiringJob(actor, jobId);
   if (!permission.ok) return permission;
 
-  const jobs = await getHiringJobs();
-  const next = mode === 'delete'
-    ? jobs.filter((job) => job.id !== jobId)
-    : jobs.map((job) => (
-      job.id === jobId ? { ...job, status: 'draft' as const, updatedAt: new Date().toISOString() } : job
-    ));
+  if (mode === 'delete') {
+    /* An authenticated owner asked for THIS job to go, which is the positive
+       evidence that makes removal safe. It names one document; it is not
+       reconciliation, and it cannot touch anything else. */
+    const result = await retireHiringJobById(jobId);
+    if (result.outcome === 'failed') throw new Error(result.error || 'could not remove the job');
+    /* `not_found` is success from the caller's point of view: the job the owner
+       wanted gone is gone, and a retried delete must not fail. */
+    return { ok: true, job: permission.job };
+  }
 
-  await saveHiringJobs(next);
+  /* Unpublish is an UPDATE, not a removal — the posting survives for its owner
+     and its applications keep resolving. It keeps its position on the board. */
+  const draft = { ...permission.job, status: 'draft' as const, updatedAt: new Date().toISOString() };
+  const write = await writeHiringJobs([draft as unknown as Record<string, unknown>]);
+  if (!write.ok) throw new Error(write.error || 'could not unpublish the job');
   return { ok: true, job: permission.job };
 }
 

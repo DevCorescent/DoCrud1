@@ -339,6 +339,124 @@ const businessState = (m: Map<string, Canonical>) =>
   check('WRITER: and the refusal left the store untouched', !store.has('ORPHAN'));
 }
 
+/* ═══ 2.7E — production cutover ═══════════════════════════════════════════ */
+{
+  const HIRING = readFileSync('lib/server/hiring.ts', 'utf8');
+  const WRITE = readFileSync('lib/server/hiring-write.ts', 'utf8');
+  const INGEST2 = readFileSync('lib/server/job-sources/ingest.ts', 'utf8');
+  const RUNING = readFileSync('lib/server/job-sources/run-ingestion.ts', 'utf8');
+  const IMPORT = readFileSync('lib/server/job-import.ts', 'utf8');
+  const PATCH = readFileSync('app/api/hiring/jobs/[jobId]/route.ts', 'utf8');
+  const REBAL = readFileSync('scripts/db-rebalance-job-order.mjs', 'utf8');
+
+  /* ── NO production caller of the old writer ── */
+  const callSites = (src: string) =>
+    src.split('\n').filter((l) => /await saveHiringJobs\(|= saveHiringJobs\b/.test(l)).length;
+  check('CUTOVER: ingestion no longer calls saveHiringJobs', callSites(INGEST2) === 0);
+  check('CUTOVER: run-ingestion no longer calls saveHiringJobs', callSites(RUNING) === 0);
+  check('CUTOVER: import no longer calls saveHiringJobs', callSites(IMPORT) === 0);
+  check('CUTOVER: the employer PATCH route no longer calls saveHiringJobs', callSites(PATCH) === 0);
+  check('CUTOVER: upsertHiringJob/removeHiringJob no longer call it', callSites(HIRING) === 0);
+  check('CUTOVER: saveHiringJobs still EXISTS as rollback code',
+    /export async function saveHiringJobs/.test(HIRING));
+
+  /* ── NO dual write ── */
+  check('NO DUAL WRITE: the new path never calls the old writer',
+    !/saveHiringJobs\(/.test(WRITE.replace(/\/\*[\s\S]*?\*\//g, '')));
+  check('NO DUAL WRITE: no OLD-or-NEW feature flag was introduced',
+    !/JOB_WRITE_TO_HIRING_JOBS/.test(HIRING + WRITE + INGEST2 + RUNING + IMPORT));
+  check('NO DUAL WRITE: the new path never writes app_state',
+    !/writeJsonFile|hiringJobsPath/.test(WRITE));
+  check('NO DUAL WRITE: no production path re-stamps dense _order',
+    !/_order: index/.test(WRITE));
+
+  /* ── retireHiringJob ── */
+  const COLL2 = readFileSync('lib/server/db/hiring-jobs-collection.ts', 'utf8');
+  const retire = COLL2.slice(COLL2.indexOf('export async function retireHiringJob'));
+  const retireBody = retire.slice(0, retire.indexOf('\n}\n') + 2);
+  check('RETIRE: it deletes exactly ONE document by _id',
+    /deleteOne\(\{ _id: id as never \}\)/.test(retireBody));
+  /* Match CALLS, not the prose in comments that says these are not used. */
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const retireCode = stripComments(retireBody);
+  check('RETIRE: it never calls deleteMany', !/deleteMany\(/.test(retireCode));
+  check('RETIRE: it never uses $nin', !/\$nin/.test(retireCode));
+  check('RETIRE: it does not accept a list of ids',
+    /retireHiringJob\(id: string\)/.test(COLL2));
+  check('RETIRE: an already-gone job is not_found, not a failure',
+    /outcome: \(res\.deletedCount \?\? 0\) > 0 \? 'retired' : 'not_found'/.test(retireBody));
+  check('RETIRE: a real failure is reported as failed',
+    /outcome: 'failed', error: message/.test(retireBody));
+  check('RETIRE: three explicit outcomes exist',
+    /'retired' \| 'not_found' \| 'failed'/.test(COLL2));
+  /* Scoped to removeHiringJob itself: comparing file-wide indexes would find
+     the import line, not the call. */
+  const removeFn = HIRING.slice(HIRING.indexOf('export async function removeHiringJob'));
+  const removeBody = removeFn.slice(0, removeFn.indexOf('\n}\n') + 2);
+  check('RETIRE: authorization gates it — the ownership check precedes it',
+    removeBody.indexOf('assertCanManageHiringJob') < removeBody.indexOf('retireHiringJobById'));
+  check('RETIRE: an unauthorised caller never reaches it',
+    /if \(!permission\.ok\) return permission;/.test(removeBody));
+  check('RETIRE: only the delete mode reaches it, unpublish does not',
+    /if \(mode === 'delete'\) \{[\s\S]{0,400}retireHiringJobById\(jobId\)/.test(HIRING));
+  check('RETIRE: unpublish stays an UPDATE that keeps the posting',
+    /Unpublish is an UPDATE, not a removal/.test(HIRING));
+
+  /* ── upsertHiringJobs is still non-destructive ── */
+  const up = COLL2.slice(COLL2.indexOf('export async function upsertHiringJobs'));
+  const upBody = up.slice(0, up.indexOf('\n}\n') + 2);
+  check('BOUNDARY: upsertHiringJobs still cannot delete',
+    !/delete(One|Many)|\$nin/.test(upBody));
+
+  /* ── Cache invalidation ── */
+  check('CACHE: all four invalidations are performed',
+    /invalidatePublishedHiringJobs\(\)/.test(WRITE)
+    && /jobs:public', 'jobs:recs', 'jobs:personalized'/.test(WRITE)
+    && /invalidateRecommendationCaches\(\)/.test(WRITE)
+    && /invalidateHiringCompanies\(\)/.test(WRITE));
+  check('CACHE: caches are cleared ONLY after a successful write',
+    /if \(res\.ok\) invalidateJobCaches\(\)/.test(WRITE));
+  check('CACHE: a failed write invalidates nothing',
+    /ok: false, written: 0, unchanged: 0,/.test(WRITE));
+  check('CACHE: only a genuine retirement invalidates',
+    /if \(result\.outcome === 'retired'\) invalidateJobCaches\(\)/.test(WRITE));
+
+  /* ── Ordering wiring ── */
+  check('ORDER: creates are positioned with orderBefore', /orderBefore\(cursor\)/.test(WRITE));
+  check('ORDER: the batch is reversed so the last create lands nearest the front',
+    /\[\.\.\.newOnes\]\.reverse\(\)/.test(WRITE));
+  check('ORDER: existing postings are written with NO position',
+    /inputs\.push\(\{ job \}\); \/\/ existing: position untouched/.test(WRITE));
+  check('ORDER: ingestion marks new postings as creates',
+    /const created = new Set\(/.test(INGEST2));
+  check('ORDER: the import marks its whole batch as creates',
+    /new Set\(valid\.map/.test(IMPORT));
+  check('ORDER: an employer create is a create, an edit is not',
+    /isCreate \? new Set\(\[nextJob\.id\]\) : new Set\(\)/.test(HIRING));
+
+  /* ── Failed writes are not reported as success ── */
+  check('FAILURE: ingestion throws rather than returning a green report',
+    /if \(!write\.ok\) throw new Error\(write\.error \|\| 'ingestion write failed'\)/.test(INGEST2));
+  check('FAILURE: the import refuses to report rows it did not save',
+    /if \(!write\.ok\) throw new Error\(write\.error \|\| 'import could not be saved'\)/.test(IMPORT));
+  check('FAILURE: the PATCH route answers 500 rather than ok:true',
+    /if \(!write\.ok\) \{[\s\S]{0,160}status: 500/.test(PATCH));
+
+  /* ── Dense→sparse maintenance ── */
+  check('MIGRATION: it is plan-only unless --apply', /PLAN ONLY/.test(REBAL));
+  const rebalCode = REBAL.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  check('MIGRATION: it changes ONLY _order',
+    /\$set: \{ _order: a\.order \}/.test(rebalCode) && !/replaceOne\(/.test(rebalCode));
+  check('MIGRATION: it never deletes', !/deleteOne\(|deleteMany\(/.test(rebalCode));
+  check('MIGRATION: it reads documents in their CURRENT board order',
+    /\.sort\(\{ _order: 1 \}\)/.test(REBAL));
+  check('MIGRATION: it verifies order was preserved afterwards',
+    /order preserved after rebalance/.test(REBAL));
+  check('MIGRATION: no production path invokes it',
+    !/db-rebalance-job-order/.test(HIRING + WRITE + INGEST2 + RUNING + IMPORT));
+}
+
 /* ═══ 13. Mutation coverage ════════════════════════════════════════════════ */
 {
   const fn = COLLECTION.slice(COLLECTION.indexOf('export async function upsertHiringJobs'));

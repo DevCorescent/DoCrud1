@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkCronAuth } from '@/lib/server/cron-auth';
 import { runScheduledRefresh } from '@/lib/server/recommendation-scheduler';
+import { logEvent, describeError, requestIdFrom } from '@/lib/server/observability';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,9 @@ export const maxDuration = 300;
 async function handle(req: NextRequest) {
   const auth = checkCronAuth(req);
   if (!auth.authorized) {
+    logEvent('warn', 'cron auth rejected', {
+      scope: 'cron/recommendations', reason: auth.reason,
+    });
     return NextResponse.json(
       {
         error: auth.reason === 'missing-secret-config'
@@ -35,13 +39,27 @@ async function handle(req: NextRequest) {
     );
   }
 
+  /* Cron runs unattended, so a pass that does nothing must be distinguishable
+     from a pass that FAILED to do anything — from the log alone, days later. */
+  const requestId = requestIdFrom(req.headers);
+  const startedAt = Date.now();
   try {
     const result = await runScheduledRefresh();
+    logEvent('info', 'recommendation refresh finished', {
+      requestId, scope: 'cron/recommendations', durationMs: Date.now() - startedAt,
+      ran: result.ran, skippedReason: result.skippedReason ?? '',
+      recomputed: result.stats?.recomputed ?? 0, written: result.stats?.written ?? 0,
+      failed: result.stats?.failed ?? 0, staleFound: result.staleFound ?? 0,
+      moreRemaining: result.moreRemaining ?? false,
+    });
     return NextResponse.json(result);
   } catch (error) {
     /* A failed pass is a FAILURE, not an empty success. The previous records
        are untouched, so the last good recommendations keep serving. */
-    console.error('[cron/recommendations] refresh failed', error);
+    logEvent('error', 'recommendation refresh failed', {
+      requestId, scope: 'cron/recommendations', durationMs: Date.now() - startedAt,
+      ...describeError(error),
+    });
     return NextResponse.json({ error: 'Recommendation refresh failed.' }, { status: 500 });
   }
 }

@@ -45,6 +45,17 @@ jobs:
           node-version: '22'
           cache: npm
 
+      # Four suites (post-job, corpus-cache, hiring-projection,
+      # public-sort-parity) now exercise a REAL isolated mongod through
+      # mongodb-memory-server, because the behaviour under test is the
+      # database's own. The binary is downloaded once and cached; without this
+      # every run re-downloads ~100 MB before a single test executes.
+      - name: Cache mongodb-memory-server binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+
       - name: Install (locked)
         run: npm ci
 
@@ -75,6 +86,11 @@ jobs:
           echo "passed=$ran failed=$failed skipped=$skipped"
           # The job fails if ANY suite failed. No soft landings.
           test "$failed" -eq 0
+
+      # Catches trailing whitespace and, more importantly, conflict markers
+      # that compile fine and merge badly.
+      - name: Whitespace / conflict-marker check
+        run: git diff --check
 
       - name: Production build
         run: npm run build

@@ -325,8 +325,25 @@ const job = (id: string, over: Record<string, unknown> = {}): Job =>
     /if \(priors\.get\(id\) === fp\) \{ unchanged \+= 1; return; \}/.test(body));
   check('R7: the fingerprint it compared against is stamped',
     /\[FP_FIELD\]: fp/.test(body));
+  /* R8 originally pinned `$in: ids`, the whole input array. The batch is now
+     CHUNKED, so the $in is bounded twice over — by the caller's batch and by
+     the chunk size. The assertion is tightened to the stronger property rather
+     than relaxed to match the rename. */
   check('R8: prior fingerprints are read with a bounded $in, not a full scan',
-    /_id: \{ \$in: ids as never\[\] \}/.test(body));
+    /_id: \{ \$in: sliceIds as never\[\] \}/.test(body));
+  check('R8a: the batch is split into bounded chunks, never one huge command',
+    /for \(let start = 0; start < inputs\.length; start \+= chunk\)/.test(body)
+    && /bulkBatchSize\(\)/.test(body));
+  /* The cap lives at module scope, not inside the function body. */
+  check('R8b: the chunk size is capped, so a bad env value cannot unbound it',
+    /Math\.min\(BULK_BATCH_MAX, Math\.floor\(raw\)\)/.test(COLLECTION)
+    && /raw < 1\) return BULK_BATCH_DEFAULT/.test(COLLECTION));
+  check('R8c: a partially-failed bulk still reports ok:false',
+    /ok: false,\s*\n\s*written: written \+ done/.test(body));
+  check('R8d: a partial failure reports what was actually written, not zero',
+    /written: written \+ done/.test(body) && /nUpserted/.test(body) && /nModified/.test(body));
+  check('R8e: a partial failure still marks the collection stale',
+    /markHiringJobsCollectionStale\(`upsert partially failed/.test(body));
   check('R9: the bulk write is unordered, so one bad document spares the rest',
     /ordered: false/.test(body));
   check('R10: a failure is reported, never returned as empty success',

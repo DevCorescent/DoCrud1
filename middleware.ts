@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { REQUEST_ID_HEADER, requestIdFrom } from '@/lib/server/observability';
 import { getToken } from 'next-auth/jwt';
 import { isSearchCrawlerUserAgent } from '@/lib/search-crawler';
 import { getAuthSecret } from '@/lib/auth-secret';
@@ -60,7 +61,16 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next({ request: { headers: request.headers } });
+  /* A correlation id for every request. Without it, concurrent invocations
+     interleave in one Vercel log stream and no single request can be followed
+     end to end. Set on the forwarded headers so route handlers can read it,
+     and echoed on the response so a user reporting a failure can quote it. */
+  const requestId = requestIdFrom(request.headers);
+  const headers = new Headers(request.headers);
+  headers.set(REQUEST_ID_HEADER, requestId);
+  const response = NextResponse.next({ request: { headers } });
+  response.headers.set(REQUEST_ID_HEADER, requestId);
+  return response;
 }
 
 export const config = {

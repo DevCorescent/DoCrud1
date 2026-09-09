@@ -63,6 +63,30 @@ const PUBLISHED = { status: 'published' } as const;
    sort, so the replica has to reproduce app_state's order exactly — Mongo's
    natural order is not a guarantee. */
 const ORDER_FIELD = '_order';
+const IDENTITY_LOOKUP_CHUNK = 500;
+
+/**
+ * How many postings one bulkWrite carries.
+ *
+ * The batch was previously unbounded: `writeHiringJobs` handed the whole array
+ * to one `$in` and one `bulkWrite`. That is fine for the tens-of-jobs batches a
+ * single board produces, and not fine for an initial ingestion of a large
+ * board, where one command carries megabytes and one failure abandons all of
+ * it. Chunking bounds the command size, bounds what a single failure can lose,
+ * and lets the counts be reported per chunk.
+ *
+ * 500 is the measured default — see scripts/bulk-batch-size.bench.ts. It is
+ * overridable so the number can be re-measured rather than argued about.
+ */
+const BULK_BATCH_DEFAULT = 500;
+const BULK_BATCH_MAX = 1000;
+
+export function bulkBatchSize(): number {
+  const raw = Number(process.env.INGEST_BULK_BATCH_SIZE);
+  if (!Number.isFinite(raw) || raw < 1) return BULK_BATCH_DEFAULT;
+  return Math.min(BULK_BATCH_MAX, Math.floor(raw));
+}
+
 const BY_ORDER = { [ORDER_FIELD]: 1 } as const;
 
 /* Content fingerprint, so a mirror can tell which jobs actually changed instead
@@ -213,6 +237,80 @@ export async function selectAllJobDocs(): Promise<HiringJobPosting[]> {
   if (!db) throw new Error('canonical job store unavailable: no database');
   const docs = await db.collection(COL).find({}).sort(BY_ORDER).toArray();
   return docs.map((d) => strip(d as Record<string, unknown>) as unknown as HiringJobPosting);
+}
+
+/**
+ * The postings ONE source could possibly match, and nothing else.
+ *
+ * This is the targeted alternative to `selectAllJobDocs()` for the ingestion
+ * path. `runCanonicalIngestion` currently loads the entire corpus so that
+ * `planIngest` can index it by identity; at 100K postings that was measured at
+ * 733 MB of heap, against a 1024 MB serverless limit. Ingestion does not need
+ * the corpus — it needs the postings the drafts in hand might already be.
+ *
+ * Identity is ranked external_id -> canonical_url -> fingerprint, so the
+ * candidate set is the UNION of all three lookups rather than just the first:
+ * a stored posting whose `sourceJobId` is absent must still be found by URL,
+ * or the planner would create a duplicate instead of updating it. Missing a
+ * candidate is the one unacceptable failure here, so the query is deliberately
+ * wider than the common case needs.
+ *
+ * `sourceId` scopes every branch, which is also what makes this safe: a source
+ * can only ever see, and therefore only ever modify, its OWN postings.
+ * Employer-posted jobs carry no `sourceId` at all and are unreachable from
+ * here by construction.
+ *
+ * `{ sourceId, sourceJobId }` is served by the existing `ingest_identity`
+ * index — no new index is required.
+ */
+export async function selectJobDocsForSource(
+  sourceId: string,
+  keys: { sourceJobIds?: string[]; canonicalUrls?: string[]; organizationNames?: string[] },
+): Promise<HiringJobPosting[]> {
+  if (!sourceId) return [];
+  const db = await getMongoDb();
+  if (!db) throw new Error('canonical job store unavailable: no database');
+
+  const ids = uniqueNonEmpty(keys.sourceJobIds);
+  const urls = uniqueNonEmpty(keys.canonicalUrls);
+  const orgs = uniqueNonEmpty(keys.organizationNames);
+  if (!ids.length && !urls.length && !orgs.length) return [];
+
+  /* Chunked so a source returning thousands of postings cannot build a single
+     oversized query document. */
+  const found = new Map<string, Record<string, unknown>>();
+  const collect = async (field: string, values: string[]) => {
+    for (let i = 0; i < values.length; i += IDENTITY_LOOKUP_CHUNK) {
+      const slice = values.slice(i, i + IDENTITY_LOOKUP_CHUNK);
+      const docs = await db.collection(COL)
+        .find({ sourceId, [field]: { $in: slice } }).toArray();
+      for (const doc of docs) found.set(String(doc._id), doc as Record<string, unknown>);
+    }
+  };
+
+  if (ids.length) await collect('sourceJobId', ids);
+  if (urls.length) {
+    await collect('canonicalUrl', urls);
+    /* Older postings stored the address as `sourceUrl` only. */
+    await collect('sourceUrl', urls);
+  }
+  /* The fingerprint basis keys on company + title + location. Only the company
+     is indexed, so it is the narrowing filter; the planner does the rest. */
+  if (orgs.length) await collect('organizationName', orgs);
+
+  return Array.from(found.values())
+    .map((d) => strip(d) as unknown as HiringJobPosting);
+}
+
+/** Values worth querying: non-empty, de-duplicated, and stringified. */
+function uniqueNonEmpty(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) return [];
+  const out = new Set<string>();
+  for (const v of values) {
+    const s = String(v ?? '').trim();
+    if (s) out.add(s);
+  }
+  return Array.from(out);
 }
 
 export async function selectPublishedJobListDocs(): Promise<HiringJobPosting[] | null> {
@@ -393,18 +491,26 @@ export async function upsertHiringJobs(
     ids.push(id);
   }
 
+  const chunk = bulkBatchSize();
+  let written = 0;
+  let unchanged = 0;
+  let failed = 0;
+
   try {
-    /* Fingerprints for THIS BATCH only — a bounded $in, never a full scan. */
+    for (let start = 0; start < inputs.length; start += chunk) {
+    const slice = inputs.slice(start, start + chunk);
+    const sliceIds = ids.slice(start, start + chunk);
+
+    /* Fingerprints for THIS CHUNK only — a bounded $in, never a full scan. */
     const priors = new Map<string, string | undefined>(
-      (await col.find({ _id: { $in: ids as never[] } }, { projection: { _id: 1, [FP_FIELD]: 1 } }).toArray())
+      (await col.find({ _id: { $in: sliceIds as never[] } }, { projection: { _id: 1, [FP_FIELD]: 1 } }).toArray())
         .map((d) => [String(d._id), (d as Record<string, unknown>)[FP_FIELD] as string | undefined]),
     );
 
     const ops: Array<Record<string, unknown>> = [];
-    let unchanged = 0;
 
-    inputs.forEach((input, i) => {
-      const id = ids[i];
+    slice.forEach((input, i) => {
+      const id = sliceIds[i];
       const fp = fingerprint(input.job);
       if (priors.get(id) === fp) { unchanged += 1; return; } // identical: no write
 
@@ -443,22 +549,53 @@ export async function upsertHiringJobs(
       ops.push({ updateOne: { filter: { _id: id }, update, upsert: true } });
     });
 
-    if (ops.length === 0) return { ok: true, written: 0, unchanged, failed: 0 };
+    if (ops.length === 0) continue;
 
-    /* Unordered: one bad document must not abandon the rest of the batch. */
+    /* Unordered: one bad document must not abandon the rest of the chunk. */
     const res = await col.bulkWrite(ops as never[], { ordered: false });
-    const written = (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
-    const failed = Math.max(0, ops.length - written);
+    written += (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
+    failed += Math.max(0, ops.length - ((res.upsertedCount ?? 0) + (res.modifiedCount ?? 0)));
+    }
 
     healthy = true;
     return { ok: true, written, unchanged, failed };
   } catch (error) {
+    /* An unordered bulkWrite that hits per-document errors REJECTS, but the
+       documents that succeeded were still written. The driver reports both on
+       the error, so the real counts are read off it rather than guessed —
+       returning `written: 0` here would understate what is now in the store and
+       make a retry look like a first attempt. */
+    const bulk = error as {
+      result?: { nUpserted?: number; nModified?: number };
+      writeErrors?: unknown[];
+    };
+    if (bulk && typeof bulk === 'object' && bulk.result) {
+      const done = (bulk.result.nUpserted ?? 0) + (bulk.result.nModified ?? 0);
+      const errs = Array.isArray(bulk.writeErrors) ? bulk.writeErrors.length : 0;
+      const message = error instanceof Error ? error.message : 'bulk upsert failed';
+      markHiringJobsCollectionStale(`upsert partially failed: ${message}`);
+      /* ok:false — a partial write is NOT a successful ingestion. */
+      return {
+        ok: false,
+        written: written + done,
+        unchanged,
+        failed: failed + (errs || 1),
+        error: message,
+      };
+    }
     /* A write failure is REPORTED, never returned as a successful empty write.
-       Some documents may have been written before the failure, so the replica
-       is marked untrusted rather than assumed intact. */
+       Some documents may have been written before the failure — earlier chunks
+       committed independently — so the counts already accumulated are kept and
+       the replica is marked untrusted rather than assumed intact. */
     const message = error instanceof Error ? error.message : 'bulk upsert failed';
     markHiringJobsCollectionStale(`upsert failed: ${message}`);
-    return { ok: false, written: 0, unchanged: 0, failed: inputs.length, error: message };
+    return {
+      ok: false,
+      written,
+      unchanged,
+      failed: Math.max(1, inputs.length - written - unchanged),
+      error: message,
+    };
   }
 }
 

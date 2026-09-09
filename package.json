@@ -40,6 +40,7 @@
     "test:seo-ui": "tsx scripts/seo-ui.selftest.ts",
     "test:seo-live": "tsx scripts/seo-live.selftest.ts",
     "test:sitemap-health": "tsx scripts/sitemap-health.selftest.ts",
+    "test:cron-account-cleanup-auth": "tsx scripts/cron-account-cleanup-auth.selftest.ts",
     "test:mail-cron": "tsx scripts/mail-cron.selftest.ts",
     "test:mail-outbox": "tsx scripts/mail-outbox.selftest.ts",
     "test:mail-compose": "tsx scripts/mail-compose.selftest.ts",
@@ -68,6 +69,7 @@
     "test:mail-bounce": "tsx scripts/mail-bounce.selftest.ts",
     "test:mail-provider-settings": "tsx scripts/mail-provider-settings.selftest.ts",
     "test:job-model": "tsx scripts/job-model.selftest.ts",
+    "test:ingest-incremental-equivalence": "tsx scripts/ingest-incremental-equivalence.selftest.ts",
     "test:job-sources": "tsx scripts/job-sources.selftest.ts",
     "test:job-dedupe": "tsx scripts/job-dedupe.selftest.ts",
     "test:job-classify": "tsx scripts/job-classify.selftest.ts",
@@ -109,10 +111,15 @@
     "test:recommendation-storage-shape": "tsx scripts/recommendation-storage-shape.selftest.ts",
     "test:recommendation-scheduler": "tsx scripts/recommendation-scheduler.selftest.ts",
     "test:recommendation-read-cutover": "tsx scripts/recommendation-read-cutover.selftest.ts",
+    "test:bulk-write-failure": "tsx scripts/bulk-write-failure.selftest.ts",
     "test:job-write-contract": "tsx scripts/job-write-contract.selftest.ts",
     "test:job-write-equivalence": "tsx scripts/job-write-equivalence.selftest.ts",
+    "bench:bulk-batch-size": "tsx scripts/bulk-batch-size.bench.ts",
+    "bench:incremental-refresh": "tsx scripts/incremental-refresh.bench.ts",
+    "bench:ingestion-scale": "tsx scripts/ingestion-scale.bench.ts",
     "bench:job-scale": "tsx scripts/job-scale.bench.ts",
-    "test:public-sort-parity": "tsx scripts/public-sort-parity.selftest.ts"
+    "test:public-sort-parity": "tsx scripts/public-sort-parity.selftest.ts",
+    "test:observability": "tsx scripts/observability.selftest.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

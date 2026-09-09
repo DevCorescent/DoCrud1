@@ -34,6 +34,26 @@ const cache = new Map<string, Cached>();
 /* Registered so a job write can clear it — see lib/server/recommendation-cache.ts. */
 registerRecommendationCache(cache);
 
+/**
+ * Why this person was recommended.
+ *
+ * Every variant carries the FACTS behind it, not a sentence: which skills
+ * actually overlapped, which interests, how many mutuals. The wording is the
+ * client's job, but the evidence is computed here, where the ranking is — a
+ * reason invented at render time would eventually disagree with the score that
+ * put the person in the row.
+ *
+ * `discovery` is the honest label for the fill tier: those candidates matched
+ * on nothing, and the row says so rather than inventing a reason for them.
+ */
+export type PersonReason =
+  | { kind: 'mutual'; count: number }
+  | { kind: 'skills'; values: string[] }
+  | { kind: 'interests'; values: string[] }
+  | { kind: 'domain'; values: string[] }
+  | { kind: 'location'; value: string }
+  | { kind: 'discovery' };
+
 export type PersonRecommendation = {
   userId: string;
   name: string;
@@ -45,6 +65,8 @@ export type PersonRecommendation = {
   mutualCount: number;
   mutualAvatars: string[];
   isFollowing: boolean;
+  /** Strongest first, by the same weights that produced the score. */
+  reasons: PersonReason[];
 };
 
 /** Same visibility rule the rest of the public surface applies. */
@@ -65,12 +87,28 @@ function shortBio(bio: unknown): string | null {
   return (first.length > 120 ? `${first.slice(0, 117)}…` : first);
 }
 
+/**
+ * Function words, dropped from headline tokens.
+ *
+ * The length > 2 filter alone let "with", "and", "the" through, and two
+ * headlines sharing the word "and" scored as a domain match. That was noise in
+ * the RANKING before it was ever wording on a card — the card just made it
+ * visible, by offering to print "Similar role — with".
+ */
+const STOPWORDS = new Set([
+  'and', 'the', 'for', 'with', 'from', 'that', 'this', 'you', 'your', 'our',
+  'are', 'was', 'were', 'have', 'has', 'had', 'not', 'but', 'all', 'any',
+  'who', 'how', 'why', 'what', 'when', 'where', 'into', 'over', 'out',
+  'about', 'across', 'building', 'building.', 'work', 'working', 'currently',
+  'passionate', 'love', 'helping', 'making', 'looking',
+]);
+
 function tokens(s: unknown): Set<string> {
   return new Set(
     String(s ?? '')
       .toLowerCase()
       .split(/[^a-z0-9+#.]+/)
-      .filter((t) => t.length > 2),
+      .filter((t) => t.length > 2 && !STOPWORDS.has(t)),
   );
 }
 
@@ -78,6 +116,26 @@ function overlap(a: Set<string>, b: Set<string>): number {
   let n = 0;
   a.forEach((t) => { if (b.has(t)) n++; });
   return n;
+}
+
+/**
+ * The same intersection, but returning the matched terms as the CANDIDATE
+ * spells them.
+ *
+ * Matching is done on lowercased sets, so the matched values have to be read
+ * back off the candidate's own list or the card would print "react, typescript"
+ * under a profile that wrote "React" and "TypeScript".
+ */
+function matchedValues(mine: Set<string>, theirs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of theirs) {
+    const key = value.toLowerCase().trim();
+    if (!key || seen.has(key) || !mine.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
 }
 
 /** Deterministic per-viewer ordering key. Same inputs, same order, every time. */
@@ -170,6 +228,11 @@ export async function GET(request: Request) {
       const interestSet = new Set<string>(
         (Array.isArray(p.interests) ? p.interests : []).map((s) => String(s).toLowerCase().trim()).filter(Boolean),
       );
+      /* Kept as the matched VALUES, not just counts — the card names them. */
+      const interestValues = matchedValues(myInterests, (Array.isArray(p.interests) ? p.interests : []).map((s) => String(s)));
+      const skillValues = matchedValues(mySkills, skills);
+      const domainValues = matchedValues(myDomain, Array.from(tokens(p.headline)));
+
       const sharedInterests = overlap(myInterests, interestSet);
       const sharedSkills = overlap(mySkills, skillSet);
       const sharedDomain = overlap(myDomain, tokens(p.headline));
@@ -183,6 +246,22 @@ export async function GET(request: Request) {
         sharedSkills * config.people.skillWeight +
         sharedDomain * config.people.domainWeight +
         sameLocation * config.people.locationWeight;
+
+      /* The reasons, ranked by what each one actually contributed to the score
+         above — the same weights, so the headline reason on the card is always
+         the thing that most put this person in the row. A signal that scored
+         nothing produces no reason at all. */
+      const reasons: PersonReason[] = ([
+        { r: { kind: 'mutual', count: mutualIds.length } as PersonReason, w: mutualIds.length * config.people.mutualWeight },
+        { r: { kind: 'interests', values: interestValues } as PersonReason, w: sharedInterests * config.people.interestWeight },
+        { r: { kind: 'skills', values: skillValues } as PersonReason, w: sharedSkills * config.people.skillWeight },
+        { r: { kind: 'domain', values: domainValues } as PersonReason, w: sharedDomain * config.people.domainWeight },
+        { r: { kind: 'location', value: (typeof p.location === 'string' && p.location.trim()) || '' } as PersonReason, w: sameLocation * config.people.locationWeight },
+      ] as const)
+        .filter((e) => e.w > 0)
+        .slice()
+        .sort((a, b) => b.w - a.w)
+        .map((e) => e.r);
 
       const entry: Scored = {
         score,
@@ -203,6 +282,9 @@ export async function GET(request: Request) {
             })
             .filter(Boolean),
           isFollowing: false,   // filtered out above, so never true here
+          /* Score 0 means nothing matched. Saying so is the honest card; the
+             alternative is a reason the ranking never used. */
+          reasons: reasons.length > 0 ? reasons : [{ kind: 'discovery' }],
         },
       };
       if (score > 0) scored.push(entry);

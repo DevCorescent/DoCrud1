@@ -26,6 +26,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { jobUrgencyLabel } from '@/lib/job-urgency';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, ArrowRight, Briefcase, Check, CloudUpload, Loader2 } from 'lucide-react';
@@ -261,6 +262,11 @@ export default function JobPostWizard() {
       { label: 'Type', value: EMPLOYMENT_TYPE_LABELS[draft.employmentType] ?? draft.employmentType },
       { label: 'Work mode', value: WORK_MODE_LABELS[draft.workMode] ?? draft.workMode },
       { label: 'Experience', value: EXPERIENCE_LABELS[draft.experienceLevel] ?? draft.experienceLevel },
+      /* Shown in the summary only when it was actually chosen — a dash here
+         would read as "no urgency", which is not what leaving it blank means. */
+      ...(jobUrgencyLabel(draft.hiringUrgency)
+        ? [{ label: 'Urgency', value: jobUrgencyLabel(draft.hiringUrgency)! }]
+        : []),
       { label: 'Pay', value: salary || 'Not stated' },
     ];
   }, [draft]);

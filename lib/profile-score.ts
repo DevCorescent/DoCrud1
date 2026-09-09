@@ -18,7 +18,8 @@
 
 export type ProfileSectionId =
   | 'photo' | 'headline' | 'bio' | 'skills' | 'experience'
-  | 'education' | 'location' | 'interests' | 'portfolio' | 'links';
+  | 'education' | 'location' | 'interests' | 'portfolio' | 'links'
+  | 'preferences';
 
 export interface ProfileSectionResult {
   id: ProfileSectionId;
@@ -53,10 +54,38 @@ export interface ScorableProfile {
   education?: Array<{ degree?: string; school?: string; year?: string }>;
   achievements?: Array<{ title?: string; desc?: string }>;
   socialLinks?: Record<string, string | undefined | null>;
+  /**
+   * Stated matching preferences — see lib/server/match-preferences.ts.
+   *
+   * Read as an opaque bag on purpose: this module is pure and dependency-free
+   * so every layer can share one definition of completeness, and it only needs
+   * to count how many answers exist, not understand any of them.
+   */
+  matchPreferences?: object | null;
 }
 
 const filled = (v?: string | null, min = 1) => typeof v === 'string' && v.trim().length >= min;
 const hasItems = (v?: unknown[] | null, min = 1) => Array.isArray(v) && v.filter(Boolean).length >= min;
+
+/**
+ * How many matching answers a profile actually states.
+ *
+ * An empty string, an empty list and an absent key are all "not answered" —
+ * the same rule the preference store itself applies, so a profile cannot look
+ * complete here while the matcher sees nothing to work with.
+ */
+export function countStatedPreferences(prefs?: object | null): number {
+  if (!prefs || typeof prefs !== 'object') return 0;
+  return Object.values(prefs).filter((v) => {
+    if (v === undefined || v === null) return false;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === 'string') return v.trim() !== '';
+    return true;
+  }).length;
+}
+
+/** Answers needed before work preferences count as done. */
+export const PREFERENCES_MIN_ANSWERS = 3;
 
 /**
  * Weights are not equal: they reflect how much each section contributes to
@@ -67,24 +96,35 @@ const SECTIONS: Array<{
   id: ProfileSectionId; label: string; weight: number; field: string;
   isComplete: (p: ScorableProfile) => boolean;
 }> = [
-  { id: 'photo',      label: 'Profile Photo', weight: 10, field: 'avatarUrl',
+  { id: 'photo',      label: 'Profile Photo', weight: 9, field: 'avatarUrl',
     isComplete: (p) => filled(p.avatarUrl) },
-  { id: 'headline',   label: 'Headline',      weight: 10, field: 'headline',
+  { id: 'headline',   label: 'Headline',      weight: 9, field: 'headline',
     isComplete: (p) => filled(p.headline, 3) },
-  { id: 'bio',        label: 'About/Bio',         weight: 10, field: 'bio',
+  { id: 'bio',        label: 'About/Bio',         weight: 9, field: 'bio',
     // A one-word bio adds nothing to discovery; ask for a real sentence.
     isComplete: (p) => filled(p.bio, 40) },
-  { id: 'skills',     label: 'Skills',        weight: 15, field: 'skills',
+  { id: 'skills',     label: 'Skills',        weight: 14, field: 'skills',
     isComplete: (p) => hasItems(p.skills, 3) },
-  { id: 'experience', label: 'Experience',    weight: 15, field: 'experience',
+  { id: 'experience', label: 'Experience',    weight: 14, field: 'experience',
     isComplete: (p) => hasItems(p.experience) },
-  { id: 'education',  label: 'Education',     weight: 10, field: 'education',
+  { id: 'education',  label: 'Education',     weight: 9, field: 'education',
     isComplete: (p) => hasItems(p.education) },
-  { id: 'location',   label: 'Location',      weight: 10, field: 'location',
+  { id: 'location',   label: 'Location',      weight: 9, field: 'location',
     isComplete: (p) => filled(p.location, 2) },
-  { id: 'interests',  label: 'Interests',     weight: 10, field: 'interests',
+  { id: 'interests',  label: 'Interests',     weight: 9, field: 'interests',
     isComplete: (p) => hasItems(p.interests, 2) },
-  { id: 'portfolio',  label: 'Portfolio',     weight: 5,  field: 'achievements',
+  /**
+   * Work preferences. Weighted like the other matching-relevant sections
+   * because that is what it is: these answers are what the eligibility rules
+   * read, and without them a person is matched on their history alone.
+   *
+   * One answer is not a preference set — it would score the section without
+   * moving the matching. PREFERENCES_MIN_ANSWERS is the point at which the
+   * matcher has something to work with.
+   */
+  { id: 'preferences', label: 'Work Preferences', weight: 9, field: 'matchPreferences',
+    isComplete: (p) => countStatedPreferences(p.matchPreferences) >= PREFERENCES_MIN_ANSWERS },
+  { id: 'portfolio',  label: 'Portfolio',     weight: 4,  field: 'achievements',
     isComplete: (p) => hasItems(p.achievements) },
   { id: 'links',      label: 'Professional Links', weight: 5, field: 'socialLinks | website',
     isComplete: (p) => Object.values(p.socialLinks ?? {}).some((v) => filled(v)) || filled(p.website, 4) },

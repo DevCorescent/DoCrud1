@@ -24,6 +24,11 @@ import {
   type ProfileScoreResult, type ProfileSectionResult,
 } from '@/lib/profile-score';
 import ProfileAtsSection from '@/components/ats/ProfileAtsSection';
+import MatchPreferencesEditor, { type MatchPreferencesValue } from '@/components/profile/MatchPreferencesEditor';
+import MatchPreferencesTrigger from '@/components/profile/MatchPreferencesTrigger';
+import ProfileCompletionCard from '@/components/profile/ProfileCompletionCard';
+import { visiblePreferences } from '@/lib/match-preferences-ui';
+import PublicMatchPreferences from '@/components/profile/PublicMatchPreferences';
 import {
   ArrowLeft,
   BarChart3,
@@ -227,6 +232,25 @@ interface ConnectionCard {
 }
 
 interface UserProfileData {
+  /**
+   * Matching answers this person chose to PUBLISH. The server projects these
+   * through an allow-list (lib/server/match-preferences.ts), so what arrives
+   * here is already only what a viewer is allowed to see — for the owner it is
+   * the full set, which is what the editor below writes.
+   */
+  matchPreferences?: import('@/components/profile/PublicMatchPreferences').PublicPreferences & {
+    minSalary?: number; salaryCurrency?: string; salaryPeriod?: string; noticePeriodDays?: number;
+  };
+  /** Per-field visibility. Sent to the owner only; absent means private. */
+  matchPreferenceVisibility?: Record<string, 'public' | 'private'>;
+  /**
+   * What a VISITOR sees — the server's own projection, sent to everyone.
+   *
+   * The About section reads THIS, never `matchPreferences`: the owner's copy of
+   * that field is the full set, so rendering it showed its owner answers they
+   * had turned off.
+   */
+  publicMatchPreferences?: import('@/components/profile/PublicMatchPreferences').PublicPreferences;
   headline?: string;
   bio?: string;
   location?: string;
@@ -1112,32 +1136,63 @@ function PublishedCtaAnalytics() {
 }
 
 /* ─── stat item ──────────────────────────────────────────────────────── */
+/**
+ * One figure in the stats row.
+ *
+ * Seven of these share a row on every screen, so each gets exactly one seventh
+ * of the width — 51px on a 390px phone. Two things make that work rather than
+ * merely fit: the label has a SHORT form for narrow screens ("Total views" does
+ * not survive 51px, "Views" does), and the type scales with the viewport
+ * instead of being fixed.
+ *
+ * No dividers. At 51px a rule between every pair is six vertical lines across a
+ * phone screen, which reads as a table rather than a row of facts; alignment
+ * and spacing separate them well enough.
+ */
 function StatItem({
   label,
+  shortLabel,
   value,
   onClick,
 }: {
   label: string;
+  /** Used below `sm`, where the full label cannot fit. Defaults to `label`. */
+  shortLabel?: string;
   value: number;
   onClick?: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`group flex flex-col items-center shrink-0 px-3 sm:px-4 first:pl-0 last:pr-0 py-1 ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
-      style={{ borderRight: '1px solid rgba(255,255,255,0.055)' }}
+      title={label}
+      aria-label={`${label}: ${value.toLocaleString()}`}
+      className={`group flex min-w-0 flex-col items-center gap-[3px] rounded-[10px] px-0.5 py-1.5 transition-colors ${
+        onClick ? 'cursor-pointer hover:bg-white/[0.04]' : 'cursor-default'
+      }`}
     >
       <span
-        className="tabular-nums font-bold tracking-tight leading-none text-white transition-colors"
-        style={{ fontSize: 'clamp(15px,3.8vw,20px)' }}
+        className="w-full truncate tabular-nums text-center font-bold tracking-tight leading-none text-white"
+        style={{ fontSize: 'clamp(14px,4vw,20px)' }}
       >
         {value.toLocaleString()}
       </span>
+      {/* Sentence case on a phone, uppercase from `sm` up.
+          Uppercase plus letter-spacing is what did not fit: at 45px on a 360px
+          screen "FOLLOWERS" and "FOLLOWING" both truncated to "FOLLOW…" and
+          "FOLLOWI…", which is worse than no label at all. Lowercase glyphs are
+          markedly narrower, so the same words fit whole — and the row reads
+          quieter for it. */}
       <span
-        className="mt-[3px] font-semibold uppercase whitespace-nowrap text-white/30 transition-colors group-hover:text-white/50"
-        style={{ fontSize: 'clamp(8px,2vw,10px)', letterSpacing: '0.10em' }}
+        className="w-full truncate text-center font-semibold leading-none tracking-normal normal-case text-white/35 transition-colors group-hover:text-white/60 sm:uppercase sm:tracking-[0.06em] sm:text-white/30"
+        /* 2.3vw rather than 2.4: at 360px — the narrowest phone worth
+           supporting — the longest label, "Published", was a pixel or two over
+           its 45px column. */
+        style={{ fontSize: 'clamp(8px,2.3vw,10px)' }}
       >
-        {label}
+        {/* Two spellings, one of which is always hidden — cheaper and more
+            reliable than measuring the container to decide. */}
+        <span className="sm:hidden">{shortLabel ?? label}</span>
+        <span className="hidden sm:inline">{label}</span>
       </span>
     </button>
   );
@@ -1169,8 +1224,8 @@ function DocrudGoBadge({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 /* ─── section card ───────────────────────────────────────────────────── */
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[22px] border border-white/[0.07] bg-white/[0.025] p-5 md:p-6">
-      <h3 className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-white/30 mb-5">{title}</h3>
+    <div className="rounded-[18px] sm:rounded-[22px] border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5 md:p-6">
+      <h3 className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-white/30 mb-3.5 sm:mb-5">{title}</h3>
       {children}
     </div>
   );
@@ -2626,149 +2681,7 @@ function profileStrength(profile: UserProfileData): number {
 
    Sections the Edit Profile modal can actually edit are rendered as buttons
    that open it scrolled to that section; the rest stay informational. */
-const EDIT_SECTION_FOR: Partial<Record<ProfileSectionResult['id'], string>> = {
-  photo: 'photo',
-  headline: 'basic',
-  bio: 'basic',
-  location: 'basic',
-  skills: 'skills',
-  experience: 'experience',
-  education: 'education',
-  links: 'links',
-  interests: 'interests',
-  portfolio: 'portfolio',
-};
 
-function ProfileCompletionCard({
-  result, onComplete,
-}: {
-  result: ProfileScoreResult;
-  onComplete: (focusSection?: string | null) => void;
-}) {
-  const { score, sections } = result;
-  const missing = sections.filter((s) => !s.complete);
-  const done = sections.filter((s) => s.complete);
-  const isComplete = score >= 100;
-  const almost = score >= 80 && score < 100;
-  const R = 30, C = 2 * Math.PI * R;
-
-  /* 100%: no warning, no CTA, no missing list — just a quiet confirmation. */
-  if (isComplete) {
-    return (
-      <div className="mb-6 flex items-center gap-2.5 rounded-[16px] border border-emerald-400/[0.18] bg-emerald-400/[0.05] px-4 py-3">
-        <span aria-hidden className="text-[13px] text-emerald-300/90">&#10003;</span>
-        <p className="text-[12.5px] text-white/60">
-          <span className="font-semibold text-white/85">Profile complete</span>
-          {' · '}Your profile is ready to help you build your presence and discover opportunities.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mb-6 overflow-hidden rounded-[20px] border border-white/[0.07] bg-white/[0.03] shadow-[0_10px_40px_rgba(0,0,0,0.18)]">
-      <div className="flex flex-col gap-5 p-4 sm:flex-row sm:items-start sm:gap-6 sm:p-5">
-
-        {/* Score ring */}
-        <div className="flex items-center gap-4 sm:block sm:shrink-0">
-          <div className="relative" style={{ width: 72, height: 72 }}>
-            <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden>
-              <circle cx="36" cy="36" r={R} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="5" />
-              <circle
-                cx="36" cy="36" r={R} fill="none"
-                stroke={almost ? 'rgba(52,211,153,0.80)' : 'rgba(255,255,255,0.55)'}
-                strokeWidth="5" strokeLinecap="round"
-                strokeDasharray={C}
-                strokeDashoffset={C - (C * Math.min(100, Math.max(0, score))) / 100}
-                transform="rotate(-90 36 36)"
-                style={{ transition: 'stroke-dashoffset 700ms cubic-bezier(0.22,1,0.36,1)' }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[17px] font-black tracking-[-0.02em] text-white" role="status"
-                aria-label={`Profile strength ${score} percent`}>{score}%</span>
-            </div>
-          </div>
-          <p className="text-[9.5px] font-semibold uppercase tracking-[0.18em] text-white/30 sm:mt-2 sm:text-center">
-            Profile strength
-          </p>
-        </div>
-
-        {/* Copy */}
-        <div className="min-w-0 flex-1">
-          <h3 className="text-[14px] font-bold tracking-[-0.01em] text-white/90">
-            {almost ? "You're almost there." : 'Complete your profile'}
-          </h3>
-          <p className="mt-1.5 text-[12.5px] leading-[1.6] text-white/45">
-            {almost
-              ? 'Finish the remaining sections to strengthen your presence and improve opportunity matching.'
-              : PROFILE_COMPLETION_CTA}
-          </p>
-          <p className="mt-1.5 text-[11.5px] leading-[1.55] text-white/28">
-            Profiles 80%+ complete can strengthen visibility and improve opportunity matching.
-          </p>
-
-          {/* Missing sections — actionable where the editor supports it */}
-          {missing.length > 0 && (
-            <div className="mt-3.5">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/25">
-                Missing from your profile
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {missing.map((sec) => (
-                  <button
-                    key={sec.id}
-                    type="button"
-                    onClick={() => onComplete(EDIT_SECTION_FOR[sec.id] ?? null)}
-                    className="group inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-[11.5px] text-white/50 transition hover:border-white/[0.16] hover:bg-white/[0.06] hover:text-white/85 active:scale-[0.98]"
-                  >
-                    <span aria-hidden className="text-white/25 group-hover:text-white/50">&#9675;</span>
-                    Add {sec.label}
-                    <span className="text-[10px] font-semibold text-emerald-300/55">+{sec.weight}%</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Completed — subtle, not a checklist wall */}
-          {done.length > 0 && (
-            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-white/25">
-              <span aria-hidden className="text-emerald-300/50">&#10003;</span>
-              {done.map((s) => s.label).join(' · ')}
-            </p>
-          )}
-
-          <button
-            onClick={() => onComplete(null)}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-[11px] border border-white/[0.12] bg-white/[0.07] px-4 py-2 text-[12.5px] font-semibold text-white/80 transition hover:bg-white/[0.11] hover:text-white active:scale-[0.98]"
-          >
-            Complete Profile <span aria-hidden>&rarr;</span>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── main page ──────────────────────────────────────────────────────── */
-type TabId = 'published' | 'about' | 'skills' | 'gigs' | 'services' | 'pages' | 'activity' | 'insights' | 'billing' | 'connections' | 'settings';
-
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'published', label: 'Published' },
-  { id: 'about', label: 'About' },
-  { id: 'skills', label: 'Work & Skills' },
-  { id: 'gigs', label: 'Gigs' },
-  { id: 'services', label: 'Services' },
-  { id: 'pages', label: 'Business Pages' },
-  { id: 'activity', label: 'Activity' },
-  { id: 'connections', label: 'Connections' },
-  { id: 'insights', label: 'Insights' },
-  { id: 'billing', label: 'Billing' },
-  { id: 'settings', label: 'Settings' },
-];
-
-/* ── Reusable accordion section (used in settings tab) ─────────────── */
 function AccordionSection({
   id, open, onToggle, icon, title, subtitle, badge, badgeColor, borderColor, children,
 }: {
@@ -2823,6 +2736,23 @@ function AccordionSection({
   );
 }
 
+/* ─── profile tabs ───────────────────────────────────────────────────── */
+type TabId = 'published' | 'about' | 'skills' | 'gigs' | 'services' | 'pages' | 'activity' | 'insights' | 'billing' | 'connections' | 'settings';
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'published', label: 'Published' },
+  { id: 'about', label: 'About' },
+  { id: 'skills', label: 'Work & Skills' },
+  { id: 'gigs', label: 'Gigs' },
+  { id: 'services', label: 'Services' },
+  { id: 'pages', label: 'Business Pages' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'connections', label: 'Connections' },
+  { id: 'insights', label: 'Insights' },
+  { id: 'billing', label: 'Billing' },
+  { id: 'settings', label: 'Settings' },
+];
+
 export default function UserProfilePage() {
   const params = useParams();
   const userId = params?.userId as string | undefined;
@@ -2854,6 +2784,38 @@ export default function UserProfilePage() {
   const [publishedView, setPublishedView] = useState<'feed' | 'tracker'>('feed');
   const [openSection, setOpenSection] = useState<string>('account');
   const [editOpen, setEditOpen] = useState(false);
+  /* The work-preferences dialog. Opened from the About tab and from the
+     profile-completion checklist, so its open state lives here rather than
+     inside either of them. */
+  const [prefsOpen, setPrefsOpen] = useState(false);
+
+  /**
+   * Saved preferences, written back into the page's own profile state.
+   *
+   * The completion score is computed from that state on every render
+   * (`calculateProfileScore(profile)`), so writing the SERVER's saved answers
+   * here is what makes the ring and the checklist move the moment the dialog
+   * closes — no refetch, and no second definition of what "complete" means.
+   */
+  const handlePreferencesSaved = useCallback((
+    savedPrefs: MatchPreferencesValue,
+    savedVisibility: Record<string, 'public' | 'private'>,
+  ) => {
+    setData((prev) => (prev
+      ? {
+          ...prev,
+          profile: {
+            ...prev.profile,
+            matchPreferences: savedPrefs,
+            matchPreferenceVisibility: savedVisibility,
+            /* Recomputed with the SAME function the API uses, so the About
+               section reflects a visibility change the moment the dialog
+               closes rather than at the next page load. */
+            publicMatchPreferences: visiblePreferences(savedPrefs, savedVisibility),
+          },
+        }
+      : prev));
+  }, []);
   const [editFocusSection, setEditFocusSection] = useState<string | null>(null);
   const [followLoading, setFollowLoading] = useState(false);
   const [followingState, setFollowingState] = useState(false);
@@ -3818,7 +3780,9 @@ export default function UserProfilePage() {
 
       {/* ─── cover ─── */}
       <div className="relative w-full overflow-hidden"
-        style={{ height: 'clamp(160px, 28vw, 380px)' }}>
+        /* 110px floor rather than 160: on a 390px screen the old minimum spent
+           a fifth of the first screen on decoration before the name appeared. */
+        style={{ height: 'clamp(110px, 28vw, 380px)' }}>
         {/* Image banner */}
         {coverIsImage ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -3845,7 +3809,9 @@ export default function UserProfilePage() {
         {isOwnProfile && (
           <button
             onClick={() => setEditOpen(true)}
-            className="absolute bottom-3 right-3 flex items-center gap-1.5 h-7 px-2.5 rounded-[9px] bg-black/50 backdrop-blur-md border border-white/10 text-white/55 text-[11px] font-medium hover:bg-black/70 hover:text-white/80 transition-all"
+            /* Top-right on a phone, where the hero cannot reach it; the old
+               bottom-right corner is now under the person's own name. */
+            className="absolute top-3 right-3 sm:top-auto sm:bottom-3 flex items-center gap-1.5 h-7 px-2.5 rounded-[9px] bg-black/50 backdrop-blur-md border border-white/10 text-white/55 text-[11px] font-medium hover:bg-black/70 hover:text-white/80 transition-all"
           >
             <Edit2 className="h-3 w-3" />
             Edit banner
@@ -3857,14 +3823,22 @@ export default function UserProfilePage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pb-28">
 
         {/* Avatar + identity + actions */}
-        <div className="-mt-14 md:-mt-20 flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6 mb-7">
+        {/* Row on EVERY size, not just desktop. Stacking the avatar above the
+            name meant 112px of avatar, then the name, then the headline, each
+            on its own full-width line — about a third of a phone screen spent
+            before the first fact about the person. */}
+        {/* `items-start` on a phone: the identity column is five lines tall and
+            the avatar is 80px, so aligning their BOTTOMS pushed the name up into
+            the banner and on top of the Edit-banner button. Top-aligned, the
+            name sits beside the avatar and the rest flows under it. */}
+        <div className="-mt-8 sm:-mt-14 md:-mt-20 flex flex-row flex-wrap items-start sm:items-end gap-x-3 gap-y-3 sm:gap-6 sm:flex-nowrap mb-4 sm:mb-7">
 
           {/* Avatar */}
           <div
-            className="relative shrink-0 z-10 h-28 w-28 md:h-36 md:w-36 rounded-[24px] md:rounded-[28px] overflow-visible"
+            className="relative shrink-0 z-10 h-20 w-20 sm:h-28 sm:w-28 md:h-36 md:w-36 rounded-[18px] sm:rounded-[24px] md:rounded-[28px] overflow-visible"
           >
             <div
-              className="h-full w-full rounded-[24px] md:rounded-[28px] overflow-hidden border-[3px] border-[#0D0D0F] bg-[#18181b] flex items-center justify-center text-3xl md:text-4xl font-bold text-white/70"
+              className="h-full w-full rounded-[18px] sm:rounded-[24px] md:rounded-[28px] overflow-hidden border-[3px] border-[#0D0D0F] bg-[#18181b] flex items-center justify-center text-2xl sm:text-3xl md:text-4xl font-bold text-white/70"
               style={{
                 boxShadow: profile.publicFace
                   ? '0 0 0 2px rgba(180,140,55,0.50), 0 0 0 3.5px rgba(200,165,70,0.18), 0 8px 32px rgba(0,0,0,0.65)'
@@ -3895,7 +3869,7 @@ export default function UserProfilePage() {
           {/* Identity */}
           <div className="flex-1 min-w-0 relative z-10 flex flex-col justify-end sm:pb-1">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <h1 className="text-[24px] md:text-[32px] font-extrabold tracking-tight leading-none text-white">{user.name}</h1>
+              <h1 className="text-[19px] sm:text-[24px] md:text-[32px] font-extrabold tracking-tight leading-none text-white">{user.name}</h1>
               {credits?.verified && <VerifiedBadge size="lg" />}
               {isEffectivelyGo && <DocrudGoBadge size="md" />}
               {profile.publicFace && (
@@ -3906,13 +3880,15 @@ export default function UserProfilePage() {
               )}
             </div>
             {/* Presence status — below name, above headline */}
-            <div className="mb-2.5">
+            <div className="mb-1.5 sm:mb-2.5">
               <PresenceBadge userId={user.id} />
             </div>
             {profile.headline && (
-              <p className="text-white/55 text-[15px] md:text-[16px] leading-snug mb-3 max-w-2xl">{profile.headline}</p>
+              /* Two lines on a phone, in full from `sm` up. A headline is worth
+                 showing; it is not worth four lines of a 390px screen. */
+              <p className="text-white/55 text-[13px] sm:text-[15px] md:text-[16px] leading-snug mb-2 sm:mb-3 max-w-2xl line-clamp-2 sm:line-clamp-none">{profile.headline}</p>
             )}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-white/35">
+            <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1.5 text-[12px] sm:text-sm text-white/35">
               {profile.location && (
                 <span className="flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -3940,8 +3916,10 @@ export default function UserProfilePage() {
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-col items-start sm:items-end gap-1.5 shrink-0 relative z-10 sm:pb-1 sm:self-end">
+          {/* Action buttons. On a phone they WRAP onto their own full-width
+              line — the avatar and the name have already taken the first — so
+              there is one definition of them rather than a mobile copy. */}
+          <div className="flex w-full sm:w-auto flex-col items-start sm:items-end gap-1.5 shrink-0 relative z-10 sm:pb-1 sm:self-end">
             <div className="flex items-center gap-2">
             {isOwnProfile ? (
               <>
@@ -4056,24 +4034,22 @@ export default function UserProfilePage() {
           </div>
         </div>
 
-        {/* Stats row — single scrollable line on all screen sizes */}
-        <style>{`.__stats-row::-webkit-scrollbar{display:none}`}</style>
-        <div className="relative pt-2 pb-5 md:pb-6 mb-5 md:mb-7 border-b border-white/[0.05]">
-          {/* Right-edge fade — hints at horizontal scroll on mobile */}
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-10 sm:hidden z-10"
-            style={{ background: 'linear-gradient(to right, transparent, var(--bg-base, #0D0D0F))' }} />
-
-          <div
-            className="__stats-row flex items-stretch overflow-x-auto"
-            style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
-          >
+        {/* Stats — ONE row, seven equal columns, every screen.
+            A fixed seven-column grid rather than a flex line: each figure gets
+            exactly one seventh of the width, so the row cannot overflow, cannot
+            wrap, and the columns stay aligned whatever the numbers are. Two
+            earlier attempts failed here — a scrolling line hid four of the seven
+            off the right edge, and a four-column grid solved that by taking two
+            rows. */}
+        <div className="relative pt-1 pb-3.5 sm:pb-5 md:pb-6 mb-4 sm:mb-5 md:mb-7 border-b border-white/[0.05]">
+          <div className="grid grid-cols-7 items-start gap-x-0.5 sm:gap-x-2">
             <StatItem label="Followers" value={followersCount} onClick={() => { setTab('connections'); loadConnections(); }} />
             <StatItem label="Following" value={liveStats?.following ?? stats.following} onClick={() => { setTab('connections'); loadConnections(); }} />
             <StatItem label="Upraised" value={upraiseCount} />
             <StatItem label="Gigs" value={liveStats?.gigsCount ?? stats.gigsCount} onClick={() => setTab('gigs')} />
             <StatItem label="Published" value={liveStats?.publishedCount ?? stats.publishedCount} onClick={() => setTab('published')} />
-            <StatItem label="Total views" value={liveStats?.totalViews ?? stats.totalViews ?? 0} onClick={isOwnProfile ? () => setTab('insights') : undefined} />
-            <StatItem label="Total likes" value={liveStats?.totalLikes ?? stats.totalLikes ?? 0} onClick={isOwnProfile ? () => setTab('published') : undefined} />
+            <StatItem label="Total views" shortLabel="Views" value={liveStats?.totalViews ?? stats.totalViews ?? 0} onClick={isOwnProfile ? () => setTab('insights') : undefined} />
+            <StatItem label="Total likes" shortLabel="Likes" value={liveStats?.totalLikes ?? stats.totalLikes ?? 0} onClick={isOwnProfile ? () => setTab('published') : undefined} />
           </div>
         </div>
 
@@ -4081,12 +4057,21 @@ export default function UserProfilePage() {
         {isOwnProfile && (
           <ProfileCompletionCard
             result={calculateProfileScore(profile)}
-            onComplete={(focus) => { setEditFocusSection(focus ?? null); setEditOpen(true); }}
+            preferences={profile.matchPreferences}
+            preferenceVisibility={profile.matchPreferenceVisibility}
+            onOpenPreferences={() => setPrefsOpen(true)}
+            onComplete={(focus) => {
+              setEditFocusSection(focus ?? null);
+              setEditOpen(true);
+            }}
           />
         )}
 
-        {/* Tabs */}
-        <div className="relative flex gap-0 mb-7 md:mb-9 overflow-x-auto [scrollbar-width:none] border-b border-white/[0.06]">
+        {/* Tabs — STICKY. Ten tabs cannot fit a phone, so they scroll
+            horizontally; what matters is that they stop disappearing upwards.
+            Before this, reaching Gigs from the bottom of About meant scrolling
+            the whole page back to the top. */}
+        <div className="sticky top-0 z-30 -mx-4 sm:mx-0 px-4 sm:px-0 relative flex gap-0 mb-5 sm:mb-7 md:mb-9 overflow-x-auto [scrollbar-width:none] border-b border-white/[0.06] bg-[#0D0D0F]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[#0D0D0F]/80">
           {TABS.filter((t) => (t.id !== 'insights' && t.id !== 'billing' && t.id !== 'settings') || isOwnProfile).map((t) => (
             <button
               key={t.id}
@@ -4159,7 +4144,7 @@ export default function UserProfilePage() {
 
         {/* About tab */}
         {tab === 'about' && (
-          <div className="space-y-5">
+          <div className="space-y-3.5 sm:space-y-5">
             {profile.bio && (
               <SectionCard title="About">
                 <p className="text-white/70 text-[15px] leading-relaxed whitespace-pre-line">{profile.bio}</p>
@@ -4172,6 +4157,38 @@ export default function UserProfilePage() {
                   {(profile.skills ?? []).map((s) => <SkillChip key={s} label={s} />)}
                 </div>
               </SectionCard>
+            )}
+
+            {/* Only the answers this person chose to publish — and the same
+                ones whoever is looking. `publicMatchPreferences` is the
+                server's projection; `matchPreferences` is the owner's full set
+                and belongs to the editor alone. Reading the wrong one here is
+                what made a switched-off answer keep appearing on its owner's
+                own profile. */}
+            {profile.publicMatchPreferences
+              && Object.keys(profile.publicMatchPreferences).length > 0 && (
+              <SectionCard title="Work preferences">
+                <PublicMatchPreferences preferences={profile.publicMatchPreferences} />
+                {isOwnProfile && (
+                  /* Said plainly, because the answer to "why is this here?" is
+                     "because you published it" — and the way to change that is
+                     one control away. */
+                  <p className="mt-3 text-[11.5px] text-white/30">
+                    This is what visitors see. Everything else you answered is used for
+                    matching only.
+                  </p>
+                )}
+              </SectionCard>
+            )}
+
+            {/* The editor is the OWNER's view of the same data — every answer,
+                including the ones nobody else can see. */}
+            {isOwnProfile && (
+              <MatchPreferencesTrigger
+                preferences={profile.matchPreferences}
+                visibility={profile.matchPreferenceVisibility}
+                onOpen={() => setPrefsOpen(true)}
+              />
             )}
 
             {(profile.experience ?? []).length > 0 && (
@@ -7051,6 +7068,20 @@ export default function UserProfilePage() {
           </div>
         );
       })()}
+
+      {/* Work preferences — ONE dialog for every trigger (the completion card
+          and the About tab both open this one). Mounted here rather than inside
+          a tab so opening it never depends on which tab is showing. */}
+      {isOwnProfile && (
+        <MatchPreferencesEditor
+          hideTrigger
+          initialPreferences={profile.matchPreferences}
+          initialVisibility={profile.matchPreferenceVisibility}
+          open={prefsOpen}
+          onOpenChange={setPrefsOpen}
+          onSaved={handlePreferencesSaved}
+        />
+      )}
 
       {/* Edit modal */}
       {editOpen && isOwnProfile && (

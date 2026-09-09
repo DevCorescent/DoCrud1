@@ -17,6 +17,7 @@ import { resolveCompanyLogos } from '@/lib/server/company-logo-resolver';
 import { logoKey } from '@/lib/company-logos';
 import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { importJobsFromCsv } from '@/lib/server/job-import';
+import { countPublishedJobs } from '@/lib/server/db/hiring-jobs-collection';
 import type { SourceRunStat } from '@/lib/server/job-scraper/types';
 
 export interface SourceInfo {
@@ -229,7 +230,50 @@ export async function runApprovedAndImport(opts: { totalLimit?: number; adminEma
  * `imported` is mapped from INSERTED, and `updated` is now a real number
  * rather than a permanent zero — that is the whole point of the switch.
  */
-export const SAVE_RESERVE_MS = 45_000;
+/**
+ * How much of the run's window is held back for PERSISTENCE.
+ *
+ * ═══ WHY THIS IS A FUNCTION AND NOT A CONSTANT ═══
+ *
+ * It used to be a flat 45 s. That is a fixed budget paying for work whose cost
+ * grows with the corpus, and the corpus grew: the reserve now has to cover
+ *
+ *   1. writing the whole ~12 MB app_state document,
+ *   2. mirroring every posting into `hiring_jobs` — a projection read of the
+ *      existing rows, a bulkWrite, and a `deleteMany` whose filter carries one
+ *      id per job,
+ *   3. writing per-source scraper state.
+ *
+ * When that no longer fit, the run was killed AFTER app_state had been written
+ * and BEFORE the mirror finished. That is exactly the observed production state:
+ * 5,276 jobs in app_state, 5,118 in hiring_jobs, and the 158 missing ones all
+ * carrying a single identical createdAt — one batch, persisted but never
+ * mirrored. Nothing was corrupted, because app_state is written first and stays
+ * authoritative; the replica simply fell behind and reads fell back to it.
+ *
+ * So the reserve scales with the number of postings that must be persisted, and
+ * is clamped at both ends: never so small that a tiny run cannot finish, never
+ * so large that it eats the whole window and no source is ever read.
+ *
+ * These coefficients are deliberately GENEROUS rather than measured-to-the-edge.
+ * Reserving too much costs a few sources deferred to the next run — they resume
+ * from the stored cursor. Reserving too little costs the mirror, silently. The
+ * two failures are not symmetrical, so the tuning is not either.
+ */
+export const SAVE_RESERVE_BASE_MS = 45_000;
+/** Per posting, covering both the app_state rewrite and the mirror upsert. */
+export const SAVE_RESERVE_PER_JOB_MS = 12;
+/** Never hand persistence more than this share of the whole window. */
+export const SAVE_RESERVE_MAX_SHARE = 0.6;
+
+export function saveReserveMs(jobCount: number, budgetMs: number): number {
+  const scaled = SAVE_RESERVE_BASE_MS + Math.max(0, jobCount) * SAVE_RESERVE_PER_JOB_MS;
+  const ceiling = Math.floor(budgetMs * SAVE_RESERVE_MAX_SHARE);
+  return Math.min(scaled, Math.max(SAVE_RESERVE_BASE_MS, ceiling));
+}
+
+/** Kept for callers that still import the old name; the flat floor. */
+export const SAVE_RESERVE_MS = SAVE_RESERVE_BASE_MS;
 
 export async function runCanonicalIngest(
   opts: { totalLimit?: number; budgetMs?: number },
@@ -242,8 +286,13 @@ export async function runCanonicalIngest(
      achieved is written AFTER the loop — the job store, then the per-source
      state — and both of those writes need to happen inside the window or the
      entire pass is lost. The reserve is what pays for them. */
+  /* Sized against the corpus that will actually have to be written, read
+     cheaply from the mirror's count rather than by loading any postings. A
+     failure to count falls back to the flat floor — never to "no reserve". */
+  const corpusForReserve = await countPublishedJobs().catch(() => null);
+  const reserveMs = saveReserveMs(corpusForReserve ?? 0, opts.budgetMs ?? 0);
   const deadlineAt = opts.budgetMs
-    ? Date.now() + Math.max(1_000, opts.budgetMs - SAVE_RESERVE_MS)
+    ? Date.now() + Math.max(1_000, opts.budgetMs - reserveMs)
     : undefined;
 
   const out = await runCanonicalIngestion({

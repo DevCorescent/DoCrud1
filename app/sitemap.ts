@@ -1,3 +1,4 @@
+import { isDatabaseConfigured } from '@/lib/server/database';
 import type { MetadataRoute } from 'next';
 
 /* `force-dynamic` was set alongside `revalidate` and silently defeated it:
@@ -41,8 +42,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        (hiring_jobs → app_state projection → full read) instead of pulling all
        360 descriptions — ~2.7 MB the sitemap never looks at. Same published
        filtering, same fallback ladder, so an unavailable replica yields a
-       slower sitemap and never an empty one. */
-    getPublishedHiringJobList(),
+       slower sitemap and never an empty one.
+
+       The catch is narrow ON PURPOSE. Since the canonical read cutover this
+       throws when NO database is configured, which broke `npm run build` in
+       CI: the sitemap is statically prerendered, and CI has no MongoDB. Before
+       the cutover an absent app_state key simply yielded [], so the build
+       succeeded with no job URLs — restored here exactly.
+
+       A read that FAILS while a database IS configured still propagates, so a
+       genuine outage remains loud rather than quietly emitting a sitemap that
+       has lost every job. */
+    getPublishedHiringJobList().catch((error) => {
+      if (!isDatabaseConfigured()) return [];
+      throw error;
+    }),
     getCertificates(),
     getVirtualIdCards(),
     getPublicDocrudiansData(),

@@ -1,0 +1,130 @@
+# Continuous integration for DoCrud.
+#
+# WHY THIS EXISTS
+# ---------------
+# The repository carries 72 self-test suites — roughly 3,000 assertions covering
+# authorization, onboarding, ATS, recommendations and the public job feed — and
+# until now NOTHING RAN THEM automatically. They only ever executed when someone
+# remembered. A test nobody runs is documentation, not a safety net.
+#
+# HOW SUITES ARE RUN
+# ------------------
+# There is no `npm test` in this repository and this workflow does not invent
+# one. Each suite is a `scripts/*.selftest.ts` executed with tsx, exactly as the
+# existing `test:*` scripts do it. They are discovered by glob, so a new suite is
+# covered the moment it is added — no list to forget to update.
+#
+# FAILURES ARE FAILURES. Nothing here is allowed to pass on error.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev/gauransh, main]
+
+# A new push supersedes an in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the major the project builds against today. pdfjs-dist
+      # requires >=20.19; 22 satisfies every engines field in the tree.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Four suites (post-job, corpus-cache, hiring-projection,
+      # public-sort-parity) now exercise a REAL isolated mongod through
+      # mongodb-memory-server, because the behaviour under test is the
+      # database's own. The binary is downloaded once and cached; without this
+      # every run re-downloads ~100 MB before a single test executes.
+      - name: Cache mongodb-memory-server binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: TypeScript
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx next lint
+
+      - name: Self-test suites
+        run: |
+          # Two suites need live infrastructure (Atlas / outbound network) and
+          # are skipped HERE rather than weakened: job-sources reaches real job
+          # boards, ranking-parity loads the production corpus. They are not
+          # disabled — they are run outside CI, deliberately, because a suite
+          # that fails for want of a secret teaches everyone to ignore red.
+          NEEDS_LIVE="job-sources ranking-parity"
+          failed=0; ran=0; skipped=0
+          for f in scripts/*.selftest.ts; do
+            name=$(basename "$f" .selftest.ts)
+            if echo "$NEEDS_LIVE" | grep -qw "$name"; then
+              echo "::notice::skipping $name (requires live infrastructure)"
+              skipped=$((skipped+1)); continue
+            fi
+            echo "── $name ──"
+            if npx tsx "$f"; then ran=$((ran+1)); else failed=$((failed+1)); echo "::error::suite failed: $name"; fi
+          done
+          echo "passed=$ran failed=$failed skipped=$skipped"
+          # The job fails if ANY suite failed. No soft landings.
+          test "$failed" -eq 0
+
+      # Catches trailing whitespace and, more importantly, conflict markers
+      # that compile fine and merge badly.
+      - name: Whitespace / conflict-marker check
+        run: git diff --check
+
+      - name: Production build
+        run: npm run build
+
+  # Advisory only, and deliberately separate: a brand-new CVE in a transitive
+  # development dependency must not block an unrelated bugfix from merging. It
+  # is still surfaced on every run so nobody has to remember to look.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      # `npm audit` exits 1 whenever it finds anything, so this step turned the
+      # whole job red even though `continue-on-error` already kept it from
+      # blocking a merge. A permanently-red advisory check is worse than no
+      # check: it trains everyone to ignore the colour, and then a real
+      # regression in `verify` looks like more of the same noise.
+      #
+      # The exit code is handled, NOT the output: the full report still prints,
+      # and a ::warning:: annotation puts the finding on the run summary and in
+      # the PR's Files-changed view. Nothing is suppressed, filtered, or
+      # downgraded — the audit still runs on every push and pull request, at the
+      # default severity threshold, against production dependencies.
+      - name: npm audit (production dependencies)
+        run: |
+          npm audit --omit=dev || {
+            echo "::warning::Production dependency vulnerabilities detected. This audit is advisory and does not block the merge — review the report above."
+            true
+          }
+      - name: npm audit (everything, informational)
+        run: npm audit || true

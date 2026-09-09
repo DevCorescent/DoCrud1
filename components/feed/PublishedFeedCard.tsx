@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { FEED_CARD, FEED_CARD_MEDIA } from './cardShell';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Newspaper } from 'lucide-react';
@@ -187,7 +188,9 @@ export function PublishedFeedCard({
   beforeActions,
   actions,
   footer,
-  articleClassName = 'group py-5 px-4 sm:px-0',
+  /* The shared shell by default, so every feed that renders this card gets the
+     same object without each one having to remember to ask for it. */
+  articleClassName = FEED_CARD,
   articleProps,
   linkContent = true,
   linkAuthor = true,
@@ -311,15 +314,19 @@ export function PublishedFeedCard({
 
       {/* 3. MAIN CONTENT */}
       {item.thumbnailUrl && (
-        <div className={`-mx-4 overflow-hidden sm:mx-0 sm:rounded-xl ${titleEl || bodyEl ? 'mb-3.5' : ''} ${titleEl ? 'mt-3.5' : ''}`}>
+        <div className={`${FEED_CARD_MEDIA} ${titleEl || bodyEl ? 'mb-3.5' : ''} ${titleEl ? 'mt-3.5' : ''}`}>
           {wrap(
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={item.thumbnailUrl}
               alt={showTitle ? item.title : ''}
-              /* Task 15 — cap media height on small screens so a very tall image
-                 cannot become an unreadable block. Desktop keeps natural height. */
-              className="h-auto max-h-[70vh] w-full object-cover transition-transform duration-500 group-hover:scale-[1.01] sm:max-h-none"
+              /* Natural proportions, full width, nothing cut. The height cap
+                 that used to live here paired with `object-cover`, so a tall
+                 photo was not scaled down to fit — it had its top and bottom
+                 sliced off, which is not a thing to do to what someone posted.
+                 The bento grid bounds height its own way, by fitting the
+                 whole picture inside the tile. */
+              className="h-auto w-full transition-transform duration-500 group-hover:scale-[1.01]"
               loading="lazy"
               decoding="async"
             />,

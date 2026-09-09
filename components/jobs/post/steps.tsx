@@ -16,6 +16,8 @@
  */
 
 import type { JobDraft, FieldErrors } from '@/lib/jobs/post-wizard';
+import { JOB_URGENCY_OPTIONS } from '@/lib/job-urgency';
+
 import {
   EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, EXPERIENCE_LABELS,
 } from '@/lib/jobs-ui';
@@ -127,6 +129,27 @@ export function JobDetailsStep({ draft, errors, set }: StepProps) {
           options={options(EXPERIENCE_LABELS)}
         />
       </div>
+
+      {/* Optional, and the empty choice is first and real. Urgency tints the
+          card wherever it is shown, so a poster who has not thought about it
+          must be able to leave it unsaid rather than pick the least wrong
+          option — see lib/job-urgency.ts. */}
+      <SelectField
+        id="job-urgency"
+        label="Hiring urgency"
+        value={draft.hiringUrgency}
+        onChange={(v) => set('hiringUrgency', v)}
+        options={[
+          /* '' is the draft's own "not stated". SelectField handles the fact
+             that a Radix Select cannot carry an empty value. */
+          { value: '', label: 'Not specified', description: 'No timeline shown on the card' },
+          ...JOB_URGENCY_OPTIONS.map((o) => ({
+            value: o.value as string,
+            label: o.composerLabel,
+            description: o.hint,
+          })),
+        ]}
+      />
 
       <Field id="job-department" label="Department" hint="Optional — helps candidates place the role.">
         <input

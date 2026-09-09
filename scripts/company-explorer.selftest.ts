@@ -357,8 +357,13 @@ check('line and page wheel units are converted to pixels',
 check('the job count is highlighted, not muted',
   /formatCompanyJobCount\(c\.jobCount\)/.test(stripCode)
   && /font-extrabold tabular-nums/.test(stripCode));
+/* The accent now lives in the stylesheet rather than in an inline style — the
+   tile's surface became glass and its colours moved with it — so the invariant
+   is checked where the rule actually is. What is asserted is unchanged: the
+   count reuses the strip's existing violet and does not introduce a colour. */
+const stripCss = read('components/jobs/company/company-explorer.css');
 check('and the highlight reuses the strip accent, not a new colour',
-  (stripCode.match(/167,139,250/g) ?? []).length >= 2);
+  (stripCss.match(/167,139,250/g) ?? []).length >= 2);
 
 /* Manage is drawn client-side but never authorizes anything. */
 check('the strip only DRAWS Manage from canManage', /canManage &&/.test(strip));

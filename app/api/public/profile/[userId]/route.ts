@@ -8,6 +8,7 @@ import { getProfileData, getFollowCounts, isFollowing as checkIsFollowing } from
 import { getPublicGigListingsForUser } from '@/lib/server/gigs';
 import { getPublicAnalyticsForUser } from '@/lib/server/file-transfers';
 import { calculateProfileScore } from '@/lib/profile-score';
+import { publicMatchPreferences } from '@/lib/server/match-preferences';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,8 +51,21 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
     // metadata needed to render the download action, never the storage URL —
     // downloads go through /api/profile/resume/[userId], which enforces the
     // Docrud Infinity entitlement server-side.
+    /* What a VISITOR would see, computed once and sent to everyone — the owner
+       included.
+
+       The owner's own copy of `matchPreferences` is deliberately the FULL set
+       (the editor needs every answer, including the private ones), which meant
+       the About section — reading that same field — showed its owner answers
+       they had switched off. It looked exactly like a broken toggle. The
+       section now reads THIS field instead, so it renders the public view no
+       matter who is looking, and cannot show a private answer to anybody. */
+    const publishedPreferences = publicMatchPreferences(
+      profile.matchPreferences, profile.matchPreferenceVisibility,
+    );
+
     const safeProfile = isOwnProfile
-      ? profile
+      ? { ...profile, publicMatchPreferences: publishedPreferences }
       : {
           ...profile,
           resumeFiles: (profile.resumeFiles ?? []).map((entry) => ({
@@ -60,6 +74,24 @@ export async function GET(req: NextRequest, { params }: { params: { userId: stri
             uploadedAt: entry.uploadedAt,
             url: '',
           })),
+          /* Matching preferences are REBUILT from an allow-list, not redacted
+             from the spread above. A salary floor, a notice period and a
+             willingness to relocate are answers a person gives so we can match
+             them, not answers they have published — and this endpoint spreads
+             the whole stored profile, so anything not deliberately projected
+             here would be world-readable. `publicMatchPreferences` starts from
+             an empty object and copies across only what its owner marked
+             public, so a field added to the model later is private until
+             somebody chooses otherwise. */
+          matchPreferences: publicMatchPreferences(
+            profile.matchPreferences, profile.matchPreferenceVisibility,
+          ),
+          /* The visibility record itself is not another person's business: it
+             would state, field by field, exactly what is being withheld. */
+          matchPreferenceVisibility: undefined,
+          /* After the spread, never before it — a key placed first would be
+             overwritten by whatever the stored profile happened to carry. */
+          publicMatchPreferences: publishedPreferences,
         };
 
     const safeUser = {

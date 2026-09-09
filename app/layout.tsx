@@ -138,17 +138,23 @@ export async function generateMetadata(): Promise<Metadata> {
       'max-snippet': -1,
     },
   },
+  /* Every icon here is served at the size it is declared at.
+     These all used to point at the same 1024x1024 source PNG — 1.36 MB —
+     including the entry labelled `32x32`, so a browser downloaded well over a
+     megabyte to draw a favicon 32 pixels wide, and again for the touch icon
+     and the tile. The sized files under /icons come from that same artwork
+     and total 84 KB for the four of them. */
   icons: {
     icon: [
-      { url: settings.faviconUrl || '/docrud-favicon.png', type: 'image/png', sizes: '1024x1024' },
-      { url: '/docrud-icon.png', type: 'image/png', sizes: '32x32' },
+      { url: settings.faviconUrl || '/icons/icon-32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/icons/icon-192.png', type: 'image/png', sizes: '192x192' },
     ],
     apple: [
-      { url: '/docrud-favicon.png', sizes: '1024x1024', type: 'image/png' },
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
     ],
-    shortcut: settings.faviconUrl || '/docrud-favicon.png',
+    shortcut: settings.faviconUrl || '/icons/icon-32.png',
     other: [
-      { rel: 'mask-icon', url: '/docrud-favicon.png' },
+      { rel: 'mask-icon', url: '/icons/icon-192.png' },
     ],
   },
   manifest: '/manifest.webmanifest',
@@ -160,7 +166,7 @@ export async function generateMetadata(): Promise<Metadata> {
   },
   other: {
     'msapplication-TileColor': '#0d0e11',
-    'msapplication-TileImage': '/docrud-favicon.png',
+    'msapplication-TileImage': '/icons/icon-192.png',
   },
   };
 }
@@ -368,8 +374,11 @@ export default async function RootLayout({
         <meta name="geo.placename" content="India" />
         <meta name="language" content="English" />
         <meta name="revisit-after" content="3 days" />
-        {/* Preload the app icon (LCP candidate in nav) */}
-        <link rel="preload" href="/docrud-icon.png" as="image" type="image/png" />
+        {/* The app icon was preloaded here as an LCP candidate. It is a
+            favicon, never painted in the page, and the file was 553 KB — so
+            the preload only bought a large download a head start over the
+            things that ARE painted. The icon links in the metadata above are
+            enough for the browser to fetch what it needs, at 1 KB. */}
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${googleAnalyticsId}`}
           strategy="afterInteractive"

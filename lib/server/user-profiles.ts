@@ -41,7 +41,28 @@ export interface UserProfileData {
   };
   openToWork?: boolean;
   pronouns?: string;
+  /**
+   * What the member has told us so we can match them to work: locations, work
+   * mode, employment type, salary floor, availability and the rest.
+   *
+   * NOT an ordinary profile field. Some of these answers are things a person
+   * wants used on their behalf without being published — see
+   * lib/server/match-preferences.ts, which owns the model, the validation and
+   * the public projection. Anything reading a profile for a PUBLIC surface must
+   * go through `publicMatchPreferences`, because the public profile endpoint
+   * spreads this whole object and redacts afterwards.
+   */
+  matchPreferences?: import('@/lib/server/match-preferences').MatchPreferences;
+  /**
+   * Per-field visibility for the above. A key that is absent is PRIVATE — the
+   * default is never "show it".
+   */
+  matchPreferenceVisibility?: import('@/lib/server/match-preferences').PreferenceVisibility;
   updatedAt?: string;
+  /** Monotonic, server-owned. Bumps only when a recommendation input changes —
+      see RECOMMENDATION_INPUT_FIELDS. Absent on profiles predating the field,
+      which reads as 0. */
+  profileVersion?: number;
   profileSetupDone?: boolean;
   /** True once the welcome → interests → first-post onboarding is finished or skipped. */
   onboardingDone?: boolean;
@@ -212,12 +233,81 @@ function serializeProfilesWrite<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+/**
+ * The profile fields that can change a recommendation.
+ *
+ * ═══ SEVEN, AND WHY IT IS EASY TO COUNT SIX ═══
+ *
+ * `buildRecProfile()` reads five directly — headline, skills, location,
+ * experience, interests. The recommendations route adds `resumeFiles`, merged
+ * through `mergeResumeSignals()` so an uploaded CV supplies signals the member
+ * never typed. That is six, and stopping there is the mistake: both scopes also
+ * pass `matchPreferences`, which `buildRecProfile` feeds into `roleTokens` (via
+ * `desiredTitles`) and into `preferredLocations`, `preferredWorkModes` and
+ * `preferredEmploymentTypes` — all of which change scores.
+ *
+ * Omitting it would mean a member could state exactly the work they want and
+ * never have their recommendations recomputed.
+ *
+ * `bio` is deliberately NOT here: the personalized scope reads it from the
+ * profile but never passes it to the scorer. Nor are `roles`/`customRoles`,
+ * which onboarding persists but the scorer does not read.
+ *
+ * This list is the ONLY reason `profileVersion` moves. Incrementing on every
+ * profile write would be easier and wrong: `profileSetupDone`, `onboardingDone`,
+ * `emailVerified` and the Infinity flags cannot change a ranking, and treating
+ * them as if they could would recompute the whole board for a boolean.
+ */
+export const RECOMMENDATION_INPUT_FIELDS = [
+  'headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles',
+  'matchPreferences',
+] as const;
+
+/**
+ * Does this patch touch anything the scorer reads?
+ *
+ * Decided from the PATCH at runtime, not from the calling route. Two writers —
+ * `/api/profile/me` and `/api/onboarding/complete` — forward arbitrary
+ * client-shaped profile objects, so which fields a request changes simply is
+ * not knowable per route. Inspecting the keys covers those correctly and keeps
+ * unrelated metadata writes from bumping the version.
+ */
+export function touchesRecommendationInputs(patch: Partial<UserProfileData>): boolean {
+  return (RECOMMENDATION_INPUT_FIELDS as readonly string[])
+    .some((field) => Object.prototype.hasOwnProperty.call(patch, field));
+}
+
+/**
+ * The next profile version.
+ *
+ * Monotonic and SERVER-OWNED. A missing version reads as 0, so the first
+ * recommendation-relevant write on a pre-existing profile produces 1 and no
+ * migration has to touch the profiles that predate the field. It never
+ * decreases: an unrelated write carries the current value forward unchanged.
+ */
+export function nextProfileVersion(
+  current: Partial<UserProfileData> | null | undefined,
+  patch: Partial<UserProfileData>,
+): number {
+  const raw = Number((current as { profileVersion?: unknown } | null | undefined)?.profileVersion);
+  const currentVersion = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+  return touchesRecommendationInputs(patch) ? currentVersion + 1 : currentVersion;
+}
+
 export async function updateProfileData(userId: string, data: Partial<UserProfileData>): Promise<void> {
+  /* `profileVersion` is SERVER-OWNED. Two routes forward arbitrary client
+     profile objects straight into this function, so a request could otherwise
+     set its own version and either freeze its recommendations or invalidate
+     everyone's. It is stripped here, at the one funnel, rather than at each
+     caller — where the next caller would forget. */
+  const { profileVersion: _clientSupplied, ...patch } = data as Partial<UserProfileData> & { profileVersion?: unknown };
+
   if (getDbPool()) {
     const current = (await selectUserProfileRow(userId)) ?? {};
     const next: UserProfileData = {
       ...current,
-      ...data,
+      ...patch,
+      profileVersion: nextProfileVersion(current, patch),
       updatedAt: new Date().toISOString(),
     };
     await upsertUserProfileRow(userId, next);
@@ -227,7 +317,8 @@ export async function updateProfileData(userId: string, data: Partial<UserProfil
     const profiles = await getAllProfiles();
     profiles[userId] = {
       ...(profiles[userId] ?? {}),
-      ...data,
+      ...patch,
+      profileVersion: nextProfileVersion(profiles[userId], patch),
       updatedAt: new Date().toISOString(),
     };
     await writeJsonFile(userProfilesPath, profiles);

@@ -10,7 +10,9 @@
  * one shared read under concurrency, correct invalidation, and no empty corpus
  * when a load fails.
  */
-process.env.MONGODB_URI = '';
+/* Phase 2.7E-INFRA: canonical hiring-job persistence is MongoDB, so this suite
+   runs against an ISOLATED in-memory mongod instead of forcing file mode. */
+import { startTestMongo } from './support/mongo-test-env';
 
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -51,7 +53,11 @@ function rank(jobs: HiringJobPosting[], skills: string[]) {
 
 const poster = { id: 'u-corpus', email: 'corpus@example.com', name: 'Corpus', role: 'user', accountType: 'individual' } as unknown as User;
 
+let stopMongo: (() => Promise<void>) | null = null;
+
 async function main() {
+  const mongo = await startTestMongo();
+  stopMongo = mongo.stop;
   const dir = path.join(process.cwd(), 'data');
   await fs.mkdir(dir, { recursive: true });
   const file = path.join(dir, 'hiring-jobs.json');
@@ -137,7 +143,11 @@ async function main() {
   await fs.unlink(file).catch(() => {});
 
   console.log(`\n${checks - failures}/${checks} checks passed.`);
-  if (failures > 0) { console.log('SELF-TEST FAILED'); process.exit(1); }
+  if (failures > 0) { console.log('SELF-TEST FAILED'); await stopMongo?.(); process.exit(1); }
   console.log('SELF-TEST OK');
+  /* Explicit exit: the MongoClient pool would otherwise hold the event loop
+     open and the suite would hang after reporting success. */
+  await stopMongo?.();
+  process.exit(0);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -120,9 +120,23 @@ export function SelectField({
   options: Array<{ value: string; label: string; description?: string }>;
   placeholder?: string;
 }) {
+  /* ── "No answer" is a real option, and Radix will not carry it ──
+     A Radix Select reserves the empty string to mean "clear the selection", so
+     a <SelectItem value=""> throws on render and takes the whole step down with
+     it. But an optional field genuinely needs a "Not specified" choice, and the
+     draft genuinely stores '' for it.
+
+     So the translation happens HERE, once, rather than at each call site: a
+     caller passes and receives '' as it would expect, and the sentinel exists
+     only for the length of the render. Fixing it in the shared control means
+     the next optional Select cannot reintroduce the crash. */
+  const EMPTY = '__unspecified__';
+  const encode = (v: string) => (v === '' ? EMPTY : v);
+  const decode = (v: string) => (v === EMPTY ? '' : v);
+
   return (
     <Field id={id} label={label} hint={hint} error={error} required={required}>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={encode(value)} onValueChange={(v) => onChange(decode(v))}>
         <SelectTrigger
           id={id}
           aria-invalid={error ? true : undefined}
@@ -133,7 +147,7 @@ export function SelectField({
         </SelectTrigger>
         <SelectContent className="ui-select-content max-h-[min(320px,60vh)]">
           {options.map((option) => (
-            <SelectItem key={option.value} value={option.value} className="ui-select-item">
+            <SelectItem key={option.value} value={encode(option.value)} className="ui-select-item">
               <span className="font-medium">{option.label}</span>
               {option.description && (
                 <span className={`ml-2 text-[12px] ${FAINT}`}>{option.description}</span>

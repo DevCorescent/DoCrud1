@@ -645,7 +645,7 @@ export default function EarlyAccessPage() {
       {/* Logo */}
       <Link href="/" style={{ display: 'block', textDecoration: 'none', marginBottom: 18, position: 'relative', width: 38, height: 38, borderRadius: 12, flexShrink: 0 }}>
         <div aria-hidden="true" style={{ position: 'absolute', inset: -1.5, borderRadius: 13.5, background: 'conic-gradient(from 0deg, transparent 0%, transparent 62%, rgba(170,128,40,0.55) 74%, rgba(232,204,122,1.0) 83%, rgba(232,204,122,0.95) 88%, rgba(170,128,40,0.50) 96%, transparent 100%)', animation: 'goldenRingSpin 3.2s linear infinite', zIndex: 0 }} />
-        <img src="/docrud-icon.png" alt="Docrud" width={38} height={38} style={{ borderRadius: 11, display: 'block', position: 'relative', zIndex: 1, width: 38, height: 38, objectFit: 'cover' }} />
+        <img src="/icons/logo-192.png" alt="Docrud" width={38} height={38} style={{ borderRadius: 11, display: 'block', position: 'relative', zIndex: 1, width: 38, height: 38, objectFit: 'cover' }} />
       </Link>
       {/* Nav items */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center', flex: 1 }}>
@@ -701,7 +701,7 @@ export default function EarlyAccessPage() {
           <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', flexShrink: 0 }}>
             <div style={{ position: 'relative', width: 26, height: 26, borderRadius: 8, flexShrink: 0 }}>
               <div aria-hidden="true" style={{ position: 'absolute', inset: -1.5, borderRadius: 10, background: 'conic-gradient(from 0deg, transparent 0%, transparent 62%, rgba(170,128,40,0.55) 74%, rgba(232,204,122,1.0) 83%, rgba(232,204,122,0.95) 88%, rgba(170,128,40,0.50) 96%, transparent 100%)', animation: 'goldenRingSpin 3.2s linear infinite', zIndex: 0 }} />
-              <img src="/docrud-icon.png" alt="Docrud" width={26} height={26} style={{ borderRadius: 7, display: 'block', position: 'relative', zIndex: 1, width: 26, height: 26, objectFit: 'cover' }} />
+              <img src="/icons/logo-192.png" alt="Docrud" width={26} height={26} style={{ borderRadius: 7, display: 'block', position: 'relative', zIndex: 1, width: 26, height: 26, objectFit: 'cover' }} />
             </div>
             <span style={{ fontSize: 14, fontWeight: 700, color: '#fafafa', letterSpacing: '-0.03em' }}>docrud</span>
           </Link>
@@ -831,7 +831,7 @@ export default function EarlyAccessPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ position: 'relative', width: 26, height: 26, borderRadius: 8, flexShrink: 0 }}>
                 <div aria-hidden="true" style={{ position: 'absolute', inset: -1.5, borderRadius: 10, background: 'conic-gradient(from 0deg, transparent 0%, transparent 62%, rgba(170,128,40,0.55) 74%, rgba(232,204,122,1.0) 83%, rgba(232,204,122,0.95) 88%, rgba(170,128,40,0.50) 96%, transparent 100%)', animation: 'goldenRingSpin 3.2s linear infinite', zIndex: 0 }} />
-                <img src="/docrud-icon.png" alt="Docrud" width={26} height={26} style={{ borderRadius: 7, display: 'block', position: 'relative', zIndex: 1, width: 26, height: 26, objectFit: 'cover' }} />
+                <img src="/icons/logo-192.png" alt="Docrud" width={26} height={26} style={{ borderRadius: 7, display: 'block', position: 'relative', zIndex: 1, width: 26, height: 26, objectFit: 'cover' }} />
               </div>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '-0.02em' }}>docrud</span>
               <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.20)' }}>·</span>

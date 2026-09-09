@@ -212,6 +212,92 @@ function trace(message: string) {
   if (TRACE_STORAGE) console.log(message);
 }
 
+/**
+ * A storage read that FAILED. Distinct from a store that is legitimately empty.
+ *
+ * ═══ WHY THIS TYPE EXISTS ═══
+ *
+ * `readJsonFile` answers every problem with the caller's fallback: a missing
+ * key, an unreachable database and a malformed document all come back as `[]`.
+ * For most stores that is the right kindness — a missing config should not take
+ * a page down. For the JOB CORPUS it is not, and during the Phase 2.3 migration
+ * it very nearly cost the entire board: a transient Atlas read failed, the
+ * corpus read as zero postings, and the reconciliation planner was handed an
+ * empty source against 5,276 live documents. `isPlanSafe()` refused it. Nothing
+ * else would have.
+ *
+ * The same silence reaches production through the public feed: an unreachable
+ * database would render as "there are no jobs" with an HTTP 200, which is
+ * indistinguishable to a visitor from a genuinely empty job board.
+ *
+ * The layer below already knows the difference — `readAppState` resolves `null`
+ * for an absent key and REJECTS when the read itself fails. `readJsonFile`
+ * collapses the two. `readJsonFileStrict` keeps them apart.
+ */
+export class StorageReadError extends Error {
+  readonly path: string;
+
+  constructor(path: string, cause: unknown) {
+    super(`Storage read failed for ${path}: ${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'StorageReadError';
+    this.path = path;
+    /* The original is kept for logs; nothing here is returned to a client. */
+    (this as { cause?: unknown }).cause = cause;
+  }
+}
+
+/**
+ * Read a JSON store, distinguishing ABSENT from BROKEN.
+ *
+ *   present   → the stored value
+ *   absent    → `fallbackWhenAbsent` (a legitimately empty store stays empty)
+ *   failed    → throws StorageReadError
+ *
+ * Deliberately a SEPARATE function rather than a change to `readJsonFile`.
+ * There are ~245 call sites across configuration, profiles, mail and caches,
+ * most of which genuinely should degrade rather than throw; converting all of
+ * them at once would trade a silent-data bug for an availability one. The
+ * job-critical path opts in; everything else keeps the behaviour it was written
+ * against, and can be migrated deliberately.
+ */
+export async function readJsonFileStrict<T>(filePath: string, fallbackWhenAbsent: T): Promise<T> {
+  const label = path.basename(filePath);
+
+  if (getDbPool()) {
+    const adapter = getDbAdapters().get(filePath);
+    if (adapter) {
+      try {
+        return (await adapter.read()) as T;
+      } catch (error) {
+        console.error(`[storage] ${label} → row-adapter read FAILED (strict)`, error);
+        throw new StorageReadError(label, error);
+      }
+    }
+  }
+
+  if (isDatabaseConfigured()) {
+    let value: T | null;
+    try {
+      value = await readAppState<T>(getAppStateKey(filePath));
+    } catch (error) {
+      /* THE CASE THIS FUNCTION EXISTS FOR. A rejected read is infrastructure
+         failing, never "the store is empty". */
+      console.error(`[storage] ${label} → app_state read FAILED (strict)`, error);
+      throw new StorageReadError(label, error);
+    }
+    /* null is the key being ABSENT, which is a real and safe answer. */
+    return value === null ? fallbackWhenAbsent : value;
+  }
+
+  try {
+    return JSON.parse(await fs.readFile(filePath, 'utf8')) as T;
+  } catch (error) {
+    /* A file that does not exist is absent; anything else is a failure. */
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return fallbackWhenAbsent;
+    throw new StorageReadError(label, error);
+  }
+}
+
 export async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
   const label = path.basename(filePath);
   if (getDbPool()) {

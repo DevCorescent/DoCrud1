@@ -487,6 +487,15 @@ export interface HiringJobPosting {
   /** Optional external application URL carried through from a Business Page job. */
   applyUrl?: string;
   /**
+   * How soon the employer is filling this role — see lib/job-urgency.ts.
+   *
+   * Optional, and absent means the posting did not say. Hundreds of live
+   * postings and every bulk importer predate this field, so a reader must
+   * never treat "absent" as "not urgent": it is simply unknown, and a card
+   * shows no urgency at all rather than inventing the calmest one.
+   */
+  hiringUrgency?: 'immediate' | 'soon' | 'ongoing';
+  /**
    * Documents this role asks applicants to attach, by label (e.g. 'Portfolio').
    * Absent/empty means the role requests nothing beyond the resume — a job that
    * did not specify documents must never appear to require any.

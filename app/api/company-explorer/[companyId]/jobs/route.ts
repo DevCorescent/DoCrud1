@@ -37,7 +37,9 @@ export async function GET(
 
   /* The job list and the viewer's profile are independent. */
   const [allJobs, fields] = await Promise.all([
-    getPublishedHiringJobs().catch(() => []),
+    /* A failed corpus read must not read as "this company has no openings" —
+       it propagates to the route's catch and answers honestly. */
+    getPublishedHiringJobs(),
     meId
       ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles'])
           .catch(() => null)

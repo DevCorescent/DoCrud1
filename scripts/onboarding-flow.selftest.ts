@@ -86,10 +86,16 @@ check('both value pages lead to the account gate',
 const GATE = src('components/onboarding/AuthGate.tsx');
 check('the gate authenticates through NextAuth',
   /signIn\('google'/.test(GATE) && /signIn\('credentials'/.test(GATE));
+/* The signup + OTP endpoints were CONSOLIDATED into /api/onboarding/signup/*
+   (start → verify → resend). The property this guards is unchanged: the gate
+   drives EXISTING server endpoints and implements no signup or OTP of its own.
+   The endpoint names moved; the rule did not. */
 check('and through the existing signup and OTP endpoints',
-  /'\/api\/individual\/signup'/.test(GATE)
-  && /'\/api\/onboarding\/send-otp'/.test(GATE)
-  && /'\/api\/onboarding\/verify-otp'/.test(GATE));
+  /'\/api\/onboarding\/signup\/start'/.test(GATE)
+  && /'\/api\/onboarding\/signup\/verify'/.test(GATE)
+  && /'\/api\/onboarding\/signup\/resend'/.test(GATE));
+check('and invents no signup or OTP mechanism of its own',
+  !/generateOtp|randomInt|otpHash|createTransport|sendMail/i.test(strip(GATE)));
 check('Back from the gate returns to the page it was reached from',
   /BACK\.auth = from/.test(FLOW));
 check('no second authentication was built',
@@ -141,9 +147,20 @@ check('the gate hashes nothing itself',
   !/(bcrypt|scrypt|createHash|sha256)/i.test(strip(GATE)));
 check('and keeps no credential client-side',
   !/(localStorage|sessionStorage|document\.cookie)/.test(strip(GATE)));
+/* THE PROPERTY: the browser never writes a profile. It used to be enforced by
+   requiring the gate to call /api/onboarding/handoff; the credentials path now
+   persists inside /api/onboarding/signup/verify instead, which is STRONGER —
+   the account is only created after the code is verified, and the answers come
+   from a server-held pending record rather than from the request body. The
+   handoff still exists and is still exercised, by the Google return leg. */
 check('the profile is written by the server, never from the browser',
-  /'\/api\/onboarding\/handoff'/.test(GATE)
-  && !/updateProfileData/.test(GATE));
+  !/updateProfileData|upsertStoredUser/.test(strip(GATE)));
+check('the credentials path persists server-side, in the verify endpoint',
+  /updateProfileData\(userId, patch\)/.test(src('app/api/onboarding/signup/verify/route.ts')));
+check('and it takes the answers from the server-held pending record, not the body',
+  /const answers = pending\.onboarding;/.test(src('app/api/onboarding/signup/verify/route.ts')));
+check('the Google return leg still finishes through the handoff',
+  /'\/api\/onboarding\/handoff'/.test(FLOW));
 
 /* ═══ 5. Real data everywhere ═══════════════════════════════════════════ */
 console.log('── 5. Real data, no fixtures ──');

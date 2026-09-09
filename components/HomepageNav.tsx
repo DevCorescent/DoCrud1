@@ -625,9 +625,14 @@ useEffect(() => {
                 willChange: 'transform',
               }}
             />
-            {/* Icon image */}
+            {/* Icon image.
+                192px of artwork for a 28px mark. It used to point at
+                /docrud-icon.png — the same picture at 1254px and 553 KB —
+                which every visitor downloaded, and `priority` put a preload
+                link at the top of the head so it competed with the stylesheet
+                for bandwidth. Same image, 14 KB. */}
             <Image
-              src="/docrud-icon.png"
+              src="/icons/logo-192.png"
               alt="Docrud"
               width={28}
               height={28}
@@ -684,29 +689,35 @@ useEffect(() => {
       {/* ── RIGHT group: nav links + bell + avatar ── */}
       <div className="flex items-center gap-1.5 shrink-0">
 
-        {/* Desktop-only nav links — Publish/Gigs/People moved to the bottom dock */}
-        <Link href="/published" className={`hidden sm:flex h-8 items-center gap-1.5 rounded-[10px] border px-3 text-[12px] font-medium transition active:scale-95 ${
-          pathname?.startsWith('/published')
-            ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
-            : 'border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.09] hover:text-white/75'
-        }`}>
-          <Globe className="h-3 w-3" />Feed
-        </Link>
+        {/* ── Desktop nav links ──
+            Feed, People and Messages. These are the destinations the floating
+            dock used to carry; the dock is gone on desktop, so they live here,
+            in the one bar that is on every page.
 
-        {/* The desktop More button that opened the Opportunity Hub used to sit
-            here, between Feed and Ddrive. It was removed; nothing replaces it,
-            and the remaining header controls keep their existing sizing. */}
+            Ddrive was removed from this row on request. It is still reachable
+            — see the note where its button used to be — but no longer competes
+            with the three places people actually navigate to. */}
+        {([
+          { href: '/published', label: 'Feed',     Icon: Globe },
+          { href: '/people',    label: 'People',   Icon: Users },
+          { href: '/messages',  label: 'Messages', Icon: MessageCircle },
+        ] as const).map(({ href, label, Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className={`hidden sm:flex h-8 items-center gap-1.5 rounded-[10px] border px-3 text-[12px] font-medium transition active:scale-95 ${
+              pathname?.startsWith(href)
+                ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-300'
+                : 'border-white/[0.08] bg-white/[0.04] text-white/50 hover:bg-white/[0.09] hover:text-white/75'
+            }`}
+          >
+            <Icon className="h-3 w-3" />{label}
+          </Link>
+        ))}
 
-        {/* ── File Drive button ── */}
-        <button
-          type="button"
-          onClick={() => onFileDriveClick?.()}
-          className="hidden sm:flex h-8 items-center gap-1.5 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] font-medium text-white/50 transition hover:bg-white/[0.09] hover:text-white/75 active:scale-95"
-        >
-          <DdriveIcon size={13} />
-          <span className="font-semibold">Ddrive</span>
-        </button>
-
+        {/* The Ddrive button stood here. Removed from the desktop row on
+            request; `onFileDriveClick` is still a prop and still wired, so the
+            drive can be reopened from here in one line if it is wanted back. */}
 
         {/* Drive — mobile icon only (desktop shows the full Ddrive button above)
         <button

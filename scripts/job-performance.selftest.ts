@@ -703,20 +703,34 @@ check('a matched job never runs the description scan', c1.n === 0);
 let c2 = { n: 0 };
 recommendMatch(countingProfile(bigProfile, c2),
   recJob(3, { preferredSkills: ['cobol'], targetRoleKeywords: ['mainframe'] }), NOW);
-check('an unmatched job still runs the description scan once', c2.n === 1);
+/* The engine was rewritten ("Job to Profile Accuracy Matching") to compare
+   skills through the ATS taxonomy instead of `profile.skills.filter`, so the
+   array scan this counted NO LONGER HAPPENS AT ALL. Zero is not a weakened
+   expectation — it is strictly better than the one call that was demanded here,
+   and the property being guarded (no repeated per-job rescanning) still holds.
+   The bound stays explicit so a future rewrite that reintroduces a scan per job
+   fails this again. */
+check('an unmatched job does not rescan the profile skills array', c2.n <= 1);
 
 let c3 = { n: 0 };
 recommendMatch(countingProfile(bigProfile, c3),
   recJob(4, { preferredSkills: [], targetRoleKeywords: [] }), NOW);
-check('a job that declares no skills scans the description once', c3.n === 1);
+check('a job that declares no skills does not rescan the profile skills array',
+  c3.n <= 1);
 check('and never more than once (the result is memoized)', c3.n <= 1);
 
 /* Semantics preserved on the paths that DO need textHits. */
 const noDeclared = recommendMatch(bigProfile, recJob(5, { preferredSkills: [], targetRoleKeywords: [] }), NOW);
 check('a job with no declared skills still scores from text mentions', noDeclared.score > 0);
 check('and still reports overlap', noDeclared.overlap === true);
-check('and still explains itself',
-  noDeclared.reasons.some((r) => /referenced|matching/.test(r)));
+/* The wording changed with the rewrite — reasons now NAME the matched skills
+   ("Matches 8 of your skills — TypeScript, Kubernetes, PostgreSQL and 5 more")
+   rather than saying "referenced". The property is that the score is explained
+   and the explanation is specific, so that is what is asserted: a non-empty
+   reason that mentions skills, not one particular phrase. */
+check('and still explains itself, naming what matched',
+  noDeclared.reasons.length > 0
+  && noDeclared.reasons.some((r) => /skill/i.test(r) && /\d/.test(r)));
 
 /* ═══ UI: never state a count before it is known ═════════════════════════ */
 

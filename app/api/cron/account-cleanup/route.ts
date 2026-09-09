@@ -6,12 +6,16 @@
  *   1. Send 7-day warning emails to users whose deactivationDeadline is ≤ 7 days away
  *   2. Permanently delete accounts whose deactivationDeadline has passed
  *
- * Secure with a secret header: CRON_SECRET env var.
- * If not set, only localhost calls are accepted.
+ * Secured by the shared cron authorization helper in STRICT mode: CRON_SECRET
+ * must be configured and presented as `Authorization: Bearer <CRON_SECRET>`
+ * (or `x-cron-secret`) in EVERY environment. This route permanently deletes
+ * accounts, so it fails closed — an unset secret disables it rather than
+ * opening it. The Host header is never consulted.
  */
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { checkCronAuth } from '@/lib/server/cron-auth';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { getStoredUsers, saveStoredUsers } from '@/lib/server/auth';
@@ -25,20 +29,14 @@ const CREDITS_FILE = path.join(process.cwd(), 'data', 'credits.json');
 const ONE_DAY_MS   = 24 * 60 * 60 * 1000;
 const SEVEN_DAYS_MS = 7 * ONE_DAY_MS;
 
-function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const header = req.headers.get('x-cron-secret') || req.headers.get('authorization');
-    return header === secret || header === `Bearer ${secret}`;
-  }
-  // If no secret set, only allow from localhost in development
-  const host = req.headers.get('host') || '';
-  return host.startsWith('localhost') || host.startsWith('127.0.0.1');
-}
-
 export async function GET(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const auth = checkCronAuth(req, { strict: true });
+  if (!auth.authorized) {
+    /* `reason` never carries the secret. A missing configuration is a server
+       fault (503), bad credentials are a client fault (401). */
+    return auth.reason === 'missing-secret-config'
+      ? NextResponse.json({ error: 'Cron authorization is not configured.' }, { status: 503 })
+      : NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const now = Date.now();

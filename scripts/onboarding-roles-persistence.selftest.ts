@@ -55,11 +55,17 @@ check('the fields live on UserProfileData, not a new model',
   /^\s{2}roles\?: string\[\];/m.test(PROFILES) && /^\s{2}customRoles\?: string\[\];/m.test(PROFILES));
 check('no second profile store was introduced',
   !/new Collection|createProfileStore|profiles_v2/i.test(strip(PROFILES)));
+/* The spread is now `...patch` rather than `...data`: `profileVersion` is
+   stripped from the caller's object first, because two routes forward arbitrary
+   client profile bodies and a request must not be able to set its own version.
+   The MERGE property these assertions exist for is unchanged. */
 check('writes still go through updateProfileData\'s merge',
-  /export async function updateProfileData/.test(PROFILES) && /\.\.\.data,/.test(PROFILES));
+  /export async function updateProfileData/.test(PROFILES) && /\.\.\.patch,/.test(PROFILES));
 /* A merge, not a replace: writing roles must not clear a bio. */
 check('the merge preserves fields the caller did not send',
-  /\.\.\.current,\s*\n\s*\.\.\.data,/.test(PROFILES) || /\.\.\.\(profiles\[userId\] \?\? \{\}\),\s*\n\s*\.\.\.data,/.test(PROFILES));
+  /\.\.\.current,\s*\n\s*\.\.\.patch,/.test(PROFILES) || /\.\.\.\(profiles\[userId\] \?\? \{\}\),\s*\n\s*\.\.\.patch,/.test(PROFILES));
+check('and the patch is the caller\'s object minus the server-owned version',
+  /const \{ profileVersion: _clientSupplied, \.\.\.patch \} = data/.test(PROFILES));
 
 console.log('── 4. PATCH /api/profile/me ──');
 check('roles are accepted (the body is Partial<UserProfileData>)',

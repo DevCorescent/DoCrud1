@@ -196,9 +196,21 @@ async function main() {
      "Never synced" forever. */
   check('the run is given the route\'s own window, not a repeated literal',
     /budgetMs: maxDuration \* 1000/.test(routeSrc));
+  /* The reserve is no longer a flat constant. A fixed 45 s had to pay for a
+     ~12 MB app_state rewrite plus a mirror of every posting, and once the corpus
+     outgrew it the run was killed after app_state was written and before the
+     mirror finished — the measured production state of 5,276 stored vs 5,118
+     mirrored. It now scales with the corpus and is clamped at both ends. */
   check('the client reserves time for the writes that follow the loop',
-    /SAVE_RESERVE_MS/.test(clientSrc)
-    && /opts\.budgetMs - SAVE_RESERVE_MS/.test(clientSrc));
+    /saveReserveMs\(/.test(clientSrc)
+    && /opts\.budgetMs - reserveMs/.test(clientSrc));
+  check('the reserve scales with the number of jobs to persist',
+    /SAVE_RESERVE_PER_JOB_MS/.test(clientSrc));
+  check('and is capped so it can never consume the whole window',
+    /SAVE_RESERVE_MAX_SHARE/.test(clientSrc));
+  check('a failed count falls back to the floor, never to no reserve',
+    /countPublishedJobs\(\)\.catch\(\(\) => null\)/.test(clientSrc)
+    && /corpusForReserve \?\? 0/.test(clientSrc));
   check('a run with no budget has no deadline, so callers outside a request are unchanged',
     /opts\.budgetMs\s*\?/.test(clientSrc));
 

@@ -18,6 +18,13 @@
  *    secret is a development convenience; in production an unauthenticated
  *    caller must never be able to trigger a job that sends real email.
  *
+ * A route may opt out of the development fallback entirely with
+ * `{ strict: true }`. A strict route requires a configured secret and a valid
+ * credential in EVERY environment, and never consults the Host header — which
+ * is request-controlled and therefore not evidence of anything. Destructive
+ * routes (permanent account deletion) use strict mode; the default is
+ * unchanged so existing scheduled routes keep their current behaviour.
+ *
  * The comparison is constant-time, so a caller cannot learn the secret one
  * byte at a time from response timing.
  */
@@ -34,17 +41,29 @@ function safeEquals(a: string, b: string): boolean {
   return crypto.timingSafeEqual(ah, bh);
 }
 
+export interface CronAuthOptions {
+  /**
+   * When true, refuse the development localhost fallback: a configured secret
+   * and a valid credential are required in every environment. Defaults to
+   * false so existing callers are unaffected.
+   */
+  strict?: boolean;
+}
+
 export interface CronAuthResult {
   authorized: boolean;
   /** Safe to return to the caller — never contains the secret. */
   reason: 'ok' | 'missing-secret-config' | 'invalid-credentials';
 }
 
-export function checkCronAuth(req: NextRequest): CronAuthResult {
+export function checkCronAuth(
+  req: NextRequest,
+  options: CronAuthOptions = {},
+): CronAuthResult {
   const secret = process.env.CRON_SECRET || '';
 
   if (!secret) {
-    if (process.env.NODE_ENV === 'production') {
+    if (options.strict || process.env.NODE_ENV === 'production') {
       return { authorized: false, reason: 'missing-secret-config' };
     }
     /* Development only: allow a local call so the job can be exercised without

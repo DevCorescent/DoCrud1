@@ -1,12 +1,15 @@
 import { HiringJobApplication, HiringJobPosting, User } from '@/types/document';
-import { coerceJobUrgency } from '@/lib/job-urgency';
-import { hiringApplicationsPath, hiringJobsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
+/* Job applications still live in app_state — that store is untouched by the
+   job-corpus cutover and remains legitimate for unrelated state. */
+import { hiringApplicationsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
 import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/server/business-pages';
 import {
   selectPublishedJobCompanyNames, selectPublishedJobListRows, selectPublishedJobRowById,
 } from '@/lib/server/db/hiring-jobs-rows';
 import { invalidateRecommendationCaches } from '@/lib/server/recommendation-cache';
 import { invalidateHiringCompanies } from '@/lib/server/hiring-companies';
+import { writeHiringJobs, retireHiringJobById } from '@/lib/server/hiring-write';
+import { selectAllJobDocs, selectJobDocById } from '@/lib/server/db/hiring-jobs-collection';
 import { invalidateNamespaces } from '@/lib/server/cache';
 import {
   countPublishedJobs, mirrorPublishedJobs, readHiringCorpusVersion,
@@ -75,8 +78,30 @@ function jobOwnerName(user: User) {
   return user.organizationName || user.name || 'Business Workspace';
 }
 
-export async function getHiringJobs() {
-  return readJsonFile<HiringJobPosting[]>(hiringJobsPath, []);
+/**
+ * The job corpus. THROWS when the read fails.
+ *
+ * Strict on purpose — see StorageReadError. Every other store in this codebase
+ * may degrade to a fallback; the job corpus may not, because an empty corpus is
+ * a valid-looking answer that is wrong in two dangerous ways: it publishes "no
+ * jobs" to visitors over HTTP 200, and it tells the reconciliation planner that
+ * every stored posting has been deleted at source.
+ *
+ * An absent key still yields `[]` — a genuinely empty board stays empty. Only a
+ * FAILED read throws.
+ */
+export async function getHiringJobs(): Promise<HiringJobPosting[]> {
+  /* Phase 2.6+2.7E: the canonical corpus is `hiring_jobs`. Every reader in the
+     application funnels through here — public feed, employer views, ownership
+     validation, recommendations — so moving this one function moves all of them
+     together, which is the only way the cutover is coherent: an employer edit
+     validates ownership against the same store the create wrote to.
+
+     There is NO app_state fallback. A failed canonical read throws, because
+     falling back would resurrect the second source of truth this phase exists
+     to remove, and would silently serve a corpus that no longer receives
+     writes. */
+  return selectAllJobDocs();
 }
 
 /* ─── raw-corpus cache ────────────────────────────────────────────────────
@@ -285,7 +310,19 @@ export async function getPublishedHiringJobList(): Promise<PublicHiringJobListIt
   ]);
 
   let value: PublicHiringJobListItem[];
-  if (docs) {
+  /* `docs.length`, NOT just `docs`.
+     A reachable-but-EMPTY collection returns [], which is truthy, so this used
+     to publish an empty job board as though it were the answer. The selectors
+     signal "unavailable" with null, but they cannot signal "migrated yet?" —
+     and the moment hiring_jobs becomes canonical, a collection that is merely
+     empty is indistinguishable here from one that is broken.
+
+     Falling back on empty is always SAFE and never wrong: if the board is
+     genuinely empty, app_state returns empty too and the answer is identical —
+     only slower. If the collection is empty because something failed, the
+     fallback is the whole point. An infrastructure failure must never render
+     as "there are no jobs". */
+  if (docs && docs.length) {
     value = [...docs.map(toPublicHiringJobListItem), ...business.map(toPublicHiringJobListItem)];
   } else {
     const rows = await selectPublishedJobListRows();
@@ -316,7 +353,9 @@ export async function getPublishedHiringJobCompanyNames(): Promise<string[]> {
   const businessNames = business.map((j) => j.organizationName ?? '');
 
   let value: string[];
-  if (fromCollection) {
+  /* Same rule as the list above: an empty collection falls through to the
+     projection and then to app_state, rather than emptying the marquee. */
+  if (fromCollection && fromCollection.length) {
     value = [...fromCollection, ...businessNames];
   } else {
     const projected = await selectPublishedJobCompanyNames();
@@ -404,7 +443,7 @@ export function toPublicHiringJob(job: HiringJobPosting): PublicHiringJob {
 export type PublicHiringJobListItem = Pick<
   PublicHiringJob,
   'id' | 'title' | 'organizationName' | 'location' | 'department'
-  | 'employmentType' | 'workMode' | 'experienceLevel' | 'hiringUrgency'
+  | 'employmentType' | 'workMode' | 'experienceLevel'
   | 'preferredSkills' | 'applyUrl' | 'shareUrl' | 'createdAt' | 'updatedAt'
 >;
 
@@ -418,7 +457,6 @@ export function toPublicHiringJobListItem(job: HiringJobPosting): PublicHiringJo
     employmentType: job.employmentType,
     workMode: job.workMode,
     experienceLevel: job.experienceLevel,
-    hiringUrgency: job.hiringUrgency,
     preferredSkills: job.preferredSkills,
     applyUrl: job.applyUrl,
     shareUrl: job.shareUrl,
@@ -427,9 +465,21 @@ export function toPublicHiringJobListItem(job: HiringJobPosting): PublicHiringJo
   };
 }
 
-export async function saveHiringJobs(jobs: HiringJobPosting[]) {
-  // app_state remains the source of truth and is written FIRST.
-  await writeJsonFile(hiringJobsPath, jobs);
+export interface SaveHiringJobsResult {
+  /** Whether the `hiring_jobs` replica is in step with what was just written. */
+  mirrored: boolean;
+  mirrorMs: number;
+  rewritten: number;
+  removed: number;
+}
+
+export async function saveHiringJobs(jobs: HiringJobPosting[]): Promise<SaveHiringJobsResult> {
+  /* LEGACY / ROLLBACK ONLY — zero production callers since Phase 2.7E.
+     The app_state write is GONE: keeping it would maintain a second copy of the
+     corpus that nothing reads and every canonical write would have to keep in
+     step, which is precisely the two-sources-of-truth problem this phase
+     removes. What remains is the whole-corpus mirror, retained so a rollback
+     path exists while the migration settles. */
 
   /* The `hiring_jobs` collection is a read replica of what was just written.
      Re-pointing it here is what stops the switched read paths from serving a
@@ -437,11 +487,27 @@ export async function saveHiringJobs(jobs: HiringJobPosting[]) {
      has already succeeded, so a mirror failure must not fail the save — it
      marks the replica untrusted instead, and every read falls back to
      app_state until the next successful mirror. */
+  const mirrorStartedAt = Date.now();
   const mirror = await mirrorPublishedJobs(jobs as unknown as Array<Record<string, unknown>>);
-  if (mirror.ok && (mirror.rewritten || mirror.removed)) {
-    console.info(
-      `[hiring_jobs] mirrored: ${mirror.rewritten} rewritten, `
-      + `${mirror.reordered} reordered, ${mirror.removed} removed`,
+  const mirrorMs = Date.now() - mirrorStartedAt;
+  if (mirror.ok) {
+    if (mirror.rewritten || mirror.removed) {
+      console.info(
+        `[hiring_jobs] mirrored: ${mirror.rewritten} rewritten, `
+        + `${mirror.reordered} reordered, ${mirror.removed} removed in ${mirrorMs}ms`,
+      );
+    }
+  } else {
+    /* A FAILED MIRROR IS SAID OUT LOUD.
+       It stays non-fatal — app_state is already written and remains the source
+       of truth, and every read falls back to it — but it must never pass as
+       success. This is the exact condition that left 5,118 mirrored rows behind
+       5,276 stored postings with nothing in the logs pointing at it: the run
+       reported success because the save had succeeded, and the replica quietly
+       drifted. The caller now gets the outcome back and can report it too. */
+    console.error(
+      `[hiring_jobs] MIRROR FAILED after ${mirrorMs}ms for ${jobs.length} jobs — `
+      + 'the replica is now stale and reads will fall back to app_state',
     );
   }
 
@@ -464,6 +530,12 @@ export async function saveHiringJobs(jobs: HiringJobPosting[]) {
      posted now stayed invisible to recommendations until the entry aged out. */
   invalidateRecommendationCaches();
   invalidateHiringCompanies();
+  return {
+    mirrored: mirror.ok,
+    mirrorMs,
+    rewritten: mirror.rewritten,
+    removed: mirror.removed,
+  };
 }
 
 export async function getHiringApplications() {
@@ -506,8 +578,9 @@ export async function assertCanManageHiringJob(
   actor: User,
   jobId: string,
 ): Promise<JobOwnershipResult> {
-  const jobs = await getHiringJobs();
-  const job = jobs.find((entry) => entry.id === jobId);
+  /* ONE indexed lookup. This used to read the whole corpus to find a single
+     posting, which is O(corpus) per authorization check. */
+  const job = await selectJobDocById(jobId);
   /* A job the actor may not touch is reported as 403 rather than 404: the id
      came from them, so its existence is not a secret worth protecting, and a
      404 here would be misleading during debugging. */
@@ -563,7 +636,6 @@ export async function upsertHiringJob(
   actor: User,
   payload: Partial<HiringJobPosting> & { title: string; description: string; minimumAtsScore: number },
 ) {
-  const jobs = await getHiringJobs();
   const now = new Date().toISOString();
   const jobId = payload.id || `job-${Date.now()}`;
 
@@ -571,7 +643,9 @@ export async function upsertHiringJob(
      arbitrary `id` rewrote someone else's posting and transferred ownership to
      the caller. Throwing here covers every caller — the Hiring Desk and the
      marketplace composer alike — rather than trusting each route to remember. */
-  const existing = payload.id ? jobs.find((entry) => entry.id === payload.id) : undefined;
+  /* ONE lookup for the posting being edited, rather than the whole corpus.
+     A create looks nothing up at all. */
+  const existing = payload.id ? await selectJobDocById(payload.id) : undefined;
   if (payload.id && !existing) throw new Error('Job not found.');
   if (existing && !userOwnsHiringJob(actor, existing)) {
     throw new Error('You can only manage jobs you posted.');
@@ -595,11 +669,6 @@ export async function upsertHiringJob(
     employmentType: payload.employmentType || 'full_time',
     workMode: payload.workMode || 'hybrid',
     experienceLevel: payload.experienceLevel || 'associate',
-    /* Absent stays absent. `coerceJobUrgency` returns undefined for anything
-       that is not one of the three known values, so a bad or missing value
-       stores nothing rather than defaulting to a claim about the employer's
-       timeline. On an edit, clearing it clears the stored value. */
-    hiringUrgency: coerceJobUrgency(payload.hiringUrgency),
     description: payload.description.trim(),
     responsibilities: Array.isArray(payload.responsibilities) ? payload.responsibilities.map((item) => item.trim()).filter(Boolean) : [],
     requirements: Array.isArray(payload.requirements) ? payload.requirements.map((item) => item.trim()).filter(Boolean) : [],
@@ -627,11 +696,15 @@ export async function upsertHiringJob(
     updatedAt: now,
   };
 
-  const nextJobs = payload.id
-    ? jobs.map((job) => (job.id === payload.id ? nextJob : job))
-    : [nextJob, ...jobs];
-
-  await saveHiringJobs(nextJobs);
+  /* Phase 2.7E: ONE document, not the whole corpus. A create is positioned at
+     the front — the same place `[nextJob, ...jobs]` used to put it — and an
+     edit keeps whatever position it already has. */
+  const isCreate = !payload.id;
+  const write = await writeHiringJobs(
+    [nextJob as unknown as Record<string, unknown>],
+    isCreate ? new Set([nextJob.id]) : new Set(),
+  );
+  if (!write.ok) throw new Error(write.error || 'could not save the job');
   return nextJob;
 }
 
@@ -651,14 +724,22 @@ export async function removeHiringJob(
   const permission = await assertCanManageHiringJob(actor, jobId);
   if (!permission.ok) return permission;
 
-  const jobs = await getHiringJobs();
-  const next = mode === 'delete'
-    ? jobs.filter((job) => job.id !== jobId)
-    : jobs.map((job) => (
-      job.id === jobId ? { ...job, status: 'draft' as const, updatedAt: new Date().toISOString() } : job
-    ));
+  if (mode === 'delete') {
+    /* An authenticated owner asked for THIS job to go, which is the positive
+       evidence that makes removal safe. It names one document; it is not
+       reconciliation, and it cannot touch anything else. */
+    const result = await retireHiringJobById(jobId);
+    if (result.outcome === 'failed') throw new Error(result.error || 'could not remove the job');
+    /* `not_found` is success from the caller's point of view: the job the owner
+       wanted gone is gone, and a retried delete must not fail. */
+    return { ok: true, job: permission.job };
+  }
 
-  await saveHiringJobs(next);
+  /* Unpublish is an UPDATE, not a removal — the posting survives for its owner
+     and its applications keep resolving. It keeps its position on the board. */
+  const draft = { ...permission.job, status: 'draft' as const, updatedAt: new Date().toISOString() };
+  const write = await writeHiringJobs([draft as unknown as Record<string, unknown>]);
+  if (!write.ok) throw new Error(write.error || 'could not unpublish the job');
   return { ok: true, job: permission.job };
 }
 

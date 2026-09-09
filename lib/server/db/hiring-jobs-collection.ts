@@ -53,6 +53,7 @@
 import { createHash } from 'crypto';
 import type { HiringJobPosting } from '@/types/document';
 import { getMongoDb } from '@/lib/server/database';
+import { derivePublicSortKeys } from '@/lib/server/db/public-sort-keys';
 
 const COL = 'hiring_jobs';
 const PUBLISHED = { status: 'published' } as const;
@@ -62,6 +63,30 @@ const PUBLISHED = { status: 'published' } as const;
    sort, so the replica has to reproduce app_state's order exactly — Mongo's
    natural order is not a guarantee. */
 const ORDER_FIELD = '_order';
+const IDENTITY_LOOKUP_CHUNK = 500;
+
+/**
+ * How many postings one bulkWrite carries.
+ *
+ * The batch was previously unbounded: `writeHiringJobs` handed the whole array
+ * to one `$in` and one `bulkWrite`. That is fine for the tens-of-jobs batches a
+ * single board produces, and not fine for an initial ingestion of a large
+ * board, where one command carries megabytes and one failure abandons all of
+ * it. Chunking bounds the command size, bounds what a single failure can lose,
+ * and lets the counts be reported per chunk.
+ *
+ * 500 is the measured default — see scripts/bulk-batch-size.bench.ts. It is
+ * overridable so the number can be re-measured rather than argued about.
+ */
+const BULK_BATCH_DEFAULT = 500;
+const BULK_BATCH_MAX = 1000;
+
+export function bulkBatchSize(): number {
+  const raw = Number(process.env.INGEST_BULK_BATCH_SIZE);
+  if (!Number.isFinite(raw) || raw < 1) return BULK_BATCH_DEFAULT;
+  return Math.min(BULK_BATCH_MAX, Math.floor(raw));
+}
+
 const BY_ORDER = { [ORDER_FIELD]: 1 } as const;
 
 /* Content fingerprint, so a mirror can tell which jobs actually changed instead
@@ -72,7 +97,10 @@ const BY_ORDER = { [ORDER_FIELD]: 1 } as const;
    KB of writes. */
 const FP_FIELD = '_fp';
 
-/** Stable across key order, so a re-serialised but identical job hashes equal. */
+/** Stable across key order, so a re-serialised but identical job hashes equal.
+    Exported as `fingerprintJob` so the reconciliation planner and its dry-run
+    decide "changed" with THIS function rather than a second copy that could
+    drift from it. Pure — it hashes its argument and touches nothing else. */
 function fingerprint(job: Record<string, unknown>): string {
   const canonical = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(canonical);
@@ -87,6 +115,8 @@ function fingerprint(job: Record<string, unknown>): string {
   return createHash('sha1').update(JSON.stringify(canonical(job))).digest('hex');
 }
 
+export { fingerprint as fingerprintJob };
+
 /* One failed mirror means the replica may be behind app_state. Rather than
    serve possibly-stale jobs, this process stops trusting the collection and
    falls back for the rest of its life; the next deploy or successful mirror
@@ -99,9 +129,12 @@ export function hiringJobsCollectionUsable(): boolean {
   return healthy;
 }
 
-/** Marks the replica untrusted, sending every read back to app_state. */
+/** Marks the collection untrusted for the projection-based readers below.
+    Since Phase 2.6+2.7E there is NO app_state fallback — the canonical reader
+    throws instead — so the old wording would send an operator looking for a
+    fallback that no longer exists. */
 export function markHiringJobsCollectionStale(reason: string) {
-  if (healthy) console.warn(`[hiring_jobs] falling back to app_state: ${reason}`);
+  if (healthy) console.warn(`[hiring_jobs] collection marked untrusted: ${reason}`);
   healthy = false;
 }
 
@@ -114,7 +147,10 @@ export function markHiringJobsCollectionStale(reason: string) {
  * byte for byte precisely to catch that.
  */
 function strip<T extends Record<string, unknown>>(doc: T): Omit<T, '_id' | 'migratedAt' | '_order' | '_fp'> {
-  const { _id: _a, migratedAt: _b, _order: _c, _fp: _d, ...rest } = doc as Record<string, unknown>;
+  const { _id: _a, migratedAt: _b, _order: _c, _fp: _d,
+    /* Persisted sort keys are bookkeeping, exactly like _order and _fp: they
+       must never reach an API response or change a job's shape. */
+    _skNewest: _e, _skSalary: _f, _skRelevance: _g, ...rest } = doc as Record<string, unknown>;
   return rest as Omit<T, '_id' | 'migratedAt' | '_order' | '_fp'>;
 }
 
@@ -151,9 +187,131 @@ export async function countPublishedJobs(): Promise<number | null> {
 const LIST_PROJECTION = {
   _id: 0,
   id: 1, title: 1, organizationName: 1, location: 1, department: 1,
-  employmentType: 1, workMode: 1, experienceLevel: 1, hiringUrgency: 1,
+  employmentType: 1, workMode: 1, experienceLevel: 1,
   preferredSkills: 1, applyUrl: 1, shareUrl: 1, createdAt: 1, updatedAt: 1,
 } as const;
+
+/**
+ * THE CANONICAL CORPUS: every job, every status, in board order.
+ *
+ * This is what `getHiringJobs()` now reads. Unlike the list selector below it
+ * applies NO status filter and NO projection — employer paths need drafts and
+ * closed postings, and ownership validation needs the whole document. The board
+ * order is `_order` ascending, exactly as the app_state array order was.
+ *
+ * Throws rather than returning null. A failed canonical read must never be
+ * mistaken for an empty board — that is the Phase 2.4 lesson, and it matters
+ * more here than anywhere, because the corpus this returns is what write paths
+ * reconcile against.
+ */
+/**
+ * ONE job by id, any status. The targeted counterpart to selectAllJobDocs.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * Ownership validation, employer job detail and the applicant/contact routes
+ * all needed a single posting and were reading the ENTIRE corpus to find it —
+ * `(await getHiringJobs()).find(j => j.id === jobId)`. That was tolerable when
+ * the corpus lived in one already-loaded document. Against a per-document
+ * collection it means fetching every job to answer a question about one, which
+ * at 100K is ~150 MB pulled into Node per request.
+ *
+ * `_id` is the primary key, so this is a single indexed lookup regardless of
+ * corpus size.
+ *
+ * NO STATUS FILTER, deliberately: employers manage drafts and closed postings,
+ * and `selectPublishedJobDocById` (which does filter) would make those
+ * invisible to their owner. Callers apply their own visibility rules, exactly
+ * as they did when scanning the full array.
+ */
+export async function selectJobDocById(id: string): Promise<HiringJobPosting | null> {
+  if (!id) return null;
+  const db = await getMongoDb();
+  if (!db) throw new Error('canonical job store unavailable: no database');
+  const doc = await db.collection(COL).findOne({ _id: id as never });
+  return doc ? (strip(doc as Record<string, unknown>) as unknown as HiringJobPosting) : null;
+}
+
+export async function selectAllJobDocs(): Promise<HiringJobPosting[]> {
+  const db = await getMongoDb();
+  if (!db) throw new Error('canonical job store unavailable: no database');
+  const docs = await db.collection(COL).find({}).sort(BY_ORDER).toArray();
+  return docs.map((d) => strip(d as Record<string, unknown>) as unknown as HiringJobPosting);
+}
+
+/**
+ * The postings ONE source could possibly match, and nothing else.
+ *
+ * This is the targeted alternative to `selectAllJobDocs()` for the ingestion
+ * path. `runCanonicalIngestion` currently loads the entire corpus so that
+ * `planIngest` can index it by identity; at 100K postings that was measured at
+ * 733 MB of heap, against a 1024 MB serverless limit. Ingestion does not need
+ * the corpus — it needs the postings the drafts in hand might already be.
+ *
+ * Identity is ranked external_id -> canonical_url -> fingerprint, so the
+ * candidate set is the UNION of all three lookups rather than just the first:
+ * a stored posting whose `sourceJobId` is absent must still be found by URL,
+ * or the planner would create a duplicate instead of updating it. Missing a
+ * candidate is the one unacceptable failure here, so the query is deliberately
+ * wider than the common case needs.
+ *
+ * `sourceId` scopes every branch, which is also what makes this safe: a source
+ * can only ever see, and therefore only ever modify, its OWN postings.
+ * Employer-posted jobs carry no `sourceId` at all and are unreachable from
+ * here by construction.
+ *
+ * `{ sourceId, sourceJobId }` is served by the existing `ingest_identity`
+ * index — no new index is required.
+ */
+export async function selectJobDocsForSource(
+  sourceId: string,
+  keys: { sourceJobIds?: string[]; canonicalUrls?: string[]; organizationNames?: string[] },
+): Promise<HiringJobPosting[]> {
+  if (!sourceId) return [];
+  const db = await getMongoDb();
+  if (!db) throw new Error('canonical job store unavailable: no database');
+
+  const ids = uniqueNonEmpty(keys.sourceJobIds);
+  const urls = uniqueNonEmpty(keys.canonicalUrls);
+  const orgs = uniqueNonEmpty(keys.organizationNames);
+  if (!ids.length && !urls.length && !orgs.length) return [];
+
+  /* Chunked so a source returning thousands of postings cannot build a single
+     oversized query document. */
+  const found = new Map<string, Record<string, unknown>>();
+  const collect = async (field: string, values: string[]) => {
+    for (let i = 0; i < values.length; i += IDENTITY_LOOKUP_CHUNK) {
+      const slice = values.slice(i, i + IDENTITY_LOOKUP_CHUNK);
+      const docs = await db.collection(COL)
+        .find({ sourceId, [field]: { $in: slice } }).toArray();
+      for (const doc of docs) found.set(String(doc._id), doc as Record<string, unknown>);
+    }
+  };
+
+  if (ids.length) await collect('sourceJobId', ids);
+  if (urls.length) {
+    await collect('canonicalUrl', urls);
+    /* Older postings stored the address as `sourceUrl` only. */
+    await collect('sourceUrl', urls);
+  }
+  /* The fingerprint basis keys on company + title + location. Only the company
+     is indexed, so it is the narrowing filter; the planner does the rest. */
+  if (orgs.length) await collect('organizationName', orgs);
+
+  return Array.from(found.values())
+    .map((d) => strip(d) as unknown as HiringJobPosting);
+}
+
+/** Values worth querying: non-empty, de-duplicated, and stringified. */
+function uniqueNonEmpty(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) return [];
+  const out = new Set<string>();
+  for (const v of values) {
+    const s = String(v ?? '').trim();
+    if (s) out.add(s);
+  }
+  return Array.from(out);
+}
 
 export async function selectPublishedJobListDocs(): Promise<HiringJobPosting[] | null> {
   if (!healthy) return null;
@@ -197,6 +355,313 @@ export async function selectPublishedJobDocById(
   try {
     const doc = await db.collection(COL).findOne({ _id: id as never, ...PUBLISHED });
     return { job: doc ? (strip(doc as Record<string, unknown>) as unknown as HiringJobPosting) : null };
+  } catch {
+    return null;
+  }
+}
+
+/** What a recommendation card renders. LIST_PROJECTION plus `hiringUrgency`,
+    which the card shows and the list view does not. */
+const CARD_PROJECTION = {
+  _id: 0,
+  id: 1, title: 1, organizationName: 1, location: 1,
+  employmentType: 1, workMode: 1, preferredSkills: 1,
+  applyUrl: 1, createdAt: 1, hiringUrgency: 1,
+} as const;
+
+/**
+ * The postings named by a stored recommendation, and nothing else.
+ *
+ * This is what makes reading from the precomputed store worth doing. Rebuilding
+ * cards needs the CURRENT text of the ranked postings, but only of those — a
+ * few hundred documents by _id, not the ~5,276-document corpus whose read was
+ * measured at 145.6 s. Fetching the whole corpus to render a stored ranking
+ * would spend the entire saving the store exists to create.
+ *
+ * Still filtered by PUBLISHED, so a posting unpublished since it was scored is
+ * simply absent from the map and drops out of the rendered ranking rather than
+ * being served from a stale record.
+ *
+ * Returns null when the replica cannot answer — never a partial map, which the
+ * caller could not tell apart from "these postings are gone".
+ */
+export async function selectPublishedJobsByIds(
+  ids: ReadonlyArray<string>,
+): Promise<Map<string, HiringJobPosting> | null> {
+  if (!healthy) return null;
+  const db = await getMongoDb();
+  if (!db) return null;
+  const wanted = Array.from(new Set(ids.filter(Boolean)));
+  if (wanted.length === 0) return new Map();
+  try {
+    const docs = await db.collection(COL)
+      .find({ _id: { $in: wanted as never[] }, ...PUBLISHED }, { projection: CARD_PROJECTION })
+      .toArray();
+    const out = new Map<string, HiringJobPosting>();
+    for (const doc of docs) {
+      const job = strip(doc as Record<string, unknown>) as unknown as HiringJobPosting;
+      /* Keyed by the posting's own `id`, NOT by `_id` — the projection drops
+         `_id`, so keying on it would collapse every document onto one empty
+         key and silently return a single job. */
+      out.set(String((job as unknown as { id?: unknown }).id ?? ''), job);
+    }
+    out.delete('');
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Phase 2.7B — write SOME jobs, without touching the rest.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * `saveHiringJobs()` takes the entire corpus and rewrites all of it to change
+ * one posting. app_state is a single MongoDB document now at 12.28 MB against a
+ * 16 MB hard limit, so that costs O(corpus) per write and puts a hard ceiling
+ * near 6,800 jobs. This writes only what changed: O(changed).
+ *
+ * ═══ WHAT MAKES IT DIFFERENT FROM THE MIRROR BELOW ═══
+ *
+ * `mirrorPublishedJobs` ends by deleting everything absent from its input. That
+ * is correct there — its input is the whole corpus by definition, so absence
+ * really does mean "gone". It would be catastrophic here: this function's input
+ * is ONE BATCH, and a scraper returning 40 of 5,276 jobs would delete 5,236
+ * live postings.
+ *
+ * SO THIS FUNCTION NEVER DELETES ANYTHING. Absence of evidence is not evidence
+ * of absence. Removal is a lifecycle decision made elsewhere, from positive
+ * evidence that a posting is gone.
+ *
+ * ═══ POSITION IS THE CALLER'S TO KNOW, NOT THIS FUNCTION'S TO GUESS ═══
+ *
+ * `_order` is a position within the whole corpus, and the corpus is exactly
+ * what a batch writer cannot see. It is not simply "append", either: an import
+ * PREPENDS new postings (`[...valid, ...current]` in job-import.ts). Inventing
+ * a position here would silently reorder the public feed, and leaving it unset
+ * would be worse — the list read sorts on `_order` ascending, and a missing
+ * value sorts FIRST, so every new job would jump to the top of the board.
+ *
+ * So `order` is required on insert and supplied by the caller, which is the
+ * same arrangement as today: planIngest decides positions, this only records
+ * them. On update the stored position is left alone unless a new one is given.
+ *
+ * ═══ NO app_state, ANYWHERE ═══
+ *
+ * Neither read nor written. That independence is the entire point of the phase.
+ */
+export interface UpsertJobInput {
+  job: Record<string, unknown>;
+  /** Corpus position. REQUIRED when the job is new — there is no safe default;
+      see the note above `upsertHiringJobs`. Optional for a known job, whose
+      stored position is then left untouched. */
+  order?: number;
+}
+
+export interface UpsertResult {
+  ok: boolean;
+  /** Documents written because they were new or their fingerprint changed. */
+  written: number;
+  /** Jobs whose fingerprint already matched — no write was issued at all. */
+  unchanged: number;
+  /** Individual write failures from an unordered bulk. Never silently dropped. */
+  failed: number;
+  error?: string;
+}
+
+export async function upsertHiringJobs(
+  inputs: ReadonlyArray<UpsertJobInput>,
+): Promise<UpsertResult> {
+  const empty: UpsertResult = { ok: true, written: 0, unchanged: 0, failed: 0 };
+  if (!Array.isArray(inputs)) throw new Error('upsertHiringJobs: inputs must be an array');
+  /* An empty batch is a no-op, NOT an instruction to empty the collection. */
+  if (inputs.length === 0) return empty;
+
+  const db = await getMongoDb();
+  if (!db) return { ok: false, written: 0, unchanged: 0, failed: inputs.length, error: 'no database' };
+  const col = db.collection(COL);
+
+  const ids: string[] = [];
+  for (const input of inputs) {
+    const id = String((input?.job as { id?: unknown })?.id ?? '');
+    /* A job with no id cannot be addressed. Skipping it silently is how a
+       corpus quietly loses postings, so it is refused outright. */
+    if (!id) throw new Error('upsertHiringJobs: a job without an id cannot be written');
+    ids.push(id);
+  }
+
+  const chunk = bulkBatchSize();
+  let written = 0;
+  let unchanged = 0;
+  let failed = 0;
+
+  try {
+    for (let start = 0; start < inputs.length; start += chunk) {
+    const slice = inputs.slice(start, start + chunk);
+    const sliceIds = ids.slice(start, start + chunk);
+
+    /* Fingerprints for THIS CHUNK only — a bounded $in, never a full scan. */
+    const priors = new Map<string, string | undefined>(
+      (await col.find({ _id: { $in: sliceIds as never[] } }, { projection: { _id: 1, [FP_FIELD]: 1 } }).toArray())
+        .map((d) => [String(d._id), (d as Record<string, unknown>)[FP_FIELD] as string | undefined]),
+    );
+
+    const ops: Array<Record<string, unknown>> = [];
+
+    slice.forEach((input, i) => {
+      const id = sliceIds[i];
+      const fp = fingerprint(input.job);
+      if (priors.get(id) === fp) { unchanged += 1; return; } // identical: no write
+
+      /* The persisted public sort keys, derived from THIS document's own
+         fields by the single shared function. Stamped on every write so a
+         posting can never be indexed under a stale key. */
+      const set: Record<string, unknown> = {
+        ...input.job, _id: id, [FP_FIELD]: fp, ...derivePublicSortKeys(input.job),
+      };
+      /* Only stamp a position when the caller supplied one, so an update never
+         moves a posting that the caller had no opinion about. */
+      if (typeof input.order === 'number') set[ORDER_FIELD] = input.order;
+
+      const update: Record<string, unknown> = { $set: set };
+      /* A NEW document with no caller position is refused, not defaulted.
+         Phase 2.7C established that there is no safe default: planIngest
+         PREPENDS new postings (`jobs.unshift(record)`), so "append at the end"
+         — the obvious guess, and this function's first draft — puts a new job
+         at the opposite end of the board from where production puts it today.
+         Leaving `_order` unset is worse still: the list read sorts ascending
+         and a missing value sorts FIRST.
+         Both choices silently reorder the public feed, so the caller must say. */
+      if (typeof input.order !== 'number' && !priors.has(id)) {
+        throw new Error(
+          `upsertHiringJobs: job ${id} is new and no order was supplied — `
+          + 'position must come from the caller (see planIngest)',
+        );
+      }
+      /* A non-integer position would collide or sort unpredictably once the
+         gaps are halved; positions come from lib/server/db/job-order.ts, which
+         only ever produces integers. */
+      if (typeof input.order === 'number' && !Number.isSafeInteger(input.order)) {
+        throw new Error(`upsertHiringJobs: job ${id} was given a non-integer order`);
+      }
+
+      ops.push({ updateOne: { filter: { _id: id }, update, upsert: true } });
+    });
+
+    if (ops.length === 0) continue;
+
+    /* Unordered: one bad document must not abandon the rest of the chunk. */
+    const res = await col.bulkWrite(ops as never[], { ordered: false });
+    written += (res.upsertedCount ?? 0) + (res.modifiedCount ?? 0);
+    failed += Math.max(0, ops.length - ((res.upsertedCount ?? 0) + (res.modifiedCount ?? 0)));
+    }
+
+    healthy = true;
+    return { ok: true, written, unchanged, failed };
+  } catch (error) {
+    /* An unordered bulkWrite that hits per-document errors REJECTS, but the
+       documents that succeeded were still written. The driver reports both on
+       the error, so the real counts are read off it rather than guessed —
+       returning `written: 0` here would understate what is now in the store and
+       make a retry look like a first attempt. */
+    const bulk = error as {
+      result?: { nUpserted?: number; nModified?: number };
+      writeErrors?: unknown[];
+    };
+    if (bulk && typeof bulk === 'object' && bulk.result) {
+      const done = (bulk.result.nUpserted ?? 0) + (bulk.result.nModified ?? 0);
+      const errs = Array.isArray(bulk.writeErrors) ? bulk.writeErrors.length : 0;
+      const message = error instanceof Error ? error.message : 'bulk upsert failed';
+      markHiringJobsCollectionStale(`upsert partially failed: ${message}`);
+      /* ok:false — a partial write is NOT a successful ingestion. */
+      return {
+        ok: false,
+        written: written + done,
+        unchanged,
+        failed: failed + (errs || 1),
+        error: message,
+      };
+    }
+    /* A write failure is REPORTED, never returned as a successful empty write.
+       Some documents may have been written before the failure — earlier chunks
+       committed independently — so the counts already accumulated are kept and
+       the replica is marked untrusted rather than assumed intact. */
+    const message = error instanceof Error ? error.message : 'bulk upsert failed';
+    markHiringJobsCollectionStale(`upsert failed: ${message}`);
+    return {
+      ok: false,
+      written,
+      unchanged,
+      failed: Math.max(1, inputs.length - written - unchanged),
+      error: message,
+    };
+  }
+}
+
+/**
+ * Retire ONE named posting. The only way a job leaves the canonical store.
+ *
+ * ═══ WHY THIS IS NOT PART OF upsertHiringJobs ═══
+ *
+ * `upsertHiringJobs` cannot delete, and that refusal is the safety property the
+ * whole of Phase 2.7 is built on: a batch writer that deletes what its input
+ * omits will eventually be handed a truncated scrape and take the board down.
+ *
+ * But "an employer deleted their job" is a real operation with real evidence —
+ * an authenticated owner asked for it. That deserves a primitive of its own,
+ * not a loophole in the batch writer. The distinction is the architecture:
+ *
+ *     deleteMany({_id: {$nin: incoming}})  "remove everything I did not see"
+ *     retireHiringJob(id)                  "remove this one, because I was told to"
+ *
+ * The first infers removal from absence. The second is told, names its target,
+ * and can remove exactly one document because `_id` is unique.
+ *
+ * AUTHORIZATION IS THE CALLER'S. This is the storage primitive; the ownership
+ * gate lives in removeHiringJob, which is where it already was. This function
+ * is deliberately not exported as a general-purpose delete helper.
+ */
+export type RetireOutcome = 'retired' | 'not_found' | 'failed';
+
+export interface RetireResult {
+  outcome: RetireOutcome;
+  error?: string;
+}
+
+export async function retireHiringJob(id: string): Promise<RetireResult> {
+  if (!id || typeof id !== 'string') return { outcome: 'failed', error: 'no job id' };
+  const db = await getMongoDb();
+  if (!db) return { outcome: 'failed', error: 'no database' };
+  try {
+    /* deleteOne, by _id. Not deleteMany, not a filter that could widen: one
+       named document, or nothing. */
+    const res = await db.collection(COL).deleteOne({ _id: id as never });
+    /* Already gone is NOT a failure — a retry of a delete that succeeded must
+       be safe, or every network timeout becomes a stuck job. */
+    return { outcome: (res.deletedCount ?? 0) > 0 ? 'retired' : 'not_found' };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'retire failed';
+    markHiringJobsCollectionStale(`retire failed: ${message}`);
+    return { outcome: 'failed', error: message };
+  }
+}
+
+/**
+ * The smallest `_order` currently stored, or null when the collection is empty.
+ *
+ * Needed to place a new posting at the FRONT, which is where planIngest and the
+ * employer create path both put one. Served from the index in a single read.
+ */
+export async function minJobOrder(): Promise<number | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    const row = await db.collection(COL)
+      .find({}, { projection: { _id: 0, [ORDER_FIELD]: 1 } })
+      .sort({ [ORDER_FIELD]: 1 }).limit(1).toArray();
+    const value = (row[0] as Record<string, unknown> | undefined)?.[ORDER_FIELD];
+    return typeof value === 'number' ? value : null;
   } catch {
     return null;
   }
@@ -264,7 +729,10 @@ export async function mirrorPublishedJobs(
         ops.push({
           updateOne: {
             filter: { _id: id },
-            update: { $set: { ...job, _id: id, [ORDER_FIELD]: index, [FP_FIELD]: fp } },
+            /* Sort keys stamped here too: this writer is rollback-only, but a
+               rollback that produced keyless documents would break the feed
+               ordering it was meant to restore. */
+            update: { $set: { ...job, _id: id, [ORDER_FIELD]: index, [FP_FIELD]: fp, ...derivePublicSortKeys(job) } },
             upsert: true,
           },
         });

@@ -30,7 +30,8 @@
 import { randomUUID } from 'crypto';
 import type { HiringJobPosting } from '@/types/document';
 import type { NormalizedJob } from '@/lib/server/job-scraper/types';
-import { getHiringJobs, saveHiringJobs } from '@/lib/server/hiring';
+import { getHiringJobs } from '@/lib/server/hiring';
+import { writeHiringJobs } from '@/lib/server/hiring-write';
 import { jobIdentity, type IdentityBasis } from './identity';
 import { classificationFields, classifyJob } from './classify';
 import { draftIsUsable, normalizeSourceJob, type CanonicalJobDraft } from './normalize';
@@ -315,7 +316,23 @@ export async function ingestSourceJobs(
   /* Only write when something actually changed. A run where every posting was
      unchanged - the common case once a board is steady - rewrites nothing and
      leaves the read caches warm. */
-  if (report.created || report.updated) await saveHiringJobs(next);
+  if (report.created || report.updated) {
+    /* Phase 2.7E: write only the postings this run touched, not the corpus.
+       `matchedJobIds` names them; anything not already stored is a create and
+       needs a position, and planIngest puts creates at the FRONT. */
+    const existingIds = new Set(existing.map((j) => String(j.id)));
+    const touched = new Set(report.matchedJobIds.map(String));
+    const changed = next.filter((j) => touched.has(String(j.id)));
+    const created = new Set(
+      changed.map((j) => String(j.id)).filter((id) => !existingIds.has(id)),
+    );
+    const write = await writeHiringJobs(
+      changed as unknown as Array<Record<string, unknown>>, created,
+    );
+    /* A failed write is NOT reported as a successful ingestion — that is how a
+       run comes back green while the store never changed. */
+    if (!write.ok) throw new Error(write.error || 'ingestion write failed');
+  }
   return report;
 }
 

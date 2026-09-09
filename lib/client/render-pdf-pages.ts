@@ -31,6 +31,43 @@ async function loadPdfJs() {
   return pdfjs;
 }
 
+/**
+ * Loader options shared by every render path in this file.
+ *
+ * ═══ isEvalSupported: false — WHY ═══
+ *
+ * pdfjs-dist 5.6.205 is inside the range of GHSA-hq66-cqwq-w95j, "arbitrary
+ * JavaScript execution upon opening a malicious PDF". This module renders PDFs
+ * IN THE VIEWER'S BROWSER for the e-signature flow — PdfSignatureBoxSigner,
+ * PdfSignatureBoxEditor, PdfSignatureBoxPreview and TemplateStudioStudio — and
+ * that flow exists precisely to open a document somebody else sent you. A
+ * crafted PDF sent for signature would therefore run script on the docrud.com
+ * origin, inside the signer's authenticated session.
+ *
+ * `isEvalSupported: false` stops pdf.js from compiling font/JS constructs
+ * through `eval`/`Function`, which is the execution path that advisory turns
+ * on. It costs nothing here: this renderer rasterises pages to PNG and never
+ * runs embedded document scripts by design.
+ *
+ * ═══ THIS IS A MITIGATION, NOT THE REMEDIATION ═══
+ *
+ * TODO(PHASE-2, dependency): upgrade pdfjs-dist to >= 6.2.108.
+ *   · It is a MAJOR bump (5.x → 6.x) touching this file's dynamic imports —
+ *     the `legacy/build/pdf.min.mjs` and `?url` worker-import paths changed
+ *     between majors, so it needs its own verification pass against all four
+ *     consumers above, not a drive-by bump during a security phase.
+ *   · The server résumé parser is NOT affected and must not be touched: it
+ *     uses pdf-parse's nested pdfjs-dist 5.4.296, which is BELOW the advisory
+ *     range.
+ * Deliberately deferred rather than rushed; the mitigation holds meanwhile.
+ */
+const SAFE_PDF_OPTIONS = {
+  /* Worker disabled for Next dev/prod robustness — pre-existing behaviour,
+     unchanged. */
+  disableWorker: true,
+  isEvalSupported: false,
+} as const;
+
 export async function renderPdfDataUrlToPngPages(options: {
   pdfDataUrl: string;
   maxPages?: number;
@@ -48,7 +85,7 @@ export async function renderPdfDataUrlToPngPages(options: {
 
   // Disable worker for maximum robustness in Next dev/prod environments.
   // This avoids worker-src / module-worker edge cases.
-  const loadingTask = pdfjs.getDocument({ data: bytes, disableWorker: true });
+  const loadingTask = pdfjs.getDocument({ data: bytes, ...SAFE_PDF_OPTIONS });
   if (options.signal) {
     const onAbort = () => {
       try {
@@ -98,7 +135,7 @@ export async function renderPdfFileToPngPages(options: {
   const resolvedMaxPages = Math.max(1, Math.min(40, Number(options.maxPages ?? 24)));
   const resolvedScale = Math.max(0.6, Math.min(2.4, Number(options.scale ?? 1.5)));
 
-  const loadingTask = pdfjs.getDocument({ data: bytes, disableWorker: true });
+  const loadingTask = pdfjs.getDocument({ data: bytes, ...SAFE_PDF_OPTIONS });
   if (options.signal) {
     const onAbort = () => {
       try {

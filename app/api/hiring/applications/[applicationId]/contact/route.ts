@@ -12,9 +12,10 @@
  * company. Making them accept a request before hearing back about their own
  * application would be an obstacle with no purpose.
  */
+import { selectJobDocById } from '@/lib/server/db/hiring-jobs-collection';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
-import { getHiringApplications, getHiringJobs, viewerOrganizationIds } from '@/lib/server/hiring';
+import { getHiringApplications, viewerOrganizationIds } from '@/lib/server/hiring';
 import { getOrCreateConversation } from '@/lib/server/messages';
 import { employerOwnsApplication, isApplicationCandidate } from '@/lib/server/job-api/resume-access';
 
@@ -50,7 +51,8 @@ export async function POST(_req: NextRequest, { params }: { params: { applicatio
     if (!toUserId) return NextResponse.json({ error: 'Candidate not available.' }, { status: 404 });
   } else {
     /* Candidate side: the employer is whoever created the job. */
-    const job = (await getHiringJobs()).find((j) => j.id === application.jobId);
+    /* ONE indexed lookup — this used to read every job to find one. */
+    const job = await selectJobDocById(application.jobId);
     toUserId = job?.createdByUserId || null;
     if (!toUserId) return NextResponse.json({ error: 'Employer not available.' }, { status: 404 });
   }

@@ -6,10 +6,11 @@
  * would orphan their applications and erase what they can see about their own
  * history. Only a job nobody has applied to is removed outright.
  */
+import { writeHiringJobs } from '@/lib/server/hiring-write';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthSession, getStoredUsers } from '@/lib/server/auth';
 import {
-  getHiringApplications, getHiringJobs, removeHiringJob, saveHiringJobs,
+  getHiringApplications, getHiringJobs, removeHiringJob,
   viewerOrganizationIds,
 } from '@/lib/server/hiring';
 import { employerJobPatch } from '@/lib/server/job-api/queries';
@@ -74,7 +75,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { jobId:
     requirements: next.requirements, preferredSkills: next.preferredSkills,
   });
 
-  await saveHiringJobs(jobs.map((j) => (j.id === job.id ? next : j)));
+  /* Phase 2.7E: writes ONE document. An edit never moves a posting, so no
+     position is supplied and the stored `_order` is left alone. */
+  const write = await writeHiringJobs([next as unknown as Record<string, unknown>]);
+  if (!write.ok) {
+    return NextResponse.json({ error: 'Could not save the job.' }, { status: 500 });
+  }
   return NextResponse.json({ ok: true, job: next });
 }
 

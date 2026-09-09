@@ -1,6 +1,6 @@
+import { getHiringJobs } from '@/lib/server/hiring';
 import {
   fileTransfersPath,
-  hiringJobsPath,
   historyFilePath,
   readJsonFile,
   usersPath,
@@ -32,7 +32,12 @@ export async function getPublicHomeMetrics() {
     readJsonFile<LooseUser[]>(usersPath, []),
     readJsonFile<LooseHistory[]>(historyFilePath, []),
     readJsonFile<Array<Record<string, unknown>>>(fileTransfersPath, []),
-    readJsonFile<LooseJob[]>(hiringJobsPath, []),
+    /* Phase 2.6+2.7E: jobs come from the canonical store like every other
+       reader. `.catch(() => [])` because these are HOMEPAGE METRICS — a
+       decorative counter must not take the homepage down, and a missing number
+       is survivable where a missing job list would not be. Every path that
+       serves actual job DATA throws instead. */
+    getHiringJobs().catch(() => [] as LooseJob[]),
   ]);
 
   const workspaceIds = new Set(

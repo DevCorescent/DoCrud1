@@ -10,6 +10,9 @@
  * because once the full list is cached the projected helpers legitimately serve
  * from it and would be comparing against themselves.
  */
+/* Phase 2.6+2.7E: the canonical job corpus is MongoDB, so this suite runs
+   against an ISOLATED in-memory mongod. */
+import { startTestMongo } from './support/mongo-test-env';
 import {
   getPublishedHiringJobById, getPublishedHiringJobCompanyNames,
   getPublishedHiringJobCount, getPublishedHiringJobList, getPublishedHiringJobs,
@@ -46,7 +49,11 @@ function check(label: string, ok: boolean, detail = '') {
   console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`);
 }
 
+let stopMongo: (() => Promise<void>) | null = null;
+
 async function main() {
+  const mongo = await startTestMongo();
+  stopMongo = mongo.stop;
   invalidatePublishedHiringJobs();
 
   // Projected reads first, while nothing is cached.
@@ -142,4 +149,10 @@ async function main() {
   console.log('SELF-TEST OK');
 }
 
-main().catch((error) => { console.error(error); process.exit(1); });
+main()
+  /* Exit EXPLICITLY. The application's MongoClient keeps a connection pool
+     open, which keeps Node's event loop alive, so a suite that merely returns
+     prints its results and then hangs forever — passing tests that never
+     finish. */
+  .then(async () => { await stopMongo?.(); process.exit(0); })
+  .catch(async (error) => { await stopMongo?.(); console.error(error); process.exit(1); });

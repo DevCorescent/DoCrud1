@@ -39,7 +39,10 @@
  */
 import type { HiringJobPosting } from '@/types/document';
 import type { NormalizedJob, ProviderDeps } from '@/lib/server/job-scraper/types';
-import { getHiringJobs, saveHiringJobs } from '@/lib/server/hiring';
+import { getHiringJobs } from '@/lib/server/hiring';
+import { selectJobDocsForSource } from '@/lib/server/db/hiring-jobs-collection';
+import { incrementalIngestEnabled } from './ingest-mode';
+import { writeHiringJobs } from '@/lib/server/hiring-write';
 import { getAdapter, isPartnershipBlocked, listSourceConfigs, safeMessage } from './registry';
 import { normalizeSourceJob } from './normalize';
 import { planIngest, type IngestReport } from './ingest';
@@ -176,6 +179,12 @@ export interface RunIngestionOptions {
   /** Set false to compute the plan without writing. Defaults to true. */
   commit?: boolean;
   /**
+   * Load candidates per source instead of loading the whole corpus. Omit to
+   * follow the server-side flag; tests set it explicitly to compare the two
+   * paths against the same fixtures.
+   */
+  incremental?: boolean;
+  /**
    * Storage seams, defaulting to the real job store.
    *
    * Injectable so the orchestrator can be exercised as a pure function: with
@@ -231,11 +240,62 @@ export async function runCanonicalIngestion(
 
   /* ONE read for the whole run. Each source's plan is chained onto the
      previous result, so two sources cannot each overwrite the other's work. */
+  /* ═══ THE INJECTION IS NOT AVAILABLE IN PRODUCTION ═══
+
+     `loadJobs`/`saveJobs` exist so the orchestrator can be exercised as a pure
+     function with no database at all — two self-tests rely on it and no
+     production caller passes either. Left unguarded it is still an escape hatch
+     around the ONE write funnel: anything supplying `saveJobs` would persist
+     nothing to app_state and mirror nothing to hiring_jobs, while the run
+     reported inserts and updates as though it had.
+
+     So it THROWS rather than being silently ignored. Quietly falling back to
+     the real save would run a production write that the caller explicitly asked
+     not to happen; quietly honouring the override would be the hole itself.
+     Refusing loudly is the only option that cannot surprise anyone. */
+  if (process.env.NODE_ENV === 'production' && (options.saveJobs || options.loadJobs)) {
+    throw new Error(
+      'run-ingestion: loadJobs/saveJobs injection is test-only and must not be used in production — '
+      + 'every production job write goes through the canonical writer',
+    );
+  }
+  /* Filled when the write happens, so the default writer knows which postings
+     are new and therefore need a board position. */
+  let createdIds = new Set<string>();
+  const defaultSave = async (toWrite: HiringJobPosting[]) => {
+    const write = await writeHiringJobs(
+      toWrite as unknown as Array<Record<string, unknown>>, createdIds,
+    );
+    if (!write.ok) throw new Error(write.error || 'ingestion write failed');
+  };
+
   const load = options.loadJobs ?? getHiringJobs;
-  const save = options.saveJobs ?? saveHiringJobs;
-  let jobs: HiringJobPosting[] = await load();
+  /* Phase 2.7E: the default writer is the per-document canonical path. The
+     injectable seam stays for tests and is still refused in production. */
+  const save = options.saveJobs ?? defaultSave;
+
+  /* ═══ WHOLE-CORPUS vs PER-SOURCE CANDIDATE LOOKUP ═══
+
+     The whole-corpus path loads every posting so `planIngest` can index it by
+     identity. That was measured at 733 MB of heap for 100K postings, against a
+     1024 MB serverless limit, and the load is not covered by `saveReserveMs`.
+
+     The incremental path instead asks, per source, for only the postings that
+     source's drafts could possibly match. It is OFF by default and enabled
+     server-side only — the corpus is small enough today that the whole-corpus
+     path is not yet a problem, and the two must be proven equivalent before
+     the default moves. See scripts/ingest-incremental-equivalence.selftest.ts.
+
+     An injected `loadJobs` always wins: tests and the dry-run path supply their
+     own corpus and must keep getting it. */
+  const incremental = options.incremental ?? (!options.loadJobs && incrementalIngestEnabled());
+
+  let jobs: HiringJobPosting[] = incremental ? [] : await load();
   const before = jobs;
   const matchedIds = new Set<string>();
+  /* Under the incremental path `jobs` accumulates only what was touched, so the
+     postings a source contributes are tracked as they are planned. */
+  const seenIds = new Set<string>();
 
   for (const config of configs) {
     const started = Date.now();
@@ -305,8 +365,36 @@ export async function runCanonicalIngestion(
     }
 
     const drafts = fetched.map((job) => normalizeSourceJob(job, { sourceId: config.sourceId, now }));
-    const plan = planIngest(drafts, jobs, { now: runAt });
-    jobs = plan.jobs;
+
+    /* Incremental: the candidate set is the postings THIS source could match,
+       plus anything earlier sources in this run already pulled in (so a draft
+       matched twice in one run still coalesces exactly as before). */
+    let candidates = jobs;
+    if (incremental) {
+      const fromStore = await selectJobDocsForSource(config.sourceId, {
+        sourceJobIds: drafts.map((d) => String(d.sourceJobId ?? '')),
+        canonicalUrls: drafts.map((d) => String(d.canonicalUrl ?? d.sourceUrl ?? '')),
+        organizationNames: drafts.map((d) => String(d.organizationName ?? '')),
+      });
+      const merged = new Map<string, HiringJobPosting>();
+      for (const job of fromStore) merged.set(String(job.id), job);
+      /* Anything already in `jobs` is newer than the stored copy. */
+      for (const job of jobs) merged.set(String(job.id), job);
+      candidates = Array.from(merged.values());
+    }
+
+    const plan = planIngest(drafts, candidates, { now: runAt });
+    if (incremental) {
+      /* Keep every posting this run has touched OR considered, so the heartbeat
+         and the commit below see the same shape the whole-corpus path sees. */
+      const next = new Map<string, HiringJobPosting>();
+      for (const job of jobs) next.set(String(job.id), job);
+      for (const job of plan.jobs) next.set(String(job.id), job);
+      jobs = Array.from(next.values());
+      for (const job of candidates) seenIds.add(String(job.id));
+    } else {
+      jobs = plan.jobs;
+    }
 
     for (const id of plan.report.matchedJobIds) matchedIds.add(id);
     for (const key of Object.keys(identityBasis) as Array<keyof typeof identityBasis>) {
@@ -351,7 +439,20 @@ export async function runCanonicalIngestion(
      unchanged rewrites nothing and leaves the read caches warm — the common
      case once a board is steady. */
   const changed = totals.inserted > 0 || totals.updated > 0 || stamps.length > 0;
-  if (commit && changed) await save(jobs);
+  if (commit && changed) {
+    /* Only the postings this run touched. `matchedIds` names them; anything not
+       present before the run is a create and is positioned at the front. */
+    /* Incremental holds no full `before` corpus; a posting is pre-existing
+       exactly when the per-source lookup returned it. */
+    const beforeIds = incremental
+      ? seenIds
+      : new Set(before.map((j) => String(j.id)));
+    const touched = jobs.filter((j) => matchedIds.has(String(j.id)));
+    createdIds = new Set(
+      touched.map((j) => String(j.id)).filter((id) => !beforeIds.has(id)),
+    );
+    await save(touched);
+  }
   /* Nothing changed: hand back the array we read, unmodified. */
   if (!changed) jobs = before;
 

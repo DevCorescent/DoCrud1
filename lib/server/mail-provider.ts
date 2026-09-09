@@ -238,6 +238,47 @@ export interface MailProvider {
   verify(): Promise<ProviderHealth>;
 }
 
+/**
+ * Strip anything that could END a header and begin a new one.
+ *
+ * ═══ HEADER INJECTION ═══
+ *
+ * A mail header is terminated by CRLF. So a value containing CR or LF does not
+ * stay a value — everything after the break is parsed as ANOTHER header. A
+ * recipient or subject carrying
+ *
+ *     victim@example.com\r\nBcc: everyone@example.com
+ *
+ * silently adds a Bcc. Several of the addresses and subjects reaching this seam
+ * originate in user input (signature invitations, reminders, document links,
+ * profile-driven notifications), so the value is cleaned at the ONE point every
+ * message passes through rather than at each of the twelve call sites, where a
+ * new one would simply be added without it.
+ *
+ * CR, LF and NUL are removed rather than escaped: none of them is ever legal in
+ * a header value, so nothing legitimate is lost. Length is capped for the same
+ * reason — an unbounded header is a denial-of-service surface, not a feature.
+ *
+ * This complements, and does not replace, the pending nodemailer upgrade:
+ * TODO(PHASE-2, dependency): nodemailer 7.0.13 -> 10.x closes GHSA-vvjj-xcjg-gr5g
+ *   (CRLF in the transport `name`/EHLO option) and GHSA-268h-hp4c-crq3 (List-*
+ *   header comments). Deferred because it is a THREE-major jump across ~12
+ *   createTransport call sites and belongs in its own verification pass, not in
+ *   a hardening phase. The `raw`, `path` and `href` advisories do NOT apply:
+ *   this codebase uses none of those options — attachments are always Buffers.
+ */
+const HEADER_MAX = 998; // RFC 5322 line-length limit.
+
+export function sanitizeHeaderValue(value: string | undefined): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return String(value).replace(/[\r\n\0]/g, '').slice(0, HEADER_MAX);
+}
+
+/** Same rule for a filename, which also lands in a header (Content-Disposition). */
+export function sanitizeFilename(value: string): string {
+  return String(value).replace(/[\r\n\0"]/g, '').slice(0, 255);
+}
+
 /** The configured SMTP account, wrapped in the provider interface. */
 export class SmtpMailProvider implements MailProvider {
   readonly name: string;
@@ -249,16 +290,22 @@ export class SmtpMailProvider implements MailProvider {
        unchanged so the caller can classify them — swallowing one here would
        turn a rejection into a silent success. */
     const transporter = (await getCachedTransporter()) as Transporter;
+    /* Header values are sanitised HERE, at the one seam every message crosses.
+       Bodies (text/html) are untouched — they are not headers and a newline in
+       a body is simply a newline. */
     const info = await transporter.sendMail({
-      from: message.from,
-      to: message.to,
-      cc: message.cc,
-      bcc: message.bcc,
-      replyTo: message.replyTo,
-      subject: message.subject,
+      from: sanitizeHeaderValue(message.from),
+      to: sanitizeHeaderValue(message.to),
+      cc: sanitizeHeaderValue(message.cc),
+      bcc: sanitizeHeaderValue(message.bcc),
+      replyTo: sanitizeHeaderValue(message.replyTo),
+      subject: sanitizeHeaderValue(message.subject),
       text: message.text,
       html: message.html,
-      attachments: message.attachments,
+      attachments: message.attachments?.map((a) => ({
+        ...a,
+        filename: sanitizeFilename(a.filename),
+      })),
     });
     return { messageId: info.messageId, provider: this.name };
   }

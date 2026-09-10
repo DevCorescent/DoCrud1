@@ -153,3 +153,31 @@
   .aim-brief-row-inline{ gap:5px; }
   .aim-brief-row-inline > .aim-brief-tile{ padding-inline:5px; }
 }
+
+/* ── Laptops and up: back to the shape the action row had ──
+   Equal tiles across the full band is right on a phone, where the row IS the
+   width. It is not right on a laptop: at 1920px an even split makes each tile
+   601px wide, and three enormous boxes holding a two-digit number read as a
+   layout accident rather than a summary.
+
+   So from 1024px the tiles size to their own content and sit to the right,
+   exactly as Companies / Publish / Jobs did. The `padding-inline` stays, so
+   the LAST tile's right edge still lands on the same rule as the Discover
+   heading's text — the alignment moves from the left edge to the right one,
+   which is what right-aligning means here. */
+@media (min-width:1024px){
+  .aim-brief-row-inline{
+    justify-content:flex-end;
+  }
+  .aim-brief-row-inline > .aim-brief-tile{
+    flex:0 0 auto;
+    width:fit-content;
+    /* Left-aligned again: a content-sized box has no spare room to centre in,
+       and the number should start where the icon does. */
+    align-items:flex-start;
+    text-align:left;
+    padding-inline:14px;
+  }
+  /* The bar belongs to the number above it once the tile is content-sized. */
+  .aim-brief-row-inline > .aim-brief-score .aim-brief-bar{ width:100%; }
+}

@@ -105,53 +105,51 @@
 }
 
 /* ══ The homepage shape ══
-   The row that used to be Companies / Publish / Jobs: tiles sized to their own
-   content, sitting to the right, not a grid spanning the column.
 
-   Same sizing model as `.hp-actions` — one line at every width, shrinking
-   through padding, gap and type rather than wrapping, each with a floor — so
-   the two rows are interchangeable in that slot and neither one stretches to
-   fill the container it happens to be in. */
+   The row sits between the Discover band and the Hiring Now rail, and it is
+   read as the line under the first of those — so it starts and ends on the
+   SAME vertical rules as `.hhs-body`, whose padding is 20px on a phone and
+   34px from 640px up. Matching those two numbers is the whole point of this
+   block: a row inset by some other amount reads as a different column.
+
+   Equal tiles across that band at every width. `flex:1 1 0` and not
+   `1 1 auto` — an `auto` basis starts each tile at its own content width, so
+   "Job matches" would stay wider than "New people" and the three would never
+   line up. A zero basis splits the space evenly. */
 .aim-brief-row-inline{
   display:flex;
   flex-wrap:nowrap;
   align-items:stretch;
-  justify-content:flex-end;
-  gap:var(--brief-inline-gap);
-
-  --brief-inline-gap:clamp(5px, 1.7vw, 10px);
-  --brief-inline-pad:clamp(8px, 2.5vw, 14px);
+  gap:clamp(6px, 1.7vw, 10px);
+  /* The same rules as .hhs-body above it. */
+  padding-inline:20px;
 }
+@media (min-width:640px){
+  .aim-brief-row-inline{ padding-inline:34px; }
+}
+@media (min-width:1024px){
+  .aim-brief-row-inline{ padding-inline:48px; }
+}
+
 .aim-brief-row-inline > .aim-brief-tile{
-  flex:0 0 auto;
-  width:fit-content;
-  padding-inline:var(--brief-inline-pad);
+  flex:1 1 0;
+  width:auto;
+  min-width:0;
+  /* Centred, now that the box is wider than the text it holds: a left-aligned
+     number in a stretched tile reads as content that failed to fill it. */
+  align-items:center;
+  text-align:center;
+  padding-inline:clamp(6px, 2vw, 14px);
 }
-/* ── Phones: fill the width ──
-   Content-sized tiles huddled in the middle of a 390px screen leave a margin
-   down each side and a ragged right edge, and the three numbers stop reading
-   as one row. On a phone the row IS the width, so the tiles share it equally
-   and the block gets a straight edge on both sides.
+/* The readiness bar spans its tile rather than sitting under a number that is
+   no longer left-aligned. */
+.aim-brief-row-inline > .aim-brief-score .aim-brief-bar{ width:100%; }
 
-   `flex:1 1 0` and not `1 1 auto`: an `auto` basis starts each tile at its own
-   content width, so "Job matches" would stay wider than "New people" and the
-   three would never line up. A zero basis makes the split even. */
-@media (max-width:639px){
-  .aim-brief-row-inline{
-    justify-content:stretch;
-    /* The same bezel inset the action row used, so the two sit on the same
-       vertical lines as everything else in this column. */
-    max-width:calc(100% - 8px);
-    margin-inline:auto;
-  }
-  .aim-brief-row-inline > .aim-brief-tile{
-    flex:1 1 0;
-    width:auto;
-    /* Centred content, now that the box is wider than the text it holds. */
-    align-items:center;
-    text-align:center;
-  }
-  /* The readiness bar spans its tile rather than sitting under a
-     left-aligned number that is no longer left-aligned. */
-  .aim-brief-row-inline > .aim-brief-score .aim-brief-bar{ width:100%; }
+/* Very narrow phones. The inset is NOT reduced — it is the alignment with the
+   Discover heading above, and giving it up to save 12px would trade the thing
+   this block exists for. The gap and the tiles' own padding give way instead,
+   which is enough: measured at 320px the three still sit on one line. */
+@media (max-width:359px){
+  .aim-brief-row-inline{ gap:5px; }
+  .aim-brief-row-inline > .aim-brief-tile{ padding-inline:5px; }
 }

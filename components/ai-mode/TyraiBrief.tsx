@@ -27,24 +27,18 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { ArrowRight, Building2, ChevronDown } from 'lucide-react';
+import { ArrowRight, Building2 } from 'lucide-react';
 import { cachedJson } from '@/lib/client/request-cache';
 import TyraiBriefRow from '@/components/ai-mode/TyraiBriefRow';
 import { companyJobsHref, formatCompanyJobCount, type CompanyExplorerTile } from '@/lib/company-explorer';
 
-export default function TyraiBrief({ open }: { open: boolean }) {
+export default function TyraiBrief(
+  { open, briefOpen }: { open: boolean; briefOpen: boolean },
+) {
   const { data: session, status } = useSession();
   const signedIn = status === 'authenticated';
 
   const [companies, setCompanies] = useState<CompanyExplorerTile[]>([]);
-  /* Closed on arrival. The screen TYRAI opens on is one question, and a
-     dashboard unfolded above it answers a question nobody asked yet — the
-     numbers are worth reading, but only when somebody reaches for them. The
-     chevron in the corner is the whole affordance.
-
-     Local and deliberately not persisted: this is a "show me", not a saved
-     preference, so every opening starts from the same quiet state. */
-  const [briefOpen, setBriefOpen] = useState(false);
 
   /* Only while the overlay is open, and only once per opening: these are
      small, cached calls, and TYRAI is opened far more often than the numbers
@@ -91,19 +85,6 @@ export default function TyraiBrief({ open }: { open: boolean }) {
       )}
       </div>
 
-      {/* The only thing that toggles. The tiles and the company links stay
-          ordinary navigation — making the whole panel a control would mean a
-          click meant for "Job matches" collapsed the panel instead. */}
-      <button
-        type="button"
-        className="aim-brief-toggle"
-        aria-expanded={briefOpen}
-        aria-controls="tyrai-brief-content"
-        aria-label={briefOpen ? 'Collapse summary' : 'Expand summary'}
-        onClick={() => setBriefOpen((v) => !v)}
-      >
-        <ChevronDown className="aim-brief-chev" aria-hidden />
-      </button>
     </div>
   );
 }

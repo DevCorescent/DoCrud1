@@ -33,7 +33,7 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, Search, Sparkles } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Search, Sparkles } from 'lucide-react';
 import AiPersonCard from '@/components/ai-mode/AiPersonCard';
 import ProfileReadiness from '@/components/ai-mode/ProfileReadiness';
 import TyraiMark from '@/components/ai-mode/TyraiMark';
@@ -126,6 +126,11 @@ export default function AiMode({
   onClose: () => void;
   seed?: string;
 }) {
+  /* Whether the recommendations brief above the title is unfolded. It lives
+     here rather than inside the brief because its control does not: the
+     button sits in the page's top-right corner, opposite Back, and a control
+     cannot own state that is rendered somewhere else. Closed on arrival. */
+  const [briefOpen, setBriefOpen] = useState(false);
   const [value, setValue] = useState('');
   const [asked, setAsked] = useState('');
   const [data, setData] = useState<Payload | null>(null);
@@ -418,6 +423,26 @@ export default function AiMode({
       <div className="aim-corner">
         {/* Your own standing in the thing you are watching run. */}
         <ProfileReadiness open={open} />
+
+        {/* Opposite Back, and built from the same parts — the corner controls
+            of this screen are a pair, so they share one set of numbers.
+            LAST in the row, so it is the thing actually in the corner: the
+            readiness pill is a readout, this is the control, and the control
+            is what a thumb reaches for.
+            Only before a search: afterwards the answer is what the screen is
+            for, and a folded-away dashboard is not worth a corner. */}
+        {phase === 'ask' && (
+          <button
+            type="button"
+            onClick={() => setBriefOpen((v) => !v)}
+            aria-expanded={briefOpen}
+            aria-controls="tyrai-brief-content"
+            className="aim-recs"
+          >
+            <span className="aim-recs-t">Recommendations</span>
+            <ChevronDown className="aim-recs-chev h-4 w-4 shrink-0" aria-hidden />
+          </button>
+        )}
       </div>
 
       <div className="aim-stage" data-phase={phase} ref={stageRef}>
@@ -430,7 +455,7 @@ export default function AiMode({
               ABOVE the title instead of moving the title away from the field
               it belongs to. */}
           <div className="aim-crown">
-            {phase === 'ask' && <TyraiBrief open={open} />}
+            {phase === 'ask' && <TyraiBrief open={open} briefOpen={briefOpen} />}
             <div className="aim-title">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">
               <TyraiMark className="h-3.5 w-3.5" /> TYRAI

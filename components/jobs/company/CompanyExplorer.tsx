@@ -234,15 +234,16 @@ export default function CompanyExplorer() {
 
   return (
     <div className="w-full min-w-0">
-      <div className="ce-head mb-1 flex items-center justify-between gap-3 px-2 sm:px-3">
+      <div className="ce-head mb-1 flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
-            {/* 0.28 measured 2.4:1 against the page — a heading nobody could
-                read, over a strip whose whole job is to be noticed. This is
-                still quiet; it is just above the floor rather than below it. */}
+            {/* White, at full strength. 0.28 measured 2.4:1 against the page
+                — a heading nobody could read, over a strip whose whole job is
+                to be noticed; 0.52 was better and still grey. This names what
+                the rail is, so it gets to be legible. */}
             <span className="hp-sec text-[11px] font-semibold uppercase tracking-[0.14em]"
-              style={{ color: 'rgba(255,255,255,0.52)' }}>
-              Top Company
+              style={{ color: '#fff' }}>
+              Hiring Now
             </span>
           </div>
         </div>
@@ -270,7 +271,7 @@ export default function CompanyExplorer() {
             gap that scrolls away with the content. */}
         <div
           ref={railRef}
-          className="ce-rail flex w-full min-w-0 items-stretch gap-2 px-2 sm:gap-2.5 sm:px-3"
+          className="ce-rail flex w-full min-w-0 items-stretch gap-2 sm:gap-2.5"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={endDrag}

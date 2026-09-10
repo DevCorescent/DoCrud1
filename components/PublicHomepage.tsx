@@ -6250,11 +6250,10 @@ function NewHomepageContent({
           </div>
         )}
 
-        {/* ── Company Explorer ──
-             The slot the legacy ExploreSection used to fill (see the LEGACY
-             EXPLORE SECTION — PRESERVED note further down this file). The
-             companies that were once a scrolling logo marquee are here as a
-             list somebody can actually click. */}
+        {/* ── Hiring Now ──
+             The companies with open roles, as a rail somebody can click. It
+             fills the slot the legacy ExploreSection used to hold — see the
+             LEGACY EXPLORE SECTION — PRESERVED note further down this file. */}
         <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
           <CompanyExplorer />
         </div>

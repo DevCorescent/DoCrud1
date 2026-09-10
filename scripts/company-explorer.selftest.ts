@@ -307,9 +307,32 @@ for (const rule of ['overflow-x:auto', 'overflow-y:hidden', 'touch-action:pan-x'
   check(`the rail sets ${rule}`, railCss.includes(rule));
 }
 check('the rail is width-capped so the body cannot scroll sideways', /max-width:100%/.test(railCss));
-/* The first tile must start on the same line as the heading. */
-check('the rail carries the same horizontal inset as the header row',
-  /ce-rail[^"]*\bpx-2\b[^"]*\bsm:px-3\b/.test(strip));
+/* The first tile must start on the same line as the heading — and on the same
+   line as `.hhs-title` in the Discover band above it.
+
+   This used to assert that the head and the rail carried the SAME Tailwind
+   inset (`px-2 sm:px-3`). That is not the property that matters, and matching
+   classes did not deliver it: `.ce-rail-wrap` breaks out to the full viewport
+   (`left:50%; width:100vw`), so an identical padding on the two is measured
+   from two different edges and lands the tile short of the heading by the
+   width of the page gutter.
+
+   The insets now live in CSS and are deliberately DIFFERENT numbers reaching
+   the same rule: the head takes the bare inset, the rail adds the centring
+   gutter and the column's own padding back on. */
+check('the head is inset to the Discover band\'s rule (20 / 34 / 48)',
+  /\.ce-head\{[^}]*padding-inline:20px/.test(railCss)
+  && /\.ce-head\{ padding-inline:34px; \}/.test(railCss)
+  && /\.ce-head\{ padding-inline:48px; \}/.test(railCss));
+check('the rail adds the centring gutter back, being full-bleed',
+  /--ce-gutter:max\(0px, \(100vw - 1440px\) \/ 2\)/.test(railCss)
+  && /padding-left:calc\(var\(--ce-gutter\) \+ var\(--ce-inset\)\)/.test(railCss));
+check('and adds the column padding, so the tile lands on the heading',
+  /--ce-inset:calc\(24px \+ 34px\)/.test(railCss)
+  && /--ce-inset:calc\(40px \+ 48px\)/.test(railCss)
+  && /--ce-inset:calc\(48px \+ 48px\)/.test(railCss));
+check('the rail no longer carries a Tailwind inset that would fight the CSS',
+  !/ce-rail[^"]*\bpx-2\b/.test(strip));
 check('and min-width:0 so a flex child cannot force it wider', /min-w-0/.test(strip));
 /* ── The rail is cursor-driven; the arrow buttons are gone ──────────────── */
 

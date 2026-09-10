@@ -1312,39 +1312,57 @@
    space the panel was supposed to give back. */
 .aim-brief[data-open="false"]{ gap:0; }
 
-/* The arrow, and nothing around it.
-   In the corner rather than the middle, and unpainted: collapsed, this control
-   IS the entire component, and a pill sitting alone above the title reads as a
-   thing that lost its panel. A bare chevron in the corner reads as an edge you
-   can pull. The 32px box is still there for the thumb — it is just not drawn. */
-.aim-brief-toggle{
-  align-self:flex-end;
+/* ══ Recommendations, in the top-right corner ══
+   The opposite number to `.aim-back`: same height, same radius, same hairline,
+   same glass, same type. The two corner controls of this screen are a pair, so
+   they are built from one set of numbers — anything that changes about the
+   look of Back should change here too.
+   The chevron points DOWN when the panel is closed (the direction it will
+   open) and flips UP once it is showing. */
+.aim-recs{
   display:inline-flex;
   align-items:center;
-  justify-content:center;
-  width:32px;
-  height:32px;
-  padding:0;
-  border:0;
-  background:transparent;
-  color:rgba(255,255,255,0.38);
+  gap:7px;
+  height:40px;
+  padding:0 12px 0 15px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(22px) saturate(140%);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  color:rgba(255,255,255,0.78);
+  font-size:12.5px;
+  font-weight:600;
+  letter-spacing:-0.005em;
+  white-space:nowrap;
   cursor:pointer;
-  transition:color 170ms ease, transform 140ms ease;
+  transition:border-color 180ms ease, background-color 180ms ease, color 180ms ease;
 }
-.aim-brief-toggle:hover{ color:rgba(255,255,255,0.85); }
-.aim-brief-toggle:active{ transform:scale(0.92); }
-.aim-brief-toggle:focus-visible{
+.aim-recs:hover{
+  border-color:rgba(255,255,255,0.25);
+  background:rgba(255,255,255,0.10);
+  color:#fff;
+}
+.aim-recs:active{ background:rgba(255,255,255,0.14); }
+.aim-recs:focus-visible{
   outline:2px solid rgba(255,255,255,0.55);
   outline-offset:2px;
 }
-.aim-brief-chev{
-  width:14px;
-  height:14px;
-  /* Points UP when the panel is open — the direction it will travel. */
-  transform:rotate(180deg);
+.aim-recs-chev{
   transition:transform 320ms cubic-bezier(0.22,1,0.36,1);
 }
-.aim-brief[data-open="false"] .aim-brief-chev{ transform:rotate(0deg); }
+.aim-recs[aria-expanded="true"] .aim-recs-chev{ transform:rotate(180deg); }
+
+/* Below 360px the corner has to hold this, the readiness pill AND Back. The
+   word goes and the control becomes the arrow in its pill — exactly what
+   `.aim-back` does at the same width. */
+@media (max-width:359px){
+  .aim-recs{ width:40px; padding:0; justify-content:center; gap:0; }
+  .aim-recs-t{ display:none; }
+}
+@media (prefers-reduced-motion: reduce){
+  .aim-recs,.aim-recs-chev{ transition:none; }
+}
 
 @media (max-width:640px){
   .aim-crown{ gap:12px; }
@@ -1352,6 +1370,5 @@
 
 @media (prefers-reduced-motion: reduce){
   .aim-brief-content,
-  .aim-brief[data-open="false"] .aim-brief-content,
-  .aim-brief-chev{ transition:none; }
+  .aim-brief[data-open="false"] .aim-brief-content{ transition:none; }
 }

@@ -146,3 +146,47 @@
   background:rgba(167,139,250,0.16);
   border:1px solid rgba(167,139,250,0.28);
 }
+
+/* ══ Aligned with the Discover band above ══
+
+   The heading and the first tile both start on the SAME vertical rule as
+   `.hhs-title` — 20px on a phone, 34px from 640px, 48px from 1024px, which is
+   `.hhs-body`'s padding.
+
+   The two need different numbers to land on the same line, because they are
+   measured from different edges. `.ce-head` sits inside the page column, so it
+   just takes the inset. `.ce-rail-wrap` breaks out to the full viewport
+   (`left:50%; width:100vw`) so the rail can run off the right edge, which
+   means the rail's padding is measured from the VIEWPORT — and to reach the
+   same rule it has to add back everything between the viewport edge and the
+   column's text:
+
+       centring gutter          max(0, (100vw - 1440px) / 2)
+     + the column's own padding 0 / 24 / 40 / 48   (px-0 sm:px-6 lg:px-10 xl:px-12)
+     + the inset                20 / 34 / 48       (.hhs-body)
+
+   Kept as one `--ce-inset` per breakpoint so the two rules cannot drift.
+
+   The RIGHT side is deliberately not matched: the rail is meant to run past
+   the edge of the screen, and a symmetric inset would stop it looking like
+   there is more to scroll to. */
+.ce-head{
+  padding-inline:20px;
+}
+.ce-rail{
+  --ce-gutter:max(0px, (100vw - 1440px) / 2);
+  --ce-inset:20px;
+  padding-left:calc(var(--ce-gutter) + var(--ce-inset));
+  padding-right:12px;
+}
+@media (min-width:640px){
+  .ce-head{ padding-inline:34px; }
+  .ce-rail{ --ce-inset:calc(24px + 34px); }
+}
+@media (min-width:1024px){
+  .ce-head{ padding-inline:48px; }
+  .ce-rail{ --ce-inset:calc(40px + 48px); }
+}
+@media (min-width:1280px){
+  .ce-rail{ --ce-inset:calc(48px + 48px); }
+}

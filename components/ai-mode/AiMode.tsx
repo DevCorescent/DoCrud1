@@ -422,10 +422,16 @@ export default function AiMode({
 
       <div className="aim-stage" data-phase={phase} ref={stageRef}>
         <div className="aim-head" ref={headRef}>
-          {/* Absolutely placed, both of them, so the HEAD is exactly the field:
+          {/* Absolutely placed, all of it, so the HEAD is exactly the field:
               centring the head centres the field itself rather than the block
-              of text around it, and neither one shifts the field as it goes. */}
-          <div className="aim-title">
+              of text around it, and nothing above it shifts the field as it
+              goes. The brief joins the title inside one bottom-anchored group,
+              anchored at the BOTTOM so collapsing the brief closes the space
+              ABOVE the title instead of moving the title away from the field
+              it belongs to. */}
+          <div className="aim-crown">
+            {phase === 'ask' && <TyraiBrief open={open} />}
+            <div className="aim-title">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">
               <TyraiMark className="h-3.5 w-3.5" /> TYRAI
             </span>
@@ -436,6 +442,7 @@ export default function AiMode({
               Describe what you need in a sentence. You get the closest matches
               across people, businesses, jobs and work — with why each one fits.
             </p>
+            </div>
           </div>
 
           <form
@@ -497,9 +504,6 @@ export default function AiMode({
               ))}
             </div>
 
-            {/* What is waiting for you — only before a search, and only when
-                there is a "you" to report on. */}
-            {phase === 'ask' && <TyraiBrief open={open} />}
           </div>
 
           {/* What the engine understood. Shown because a result set that has

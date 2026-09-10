@@ -116,6 +116,7 @@ import { EXPLORE_DESTINATIONS, exploreWash } from '@/lib/explore-destinations';
 import CompanyExplorer from '@/components/jobs/company/CompanyExplorer';
 import type { HeroBanner } from '@/lib/hero-banner';
 import '@/components/home/home-actions.css';
+import TyraiBriefRow from '@/components/ai-mode/TyraiBriefRow';
 
 // Heavy modal components — loaded only when first opened, not part of the initial bundle
 const QuickFileEditorDialog = dynamic(() => import('@/components/QuickFileEditorDialog'), { ssr: false });
@@ -5892,7 +5893,7 @@ function NewHomepageContent({
   initialBanners?: HeroBanner[] | null;
   guestMode?: boolean;
 }) {
-  const { data: nhcSession } = useSession();
+  const { data: nhcSession, status: nhcAuthStatus } = useSession();
   const [activeFeedTab, setActiveFeedTab] = React.useState<string>('All');
   const [feedSliderKey, setFeedSliderKey] = React.useState(0);
   const [heroDot, setHeroDot] = React.useState(0);
@@ -6206,27 +6207,39 @@ function NewHomepageContent({
           </div>
         )}
 
-        {/* ── The two ways on from here ──
-             Between the band that says what is waiting for you and the feed
-             that shows it: one button out to the companies, one to add
-             something of your own. Their own row rather than tucked onto the
-             companies heading — at this size they are a choice being offered,
-             and a choice reads as one when it is given the width. */}
-        <div className="hp-actions w-full min-w-0" style={{ marginBottom: 16 }}>
-          <Link href="/businesses" className="hp-action hp-action-ghost">
-            <Building2 className="h-4 w-4 shrink-0" />
-            <span>Explore Companies</span>
-            <ArrowRight className="hp-action-go h-3.5 w-3.5 shrink-0" />
-          </Link>
+        {/* ── What is waiting for you ──
+             The same three-tile brief TYRAI opens on: matches, new people, and
+             how ready the profile is. It replaces the Companies / Publish /
+             Jobs row that sat here, and it is the SAME component TYRAI renders
+             — one definition, one set of fetches, so a number here can never
+             disagree with the same number there.
 
-          {/* The same composer the nav and the feed open — one dialog, one
-              handler, so what it publishes cannot depend on which button was
-              pressed. */}
-          <button type="button" onClick={() => onPublishClick()} className="hp-action hp-action-solid">
-            <Plus className="h-4 w-4 shrink-0" />
-            <span>Publish</span>
-          </button>
-        </div>
+             It renders nothing when signed out: "Job matches —" is not a fact
+             about a visitor who has no account. The old row stays for that
+             case, so a logged-out homepage still offers a way onward rather
+             than a gap. */}
+        {nhcAuthStatus === 'authenticated' ? (
+          <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
+            <TyraiBriefRow />
+          </div>
+        ) : (
+          <div className="hp-actions w-full min-w-0" style={{ marginBottom: 16 }}>
+            <Link href="/businesses" className="hp-action hp-action-ghost">
+              <Building2 className="h-4 w-4 shrink-0" />
+              <span>Companies</span>
+              <ArrowRight className="hp-action-go h-3.5 w-3.5 shrink-0" />
+            </Link>
+            <button type="button" onClick={() => onPublishClick()} className="hp-action hp-action-solid">
+              <Plus className="h-4 w-4 shrink-0" />
+              <span>Publish</span>
+            </button>
+            <Link href="/jobs" className="hp-action hp-action-ghost">
+              <Briefcase className="h-4 w-4 shrink-0" />
+              <span>Jobs</span>
+              <ArrowRight className="hp-action-go h-3.5 w-3.5 shrink-0" />
+            </Link>
+          </div>
+        )}
 
         {/* The announcement used to be repeated here, mid-page, in inline
             styles. One message, one place: it is the bar under the nav. */}

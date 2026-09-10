@@ -253,7 +253,13 @@
 .aim-grid{
   display:grid;
   gap:12px;
-  grid-template-columns:1fr;
+  /* `minmax(0,1fr)`, NOT `1fr`. A bare `1fr` is `minmax(auto,1fr)`, so the
+     track floors at the widest thing inside it — one unbreakable job title or
+     a location like "United States, Multiple Locations, Multiple Locations"
+     drags the column past the viewport. Measured at 320px before this: the
+     card rendered 529px wide. The two-and three-column rules below always
+     said `minmax(0,...)`; the single-column one was the odd rule out. */
+  grid-template-columns:minmax(0,1fr);
 }
 @media (min-width:720px){ .aim-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (min-width:1100px){ .aim-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
@@ -1082,68 +1088,6 @@
   color:rgba(255,255,255,0.45);
 }
 
-.aim-brief-row{
-  display:grid;
-  grid-template-columns:repeat(3, minmax(0,1fr));
-  gap:8px;
-}
-
-.aim-brief-tile{
-  position:relative;
-  display:flex;
-  flex-direction:column;
-  gap:2px;
-  min-width:0;
-  padding:11px 12px;
-  border-radius:14px;
-  border:1px solid rgba(255,255,255,0.09);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.015) 100%),
-    rgba(12,12,16,0.45);
-  backdrop-filter:blur(22px) saturate(150%);
-  -webkit-backdrop-filter:blur(22px) saturate(150%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
-  text-decoration:none;
-  transition:border-color 170ms ease, background-color 170ms ease, transform 140ms ease;
-}
-.aim-brief-tile:hover{
-  border-color:rgba(255,255,255,0.20);
-  transform:translateY(-1px);
-}
-.aim-brief-i{
-  width:13px;
-  height:13px;
-  color:rgba(255,255,255,0.40);
-}
-.aim-brief-n{
-  font-size:19px;
-  font-weight:700;
-  line-height:1.05;
-  letter-spacing:-0.02em;
-  font-variant-numeric:tabular-nums;
-  color:rgba(255,255,255,0.95);
-}
-.aim-brief-l{
-  font-size:10.5px;
-  color:rgba(255,255,255,0.50);
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-}
-.aim-brief-bar{
-  display:block;
-  height:3px;
-  margin-top:5px;
-  border-radius:999px;
-  background:rgba(255,255,255,0.10);
-  overflow:hidden;
-}
-.aim-brief-bar > span{
-  display:block;
-  height:100%;
-  border-radius:999px;
-  transition:width 620ms cubic-bezier(0.22,1,0.36,1);
-}
 
 /* ── Who is hiring ──
    A row, scrolled rather than wrapped: a second line here would push the
@@ -1208,9 +1152,6 @@
   .aim-brief-cos{ display:none; }
   .aim-brief-hi{ font-size:12.5px; }
   .aim-brief-sub{ width:100%; text-align:center; }
-  .aim-brief-tile{ padding:9px 10px; border-radius:12px; }
-  .aim-brief-n{ font-size:17px; }
-  .aim-brief-l{ font-size:10px; }
 }
 
 /* A short window cannot hold the field in the middle AND a brief below it.
@@ -1223,4 +1164,200 @@
   .aim-brief{ animation:none; }
   .aim-brief-tile,.aim-brief-co,.aim-brief-bar > span{ transition:none; }
   .aim-brief-tile:hover{ transform:none; }
+}
+
+/* ══ Containment: nothing in this section may be wider than the screen ══
+
+   `.aim-results` sets `overflow-y:auto`, which makes `overflow-x` compute to
+   `auto` too — and `scrollbar-width:none` then HIDES the resulting scrollbar.
+   So an over-wide card did not show up as page overflow: the section scrolled
+   sideways invisibly and the content simply sat off-screen. The page looked
+   correct while the right-hand half of every job card was unreachable.
+
+   The fix is to stop the content being over-wide in the first place. Every
+   rule below either lets a box shrink (`min-width:0`, which flex and grid
+   items do NOT get by default) or lets long text break. None of them clips,
+   and none of them relies on `overflow-x:hidden` to hide the problem. */
+
+.aim-stage,
+.aim-head,
+.aim-field,
+.aim-below,
+.aim-examples,
+.aim-results,
+.aim-grid,
+.aim-p,
+.aim-in,
+.feed-job{
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+}
+
+/* Flex and grid children floor at their min-content width unless told
+   otherwise. These are the ones holding text that can be arbitrarily long. */
+.aim-p-id,
+.aim-p-loc,
+.aim-p-bio,
+.aim-p-skills,
+.aim-p-foot,
+.feed-job-meta,
+.feed-job-meta > *{
+  min-width:0;
+}
+
+/* ── Long text: break rather than push ──
+   `anywhere` and not `break-word`: a job title can be a single hyphen-free
+   token ("Principal-Software-Engineer-Distributed-Systems-Infrastructure"),
+   and only `anywhere` will break inside it. Normal prose still breaks at
+   spaces first, so this changes nothing for ordinary titles. */
+.feed-job-title,
+.feed-job-meta,
+.feed-job-meta > *,
+.aim-p-bio,
+.aim-p-loc,
+.aim-lede,
+.aim-examples button{
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+.feed-job-title{ white-space:normal; }
+
+/* The summary line carries the user's own query text, which has no length
+   limit at all. It must wrap. */
+.aim-lede{ white-space:normal; }
+
+/* Chips size to their text and wrap as a group; a single long example must be
+   able to break inside itself rather than set the row's width. */
+.aim-examples > *{
+  max-width:100%;
+  min-width:0;
+  white-space:normal;
+}
+
+/* ── Mobile spacing ──
+   Tighter gutters where the screen is narrow, the existing desktop values
+   everywhere else. Nothing here changes layout above 640px. */
+@media (max-width:640px){
+  .aim-grid{ gap:10px; }
+  .aim-p-top{ gap:10px; }
+  .aim-p-av{ width:48px; height:48px; }
+  /* Measured at 21px tall on one line — a real control at half the size a
+     thumb needs. Raised on touch widths only; the desktop chip is unchanged. */
+  .aim-examples > *{
+    display:inline-flex;
+    align-items:center;
+    min-height:40px;
+  }
+}
+@media (max-width:359px){
+  .aim-go{ padding:0 11px; }
+  .aim-p-av{ width:44px; height:44px; }
+}
+
+/* ══ The crown: what sits above the field ══
+
+   The brief and the title as ONE out-of-flow group, anchored by its BOTTOM to
+   26px above the field.
+
+   Bottom-anchored, and that is the whole trick. The field is the one thing on
+   this screen whose position is fixed — it sits on the centre line and the
+   head is translated so that it does. If this group were in the flow the head
+   would be the brief plus the title plus the field, and centring the head
+   would leave the FIELD below the middle. Anchoring the group by its bottom
+   edge instead means it grows and shrinks UPWARD: collapsing the brief closes
+   the space above the title, the title stays where it belongs — just over the
+   field — and the field never moves. */
+.aim-crown{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:calc(100% + 26px);
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:18px;
+}
+/* Now a child of the crown rather than positioned itself. */
+.aim-title{
+  position:static;
+  bottom:auto;
+}
+
+/* ══ Collapse ══
+   `max-height` and not `height:auto`, which cannot be transitioned. The
+   ceiling is generous — it only has to exceed the real height for the
+   transition to run to the end; the box itself is never that tall because the
+   content decides its height. */
+.aim-brief-content{
+  overflow:hidden;
+  max-height:60vh;
+  opacity:1;
+  transform:translateY(0);
+  transition:
+    max-height 420ms cubic-bezier(0.22,1,0.36,1),
+    opacity 240ms ease,
+    transform 420ms cubic-bezier(0.22,1,0.36,1);
+}
+.aim-brief[data-open="false"] .aim-brief-content{
+  max-height:0;
+  opacity:0;
+  transform:translateY(-8px);
+  /* Out of the tab order once it is out of sight — a collapsed panel whose
+     links are still focusable is a keyboard trap with no visible cursor. */
+  visibility:hidden;
+  transition:
+    max-height 380ms cubic-bezier(0.4,0,1,1),
+    opacity 180ms ease,
+    transform 380ms cubic-bezier(0.4,0,1,1),
+    visibility 0s linear 380ms;
+}
+/* The gap belongs to the expanded state only; collapsed, it would leave the
+   space the panel was supposed to give back. */
+.aim-brief[data-open="false"]{ gap:0; }
+
+.aim-brief-toggle{
+  align-self:center;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  /* 32px of box for a 14px chevron: small enough to stay subtle, big enough
+     to hit on a phone. */
+  width:44px;
+  height:32px;
+  margin-top:2px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:rgba(255,255,255,0.04);
+  color:rgba(255,255,255,0.45);
+  cursor:pointer;
+  transition:border-color 170ms ease, color 170ms ease, background-color 170ms ease;
+}
+.aim-brief-toggle:hover{
+  border-color:rgba(255,255,255,0.20);
+  color:rgba(255,255,255,0.80);
+  background:rgba(255,255,255,0.07);
+}
+.aim-brief-toggle:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}
+.aim-brief-chev{
+  width:14px;
+  height:14px;
+  /* Points UP when the panel is open — the direction it will travel. */
+  transform:rotate(180deg);
+  transition:transform 320ms cubic-bezier(0.22,1,0.36,1);
+}
+.aim-brief[data-open="false"] .aim-brief-chev{ transform:rotate(0deg); }
+
+@media (max-width:640px){
+  .aim-crown{ gap:12px; }
+  .aim-brief-toggle{ width:40px; height:28px; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .aim-brief-content,
+  .aim-brief[data-open="false"] .aim-brief-content,
+  .aim-brief-chev{ transition:none; }
 }

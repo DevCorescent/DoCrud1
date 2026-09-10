@@ -1,0 +1,105 @@
+/**
+ * The three-tile brief: job matches, new people, profile readiness.
+ *
+ * Its own stylesheet because the row now has two homes — TYRAI's first screen
+ * and the homepage, above the feed — and a rule that lives in `ai-mode.css`
+ * only loads where the overlay does. `TyraiBriefRow` imports this file, so the
+ * styles arrive with the component wherever it is rendered and there is
+ * exactly one definition of them.
+ */
+
+.aim-brief-row{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0,1fr));
+  gap:8px;
+}
+
+.aim-brief-tile{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+  padding:11px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.015) 100%),
+    rgba(12,12,16,0.45);
+  backdrop-filter:blur(22px) saturate(150%);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+  text-decoration:none;
+  transition:border-color 170ms ease, background-color 170ms ease, transform 140ms ease;
+}
+.aim-brief-tile:hover{
+  border-color:rgba(255,255,255,0.20);
+  transform:translateY(-1px);
+}
+.aim-brief-i{
+  width:13px;
+  height:13px;
+  color:rgba(255,255,255,0.40);
+}
+.aim-brief-n{
+  font-size:19px;
+  font-weight:700;
+  line-height:1.05;
+  letter-spacing:-0.02em;
+  font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,0.95);
+}
+.aim-brief-l{
+  font-size:10.5px;
+  color:rgba(255,255,255,0.50);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.aim-brief-bar{
+  display:block;
+  height:3px;
+  margin-top:5px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.10);
+  overflow:hidden;
+}
+.aim-brief-bar > span{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  transition:width 620ms cubic-bezier(0.22,1,0.36,1);
+}
+
+/* ── Narrow screens ──
+   The label used to be `nowrap` + ellipsis, which on a 320px phone clipped
+   "Profile · Fair" to "Profile ·…" — a truncation that removes the only word
+   carrying the meaning. It wraps instead: the tiles are already equal-width
+   grid tracks, so a second line costs height, not layout. */
+.aim-brief-l{
+  white-space:normal;
+  overflow-wrap:anywhere;
+  overflow:visible;
+  text-overflow:clip;
+  line-height:1.25;
+}
+
+@media (max-width:640px){
+  .aim-brief-row{ gap:6px; }
+  .aim-brief-tile{ padding:9px 10px; border-radius:12px; }
+  .aim-brief-n{ font-size:17px; }
+  .aim-brief-l{ font-size:10px; }
+}
+@media (max-width:359px){
+  .aim-brief-row{ gap:5px; }
+  .aim-brief-tile{ padding:8px 7px; }
+  .aim-brief-n{ font-size:15.5px; }
+  .aim-brief-l{ font-size:9.5px; }
+}
+
+/* Navigation links, so they carry the same focus ring every other control on
+   these surfaces uses. */
+.aim-brief-tile:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}

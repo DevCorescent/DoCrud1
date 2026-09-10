@@ -27,27 +27,20 @@
 
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { ArrowRight, Briefcase, Building2, Users } from 'lucide-react';
-import { profileStatusStyle } from '@/lib/profile-score';
+import { ArrowRight, Building2, ChevronDown } from 'lucide-react';
 import { cachedJson } from '@/lib/client/request-cache';
+import TyraiBriefRow from '@/components/ai-mode/TyraiBriefRow';
 import { companyJobsHref, formatCompanyJobCount, type CompanyExplorerTile } from '@/lib/company-explorer';
-
-const BAND_WORD: Record<string, string> = {
-  'low': 'Needs work',
-  'medium-low': 'Fair',
-  'medium-high': 'Good',
-  'high': 'Great',
-  'complete': 'Complete',
-};
 
 export default function TyraiBrief({ open }: { open: boolean }) {
   const { data: session, status } = useSession();
   const signedIn = status === 'authenticated';
 
-  const [jobCount, setJobCount] = useState<number | null>(null);
-  const [peopleCount, setPeopleCount] = useState<number | null>(null);
-  const [score, setScore] = useState<number | null>(null);
   const [companies, setCompanies] = useState<CompanyExplorerTile[]>([]);
+  /* Local, and deliberately not persisted: this is a "not right now", not a
+     preference. Every opening of TYRAI starts with the brief showing, which is
+     the whole reason it is on this screen. */
+  const [briefOpen, setBriefOpen] = useState(true);
 
   /* Only while the overlay is open, and only once per opening: these are
      small, cached calls, and TYRAI is opened far more often than the numbers
@@ -55,12 +48,6 @@ export default function TyraiBrief({ open }: { open: boolean }) {
   useEffect(() => {
     if (!open || !signedIn) return;
     let alive = true;
-    const load = <T,>(url: string, pick: (d: T) => number | null, set: (n: number | null) => void) => {
-      cachedJson<T>(url).then((d) => { if (alive) set(pick(d)); }).catch(() => {});
-    };
-    load<{ total?: number }>('/api/recommendations/jobs', (d) => d.total ?? 0, setJobCount);
-    load<{ total?: number }>('/api/recommendations/people', (d) => d.total ?? 0, setPeopleCount);
-    load<{ profileScore?: number | null }>('/api/me/badge', (d) => d.profileScore ?? null, setScore);
     cachedJson<{ companies?: CompanyExplorerTile[] }>('/api/company-explorer')
       .then((d) => { if (alive && Array.isArray(d.companies)) setCompanies(d.companies.slice(0, 4)); })
       .catch(() => {});
@@ -71,42 +58,16 @@ export default function TyraiBrief({ open }: { open: boolean }) {
   if (!signedIn) return null;
 
   const firstName = (session?.user?.name ?? '').trim().split(/\s+/)[0] || 'there';
-  const band = profileStatusStyle(score ?? 0);
-  const word = BAND_WORD[band.band] ?? 'In progress';
 
   return (
-    <div className="aim-brief">
+    <div className="aim-brief" data-open={briefOpen ? 'true' : 'false'}>
+      <div id="tyrai-brief-content" className="aim-brief-content">
       <p className="aim-brief-hi">
         Hey, {firstName} <span aria-hidden>👋</span>
         <span className="aim-brief-sub">Here is what is waiting for you.</span>
       </p>
 
-      <div className="aim-brief-row">
-        <a href="/jobs?recommended=1" className="aim-brief-tile">
-          <Briefcase className="aim-brief-i" aria-hidden />
-          <span className="aim-brief-n">{jobCount ?? '—'}</span>
-          <span className="aim-brief-l">Job matches</span>
-        </a>
-
-        <a href="/people?recommended=1" className="aim-brief-tile">
-          <Users className="aim-brief-i" aria-hidden />
-          <span className="aim-brief-n">{peopleCount ?? '—'}</span>
-          <span className="aim-brief-l">New people</span>
-        </a>
-
-        {/* The score keeps the band's own colour — the one the profile page
-            and the readiness pill already use — so it is the same fact in the
-            same hue wherever it is read. */}
-        <a href="/profile#score" className="aim-brief-tile aim-brief-score">
-          <span className="aim-brief-n" style={{ color: band.fg }}>
-            {score === null ? '—' : `${score}%`}
-          </span>
-          <span className="aim-brief-l">Profile · {score === null ? 'Loading' : word}</span>
-          <span className="aim-brief-bar" aria-hidden>
-            <span style={{ width: `${Math.max(2, Math.min(100, score ?? 0))}%`, background: band.ring }} />
-          </span>
-        </a>
-      </div>
+      <TyraiBriefRow active={open} />
 
       {companies.length > 0 && (
         <div className="aim-brief-cos">
@@ -124,6 +85,21 @@ export default function TyraiBrief({ open }: { open: boolean }) {
           </a>
         </div>
       )}
+      </div>
+
+      {/* The only thing that toggles. The tiles and the company links stay
+          ordinary navigation — making the whole panel a control would mean a
+          click meant for "Job matches" collapsed the panel instead. */}
+      <button
+        type="button"
+        className="aim-brief-toggle"
+        aria-expanded={briefOpen}
+        aria-controls="tyrai-brief-content"
+        aria-label={briefOpen ? 'Collapse summary' : 'Expand summary'}
+        onClick={() => setBriefOpen((v) => !v)}
+      >
+        <ChevronDown className="aim-brief-chev" aria-hidden />
+      </button>
     </div>
   );
 }

@@ -324,13 +324,32 @@ check('the head is inset to the Discover band\'s rule (20 / 34 / 48)',
   /\.ce-head\{[^}]*padding-inline:20px/.test(railCss)
   && /\.ce-head\{ padding-inline:34px; \}/.test(railCss)
   && /\.ce-head\{ padding-inline:48px; \}/.test(railCss));
-check('the rail adds the centring gutter back, being full-bleed',
-  /--ce-gutter:max\(0px, \(100vw - 1440px\) \/ 2\)/.test(railCss)
-  && /padding-left:calc\(var\(--ce-gutter\) \+ var\(--ce-inset\)\)/.test(railCss));
-check('and adds the column padding, so the tile lands on the heading',
-  /--ce-inset:calc\(24px \+ 34px\)/.test(railCss)
-  && /--ce-inset:calc\(40px \+ 48px\)/.test(railCss)
-  && /--ce-inset:calc\(48px \+ 48px\)/.test(railCss));
+/* The band is set ONCE, on the wrap, as a single `margin-inline` value. That
+   is the property that makes the two sides provably equal: one declaration
+   applied to both edges, so there is no second number that can drift. The rail
+   simply fills it. */
+check('the band is one margin-inline value on the wrap, not two paddings',
+  /\.ce-rail-wrap\{[^}]*margin-inline:var\(--ce-inset\)/.test(railCss));
+check('and the inset follows the Discover band (20 / 34 / 48)',
+  /--ce-inset:20px/.test(railCss) && /--ce-inset:34px/.test(railCss)
+  && /--ce-inset:48px/.test(railCss));
+check('the head is inset to the same three values',
+  /\.ce-head\{\s*padding-inline:20px/.test(railCss)
+  && /\.ce-head\{ padding-inline:34px; \}/.test(railCss)
+  && /\.ce-head\{ padding-inline:48px; \}/.test(railCss));
+check('the rail itself adds no inset of its own to fight the band',
+  /\.ce-rail\{[^}]*padding-inline:0/.test(railCss));
+
+/* ── The bleed must never come back as 100vw ──
+   `100vw` is the viewport INCLUDING a classic scrollbar; the document is not.
+   A full-bleed built on it runs wider than the page on any desktop that paints
+   a real scrollbar, pushing the right edge off while the left stays put — and
+   it is invisible on overlay-scrollbar machines, so it survives review.
+   Comments here DISCUSS 100vw, so the prose is stripped before testing. */
+check('the rail uses no viewport unit',
+  !/100vw/.test(railCss.replace(/\/\*[\s\S]*?\*\//g, '')));
+check('the component no longer carries the w-screen utility',
+  !/ce-rail-wrap[^"]*w-screen/.test(strip));
 check('the rail no longer carries a Tailwind inset that would fight the CSS',
   !/ce-rail[^"]*\bpx-2\b/.test(strip));
 check('and min-width:0 so a flex child cannot force it wider', /min-w-0/.test(strip));

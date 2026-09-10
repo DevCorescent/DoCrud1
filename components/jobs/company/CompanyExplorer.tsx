@@ -257,7 +257,7 @@ export default function CompanyExplorer() {
           </button>
         )}
       </div>
-<div className="ce-rail-wrap relative left-1/2 w-screen min-w-0 -translate-x-1/2">
+<div className="ce-rail-wrap relative min-w-0">
         {/* No arrow buttons. The rail is scrolled by the cursor — see the
             wheel handler above — so there is no control to render, and none to
             leave present-but-dead at either end.

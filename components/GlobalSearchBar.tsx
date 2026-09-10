@@ -12,6 +12,8 @@ import {
 import { createPortal } from 'react-dom';
 import { useSession } from 'next-auth/react';
 import { useSearchTracker, SEARCH_CONTEXTS } from '@/lib/search-tracking';
+import TyraiMark from '@/components/ai-mode/TyraiMark';
+import '@/components/ai-mode/tyrai-entry.css';
 import {
   addRecentSearch,
   clearRecentSearches,
@@ -96,6 +98,21 @@ interface GlobalSearchBarProps {
   className?: string;
   placeholder?: string;
   placeholderCycle?: string[];
+  /**
+   * Opens TYRAI, from a button inside the field.
+   *
+   * The field takes keywords; TYRAI takes a sentence. They are two ways of
+   * doing the same thing, so the way in sits in the field itself rather than
+   * beside it — in the slot the keyboard hint used to hold, which is the one
+   * piece of that field nobody has ever clicked.
+   *
+   * Optional: a caller that does not pass it keeps the ⌘K hint.
+   *
+   * Called with whatever has been typed, so a half-written search carries over
+   * instead of being retyped — somebody who typed a sentence into the keyword
+   * field and then reached for TYRAI has already said what they want.
+   */
+  onAiOpen?: (seed?: string) => void;
 }
 
 export interface GlobalSearchBarHandle {
@@ -809,7 +826,7 @@ const DEFAULT_CYCLE = ['Search'];
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
-  function GlobalSearchBar({ getLocalResults, mobileShortcuts = [], className, placeholder, placeholderCycle }, ref) {
+  function GlobalSearchBar({ getLocalResults, mobileShortcuts = [], className, placeholder, placeholderCycle, onAiOpen }, ref) {
 
     const [query,        setQuery]        = useState('');
     const [desktopOpen,  setDesktopOpen]  = useState(false);
@@ -1199,7 +1216,10 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               className="[&::placeholder]:text-[color:var(--gs-w350)]"
               style={{
                 height: 38, width: '100%', borderRadius: 999,
-                paddingLeft: 38, paddingRight: 72,
+                /* Room for whatever sits in the right slot: the TYRAI button is
+                   wider than the ⌘K hint it replaced, and text running under
+                   it is the one thing this padding exists to prevent. */
+                paddingLeft: 38, paddingRight: onAiOpen ? 104 : 72,
                 fontSize: 13, fontWeight: 500,
                 color: 'var(--gs-w850)',
                 outline: 'none',
@@ -1227,29 +1247,49 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
               </div>
             )}
 
-            {/* Right pill: ⌘K or dots-loading */}
-            <div style={{
-              position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-              display: 'flex', alignItems: 'center', gap: 2.5,
-              background: 'var(--gs-w050)', border: '1px solid var(--gs-w070)',
-              borderRadius: 999, padding: '3px 8px',
-            }}>
-              {loading ? (
-                /* Three pulsing dots */
-                [0, 1, 2].map((i) => (
-                  <div key={i} style={{
-                    width: 4, height: 4, borderRadius: '50%',
-                    background: 'rgba(251,146,60,0.65)',
-                    animation: `gsPulse 1.0s ${i * 0.18}s ease-in-out infinite`,
-                  }} />
-                ))
-              ) : (
-                <>
-                  <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gs-w280)', letterSpacing: '0.04em' }}>⌘</span>
-                  <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gs-w280)', letterSpacing: '0.04em' }}>K</span>
-                </>
-              )}
-            </div>
+            {/* ── The right slot ──
+                TYRAI when the page offers it, the keyboard hint otherwise.
+
+                The button does NOT swap itself out for the loading dots the
+                hint used to become: a control that disappears while somebody is
+                typing is worse than one loading cue, and the sweep line under
+                the input is already saying the same thing. */}
+            {onAiOpen ? (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onAiOpen(query)}
+                aria-label="TYRAI — tell your requirements in a sentence"
+                title="TYRAI — describe what you need"
+                className="gs-tyrai"
+              >
+                <TyraiMark className="gs-tyrai-i" strokeWidth={1.8} />
+                <span className="gs-tyrai-t">TYRAI</span>
+              </button>
+            ) : (
+              <div style={{
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                display: 'flex', alignItems: 'center', gap: 2.5,
+                background: 'var(--gs-w050)', border: '1px solid var(--gs-w070)',
+                borderRadius: 999, padding: '3px 8px',
+              }}>
+                {loading ? (
+                  /* Three pulsing dots */
+                  [0, 1, 2].map((i) => (
+                    <div key={i} style={{
+                      width: 4, height: 4, borderRadius: '50%',
+                      background: 'rgba(251,146,60,0.65)',
+                      animation: `gsPulse 1.0s ${i * 0.18}s ease-in-out infinite`,
+                    }} />
+                  ))
+                ) : (
+                  <>
+                    <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gs-w280)', letterSpacing: '0.04em' }}>⌘</span>
+                    <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gs-w280)', letterSpacing: '0.04em' }}>K</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1352,7 +1392,13 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                   onKeyDown={handleInputKeyDown}
                   className="[&::placeholder]:text-[color:var(--gs-w350)]"
                   style={{
-                    flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                    /* `minWidth: 0` is load-bearing. A flex item will not shrink
+                       below its content, so a long query made this input push
+                       the buttons beside it off the right edge of the screen —
+                       Cancel included. It is not the new button that overflows
+                       the row; it is the input refusing to give ground. */
+                    flex: 1, minWidth: 0,
+                    background: 'transparent', border: 'none', outline: 'none',
                     fontSize: 17, fontWeight: 500, color: 'var(--gs-w900)',
                     caretColor: 'rgba(251,146,60,0.80)', fontFamily: 'inherit', letterSpacing: '-0.01em',
                   }}
@@ -1364,6 +1410,20 @@ const GlobalSearchBar = forwardRef<GlobalSearchBarHandle, GlobalSearchBarProps>(
                     style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'var(--gs-w070)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: 'var(--gs-w450)' }}
                   >
                     <X style={{ width: 12, height: 12 }} />
+                  </button>
+                )}
+                {/* TYRAI, in the sheet as well as in the bar that opened it.
+                    Without this, tapping the field on a phone led to the one
+                    screen with no way through to it. */}
+                {onAiOpen && (
+                  <button
+                    type="button"
+                    onClick={() => { const seed = query; closeAll(); onAiOpen(seed); }}
+                    aria-label="TYRAI — tell your requirements in a sentence"
+                    className="gs-tyrai-sheet"
+                  >
+                    <TyraiMark className="gs-tyrai-i" strokeWidth={1.8} />
+                    <span className="gs-tyrai-t">TYRAI</span>
                   </button>
                 )}
                 <button

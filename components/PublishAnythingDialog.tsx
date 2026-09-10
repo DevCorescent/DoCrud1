@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import './publish-dialog.css';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { sanitizeCtaLabel, sanitizeCtaUrl, CTA_LABEL_MAX, type PostCta } from '@/lib/cta';
@@ -1048,7 +1049,7 @@ export default function PublishAnythingDialog({
       onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-lg animate-in fade-in duration-200" aria-hidden="true" />
+      <div className="pub-scrim absolute inset-0 animate-in fade-in duration-200" aria-hidden="true" />
 
       {/* Dialog */}
       {/* The composer fills the height the app actually leaves free on a phone —
@@ -1058,8 +1059,7 @@ export default function PublishAnythingDialog({
         h-[calc(100dvh-84px)] max-h-[calc(100dvh-84px)] rounded-none pt-[env(safe-area-inset-top)]
         sm:h-auto sm:max-h-[88dvh] sm:rounded-[28px] sm:pt-0
         max-w-[680px] lg:max-w-[1020px]
-        border border-white/[0.08] bg-[#0a0a0e]
-        shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_-1px_0_0_rgba(255,255,255,0.06),0_32px_80px_rgba(0,0,0,0.98)]
+        pub-sheet
         animate-in fade-in slide-in-from-bottom-4 [animation-duration:200ms] [animation-timing-function:cubic-bezier(0.25,0.75,0,1)]
         motion-reduce:animate-none
         sm:zoom-in-[99%] sm:[animation-duration:180ms]">
@@ -1116,7 +1116,7 @@ export default function PublishAnythingDialog({
           type="button"
           onClick={requestClose}
           aria-label="Close"
-          className="absolute right-3 top-3 z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-[#0a0a0e]/80 text-white/40 backdrop-blur-md transition hover:bg-white/[0.09] hover:text-white active:scale-95"
+          className="absolute right-3 top-3 z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/[0.09] bg-white/[0.06] text-white/45 backdrop-blur-md transition hover:bg-white/[0.12] hover:text-white active:scale-95"
         >
           <X className="h-4 w-4" />
         </button>
@@ -1202,29 +1202,22 @@ export default function PublishAnythingDialog({
                   </div>
                 )}
 
-                {/* Controls: category, visibility, CTA — compact, collapsed. */}
+                {/* Controls: the call to action, and nothing else.
+
+                    The category chip and the "Public" label were removed on
+                    request. Neither changed what gets published — `category`
+                    still defaults to whatever the caller opened the composer
+                    with (a post, unless told otherwise) and `visibility` still
+                    defaults to 'public' — so the payload is unchanged; the row
+                    simply no longer says so.
+
+                    ONE CONSEQUENCE, stated because it is not obvious: that
+                    chip was the only way to reach the category picker from
+                    inside the composer, so the other kinds of publication can
+                    now only be started by opening the dialog with a category
+                    already chosen. The picker itself is untouched and one
+                    button away if it should come back. */}
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPickerOpen(true)}
-                    className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 text-[12px] font-semibold text-white/70 transition hover:bg-white/[0.09] hover:text-white"
-                  >
-                    {activeCat && <activeCat.icon className="h-3.5 w-3.5" />}
-                    {activeCat?.label ?? 'Category'}
-                    <ChevronDown className="h-3 w-3 opacity-60" />
-                  </button>
-
-                  {/* Publishing is public. Not a toggle any more: with one
-                      option a segmented control asks the author to choose
-                      between a thing and nothing. It stays visible because
-                      "who will see this" is worth stating before someone
-                      presses Publish — it just states it instead of asking.
-                      `visibility` already defaults to 'public' in the blank
-                      form, so nothing downstream changes. */}
-                  <span className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.04] px-3 text-[12px] font-semibold text-white/70">
-                    <Globe className="h-3.5 w-3.5" /> Public
-                  </span>
-
                   {!ctaOpen && !ctaDraft && (
                     <button
                       type="button"
@@ -1310,7 +1303,7 @@ export default function PublishAnythingDialog({
 
             {/* Category grid — an overlay over the composer, not a step. */}
             {pickerOpen && (
-              <div className="absolute inset-0 z-20 flex flex-col bg-[#0a0a0e] animate-in fade-in [animation-duration:170ms] motion-reduce:animate-none">
+              <div className="pub-layer absolute inset-0 z-20 flex flex-col animate-in fade-in [animation-duration:170ms] motion-reduce:animate-none">
                 <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-5 py-3.5 sm:px-6">
                   <div>
                     <h3 className="text-[14px] font-bold text-white">Choose a category</h3>
@@ -1416,7 +1409,7 @@ export default function PublishAnythingDialog({
         {/* ── Footer ── one primary action, nothing competing with it. */}
         {!successHref && !pickerOpen && step === 'compose' && (
           <div
-            className="flex shrink-0 items-center justify-end gap-2.5 border-t border-white/[0.06] bg-[#0a0a0e] px-5 py-3.5 sm:px-6 sm:py-4"
+            className="pub-foot flex shrink-0 items-center justify-end gap-2.5 px-5 py-3.5 sm:px-6 sm:py-4"
             style={{ paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom))' }}
           >
             {/* Preview, on phones only — the panel it toggles is `lg:hidden`

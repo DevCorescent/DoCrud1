@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import './business-directory.css';
 import {
   ArrowLeft, ArrowRight, BadgeCheck, Briefcase, Building2, ChevronDown,
   Globe, MapPin, Plus, Search, SlidersHorizontal, Star, TrendingUp,
@@ -13,7 +14,17 @@ interface BizPage {
   companySize?: string; city?: string; country?: string; logoUrl?: string;
   coverUrl?: string; followerCount: number; postCount: number; jobCount: number;
   verified: boolean; createdAt: string;
+  /* On the record and returned by the API; the card was simply not reading
+     it. How long a company has been going is one of the three things anybody
+     wants to know about one they have not heard of. */
+  foundedYear?: number;
 }
+
+/* Two per row from the narrowest phone, widening with the screen. The same
+   shape the People directory uses, so the two read as one product — and the
+   same reason: a directory is something you scan, and one card per row makes
+   scanning a scroll. */
+const GRID = 'grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4';
 
 /* ─── industry config ─────────────────────────────────────────────── */
 const INDUSTRIES = [
@@ -278,97 +289,131 @@ function BizLogo({ src, name, fallback }: { src?: string; name: string; fallback
   return <>{fallback}</>;
 }
 
-/* ─── business card — restrained glass card ───────────────────────────
-   Logo → Name → Category → Tagline → Location → Stats + View action.
-   Only fields the page actually has are shown; nothing is invented. */
+/* ─── business card ───────────────────────────────────────────────────
+   Band → logo + name → industry → the facts → tagline → location → stats.
+
+   ═══ EVERY CARD HAS THE SAME PARTS ═══
+
+   The band at the top is always there. It used to appear only when a company
+   had uploaded a cover, which meant two different cards in one grid: some with
+   a banner and a logo overlapping it, some starting flat at the logo. Nothing
+   makes a directory look unfinished faster than two structures in one row.
+   Without a cover the band is the product's own quiet gradient — the same one
+   the People cards use — so the shape is identical and the photograph, when
+   there is one, is the only thing that changes.
+
+   ═══ WHY THE BLOCKS HOLD THEIR HEIGHT ═══
+
+   Grid rows stretch, so the card OUTLINES lined up while everything inside
+   them did not: a two-line tagline pushed its location and its stats a line
+   below its neighbour's. The name, the facts, the tagline and the location
+   each reserve their space whether or not they use it, so the same thing sits
+   at the same height across a row.
+
+   ═══ WHAT IT SAYS ═══
+
+   Industry, size, founding year, where it is, and three counts a person can
+   act on — how many follow it, how much it has published, and how many roles
+   are open. Each is rendered only when the company has it, and the space is
+   held either way. */
 function BusinessCard({ page }: { page: BizPage }) {
   const indCls = indColor(page.industry);
   const initials = page.name.split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('');
   const location = [page.city, page.country].filter(Boolean).join(', ');
+  /* Size and age on one line, separated rather than stacked: two facts worth
+     a glance each, not two rows. */
+  const facts = [
+    page.companySize ? `${page.companySize} people` : '',
+    page.foundedYear ? `Est. ${page.foundedYear}` : '',
+  ].filter(Boolean);
 
   return (
-    <Link href={`/businesses/${page.slug}`} className="group block">
-      <article className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] transition-all duration-200 hover:border-white/[0.14] hover:bg-white/[0.035]">
-        {/* cover — slim banner across the top, only when available */}
-        {page.coverUrl && (
-          <div className="h-20 sm:h-24 overflow-hidden border-b border-white/[0.05] bg-white/[0.02]">
-            <div className="h-full w-full transition-transform duration-500 group-hover:scale-[1.02]">
-              <BizLogo src={page.coverUrl} name="" fallback={null} />
-            </div>
-          </div>
-        )}
+    <Link href={`/businesses/${page.slug}`} className="group block h-full">
+      <article className="bd-card relative flex h-full flex-col overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-[2px]">
+        {/* ── The band ── */}
+        <div className="bd-cover relative h-[72px] shrink-0 overflow-hidden border-b border-white/[0.06]">
+          {page.coverUrl
+            ? (
+              <div className="h-full w-full transition-transform duration-500 group-hover:scale-[1.03]">
+                <BizLogo src={page.coverUrl} name="" fallback={null} />
+              </div>
+            )
+            : <div className="bd-band h-full w-full" />}
+          {page.verified && (
+            <span className="bd-verified absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-indigo-400/30 bg-indigo-500/15 px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.10em] text-indigo-300 backdrop-blur-sm">
+              <BadgeCheck className="h-3 w-3" /> Verified
+            </span>
+          )}
+        </div>
 
-        <div className="p-4 sm:p-5">
-          {/* header: logo + name + category */}
-          <div className="flex items-start gap-3">
-            {/* logo */}
-            <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.05] text-[13px] font-bold text-white/60 ${page.coverUrl ? '-mt-9 sm:-mt-10 ring-4 ring-[#0A0A0C]' : ''}`}>
-              <BizLogo src={page.logoUrl} name={page.name} fallback={initials || <Building2 className="h-5 w-5 opacity-50" />} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <h3 className="truncate text-[15px] font-bold leading-tight tracking-tight text-white transition-colors group-hover:text-white/90">
-                  {page.name}
-                </h3>
-                {page.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-indigo-400" />}
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${indCls}`}>
-                  {indLabel(page.industry)}
-                </span>
-                {page.companySize && (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-white/35">
-                    <Users className="h-3 w-3 shrink-0" />
-                    {page.companySize}
-                  </span>
-                )}
-                {page.jobCount > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
-                    <Briefcase className="h-3 w-3" /> Hiring
-                  </span>
-                )}
-              </div>
-            </div>
+        <div className="bd-body flex flex-1 flex-col px-4 pb-4 sm:px-5 sm:pb-5">
+          {/* ── Logo, overlapping the band on every card ── */}
+          <div className="bd-logo -mt-7 flex h-[52px] w-[52px] shrink-0 items-center justify-center overflow-hidden rounded-[15px] border border-white/[0.10] bg-[#111114] text-[14px] font-bold text-white/70 shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+            <BizLogo src={page.logoUrl} name={page.name} fallback={initials || <Building2 className="h-5 w-5 opacity-50" />} />
           </div>
 
-          {/* tagline / short description */}
-          {page.tagline && (
-            <p className="mt-3 line-clamp-2 text-[13px] leading-relaxed text-white/55">
-              {page.tagline}
-            </p>
-          )}
+          {/* ── Name ── */}
+          <h3 className="bd-name mt-3 text-[15px] font-bold leading-tight tracking-[-0.01em] text-white transition-colors group-hover:text-white/90">
+            {page.name}
+          </h3>
 
-          {/* location */}
-          {location && (
-            <div className="mt-2.5 flex items-center gap-1.5 text-[12px] text-white/35">
-              <MapPin className="h-3 w-3 shrink-0" />
-              <span className="truncate">{location}</span>
-            </div>
-          )}
+          {/* ── Industry ── */}
+          <div className="bd-meta mt-2">
+            <span className={`inline-flex items-center rounded-full border px-2.5 py-[3px] text-[10px] font-semibold ${indCls}`}>
+              {indLabel(page.industry)}
+            </span>
+          </div>
 
-          {/* footer: metadata + view action */}
-          <div className="mt-4 flex items-center gap-x-4 gap-y-2 border-t border-white/[0.05] pt-3.5">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
-              <span className="flex items-baseline gap-1.5">
-                <span className="text-[13px] font-bold tabular-nums text-white/80">{page.followerCount.toLocaleString()}</span>
-                <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">followers</span>
+          {/* ── The facts ── */}
+          <p className="bd-facts mt-2 truncate text-[11.5px] text-white/40">
+            {facts.length ? facts.join('  ·  ') : '\u00A0'}
+          </p>
+
+          {/* ── What they do ── */}
+          <p className="bd-tag mt-2.5 line-clamp-2 text-[12.5px] leading-relaxed text-white/58">
+            {page.tagline || '\u00A0'}
+          </p>
+
+          {/* ── Where ── */}
+          <div className="bd-loc mt-2.5 flex items-center gap-1.5 text-[11.5px] text-white/38">
+            {location ? (
+              <>
+                <MapPin className="h-3 w-3 shrink-0" />
+                <span className="truncate">{location}</span>
+              </>
+            ) : <span>&nbsp;</span>}
+          </div>
+
+          {/* ── The counts ──
+              Three fixed columns on a desktop card, so the numbers line up
+              down a column of cards as well as across a row. A quarter of a
+              phone has room for one line, and it gets the two that can be
+              acted on. */}
+          <div className="bd-foot mt-auto border-t border-white/[0.06] pt-3.5">
+            <div className="bd-stats grid grid-cols-3 gap-2">
+              <span className="bd-stat flex flex-col gap-[3px] min-w-0">
+                <span className="text-[13px] font-bold tabular-nums leading-none text-white/85">{page.followerCount.toLocaleString()}</span>
+                <span className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-white/30">Followers</span>
               </span>
-              {page.postCount > 0 && (
-                <span className="flex items-baseline gap-1.5">
-                  <span className="text-[13px] font-bold tabular-nums text-white/80">{page.postCount}</span>
-                  <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">posts</span>
-                </span>
-              )}
-              {page.jobCount > 0 && (
-                <span className="flex items-baseline gap-1.5">
-                  <span className="text-[13px] font-bold tabular-nums text-blue-400">{page.jobCount}</span>
-                  <span className="text-[9.5px] font-semibold uppercase tracking-widest text-white/25">open jobs</span>
-                </span>
-              )}
+              <span className="bd-stat flex flex-col gap-[3px] min-w-0">
+                <span className="text-[13px] font-bold tabular-nums leading-none text-white/85">{page.postCount}</span>
+                <span className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-white/30">Posts</span>
+              </span>
+              <span className="bd-stat flex flex-col gap-[3px] min-w-0">
+                <span className={`text-[13px] font-bold tabular-nums leading-none ${page.jobCount > 0 ? 'text-blue-400' : 'text-white/85'}`}>{page.jobCount}</span>
+                <span className="truncate text-[9px] font-semibold uppercase tracking-[0.12em] text-white/30">Open roles</span>
+              </span>
             </div>
-            {/* Always-visible action so the CTA stays reachable on touch too. */}
-            <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold text-white/55 transition group-hover:border-white/[0.18] group-hover:bg-white/[0.08] group-hover:text-white/90">
-              View <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+
+            {/* The compact form, for a card a quarter of a phone wide. */}
+            <span className="bd-stats-m hidden text-[11px] text-white/45">
+              <span className="font-semibold tabular-nums text-white/85">{page.followerCount.toLocaleString()}</span> followers
+              {page.jobCount > 0 && (
+                <>
+                  <span className="px-1.5 text-white/20">·</span>
+                  <span className="font-semibold tabular-nums text-blue-400">{page.jobCount}</span> open
+                </>
+              )}
             </span>
           </div>
         </div>
@@ -493,7 +538,7 @@ export default function BusinessDirectory() {
       {/* ══════════════════════════════════════
           LEFT SIDEBAR
       ══════════════════════════════════════ */}
-      <aside className="hidden lg:flex w-56 xl:w-60 shrink-0 flex-col border-r border-white/[0.06] bg-[#0A0A0C]">
+      <aside className="bd-rail hidden lg:flex w-56 xl:w-60 shrink-0 flex-col border-r border-white/[0.06]">
 
         {/* logo / title area */}
         <div className="px-4 py-5 border-b border-white/[0.05]">
@@ -554,9 +599,20 @@ export default function BusinessDirectory() {
       ══════════════════════════════════════ */}
       <div className="flex flex-1 overflow-hidden min-w-0">
         <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+          {/* ── One scroll container ──
+              The bars used to sit ABOVE the scrolling area, as siblings of it.
+              Nothing ever passed behind them, so their blur had nothing to
+              sample and they rendered as flat dark strips however translucent
+              they were set — glass with nothing behind it is just a tint.
+
+              The list scrolls inside this container and the bars are stuck to
+              the top of it, so cards slide underneath and the blur has
+              something to do. */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="sticky top-0 z-30">
 
           {/* ── Desktop top bar ── */}
-          <header className="hidden lg:flex shrink-0 items-center gap-4 border-b border-white/[0.06] bg-[#0A0A0C]/80 px-5 py-3 backdrop-blur-xl">
+          <header className="bd-bar hidden lg:flex shrink-0 items-center gap-4 px-5 py-3">
             <div className="flex min-w-0 flex-1 items-center gap-2">
               <span className={`flex h-6 w-6 items-center justify-center rounded-lg border ${industry ? indColor(industry) : 'border-white/[0.10] bg-white/[0.06] text-white/40'}`}>
                 <Building2 className="h-3 w-3" />
@@ -622,7 +678,7 @@ export default function BusinessDirectory() {
           </header>
 
           {/* ── Mobile header ── */}
-          <header className="lg:hidden shrink-0 border-b border-white/[0.06] bg-[#0A0A0C]/90 backdrop-blur-xl">
+          <header className="bd-bar lg:hidden shrink-0">
             <div className="flex items-center gap-3 px-4 py-3">
               <Link href="/" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white/55">
                 <ArrowLeft className="h-4 w-4" />
@@ -692,7 +748,7 @@ export default function BusinessDirectory() {
             style={{ display: 'grid', gridTemplateRows: filtersOpen ? '1fr' : '0fr', transition: 'grid-template-rows 0.3s cubic-bezier(0.22,1,0.36,1)' }}
           >
             <div className="overflow-hidden">
-              <div className="border-b border-white/[0.06] bg-[#0b0c0f] px-4 lg:px-5 py-3 space-y-2">
+              <div className="bd-substrip px-4 lg:px-5 py-3 space-y-2">
 
                 {/* Company Size */}
                 <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none]">
@@ -737,7 +793,7 @@ export default function BusinessDirectory() {
 
           {/* ── Active filter chips ── */}
           {activeFilters > 0 && !isSearching && (
-            <div className="shrink-0 border-b border-white/[0.04] bg-[#0A0A0C] px-4 lg:px-5 py-2 overflow-x-auto [scrollbar-width:none]">
+            <div className="bd-substrip shrink-0 px-4 lg:px-5 py-2 overflow-x-auto [scrollbar-width:none]">
               <div className="flex items-center gap-1.5 min-w-max">
                 <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.18em] text-white/20 pr-1">Active</span>
                 {industry && (
@@ -770,12 +826,17 @@ export default function BusinessDirectory() {
             </div>
           )}
 
-          {/* ── Scrollable content ── */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="p-4 lg:py-6 lg:px-8 pb-24 lg:pb-10 max-w-3xl mx-auto w-full">
+            </div>{/* end of the stuck bars */}
+
+            {/* A grid, not a column of wide rows. `max-w-3xl` pinned every
+                listing to a single centred lane with empty space either side
+                on any real desktop; the People directory next door has always
+                laid its cards out across the width, and these are the same
+                kind of thing. */}
+            <div className="p-4 lg:py-6 lg:px-8 pb-24 lg:pb-10 max-w-[1600px] mx-auto w-full">
 
               {loading && pages.length === 0 ? (
-                <div className="space-y-3">
+                <div className={GRID}>
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
               ) : pages.length === 0 ? (
@@ -796,7 +857,7 @@ export default function BusinessDirectory() {
                 </div>
               ) : (
                 <>
-                  <div className="space-y-3">
+                  <div className={GRID}>
                     {visiblePages.map(page => <BusinessCard key={page.id} page={page} />)}
                   </div>
 
@@ -831,7 +892,7 @@ export default function BusinessDirectory() {
         </div>
 
         {/* ── Right sidebar — Business Insights ── */}
-        <aside className="hidden xl:flex w-72 2xl:w-80 shrink-0 flex-col border-l border-white/[0.06] bg-[#0A0A0C] overflow-hidden">
+        <aside className="bd-rail hidden xl:flex w-72 2xl:w-80 shrink-0 flex-col border-l border-white/[0.06] overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.05] shrink-0">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-3.5 w-3.5 text-indigo-400/60" />

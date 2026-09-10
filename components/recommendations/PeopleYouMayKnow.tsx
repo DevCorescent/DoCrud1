@@ -59,7 +59,7 @@ export type PersonRecommendation = {
  * actually use. `discovery` is the one that says nothing matched, and it is
  * styled differently for exactly that reason: it must not look like evidence.
  */
-function describeReason(reason: PersonReason | undefined): {
+export function describeReason(reason: PersonReason | undefined): {
   Icon: typeof Users; text: string; matched: boolean;
 } {
   if (!reason) return { Icon: Compass, text: 'New to your network', matched: false };
@@ -94,7 +94,7 @@ function listOf(values: string[]): string {
 /** Below this the row is shorter than the viewport and looping is pointless. */
 const MIN_FOR_LOOP = 4;
 
-function initials(name: string) {
+export function initials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 }
 
@@ -662,6 +662,16 @@ const STRIP_CSS = `
  */
 export function PersonRow({
   person, following, pending, onToggle, upraised, upraisePending, onUpraise,
+  /**
+   * The reason to show INSTEAD of the recommendation reason.
+   *
+   * Search reuses this card, and there the reason a person is on screen is the
+   * one the query produced — "Matches react · Bengaluru" — not a
+   * recommendation signal. Passing the search's own sentence keeps the card
+   * honest: it still shows why this person is here, and the text still comes
+   * from whatever ranking put them here rather than being written by the card.
+   */
+  reasonOverride,
 }: {
   person: PersonRecommendation;
   following: boolean;
@@ -670,10 +680,13 @@ export function PersonRow({
   upraised: boolean;
   upraisePending: boolean;
   onUpraise: (id: string) => void;
+  reasonOverride?: string;
 }) {
   const [broken, setBroken] = useState(false);
   const secondary = person.headline || person.location || '';
-  const why = describeReason(person.reasons?.[0]);
+  const why = reasonOverride
+    ? { Icon: Sparkles, text: reasonOverride, matched: true }
+    : describeReason(person.reasons?.[0]);
 
   return (
     <article className="pymk-row">

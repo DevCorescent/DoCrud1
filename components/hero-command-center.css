@@ -1,0 +1,728 @@
+/**
+ * Super Admin → Promotions → Hero Slider.
+ *
+ * A stylesheet rather than utilities in the markup: this panel has a preview in
+ * it that has to look like the homepage, and matching a wash, a type scale and
+ * a set of gradients is work for CSS, not for forty class names on a div.
+ *
+ * The preview's veil is deliberately a copy of the one in
+ * components/home/home-hero-slider.css. The alternative — importing that file
+ * — would bring the bleed, the parallax and the scroll-snap track with it, none
+ * of which mean anything inside a 420px box. If you change the veil there,
+ * change it here.
+ */
+
+.hcc{
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  color:#e8e8ea;
+}
+
+/* ══ Header ══ */
+.hcc-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+}
+.hcc-h{
+  font-size:19px;
+  font-weight:700;
+  letter-spacing:-0.02em;
+  color:#fff;
+}
+.hcc-sub{
+  margin-top:5px;
+  max-width:60ch;
+  font-size:12.5px;
+  line-height:1.55;
+  color:rgba(232,232,234,0.55);
+}
+.hcc-head-right{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.hcc-count{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  font-size:11.5px;
+  color:rgba(232,232,234,0.55);
+  white-space:nowrap;
+}
+.hcc-dot{
+  width:7px;
+  height:7px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.22);
+}
+.hcc-dot[data-on="true"]{
+  background:#4ade80;
+  box-shadow:0 0 0 3px rgba(74,222,128,0.16);
+}
+
+/* ══ Buttons ══ */
+.hcc-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  height:36px;
+  padding:0 15px;
+  border-radius:10px;
+  border:1px solid transparent;
+  font-size:12.5px;
+  font-weight:600;
+  cursor:pointer;
+  transition:background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+.hcc-btn:disabled{ opacity:0.5; cursor:default; }
+.hcc-btn-s{ height:30px; padding:0 11px; font-size:11.5px; border-radius:8px; }
+
+.hcc-btn-primary{
+  background:linear-gradient(180deg, #f5f5f7 0%, #e2e2e6 100%);
+  color:#0b0b0e;
+}
+.hcc-btn-primary:not(:disabled):hover{ background:#fff; }
+
+.hcc-btn-ghost{
+  border-color:rgba(255,255,255,0.12);
+  background:rgba(255,255,255,0.04);
+  color:rgba(232,232,234,0.82);
+}
+.hcc-btn-ghost:not(:disabled):hover{
+  border-color:rgba(255,255,255,0.22);
+  background:rgba(255,255,255,0.08);
+  color:#fff;
+}
+
+.hcc-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:30px;
+  height:30px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.03);
+  color:rgba(232,232,234,0.7);
+  cursor:pointer;
+  transition:background 150ms ease, color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+}
+.hcc-icon:not(:disabled):hover{
+  border-color:rgba(255,255,255,0.2);
+  background:rgba(255,255,255,0.07);
+  color:#fff;
+}
+.hcc-icon:disabled{ opacity:0.35; cursor:default; }
+.hcc-icon-danger:not(:disabled):hover{
+  border-color:rgba(248,113,113,0.4);
+  background:rgba(248,113,113,0.12);
+  color:#fca5a5;
+}
+
+/* ══ Flash ══ */
+.hcc-flash{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  padding:10px 14px;
+  border-radius:10px;
+  border:1px solid;
+  font-size:12.5px;
+  font-weight:500;
+}
+.hcc-flash.is-ok{
+  border-color:rgba(74,222,128,0.28);
+  background:rgba(74,222,128,0.10);
+  color:#86efac;
+}
+.hcc-flash.is-bad{
+  border-color:rgba(248,113,113,0.3);
+  background:rgba(248,113,113,0.10);
+  color:#fca5a5;
+}
+
+/* ══ Editor ══ */
+.hcc-editor{
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.01) 100%),
+    rgba(14,14,18,0.9);
+  overflow:hidden;
+}
+.hcc-editor-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 16px;
+  border-bottom:1px solid rgba(255,255,255,0.08);
+}
+.hcc-editor-head h3{
+  font-size:14px;
+  font-weight:650;
+  color:#fff;
+}
+.hcc-editor-foot{
+  display:flex;
+  justify-content:flex-end;
+  gap:9px;
+  padding:13px 16px;
+  border-top:1px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.015);
+}
+
+.hcc-grid{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:20px;
+  padding:16px;
+}
+@media (min-width:1100px){
+  .hcc-grid{ grid-template-columns:minmax(0,1fr) minmax(340px, 430px); }
+}
+
+.hcc-fields{
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  min-width:0;
+}
+
+/* ══ Groups and fields ══ */
+.hcc-group{
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.07);
+  background:rgba(255,255,255,0.015);
+  overflow:hidden;
+}
+.hcc-group-h{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:10px;
+  padding:10px 13px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  background:rgba(255,255,255,0.02);
+}
+.hcc-group-h h4{
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:0.09em;
+  text-transform:uppercase;
+  color:rgba(232,232,234,0.8);
+}
+.hcc-group-h span{
+  font-size:11.5px;
+  color:rgba(232,232,234,0.42);
+}
+.hcc-group-b{
+  display:flex;
+  flex-direction:column;
+  gap:13px;
+  padding:13px;
+}
+
+.hcc-row{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:13px;
+}
+@media (min-width:560px){
+  .hcc-row{ grid-template-columns:1fr 1fr; }
+}
+
+.hcc-field{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  min-width:0;
+}
+.hcc-label{
+  font-size:11.5px;
+  font-weight:600;
+  color:rgba(232,232,234,0.72);
+}
+.hcc-hint{
+  font-size:11px;
+  line-height:1.45;
+  color:rgba(232,232,234,0.38);
+}
+
+.hcc-in{
+  width:100%;
+  min-width:0;
+  padding:8px 11px;
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,0.11);
+  background:rgba(0,0,0,0.28);
+  font-size:13px;
+  color:#fff;
+  transition:border-color 150ms ease, background 150ms ease;
+}
+.hcc-in::placeholder{ color:rgba(232,232,234,0.28); }
+.hcc-in:focus{
+  outline:none;
+  border-color:rgba(255,255,255,0.3);
+  background:rgba(0,0,0,0.42);
+}
+.hcc-in.is-bad{ border-color:rgba(248,113,113,0.5); }
+.hcc-in-s{ padding:6px 9px; font-size:11.5px; }
+.hcc-ta{ resize:vertical; line-height:1.5; font-family:inherit; }
+
+.hcc-warn{
+  display:flex;
+  align-items:flex-start;
+  gap:7px;
+  font-size:11.5px;
+  line-height:1.5;
+  color:#fbbf24;
+}
+.hcc-warn code{
+  padding:1px 4px;
+  border-radius:4px;
+  background:rgba(255,255,255,0.08);
+  font-size:11px;
+}
+
+.hcc-check{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  font-size:12.5px;
+  color:rgba(232,232,234,0.8);
+  cursor:pointer;
+}
+.hcc-check input{ width:15px; height:15px; accent-color:#fff; }
+
+/* ══ Image slots ══ */
+.hcc-slot{
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.07);
+  background:rgba(0,0,0,0.18);
+  overflow:hidden;
+}
+.hcc-slot-h{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:8px 11px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.hcc-slot-n{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  font-weight:600;
+  color:rgba(232,232,234,0.85);
+}
+.hcc-slot-spec{
+  font-size:10.5px;
+  font-variant-numeric:tabular-nums;
+  color:rgba(232,232,234,0.42);
+}
+.hcc-slot-b{
+  display:flex;
+  gap:12px;
+  padding:11px;
+}
+/* The thumbnail is the shape of the thing it stands for — a wide well for the
+   desktop artwork and a tall one for the phone — so the two uploads cannot be
+   confused for one another at a glance. */
+.hcc-slot-prev{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:8px;
+  border:1px dashed rgba(255,255,255,0.14);
+  background-color:rgba(255,255,255,0.03);
+  background-size:cover;
+  background-position:center;
+  color:rgba(232,232,234,0.3);
+}
+.hcc-slot-prev[data-shape="wide"]{ width:112px; height:47px; }
+.hcc-slot-prev[data-shape="tall"]{ width:60px; height:67px; }
+
+.hcc-slot-ctrl{
+  display:flex;
+  flex-direction:column;
+  gap:7px;
+  min-width:0;
+  flex:1;
+}
+.hcc-slot-note{
+  font-size:11px;
+  line-height:1.45;
+  color:rgba(232,232,234,0.42);
+}
+.hcc-slot-note-q{ color:rgba(232,232,234,0.30); }
+.hcc-slot-btns{ display:flex; flex-wrap:wrap; gap:7px; }
+
+/* ══ Colour ══ */
+.hcc-presets{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(96px, 1fr));
+  gap:8px;
+}
+.hcc-preset{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:7px;
+  padding:9px 10px;
+  border-radius:9px;
+  border:1px solid;
+  cursor:pointer;
+  transition:transform 140ms ease, box-shadow 140ms ease;
+}
+.hcc-preset:hover{ transform:translateY(-1px); }
+.hcc-preset[data-on="true"]{
+  box-shadow:0 0 0 2px rgba(255,255,255,0.55);
+}
+.hcc-preset-a{
+  width:22px;
+  height:5px;
+  border-radius:999px;
+}
+.hcc-preset-n{
+  font-size:11px;
+  font-weight:600;
+  color:rgba(255,255,255,0.82);
+}
+
+.hcc-color{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.hcc-color-well{
+  flex:0 0 auto;
+  width:34px;
+  height:34px;
+  padding:0;
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:8px;
+  background:transparent;
+  cursor:pointer;
+}
+.hcc-color-well::-webkit-color-swatch-wrapper{ padding:3px; }
+.hcc-color-well::-webkit-color-swatch{ border:0; border-radius:5px; }
+.hcc-color-hex{ font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:12px; }
+
+/* ══ Motifs ══ */
+.hcc-motifs{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
+  gap:9px;
+}
+.hcc-motif{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  padding:10px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:rgba(0,0,0,0.26);
+  text-align:left;
+  cursor:pointer;
+  transition:border-color 150ms ease, background 150ms ease;
+}
+.hcc-motif:hover{ border-color:rgba(255,255,255,0.2); }
+.hcc-motif[data-on="true"]{
+  border-color:rgba(255,255,255,0.45);
+  background:rgba(255,255,255,0.06);
+}
+/* The tile is a stage for the real motif component, at a size where its
+   movement still reads. `.hm` positions itself against the hero, so it is
+   re-anchored here rather than being given a second set of styles. */
+.hcc-motif-art{
+  position:relative;
+  height:62px;
+  border-radius:7px;
+  background:rgba(255,255,255,0.02);
+  overflow:hidden;
+}
+.hcc-motif-art .hm{
+  right:auto;
+  left:50%;
+  top:50%;
+  width:56px;
+  transform:translate(-50%,-50%);
+  opacity:0.95;
+}
+.hcc-motif-none{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:17px;
+  color:rgba(232,232,234,0.25);
+}
+.hcc-motif-l{
+  font-size:12px;
+  font-weight:650;
+  color:#fff;
+}
+.hcc-motif-h{
+  font-size:10.5px;
+  line-height:1.4;
+  color:rgba(232,232,234,0.42);
+}
+
+/* ══ Preview ══ */
+.hcc-preview-col{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-width:0;
+}
+.hcc-preview-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:0.09em;
+  text-transform:uppercase;
+  color:rgba(232,232,234,0.62);
+}
+.hcc-seg{
+  display:flex;
+  padding:2px;
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:rgba(0,0,0,0.3);
+}
+.hcc-seg button{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:5px 10px;
+  border-radius:7px;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:0;
+  text-transform:none;
+  color:rgba(232,232,234,0.55);
+  cursor:pointer;
+  transition:background 150ms ease, color 150ms ease;
+}
+.hcc-seg button[data-on="true"]{
+  background:rgba(255,255,255,0.10);
+  color:#fff;
+}
+
+.hcc-prev{ display:flex; justify-content:center; }
+.hcc-prev-frame{
+  position:relative;
+  width:100%;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.10);
+  background-size:cover;
+  background-position:center;
+  overflow:hidden;
+}
+.hcc-prev[data-shape="desktop"] .hcc-prev-frame{ aspect-ratio:12/5; }
+.hcc-prev[data-shape="mobile"] .hcc-prev-frame{
+  aspect-ratio:9/10;
+  max-width:250px;
+}
+
+/* The homepage's veil. See the note at the top of this file. */
+.hcc-prev-veil{
+  position:absolute;
+  inset:0;
+  background:
+    linear-gradient(180deg, rgba(6,6,9,0.55) 0%, rgba(6,6,9,0.18) 12%, transparent 26%),
+    linear-gradient(180deg, transparent 30%, rgba(6,6,9,0.40) 56%, rgba(6,6,9,0.66) 74%, rgba(6,6,9,0.80) 100%),
+    linear-gradient(105deg, rgba(6,6,9,0.58) 0%, rgba(6,6,9,0.16) 54%, rgba(6,6,9,0.04) 100%);
+}
+
+.hcc-prev-body{
+  position:absolute;
+  left:0;
+  bottom:0;
+  z-index:2;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:5px;
+  max-width:74%;
+  padding:0 16px 15px;
+}
+.hcc-prev-body h5{
+  font-size:clamp(13px, 2.1cqw, 19px);
+  font-weight:700;
+  line-height:1.14;
+  letter-spacing:-0.02em;
+  color:#fff;
+  text-shadow:0 2px 14px rgba(0,0,0,0.5);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.hcc-prev-body p{
+  font-size:10.5px;
+  line-height:1.45;
+  color:rgba(255,255,255,0.74);
+  text-shadow:0 1px 10px rgba(0,0,0,0.45);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.hcc-prev-cta{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  margin-top:3px;
+  height:26px;
+  padding:0 11px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.22);
+  background:linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.05) 100%);
+  font-size:10.5px;
+  font-weight:650;
+  color:#fff;
+}
+.hcc-prev-dots{
+  position:absolute;
+  right:14px;
+  bottom:16px;
+  z-index:2;
+  display:flex;
+  gap:4px;
+}
+.hcc-prev-dots i{
+  width:11px;
+  height:3px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.26);
+}
+.hcc-prev-dots i[data-on]{ width:19px; background:rgba(255,255,255,0.9); }
+
+.hcc-preview-note{
+  font-size:11px;
+  line-height:1.5;
+  color:rgba(232,232,234,0.38);
+}
+
+/* ══ The list ══ */
+.hcc-list{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+}
+.hcc-empty{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:22px;
+  border-radius:12px;
+  border:1px dashed rgba(255,255,255,0.11);
+  color:rgba(232,232,234,0.5);
+  font-size:12.5px;
+}
+.hcc-empty div{ display:flex; flex-direction:column; gap:3px; }
+.hcc-empty strong{ color:rgba(232,232,234,0.8); font-weight:650; }
+
+.hcc-item{
+  display:flex;
+  align-items:center;
+  gap:13px;
+  padding:11px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.08);
+  background:rgba(255,255,255,0.02);
+  transition:border-color 150ms ease, background 150ms ease;
+}
+.hcc-item:hover{
+  border-color:rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.04);
+}
+.hcc-item[data-off="true"]{ opacity:0.5; }
+
+.hcc-thumb{
+  position:relative;
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:88px;
+  height:44px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.09);
+  background-size:cover;
+  background-position:center;
+}
+.hcc-thumb-c{ font-size:17px; opacity:0.7; }
+
+.hcc-item-body{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.hcc-item-top{ display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.hcc-item-top h4{
+  font-size:13px;
+  font-weight:650;
+  color:#fff;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hcc-item-sub{
+  font-size:11.5px;
+  color:rgba(232,232,234,0.5);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hcc-item-cta{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-size:11px;
+  color:rgba(232,232,234,0.42);
+}
+.hcc-item-cta code{
+  padding:1px 5px;
+  border-radius:4px;
+  background:rgba(255,255,255,0.06);
+}
+.hcc-tag{
+  padding:2px 7px;
+  border-radius:999px;
+  border:1px solid rgba(251,191,36,0.3);
+  background:rgba(251,191,36,0.1);
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  color:#fbbf24;
+  white-space:nowrap;
+}
+.hcc-tag-q{
+  border-color:rgba(255,255,255,0.13);
+  background:rgba(255,255,255,0.05);
+  color:rgba(232,232,234,0.55);
+}
+
+.hcc-item-acts{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-shrink:0;
+}
+@media (max-width:700px){
+  .hcc-item{ flex-wrap:wrap; }
+  .hcc-item-acts{ width:100%; justify-content:flex-end; }
+}

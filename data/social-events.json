@@ -6,6 +6,51 @@
       "actorName": "suhas",
       "targetUserId": "individual-1788596770002",
       "href": "/u/individual-1788599113878",
+      "id": "se_1788847353318_6z521e",
+      "createdAt": "2026-09-08T06:02:33.318Z"
+    },
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788597926063",
+      "href": "/u/individual-1788599113878",
+      "id": "se_1788845840478_501jta",
+      "createdAt": "2026-09-08T05:37:20.478Z"
+    },
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788596770002",
+      "href": "/u/individual-1788599113878",
+      "id": "se_1788768501112_4qsdhv",
+      "createdAt": "2026-09-07T08:08:21.112Z"
+    },
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788596770002",
+      "href": "/u/individual-1788599113878",
+      "id": "se_1788768009055_fv81fp",
+      "createdAt": "2026-09-07T08:00:09.055Z"
+    },
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788597926063",
+      "href": "/u/individual-1788599113878",
+      "id": "se_1788767486315_pm4cdl",
+      "createdAt": "2026-09-07T07:51:26.315Z"
+    },
+    {
+      "type": "profile_view",
+      "actorId": "individual-1788599113878",
+      "actorName": "suhas",
+      "targetUserId": "individual-1788596770002",
+      "href": "/u/individual-1788599113878",
       "id": "se_1788726375771_28mez9",
       "createdAt": "2026-09-06T20:26:15.771Z"
     },

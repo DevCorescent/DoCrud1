@@ -3,15 +3,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import {
-  ArrowUp,
   Globe,
   Home,
   MessageSquare,
   Users,
-  X,
 } from 'lucide-react';
-import { BOTTOM_NAV_EXPLORE } from '@/lib/explore-destinations';
+import TyraiMark from '@/components/ai-mode/TyraiMark';
+
+/* Loaded when it is first opened, not with the bar. TYRAI brings the search
+   surface, the result cards and the follow-up model with it, and the bar is
+   on every page on a phone. */
+const AiMode = dynamic(() => import('@/components/ai-mode/AiMode'), { ssr: false });
 
 /* ── Pages where the nav is hidden ──────────────────────────────── */
 const EXCLUDED = [
@@ -35,25 +39,17 @@ export default function GlobalBottomNav() {
   const [inChat,  setInChat]  = useState(false);
   /* Unread badge count, from the endpoint the app already exposes. */
   const [unread, setUnread] = useState(0);
-  /* Explore panel. Purely local UI state — opening it fetches nothing and
-     renders nothing but the static destination list. */
-  const [exploreOpen, setExploreOpen] = useState(false);
+  /* TYRAI, from the bar. The overlay is a portal of its own, so it can be
+     opened from here on any page rather than only from the homepage nav. */
+  const [tyraiOpen, setTyraiOpen] = useState(false);
   const lastY     = useRef(0);
   const ticking   = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
 
-  /* Escape closes the panel. Bound only while it is open, so the app carries no
-     idle key listener. */
-  useEffect(() => {
-    if (!exploreOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExploreOpen(false); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [exploreOpen]);
-
-  /* Navigating away closes it — otherwise it would still be open on arrival. */
-  useEffect(() => { setExploreOpen(false); }, [pathname]);
+  /* Navigating away closes TYRAI — otherwise it would still be over the page
+     you arrived at. */
+  useEffect(() => { setTyraiOpen(false); }, [pathname]);
 
 
   /* ── scroll-hide / scroll-show ──
@@ -186,30 +182,42 @@ export default function GlobalBottomNav() {
         @media (min-width: 640px) { .gnb-bar { display: none !important; } }
 
        
+/* ── The bar ──
+   Edge to edge along the bottom, not a pill floating above it. A floating
+   capsule leaves a strip of page visible underneath and to either side, which
+   on a phone reads as something that has come loose; a bar that meets the
+   bezels reads as part of the device. It also gives the five items the whole
+   width instead of 380px of it.
+
+   The safe-area inset is padding rather than an offset, so on a phone with a
+   home indicator the glass runs under it and the icons sit above it. */
 .gnb-bar {
   position: fixed;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%) translateY(0);
-  width: calc(100% - 32px);
-  max-width: 380px;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform: translateY(0);
   z-index: 9995;
-  height: 62px;
+  height: calc(60px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 
-  background: rgba(0, 0, 0, 0.82);
+  /* Thinner than the pill was: the pill sat on the page, this sits over the
+     content scrolling beneath it and should show it. */
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.012) 100%),
+    rgba(10, 10, 12, 0.62);
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
 
-  border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 24px;
+  border-top: 1px solid rgba(255,255,255,0.09);
+  border-radius: 0;
 
   box-shadow:
-    0 8px 32px rgba(0,0,0,0.55),
-    0 2px 8px rgba(0,0,0,0.30),
+    0 -8px 32px rgba(0,0,0,0.45),
     inset 0 1px 0 rgba(255,255,255,0.07);
 
   display: flex;
-  align-items: center;
+  align-items: stretch;
 
   opacity: 1;
 
@@ -222,7 +230,7 @@ export default function GlobalBottomNav() {
 
 .gnb-bar.gnb-hidden {
   opacity: 0;
-  transform: translateX(-50%) translateY(calc(100% + 24px));
+  transform: translateY(100%);
   pointer-events: none;
 }
 
@@ -234,7 +242,7 @@ export default function GlobalBottomNav() {
           gap: 3px;
           flex: 1;
           height: 100%;
-          padding: 10px 4px 8px;
+          padding: 9px 4px 7px;
           cursor: pointer;
           text-decoration: none;
           -webkit-tap-highlight-color: transparent;
@@ -291,281 +299,33 @@ export default function GlobalBottomNav() {
           transition: opacity 0.14s ease, background 0.14s ease;
         }
 
-        /* ── Explore ──────────────────────────────────────────────────
+        /* ── TYRAI ────────────────────────────────────────────────────
            The centre control is distinguished by SHAPE, not colour: the same
-           icon box the other items use, with a hairline border. */
-        .gnb-explore-icon {
+           icon box the other items use, with a hairline border around it. It
+           is the one item here that opens something rather than going
+           somewhere, and the border is what says so. */
+        .gnb-tyrai-icon {
           border: 1px solid rgba(255,255,255,0.14);
           background: rgba(255,255,255,0.05);
           color: rgba(255,255,255,0.62);
         }
-        .gnb-explore[aria-expanded="true"] .gnb-explore-icon {
+        .gnb-tyrai:active .gnb-tyrai-icon,
+        .gnb-tyrai[aria-expanded="true"] .gnb-tyrai-icon {
           border-color: rgba(167,139,250,0.40);
           background: rgba(167,139,250,0.16);
           color: #a78bfa;
         }
-        /* The arrow turns to point back down when the panel is open. */
-        .gnb-explore-icon svg { transition: transform 0.22s cubic-bezier(0.22,1,0.36,1); }
-        .gnb-explore-icon.is-open svg { transform: rotate(180deg); }
+        .gnb-tyrai-mark { width: 18px; height: 18px; }
 
-        /* Backdrop sits BELOW the bar and the panel, so both stay interactive.
-           Opacity only — no blur, which would cost a full-screen filter pass. */
-        .gnb-scrim {
-          position: fixed;
-          inset: 0;
-          z-index: 998;
-          background: rgba(0,0,0,0.42);
-          opacity: 0;
-          pointer-events: none;
-          transition: opacity 220ms ease;
-        }
-        .gnb-scrim.is-open { opacity: 1; pointer-events: auto; }
-
-        /* Panel: fixed, so opening it cannot reflow or shift the page. Height
-           is capped at ~25vh and it animates on transform/opacity only. */
-        .gnb-explore-panel {
-          position: fixed;
-          left: 50%;
-          /* The bar is bottom:18px, height:62px — its top edge is at 80px.
-             92px leaves a consistent 12px gap, and matching the bar's own
-             (inset-free) positioning keeps the two aligned on every device. */
-          bottom: 92px;
-          z-index: 999;
-          width: min(680px, calc(100vw - 24px));
-          /* 25vh cut the second row off on a phone, which defeats the point
-             of guaranteeing two rows. The cap is now whatever space actually
-             exists between the panel's 92px bottom offset and the top of the
-             screen, so both rows are always visible; the 460px ceiling stops
-             it stretching on a tall display. dvh is the accurate measure where
-             a mobile browser's chrome slides away — the vh line above it is
-             the fallback for engines without dvh. */
-          /* A FIXED quarter-screen box, not a max-height.
-             The panel is now exactly one quarter of the viewport, and the grid
-             inside it is sized in fractions of that box (see .gnb-explore-grid),
-             so the tiles shrink to fit rather than the panel growing to fit the
-             tiles. That is what makes scrolling impossible instead of merely
-             unlikely: overflow is hidden and nothing can exceed the box.
-             The clamp only bites at the extremes: a landscape phone (375px
-             tall) would get a 94px panel from a literal 25dvh, too short for a
-             row of tiles, and a 1366px iPad would get 341px, which is a lot of
-             screen for eight shortcuts. Between roughly 450px and 1200px of
-             viewport height — every phone and laptop — the panel is exactly a
-             quarter of the screen. */
-          height: clamp(112px, 25dvh, 300px);
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-
-          background: rgba(0,0,0,0.86);
-          backdrop-filter: blur(28px) saturate(180%);
-          -webkit-backdrop-filter: blur(28px) saturate(180%);
-          border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 24px;
-          box-shadow:
-            0 8px 32px rgba(0,0,0,0.55),
-            0 2px 8px rgba(0,0,0,0.30),
-            inset 0 1px 0 rgba(255,255,255,0.07);
-
-          padding: clamp(8px, 2.4vw, 12px);
-          opacity: 0;
-          visibility: hidden;
-          pointer-events: none;
-          transform: translateX(-50%) translateY(14px) scale(0.98);
-          transition:
-            transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
-            opacity 180ms ease,
-            visibility 0s linear 260ms;
-          will-change: transform, opacity;
-        }
-        .gnb-explore-panel.is-open {
-          opacity: 1;
-          visibility: visible;
-          pointer-events: auto;
-          transform: translateX(-50%) translateY(0) scale(1);
-          transition:
-            transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
-            opacity 200ms ease,
-            visibility 0s;
-        }
-
-        /* Sheet grabber, as in the reference. */
-        .gnb-explore-grabber {
-          display: block;
-          width: 34px; height: 4px;
-          border-radius: 999px;
-          background: rgba(255,255,255,0.16);
-        }
-
-        /* A strip of its own for the grabber and the close button.
-           The close button is absolute so it does not push the grabber
-           off-centre, but absolute inside the PANEL let it sit on top of the
-           top-right tile and swallow taps meant for it. Scoping it to this
-           strip keeps the reference's layout while guaranteeing it can never
-           overlap the grid. */
-        .gnb-explore-top {
-          position: relative;
-          flex: 0 0 auto;
-          height: clamp(22px, 5.4vw, 28px);
-          display: flex; align-items: center; justify-content: center;
-        }
-
-        /* The "Explore DoCrud" title row is gone, and the close button is
-           taken OUT of flow rather than given a row of its own. A header row
-           cost ~40px, which at a quarter of a 640px-tall phone is a third of
-           the whole panel — height the tiles need. Absolute keeps the control
-           exactly where the reference puts it while costing nothing. */
-        .gnb-explore-close {
-          position: absolute;
-          top: 50%;
-          right: 0;
-          transform: translateY(-50%);
-          display: flex; align-items: center; justify-content: center;
-          width: clamp(22px, 5.4vw, 28px); height: clamp(22px, 5.4vw, 28px);
-          flex-shrink: 0;
-          border-radius: 999px;
-          border: 1px solid rgba(255,255,255,0.10);
-          background: rgba(255,255,255,0.05);
-          color: rgba(255,255,255,0.55);
-          cursor: pointer;
-          -webkit-tap-highlight-color: transparent;
-          transition: background 0.15s ease, color 0.15s ease;
-        }
-        .gnb-explore-close:hover { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.92); }
-        .gnb-explore-close:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
-
-        /* The tile grid. Fills the panel's fixed height exactly — see below. */
-        .gnb-explore-grid {
-          display: grid;
-          /* COLUMN COUNT ADAPTS; the tile never gets narrower than its own
-             label. Four fixed columns is the target and is what a tablet and
-             desktop get, but it is arithmetically impossible on a phone: at
-             320px each of four tiles is ~66px wide, of which ~36px is left for
-             text after the icon and padding, and "Businesses" needs ~52px even
-             at a 9px font. Fixed columns there could only truncate. auto-fit
-             drops to three columns on a narrow phone instead, so every label
-             stays whole — the requirement was that no word breaks or
-             overlaps, and hiding half a word behind an ellipsis fails it just
-             as surely as spilling it would. */
-          grid-template-columns: repeat(auto-fit, minmax(clamp(78px, 22vw, 132px), 1fr));
-          /* FRACTIONAL rows, however many the columns produce. 1fr rows divide
-             whatever height the panel has, so the tiles always fill the fixed
-             box exactly — no leftover space, and nothing pushed past the
-             bottom edge whether the grid lands as 4x2 or 3x3. minmax(0, …) is
-             what permits a track to be smaller than its content. */
-          grid-auto-rows: minmax(0, 1fr);
-          flex: 1 1 auto;
-          min-height: 0;
-          gap: clamp(4px, 1.8vw, 8px);
-        }
-
-        .gnb-explore-link {
-          /* ROW, not column: the icon sits to the left of the name, as in the
-             reference. Dropping the stacked layout and the blurb underneath is
-             most of the height saving that lets two rows live in a quarter
-             screen. */
-          display: flex; flex-direction: row;
-          align-items: center; justify-content: center;
-          gap: clamp(4px, 1.4vw, 7px);
-          /* No min-height at all — the grid's 1fr rows set the height. A floor
-             here would fight the box and be the one thing able to overflow it. */
-          min-width: 0;
-          min-height: 0;
-          padding: clamp(4px, 1.6vw, 8px) clamp(5px, 1.8vw, 9px);
-          border-radius: clamp(11px, 3.4vw, 15px);
-          border: 1px solid rgba(255,255,255,0.06);
-          background: rgba(255,255,255,0.025);
-          color: rgba(255,255,255,0.92);
-          text-decoration: none;
-          -webkit-tap-highlight-color: transparent;
-          transition: background 0.15s ease, border-color 0.15s ease;
-        }
-        .gnb-explore-link:hover {
-          background: rgba(255,255,255,0.06);
-          border-color: rgba(255,255,255,0.12);
-        }
-        .gnb-explore-link:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
-
-        /* The icon must never be squeezed by a long neighbour, and it scales
-           with the tile so a 320px phone does not get a 20px glyph in a 60px
-           cell. */
-        .gnb-explore-link svg {
-          flex: 0 0 auto;
-          width: clamp(14px, 4.2vw, 19px);
-          height: clamp(14px, 4.2vw, 19px);
-        }
-
-        /* ONE LINE, never wrapped and never broken mid-word. nowrap plus a
-           min-width:0 parent is what stops "Businesses" from either splitting
-           across lines or spilling over the neighbouring tile; if a viewport is
-           genuinely too narrow for the whole word the ellipsis is the honest
-           outcome, not overlapping text. */
-        .gnb-explore-label {
-          min-width: 0;
-          font-size: clamp(9px, 2.9vw, 13px);
-          font-weight: 700; line-height: 1.15;
-          letter-spacing: -0.015em;
-          color: rgba(255,255,255,0.92);
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
+        /* The Explore panel that used to live here — a sheet of destination
+           links above the bar — is gone with the button that opened it. The
+           same destinations are still listed in lib/explore-destinations.ts
+           and reachable from the pages that link to them. */
 
         @media (prefers-reduced-motion: reduce) {
-          .gnb-explore-panel, .gnb-scrim, .gnb-explore-icon svg { transition: none; }
+          .gnb-tyrai-icon { transition: none; }
         }
       `}</style>
-
-      {/* Clicking anywhere outside closes. Sits under the bar and the panel so
-          both remain clickable while it is up. */}
-      <div
-        className={`gnb-scrim${exploreOpen ? ' is-open' : ''}`}
-        onClick={() => setExploreOpen(false)}
-        aria-hidden="true"
-      />
-
-      {/* Explore panel — static links only. Opening it makes no request and
-          mounts no data component. It stays in the DOM so the open/close
-          animation runs on transform and opacity rather than on mount. */}
-      <div
-        id="gnb-explore-panel"
-        className={`gnb-explore-panel${exploreOpen ? ' is-open' : ''}`}
-        role="group"
-        aria-label="Explore DoCrud"
-        aria-hidden={!exploreOpen}
-      >
-        {/* Grabber + close. No visible title: the panel is already labelled for
-            assistive tech by aria-label on the container, so removing the
-            heading costs nothing semantically and returns its height to the
-            tiles. */}
-        <div className="gnb-explore-top">
-          <span className="gnb-explore-grabber" aria-hidden="true" />
-          <button
-            type="button"
-            className="gnb-explore-close"
-            onClick={() => setExploreOpen(false)}
-            aria-label="Close Explore"
-            tabIndex={exploreOpen ? 0 : -1}
-          >
-            <X width={14} height={14} />
-          </button>
-        </div>
-
-        <div className="gnb-explore-grid">
-          {BOTTOM_NAV_EXPLORE.map((item) => (
-            <a
-              key={item.label}
-              href={item.href}
-              className="gnb-explore-link"
-              /* Not focusable while closed, so keyboard order is unaffected. */
-              tabIndex={exploreOpen ? 0 : -1}
-              onClick={() => setExploreOpen(false)}
-            >
-              <item.Icon style={{ color: item.ic }} aria-hidden />
-              <span className="gnb-explore-label">{item.label}</span>
-            </a>
-          ))}
-        </div>
-      </div>
 
       <nav className={`gnb-bar${visible ? '' : ' gnb-hidden'}`} role="navigation" aria-label="Main navigation">
 
@@ -599,23 +359,23 @@ export default function GlobalBottomNav() {
           );
         })()}
 
-        {/* Explore — replaces Recents. A button, not a link: it toggles the
-            panel above rather than navigating anywhere. */}
+        {/* TYRAI — a button, not a link: it opens the overlay over whatever
+            page you are on rather than navigating away from it. In the centre,
+            because it is the one thing here that is not a destination. */}
         <button
           type="button"
-          className="gnb-item gnb-explore"
-          onClick={() => setExploreOpen((open) => !open)}
-          aria-label={exploreOpen ? 'Close Explore' : 'Open Explore'}
-          aria-expanded={exploreOpen}
-          aria-controls="gnb-explore-panel"
+          className="gnb-item gnb-tyrai"
+          onClick={() => setTyraiOpen(true)}
+          aria-label="TYRAI — tell your requirements in a sentence"
+          aria-expanded={tyraiOpen}
         >
-          <span className={`gnb-icon gnb-explore-icon${exploreOpen ? ' is-open' : ''}`}>
-            <ArrowUp width={19} height={19} />
+          <span className={`gnb-icon gnb-tyrai-icon${tyraiOpen ? ' is-open' : ''}`}>
+            <TyraiMark className="gnb-tyrai-mark" strokeWidth={1.8} />
           </span>
-          <span className="gnb-label" style={{ color: exploreOpen ? '#a78bfa' : 'rgba(255,255,255,0.50)' }}>
-            Explore
+          <span className="gnb-label" style={{ color: tyraiOpen ? '#a78bfa' : 'rgba(255,255,255,0.50)' }}>
+            TYRAI
           </span>
-          <span className="gnb-dot" style={{ opacity: exploreOpen ? 1 : 0, background: '#a78bfa' }} />
+          <span className="gnb-dot" style={{ opacity: tyraiOpen ? 1 : 0, background: '#a78bfa' }} />
         </button>
 
         {/* People */}
@@ -662,6 +422,9 @@ export default function GlobalBottomNav() {
         })()}
 
       </nav>
+
+      {/* Only once it has been asked for. */}
+      {tyraiOpen && <AiMode open onClose={() => setTyraiOpen(false)} />}
     </>
   );
 

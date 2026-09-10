@@ -20,10 +20,12 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { profileStatusStyle } from '@/lib/profile-score';
 import dynamic from 'next/dynamic';
 const HomepageCommandCenter = dynamic(() => import('@/components/HomepageCommandCenter'), { ssr: false });
+const PromotionsCommandCenter = dynamic(() => import('@/components/PromotionsCommandCenter'), { ssr: false });
+const HeroSliderCommandCenter = dynamic(() => import('@/components/HeroSliderCommandCenter'), { ssr: false });
 const AdBannerManager = dynamic(() => import('@/components/AdBannerManagerPanel'), { ssr: false });
 
 // ── Types ──────────────────────────────────────────────────────────────
-type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners' | 'sponsored-ads' | 'announcements' | 'jobs' | 'seo' | 'company-explorer';
+type Tab = 'overview' | 'users' | 'plans' | 'platform' | 'analytics' | 'documents' | 'mail' | 'content' | 'settings' | 'audit' | 'revenue' | 'gigs' | 'people' | 'search' | 'security' | 'geography' | 'integrations' | 'early-access' | 'public_face' | 'verifications' | 'live-sessions' | 'file-transfers' | 'user-intelligence' | 'network' | 'marketplace' | 'services' | 'referrals' | 'feeds' | 'infinity' | 'homepage' | 'ad-banners' | 'sponsored-ads' | 'announcements' | 'announcement-bar' | 'hero-slider' | 'jobs' | 'seo' | 'company-explorer';
 
 interface DashboardData {
   users: { total: number; active: number; suspended: number; disabled: number; business: number; individual: number; newLast30Days: number; newLast7Days: number; planDistribution: Record<string, number>; subscriptionStatusDistribution: Record<string, number>; roleDistribution: Record<string, number>; recentSignups: UserRow[]; dailySignups: { date: string; count: number }[] };
@@ -198,6 +200,15 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
       { id: 'sponsored-ads' as Tab, label: 'Sponsored Ads', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="5" width="18" height="14" rx="2"/><path strokeLinecap="round" d="M7 10h6"/></svg> },
       { id: 'announcements' as Tab, label: 'Announcements', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg> },
     ]},
+    /* ── Promotions ──
+       What the product SAYS, as opposed to how a page is arranged. The
+       announcement bar was buried nine panels down the Homepage command
+       centre, which is a screen for layout — nobody opens it to write an
+       alert at 2am. */
+    { group: 'Promotions', items: [
+      { id: 'hero-slider' as Tab, label: 'Hero Slider', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><rect x="3" y="5" width="18" height="14" rx="2" /><path strokeLinecap="round" d="M7 19v1M17 19v1M3 15l4.5-4 3 2.5L15 9l6 5" /></svg> },
+      { id: 'announcement-bar' as Tab, label: 'Announcement Bar', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" /></svg> },
+    ]},
     { group: 'Manage', items: [
       { id: 'mail', label: 'Mail', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> },
       { id: 'content', label: 'Content', icon: <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h7" /></svg> },
@@ -305,6 +316,8 @@ export default function SuperAdminPanel({ adminEmail, onLogout }: { adminEmail: 
           {tab === 'feeds' && <FeedsTab />}
           {tab === 'infinity' && <InfinityTab />}
           {tab === 'homepage' && <HomepageCommandCenterTab />}
+          {tab === 'hero-slider' && <HeroSliderCommandCenter />}
+          {tab === 'announcement-bar' && <PromotionsCommandCenter />}
           {tab === 'ad-banners' && <AdBannersTab />}
           {tab === 'sponsored-ads' && <SponsoredAdsTab />}
           {tab === 'company-explorer' && <CompanyExplorerTab />}

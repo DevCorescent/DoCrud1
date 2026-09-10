@@ -34,7 +34,105 @@ type NavLink = { id: string; label: string; href: string; visible: boolean; orde
 type ContentTab = { id: string; label: string; visible: boolean; order: number };
 type FooterLink = { label: string; href: string; visible: boolean };
 type FooterColumn = { id: string; title: string; links: FooterLink[] };
-type AnnouncementBanner = { id: string; text: string; ctaLabel: string; ctaHref: string; style: 'info' | 'warning' | 'success' | 'promo'; active: boolean };
+/* ─── The announcement bar ────────────────────────────────────────────────
+   The strip under the navigation. Super Admin owns every part of it. */
+
+/** What kind of message it is. Sets the icon and the word on the chip. */
+export const ANNOUNCEMENT_KINDS = ['announcement', 'alert', 'reminder'] as const;
+export type AnnouncementKind = (typeof ANNOUNCEMENT_KINDS)[number];
+
+/** How it looks. Kind and tone are separate on purpose: an alert is not always
+    red — "we are moving to a new domain on Friday" is an alert in a calm
+    colour — and a promo is not always a promo-coloured announcement. */
+export const ANNOUNCEMENT_TONES = ['neutral', 'info', 'success', 'warning', 'danger', 'promo'] as const;
+export type AnnouncementTone = (typeof ANNOUNCEMENT_TONES)[number];
+
+export type AnnouncementBanner = {
+  /**
+   * Also the dismissal key.
+   *
+   * A visitor who closes the bar has closed THIS message; changing the id is
+   * how an admin says "this is a new one, show it again", and editing the text
+   * of an existing one deliberately does not re-open it for people who already
+   * dismissed it. The admin screen offers both.
+   */
+  id: string;
+  kind: AnnouncementKind;
+  text: string;
+  tone: AnnouncementTone;
+  /** Primary call to action. Both fields must be filled for it to render. */
+  ctaLabel: string;
+  ctaHref: string;
+  /** Secondary call to action, shown quieter. Same rule. */
+  ctaLabel2: string;
+  ctaHref2: string;
+  /** Whether a visitor may close it. Off for something they must see. */
+  dismissible: boolean;
+  active: boolean;
+};
+
+const LEGACY_TONE: Record<string, AnnouncementTone> = {
+  info: 'info', warning: 'warning', success: 'success', promo: 'promo',
+};
+
+/**
+ * A link an announcement may point at.
+ *
+ * Same rule the company-logo overrides use: a same-origin path or an https
+ * URL, nothing else. This value is written by an admin but read back from a
+ * JSON file, and `javascript:` in a stored href would run on every page that
+ * renders the bar.
+ */
+function safeHref(raw: unknown): string {
+  const v = typeof raw === 'string' ? raw.trim() : '';
+  if (!v) return '';
+  if (v.startsWith('/') && !v.startsWith('//')) return v.slice(0, 512);
+  if (/^https:\/\//i.test(v)) return v.slice(0, 512);
+  return '';
+}
+
+/**
+ * Rebuilt field by field, never spread.
+ *
+ * The stored value can come from an older build (which had `style` and no
+ * `kind`, `tone`, second CTA or dismissible flag) or from an admin request
+ * body. Anything unrecognised falls back to a safe default rather than
+ * reaching a page.
+ */
+export function normalizeAnnouncement(raw: unknown): AnnouncementBanner | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const a = raw as Record<string, unknown>;
+
+  const text = typeof a.text === 'string' ? a.text.trim().slice(0, 400) : '';
+  if (!text) return null;                    // a bar with nothing to say is not a bar
+
+  const kind = ANNOUNCEMENT_KINDS.includes(a.kind as AnnouncementKind)
+    ? (a.kind as AnnouncementKind) : 'announcement';
+
+  const tone = ANNOUNCEMENT_TONES.includes(a.tone as AnnouncementTone)
+    ? (a.tone as AnnouncementTone)
+    /* An older record has `style` instead. Mapped rather than dropped, so a
+       banner that was live before this change stays the colour it was. */
+    : (LEGACY_TONE[String(a.style ?? '')] ?? 'neutral');
+
+  const id = String(a.id ?? '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64) || 'ab1';
+
+  return {
+    id,
+    kind,
+    text,
+    tone,
+    ctaLabel: typeof a.ctaLabel === 'string' ? a.ctaLabel.trim().slice(0, 40) : '',
+    ctaHref: safeHref(a.ctaHref),
+    ctaLabel2: typeof a.ctaLabel2 === 'string' ? a.ctaLabel2.trim().slice(0, 40) : '',
+    ctaHref2: safeHref(a.ctaHref2),
+    /* Absent means yes: every banner written before this field existed was
+       one a visitor could not close, and the kinder default for a new field
+       is the one that gives them the choice. */
+    dismissible: a.dismissible !== false,
+    active: a.active === true,
+  };
+}
 /**
  * Re-check every stored override before it can render.
  *
@@ -151,6 +249,9 @@ export function mergeConfig(stored: Partial<HomepageConfig> | null): HomepageCon
     /* Normalized, never spread: this is read back from storage and every entry
        is re-checked before anything renders it. */
     companyLogos: normalizeCompanyLogoOverrides(stored.companyLogos),
+    /* Same reasoning, plus one more: this one carries links, and a stored href
+       is rendered onto every page. */
+    announcementBanner: normalizeAnnouncement(stored.announcementBanner),
   };
 }
 
@@ -194,6 +295,13 @@ export async function saveHomepageConfig(incoming: Partial<HomepageConfig>): Pro
     companyLogos: normalizeCompanyLogoOverrides(
       incoming.companyLogos ?? current.companyLogos,
     ),
+    /* On the way in as well as on the way out: an admin request body is still
+       a request body, and this one carries links that end up on every page.
+       `undefined` means the request did not touch it; an explicit null is a
+       deletion and must be allowed through. */
+    announcementBanner: incoming.announcementBanner === undefined
+      ? current.announcementBanner
+      : normalizeAnnouncement(incoming.announcementBanner),
     updatedAt: new Date().toISOString(),
   };
   await writeJsonFile(homepageConfigPath, updated);

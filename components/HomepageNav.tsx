@@ -6,6 +6,9 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import Image from 'next/image';
 import GlobalSearchBar, { type GlobalSearchBarHandle, type LocalSearchResult } from '@/components/GlobalSearchBar';
+import AiMode from '@/components/ai-mode/AiMode';
+import TyraiMark from '@/components/ai-mode/TyraiMark';
+import '@/components/ai-mode/tyrai-entry.css';
 import { ProfileCompletionRing } from '@/components/nav/ProfileCompletion';
 import { cachedJson } from '@/lib/client/request-cache';
 import { useSession ,signOut } from 'next-auth/react';
@@ -318,6 +321,10 @@ useEffect(() => {
   }, []);
 
   const searchBarRef = useRef<GlobalSearchBarHandle>(null);
+  const [aiOpen, setAiOpen] = useState(false);
+  /* What was typed in the keyword field when TYRAI was reached for. Handed to
+     the overlay so the sentence is not typed twice. */
+  const [aiSeed, setAiSeed] = useState('');
 
   // Mobile dock (in PublicHomepage) opens the search overlay by dispatching
   // this window event — handled here because the search bar ref lives in this
@@ -328,7 +335,8 @@ useEffect(() => {
     return () => window.removeEventListener('homepage:open-search', handler);
   }, []);
 
-  // ⌘K / Ctrl+K shortcut to open search
+  // ⌘K / Ctrl+K shortcut to open search. The hint that used to advertise it
+  // inside the field is now the TYRAI button; the shortcut itself still works.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -648,7 +656,9 @@ useEffect(() => {
       <GlobalSearchBar
         ref={searchBarRef}
         getLocalResults={getLocalResults}
-        className="mx-3"
+        className="ml-3"
+        /* TYRAI sits INSIDE the field, in the slot the ⌘K hint held. */
+        onAiOpen={(seed) => { setAiSeed(seed ?? ''); setAiOpen(true); }}
       />
 
       {/* Mobile publish + button — left of search pill, visible below md only */}
@@ -669,11 +679,14 @@ useEffect(() => {
         </button>
       )}
 
-      {/* Mobile search pill — visible below md only, matches GlobalSearchBar's md:flex breakpoint */}
-      <button
-        type="button"
-        onClick={() => searchBarRef.current?.openMobile()}
-        className="md:hidden flex flex-1 items-center gap-2 mx-1.5 h-[36px] min-w-0 rounded-[12px] px-3"
+      {/* Mobile search pill — visible below md only, matches GlobalSearchBar's
+          md:flex breakpoint.
+
+          A container with two buttons rather than one button, because TYRAI now
+          lives inside the field on a phone too and a button inside a button is
+          invalid markup that browsers resolve by dropping one of them. */}
+      <div
+        className="md:hidden flex flex-1 items-center mx-1.5 h-[36px] min-w-0 rounded-[12px] pl-3 pr-1"
         style={{
           background: 'rgba(255,255,255,0.06)',
           border: '1px solid rgba(255,255,255,0.10)',
@@ -682,9 +695,31 @@ useEffect(() => {
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)',
         }}
       >
-        <Search className="h-[13px] w-[13px] shrink-0 text-white/40" />
-        <span className="text-[13px] font-medium text-white/32 truncate flex-1 text-left">Search</span>
-      </button>
+        <button
+          type="button"
+          onClick={() => searchBarRef.current?.openMobile()}
+          className="flex h-full min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <Search className="h-[13px] w-[13px] shrink-0 text-white/40" />
+          <span className="truncate text-[13px] font-medium text-white/32">Search</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAiSeed(''); setAiOpen(true); }}
+          aria-label="TYRAI — tell your requirements in a sentence"
+          title="TYRAI"
+          className="gs-tyrai-m"
+        >
+          <TyraiMark className="gs-tyrai-i" strokeWidth={1.9} />
+          <span className="gs-tyrai-t">TYRAI</span>
+        </button>
+      </div>
+
+      {/* TYRAI used to have a button of its own here, beside the field. It
+          lives INSIDE the field now — desktop in the slot the ⌘K hint held,
+          phone at the right end of the search pill — because it is the same
+          act as searching, done with a sentence instead of keywords. Two
+          entries to one thing, side by side, only asked people to choose. */}
 
       {/* ── RIGHT group: nav links + bell + avatar ── */}
       <div className="flex items-center gap-1.5 shrink-0">
@@ -1172,6 +1207,11 @@ useEffect(() => {
     {/* The profile-completion pill that used to sit here is gone: the homepage
         Profile Score card (components/home/HomeHighlights.tsx) is now the one
         completion prompt, so the same number is not shown twice. */}
+
+    {/* TYRAI. Rendered from the nav because the nav is on every page and the
+        overlay portals to <body> anyway — mounting it inside the homepage would
+        make the button work on exactly one route. */}
+    <AiMode open={aiOpen} seed={aiSeed} onClose={() => setAiOpen(false)} />
     </>
   );
 

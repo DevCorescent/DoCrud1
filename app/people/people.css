@@ -1,0 +1,148 @@
+/**
+ * The People directory's own surfaces.
+ *
+ * A real stylesheet rather than rules inside the page's inline <style>, for the
+ * reason components/jobs/company/company-explorer.css records: React compares
+ * an inline style element's TEXT during hydration, and adding to that block on
+ * this page produced "Text content does not match server-rendered HTML" and a
+ * dropped Suspense boundary on every load. A stylesheet is not part of the
+ * reconciled tree, so the mismatch cannot happen.
+ */
+
+/* ── The card's material ──
+   The top highlight is the lit edge; without it a card has a colour but no
+   thickness.
+
+   No backdrop filter here any more. Blurring what is behind a card only pays
+   for itself when something interesting IS behind it — here the page is one
+   flat colour, so the filter cost a compositor layer per card and, with
+   `saturate(150%)` over that flat ground, lifted the whole grid a step. The
+   cards came out mid-grey however dark their own gradient was set, which is
+   why tuning the gradient kept changing nothing. The surface below is drawn,
+   not sampled, so what is written is what renders. */
+.pd-glass{
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* A filter chip.
+   Only the material lives here — the blur and the transition. The BACKGROUND
+   and border stay in the markup, because the selected state is a solid white
+   pill and a background declared here beat it: the active chip rendered as a
+   dark chip with near-black text on it, at 1.04:1. A shared class must not own
+   a property that a state needs to change. */
+.pd-chip{
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+  transition:border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+/* ── The card, and its ring ──
+   The ring used to be a 1px-padded parent with the colour as its BACKGROUND,
+   and the card sat inside it. That works with an opaque card and fails with a
+   translucent one: the parent's fill covers the whole card area, not just the
+   ring, so every card carried a flat 10% white wash under its glass. It is
+   why the directory read grey whatever the card's own gradient said.
+
+   Here the ring and the surface are layers of one background on one element.
+   The card's own layers are clipped to the padding box, the ring's layer to
+   the border box, so the colour appears in the 1px border and nowhere else —
+   and nothing is masked, so the content inside is untouched.
+
+   The clip list has one entry per layer: two for the surface (a corner light
+   and a ramp), one for the ring. */
+.pd-card{
+  border:1px solid transparent;
+  background-origin:border-box;
+  /* One entry per layer: the corner light, the ramp, the base, then the ring. */
+  background-clip:padding-box, padding-box, padding-box, border-box;
+  /* The base the layers above are drawn on. Near the page's own colour, a
+     shade lighter, so a card is a raised surface rather than a hole. */
+  background-color:#101014;
+}
+
+/* ── The bar glass ──
+   The exact material the homepage navigation uses
+   (components/HomepageNav.tsx): a translucent tint over a dark ground, a
+   hairline highlight along the top edge and a hairline below it, with the blur
+   and saturation that make it read as glass rather than as a dark strip.
+
+   Copied deliberately as one rule rather than three inline styles: this page
+   had `rgba(10,10,12,0.96)` — 96% opaque, which is a wall with a blur behind
+   it that nothing can pass through. */
+.pd-bar{
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.055) 0%,
+      rgba(255,255,255,0.012) 55%,
+      rgba(255,255,255,0.028) 100%),
+    rgba(10,10,12,0.55);
+  backdrop-filter:blur(28px) saturate(180%);
+  -webkit-backdrop-filter:blur(28px) saturate(180%);
+  border-bottom:1px solid rgba(255,255,255,0.09);
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.45),
+    0 2px 8px rgba(0,0,0,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* The sidebar in the same material. It is a panel rather than a bar, so it
+   keeps its own radius and drops the bottom edge. */
+.pd-panel{
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.055) 0%,
+      rgba(255,255,255,0.012) 55%,
+      rgba(255,255,255,0.028) 100%),
+    rgba(10,10,12,0.55);
+  border:1px solid rgba(255,255,255,0.09);
+  backdrop-filter:blur(28px) saturate(180%);
+  -webkit-backdrop-filter:blur(28px) saturate(180%);
+  box-shadow:
+    0 8px 32px rgba(0,0,0,0.40),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* ══ The card on a phone ══
+   Two per row on a 390px screen is about 177px each. Everything below is the
+   same card with smaller numbers — no second layout, no second set of markup
+   to keep in step. The rule is that nothing may be squeezed: anything that
+   will not fit at this width is made smaller deliberately, moved to its own
+   row, or dropped. */
+@media (max-width: 639px){
+  /* Shorter, so the banner does not take a third of a small card. */
+  .pd-banner{ height:58px !important; }
+
+  .pd-body{ padding-left:11px; padding-right:11px; }
+
+  /* The avatar overlaps a shorter banner by less. */
+  .pd-idrow{ margin-top:-20px !important; }
+  /* The Avatar component sizes itself inline, so this is the one place that
+     has to shout to be heard. */
+  .pd-av > div{ width:44px !important; height:44px !important; }
+  .pd-av > div > div{ border-radius:13px !important; font-size:13px !important; }
+  .pd-av{ padding:2px !important; }
+
+  /* Beside the avatar there is room for none of them; they move down. */
+  .pd-actions{ display:none !important; }
+  .pd-actions-m{ display:flex !important; }
+
+  .pd-ident{ margin-top:9px; }
+  .pd-ident > div > span:first-child{ font-size:13.5px; }
+
+  /* The chips wrap rather than being hidden. Hiding the third in CSS left the
+     "+1" counter next to it counting the skills the CARD dropped, not the ones
+     CSS had — it said "+1" with two skills out of sight. A wrapped row costs a
+     few pixels; a number that is wrong costs trust in every number on the
+     page, and grid rows stretch to the same height anyway. */
+  .pd-skills{ margin-top:9px; gap:5px; }
+
+  .pd-foot{ padding-top:9px; padding-bottom:11px; gap:8px; font-size:10px; }
+  /* The gig count is the first thing to go: it is the least of the three and
+     the only one that can wrap the row. */
+  .pd-foot > span:nth-child(3){ display:none; }
+}
+
+/* Between the phone grid and the roomy desktop card. */
+@media (min-width: 640px) and (max-width: 899px){
+  .pd-banner{ height:70px !important; }
+}

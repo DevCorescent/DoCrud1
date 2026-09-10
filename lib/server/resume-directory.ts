@@ -776,9 +776,28 @@ export type PublicResumeSearchItem = {
   updatedAt: string;
 };
 
+/**
+ * Is this a real member's resume, or one of the demo rows?
+ *
+ * `listResumeDirectory` tops the directory up with generated entries in
+ * development so the Talent page is never empty — and it WRITES them, so they
+ * outlive the request that made them. That is fine for a directory people
+ * browse knowing it is a demo, and wrong everywhere else: search presented
+ * them as people, with a profile link that goes nowhere, which is the
+ * "results that do not exist" problem exactly.
+ *
+ * The rule is ownership, not the id prefix: a row nobody owns is not a person.
+ */
+function isRealResume(entry: ResumeDirectoryEntry): boolean {
+  const owner = String(entry.ownerUserId ?? '').trim();
+  return owner !== '' && owner !== 'demo';
+}
+
 export async function searchPublicResumes(query: string, limit = 6): Promise<PublicResumeSearchItem[]> {
-  const result = await listResumeDirectory({ q: query, limit, offset: 0 });
-  return result.entries.slice(0, limit).map((entry) => ({
+  /* Over-fetch, because the demo rows are removed AFTER ranking and would
+     otherwise eat the page. */
+  const result = await listResumeDirectory({ q: query, limit: Math.min(60, limit * 4), offset: 0 });
+  return result.entries.filter(isRealResume).slice(0, limit).map((entry) => ({
     id: entry.id,
     slug: entry.slug,
     title: entry.displayName,

@@ -1,0 +1,1226 @@
+/**
+ * TYRAI — the full-screen "tell your requirements" surface.
+ *
+ * The class prefix stays `aim-`: it is internal, it is on every rule in this
+ * file and in three components, and a rename would be a large diff that
+ * changes nothing anybody can see.
+ *
+ * A real stylesheet, not an inline <style>: React compares an inline style
+ * element's text during hydration, and this repo has twice shipped a
+ * "Text content does not match server-rendered HTML" from exactly that — see
+ * components/jobs/company/company-explorer.css and app/people/people.css.
+ *
+ * Every animation here is transform/opacity only, so it runs on the compositor
+ * and cannot cause layout. Nothing animates while results are streaming in.
+ */
+
+.aim-root{
+  position:fixed;
+  inset:0;
+  z-index:9998;
+  display:flex;
+  flex-direction:column;
+  background:rgba(8,8,10,0.86);
+  backdrop-filter:blur(28px) saturate(140%);
+  -webkit-backdrop-filter:blur(28px) saturate(140%);
+  animation:aim-in 260ms cubic-bezier(0.22,1,0.36,1) both;
+}
+
+@keyframes aim-in{
+  from{ opacity:0; }
+  to{ opacity:1; }
+}
+
+/* The ambient wash. Two soft fields, static — a moving gradient behind a
+   results list is the kind of thing that looks good in a demo and costs a
+   frame budget every time someone scrolls. */
+.aim-root::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    radial-gradient(60% 45% at 50% 0%, rgba(120,110,255,0.10), transparent 70%),
+    radial-gradient(50% 40% at 85% 100%, rgba(90,190,255,0.06), transparent 72%);
+}
+
+/* ── The stage ──
+   The field starts in the middle of the screen and rises to the top when there
+   is something to show. Both positions are the SAME element in the same place
+   in the flow, moved by a transform — the earlier version swapped
+   `justify-content`, which is not an animatable property, so the field jumped.
+
+   The field is never re-mounted, so focus, the caret and the selection all
+   survive the move. */
+.aim-stage{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:flex-start;
+  flex:1;
+  min-height:0;
+  padding:20px 16px 0;
+}
+
+.aim-head{
+  position:relative;
+  width:100%;
+  max-width:720px;
+  flex:0 0 auto;
+  /* --aim-center is the measured distance from the top of the stage to the
+     middle (see AiMode.tsx). The calc is the fallback for the first frame:
+     half the viewport, less half the field's own height, less the stage's top
+     padding — right to within a pixel or two, and replaced before paint. */
+  transform:translateY(var(--aim-center, calc(50vh - 50% - 20px)));
+  transition:transform 560ms cubic-bezier(0.22,1,0.36,1);
+}
+.aim-stage[data-phase="answer"] .aim-head{ transform:translateY(0); }
+
+/* Above the field and below it, out of the flow: with these in the flow the
+   head is the whole block, and centring the block leaves the FIELD sitting
+   below the middle. Out of the flow the head is exactly the field. */
+.aim-title{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:calc(100% + 26px);
+  text-align:center;
+  /* No fill mode: a filled animation keeps its final transform forever and
+     would win over the transition below, so the exit would not run. */
+  animation:aim-rise 420ms cubic-bezier(0.22,1,0.36,1);
+}
+
+/* ══ Everything under the field ══
+   One out-of-flow column rather than a stack of layers each pinned at its own
+   guessed offset from the field. Out of the flow because the field is the one
+   thing on this screen whose position is fixed — it sits on the centre line,
+   and anything that adds height above or below it would move it. In the flow
+   INSIDE that column, because the examples wrap to two rows on a laptop and
+   three in a narrow window, and whatever follows them has to know. */
+.aim-below{
+  position:absolute;
+  left:0;
+  right:0;
+  top:calc(100% + 16px);
+  display:flex;
+  flex-direction:column;
+}
+
+.aim-examples{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:8px;
+  animation:aim-rise 420ms 80ms cubic-bezier(0.22,1,0.36,1) backwards;
+}
+
+/* They leave with the move rather than blinking out at the start of it.
+   `visibility` is delayed to the end so they are gone from the tab order once
+   they are gone from the screen. */
+.aim-title,
+.aim-examples{
+  transition:
+    opacity 220ms ease,
+    transform 420ms cubic-bezier(0.22,1,0.36,1),
+    visibility 0s linear 420ms;
+}
+.aim-stage[data-phase="answer"] .aim-title,
+.aim-stage[data-phase="answer"] .aim-examples{
+  opacity:0;
+  transform:translateY(-10px);
+  visibility:hidden;
+  pointer-events:none;
+}
+/* The column keeps its size while its contents fade, and an invisible box the
+   height of three chip rows and a brief sits over the top of the results. It
+   has to stop catching what is aimed at them. */
+.aim-stage[data-phase="answer"] .aim-below{ pointer-events:none; }
+
+@keyframes aim-rise{
+  from{ opacity:0; transform:translateY(10px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+
+/* ── The field ── */
+.aim-field{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+  padding:0 6px 0 16px;
+  height:60px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:linear-gradient(180deg, rgba(255,255,255,0.075) 0%, rgba(255,255,255,0.03) 100%);
+  backdrop-filter:blur(22px) saturate(150%);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
+  box-shadow:
+    0 18px 50px rgba(0,0,0,0.40),
+    inset 0 1px 0 rgba(255,255,255,0.08);
+  transition:border-color 200ms ease, box-shadow 200ms ease;
+}
+.aim-field:focus-within{
+  border-color:rgba(255,255,255,0.26);
+  box-shadow:
+    0 22px 60px rgba(0,0,0,0.46),
+    inset 0 1px 0 rgba(255,255,255,0.10);
+}
+@media (max-width:640px){
+  .aim-field{ height:54px; border-radius:16px; padding-left:14px; }
+  /* ── The field gets the whole width ──
+     Once results are up the field rises to the top of the overlay, into the
+     lane the close button occupies. It used to end 96px short of the right
+     edge to clear that button and the readiness pill beside it, which left
+     about 260px of a 390px screen for a sentence — the end of what you typed
+     was always cut off.
+
+     The corner controls are positioned, not in the flow, so nothing has to
+     make room for them: the field drops BELOW their row and takes the full
+     width. It costs one row of height, on the axis a phone has to spare. */
+  .aim-stage[data-phase="answer"] .aim-head{
+    padding-right:0;
+    margin-top:42px;
+  }
+  /* A circle once the word is gone. A 13px-radius rectangle holding a single
+     arrow, hard against the inside of a 16px-radius pill, reads as a panel
+     that did not finish loading rather than as a button. */
+  .aim-stage[data-phase="answer"] .aim-go{
+    width:44px;
+    padding:0;
+    gap:0;
+    border-radius:999px;
+    justify-content:center;
+  }
+  .aim-stage[data-phase="answer"] .aim-go-t{ display:none; }
+}
+
+.aim-input{
+  flex:1;
+  min-width:0;
+  background:transparent;
+  border:0;
+  outline:0;
+  color:#fff;
+  font-size:15px;
+  letter-spacing:-0.01em;
+}
+.aim-input::placeholder{ color:rgba(255,255,255,0.42); }
+
+.aim-go{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  height:44px;
+  padding:0 16px;
+  border-radius:13px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:#fff;
+  color:#0b0b0d;
+  font-size:13px;
+  font-weight:650;
+  transition:transform 140ms ease, opacity 140ms ease;
+}
+.aim-go:disabled{ opacity:0.45; }
+.aim-go:not(:disabled):active{ transform:scale(0.97); }
+
+/* ── Results ── */
+.aim-results{
+  width:100%;
+  max-width:1180px;
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  /* The gap under the field used to be the head's bottom padding. It lives
+     here now, so the head's box is the field and nothing else — which is what
+     makes centring it exact. */
+  padding:18px 0 40px;
+  scrollbar-width:none;
+  /* Held back 120ms: the field is already on its way up, and results that
+     appear underneath it while it moves read as two things happening at once
+     rather than one. */
+  animation:aim-results-in 420ms 120ms cubic-bezier(0.22,1,0.36,1) backwards;
+}
+
+@keyframes aim-results-in{
+  from{ opacity:0; transform:translateY(10px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+.aim-results::-webkit-scrollbar{ display:none; }
+
+.aim-grid{
+  display:grid;
+  gap:12px;
+  grid-template-columns:1fr;
+}
+@media (min-width:720px){ .aim-grid{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (min-width:1100px){ .aim-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
+.aim-in{ animation:aim-card-in 380ms cubic-bezier(0.22,1,0.36,1) both; }
+
+/* The question. Set apart from the results without being a modal — it is part
+   of the same conversation, one step further down it. */
+.aim-ask{
+  padding:14px 16px;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.025) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.07);
+  animation:aim-card-in 320ms cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* People read as a row, so they get more width and fewer columns; jobs and
+   posts are blocks and tile at three. */
+@media (min-width:1100px){
+  .aim-grid-wide{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+.aim-card{
+  display:block;
+  padding:14px;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.08);
+  background:linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.022) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.055);
+  transition:border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  animation:aim-card-in 380ms cubic-bezier(0.22,1,0.36,1) both;
+}
+.aim-card:hover{
+  border-color:rgba(255,255,255,0.18);
+  background:linear-gradient(180deg, rgba(255,255,255,0.085) 0%, rgba(255,255,255,0.032) 100%);
+  transform:translateY(-1px);
+}
+
+@keyframes aim-card-in{
+  from{ opacity:0; transform:translateY(8px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+
+/* A skeleton row, so the wait has a shape instead of a spinner. */
+.aim-skel{
+  height:104px;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.06);
+  background:rgba(255,255,255,0.028);
+  animation:aim-pulse 1.15s ease-in-out infinite;
+}
+@keyframes aim-pulse{
+  0%,100%{ opacity:0.55; }
+  50%{ opacity:0.95; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .aim-root,.aim-title,.aim-examples,.aim-results,.aim-card,.aim-in,.aim-ask{ animation:none; }
+  .aim-head,.aim-title,.aim-examples,.aim-card{ transition:none; }
+  .aim-skel{ animation:none; }
+}
+
+/* ══ A person, as a result ══
+   Built for this surface rather than borrowed from the homepage: a result has
+   a score to show and fields the ranking matched on, and the recommendation
+   row has neither. See components/ai-mode/AiPersonCard.tsx. */
+
+/* The entrance animation lives on the .aim-in wrapper, NOT here. An animation
+   with a fill mode keeps its final transform forever and would beat the hover
+   lift below, which is exactly why .aim-card never lifted. */
+.aim-p{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  height:100%;
+  padding:15px 16px 14px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:linear-gradient(180deg, rgba(255,255,255,0.062) 0%, rgba(255,255,255,0.022) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.26);
+  transition:border-color 180ms ease, background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+.aim-p:hover{
+  border-color:rgba(255,255,255,0.20);
+  background:linear-gradient(180deg, rgba(255,255,255,0.09) 0%, rgba(255,255,255,0.035) 100%);
+  transform:translateY(-2px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.09), 0 16px 38px rgba(0,0,0,0.34);
+}
+.aim-p:focus-within{ border-color:rgba(255,255,255,0.28); }
+
+/* Cards in a row end level, so the Follow buttons line up. */
+.aim-grid-wide > .aim-in{ display:flex; }
+.aim-grid-wide > .aim-in > *{ flex:1 1 auto; min-width:0; }
+
+/* The card is the link. Underneath the content, with the content not taking
+   clicks, so a click anywhere but the button opens the profile. */
+.aim-p-hit{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  border-radius:inherit;
+}
+.aim-p-hit:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}
+
+.aim-p-top{
+  position:relative;
+  z-index:1;
+  display:flex;
+  align-items:flex-start;
+  gap:12px;
+  pointer-events:none;
+}
+
+.aim-p-av{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:56px;
+  height:56px;
+  overflow:hidden;
+  /* Squarish, not round: a square reads as a card of its own and gives a face
+     more pixels at the same width. */
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.05);
+}
+.aim-p-av img{ width:100%; height:100%; object-fit:cover; display:block; }
+.aim-p-av-i{ font-size:19px; font-weight:600; color:rgba(255,255,255,0.58); }
+
+.aim-p-id{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+  flex:1 1 auto;
+}
+.aim-p-name-row{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+}
+.aim-p-name{
+  font-size:14.5px;
+  font-weight:650;
+  letter-spacing:-0.01em;
+  color:rgba(255,255,255,0.95);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.aim-p-open{
+  flex:0 0 auto;
+  border-radius:999px;
+  border:1px solid rgba(134,239,172,0.24);
+  background:rgba(134,239,172,0.11);
+  padding:2px 7px;
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:0.09em;
+  text-transform:uppercase;
+  color:rgba(198,245,220,0.94);
+}
+.aim-p-head{
+  font-size:12px;
+  line-height:1.45;
+  color:rgba(255,255,255,0.66);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.aim-p-loc{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  font-size:11.5px;
+  color:rgba(255,255,255,0.56);
+  min-width:0;
+}
+
+/* ── The score ──
+   A ring rather than a bare number: it says "out of a hundred" without a
+   label, and it is the same shape at every size. */
+.aim-p-score{
+  flex:0 0 auto;
+  margin-left:auto;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+}
+.aim-p-score-cap{
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.62);
+}
+.aim-p-ring{
+  position:relative;
+  flex:0 0 auto;
+  width:40px;
+  height:40px;
+}
+.aim-p-ring svg{
+  width:40px;
+  height:40px;
+  transform:rotate(-90deg);
+}
+.aim-p-ring-track{ fill:none; stroke:rgba(255,255,255,0.10); stroke-width:3; }
+.aim-p-ring-arc{
+  fill:none;
+  stroke:rgba(255,255,255,0.90);
+  stroke-width:3;
+  stroke-linecap:round;
+  transition:stroke-dashoffset 620ms cubic-bezier(0.22,1,0.36,1);
+}
+.aim-p-ring-num{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,0.94);
+}
+
+.aim-p-bio{
+  position:relative;
+  z-index:1;
+  pointer-events:none;
+  font-size:12px;
+  line-height:1.55;
+  color:rgba(255,255,255,0.60);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+.aim-p-skills{
+  position:relative;
+  z-index:1;
+  pointer-events:none;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+}
+.aim-p-skill{
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:rgba(255,255,255,0.045);
+  padding:3px 8px;
+  font-size:11px;
+  line-height:1.35;
+  color:rgba(255,255,255,0.66);
+}
+/* A skill the QUERY asked for. Lit, so the reason the card is here is on the
+   card rather than only in the sentence underneath it. */
+.aim-p-skill-on{
+  border-color:rgba(255,255,255,0.28);
+  background:rgba(255,255,255,0.13);
+  color:rgba(255,255,255,0.96);
+  font-weight:600;
+}
+.aim-p-more{
+  font-size:11px;
+  color:rgba(255,255,255,0.50);
+}
+
+.aim-p-why{
+  position:relative;
+  z-index:1;
+  pointer-events:none;
+  display:flex;
+  gap:6px;
+  font-size:11.5px;
+  line-height:1.5;
+  color:rgba(255,255,255,0.66);
+}
+/* Two lines at most. A reason can carry three lexical clauses and two stated
+   preferences, which on a phone runs to four lines and turns the card into a
+   paragraph with a photo. */
+.aim-p-why > span{
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+.aim-p-foot{
+  position:relative;
+  z-index:1;
+  margin-top:auto;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  pointer-events:none;
+}
+.aim-p-btn{
+  pointer-events:auto;
+  flex:0 0 auto;
+  height:30px;
+  padding:0 15px;
+  border-radius:999px;
+  border:1px solid transparent;
+  background:#fff;
+  color:#0b0b0d;
+  font-size:12px;
+  font-weight:650;
+  transition:background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.aim-p-btn:hover{ background:rgba(255,255,255,0.90); }
+.aim-p-btn:active{ transform:scale(0.97); }
+.aim-p-btn:disabled{ opacity:0.55; }
+.aim-p-btn-on{
+  background:transparent;
+  border-color:rgba(255,255,255,0.18);
+  color:rgba(255,255,255,0.78);
+}
+.aim-p-btn-on:hover{
+  background:rgba(255,255,255,0.07);
+  border-color:rgba(255,255,255,0.3);
+  color:#fff;
+}
+.aim-p-view{
+  margin-left:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-size:11.5px;
+  font-weight:600;
+  color:rgba(255,255,255,0.52);
+  transition:color 160ms ease;
+}
+.aim-p:hover .aim-p-view{ color:rgba(255,255,255,0.88); }
+
+@media (prefers-reduced-motion: reduce){
+  .aim-p,.aim-p-ring-arc,.aim-p-btn,.aim-p-view{ transition:none; }
+  .aim-p:hover{ transform:none; }
+}
+
+/* ══ Back ══
+   On the left, where back goes, and reading as a step rather than a dismissal:
+   an X says "this is over", and from a set of results it is not — the field,
+   the sentence and the screen it came from are all still there.
+
+   What it goes back TO is decided in AiMode.tsx: the first TYRAI screen from
+   an answer, the page underneath from that first screen. */
+.aim-back{
+  position:absolute;
+  top:16px;
+  left:16px;
+  z-index:20;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  height:40px;
+  padding:0 15px 0 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(22px) saturate(140%);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  color:rgba(255,255,255,0.78);
+  font-size:12.5px;
+  font-weight:600;
+  letter-spacing:-0.005em;
+  white-space:nowrap;
+  transition:border-color 180ms ease, background-color 180ms ease, color 180ms ease;
+}
+.aim-back:hover{
+  border-color:rgba(255,255,255,0.25);
+  background:rgba(255,255,255,0.10);
+  color:#fff;
+}
+.aim-back:active{ background:rgba(255,255,255,0.14); }
+.aim-back:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}
+/* The arrow leans the way it is going. */
+.aim-back svg{ transition:transform 240ms cubic-bezier(0.22,1,0.36,1); }
+.aim-back:hover svg{ transform:translateX(-2px); }
+
+@media (min-width:640px){
+  .aim-back{ top:24px; left:24px; }
+}
+/* On the narrowest phones the arrow says it on its own. */
+@media (max-width:359px){
+  .aim-back{ width:40px; padding:0; justify-content:center; gap:0; }
+  .aim-back-t{ display:none; }
+}
+@media (prefers-reduced-motion: reduce){
+  .aim-back,.aim-back svg{ transition:none; }
+  .aim-back:hover svg{ transform:none; }
+}
+
+/* ══ The corner ══
+   Two controls, one lane. They are laid out as a row rather than positioned
+   individually so adding one cannot land it on top of the other. */
+.aim-corner{
+  position:absolute;
+  top:16px;
+  right:16px;
+  z-index:20;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+@media (min-width:640px){
+  .aim-corner{ top:24px; right:24px; gap:10px; }
+}
+
+/* ── Profile readiness ── */
+.aim-rd{ position:relative; }
+
+.aim-rd-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  height:40px;
+  padding:0 13px 0 6px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.05);
+  backdrop-filter:blur(22px) saturate(140%);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  color:rgba(255,255,255,0.82);
+  font-size:12px;
+  font-weight:600;
+  transition:border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+.aim-rd-btn:hover{
+  border-color:rgba(255,255,255,0.25);
+  background:rgba(255,255,255,0.10);
+  color:#fff;
+}
+/* Finished. Stated in the same pastel the rest of the product uses for a good
+   state, never a flashy green. */
+.aim-rd-btn-ok{
+  border-color:rgba(134,239,172,0.26);
+  background:rgba(134,239,172,0.10);
+  color:rgba(206,247,224,0.94);
+}
+.aim-rd-btn-ok:hover{
+  border-color:rgba(134,239,172,0.42);
+  background:rgba(134,239,172,0.16);
+  color:#fff;
+}
+
+.aim-rd-ring{
+  position:relative;
+  flex:0 0 auto;
+  width:28px;
+  height:28px;
+}
+.aim-rd-ring svg{ width:28px; height:28px; transform:rotate(-90deg); }
+.aim-rd-track{ fill:none; stroke:rgba(255,255,255,0.14); stroke-width:3; }
+.aim-rd-arc{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:3;
+  stroke-linecap:round;
+  transition:stroke-dashoffset 620ms cubic-bezier(0.22,1,0.36,1);
+}
+.aim-rd-num{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:9.5px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,0.94);
+}
+
+/* The label is the first thing to go: on a phone this shares the corner with
+   the close button, and the search field needs what is left. */
+.aim-rd-label{ display:none; }
+@media (min-width:640px){
+  .aim-rd-label{ display:inline; }
+}
+
+/* The bar's own copy. Desktop is a pill in the corner; there is no room for a
+   headline and a subline there, and no need for them beside the ring. */
+.aim-rd-bar-copy,
+.aim-rd-chev{ display:none; }
+
+/* ── The panel ── */
+.aim-rd-panel{
+  position:absolute;
+  top:calc(100% + 10px);
+  right:0;
+  width:min(340px, calc(100vw - 32px));
+  padding:14px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(18,18,22,0.94);
+  backdrop-filter:blur(28px) saturate(150%);
+  -webkit-backdrop-filter:blur(28px) saturate(150%);
+  box-shadow:0 24px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.07);
+  animation:aim-rd-in 220ms cubic-bezier(0.22,1,0.36,1) both;
+  text-align:left;
+}
+@keyframes aim-rd-in{
+  from{ opacity:0; transform:translateY(-6px) scale(0.98); }
+  to{ opacity:1; transform:none; }
+}
+
+.aim-rd-head{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+}
+.aim-rd-title{
+  flex:1 1 auto;
+  font-size:13px;
+  font-weight:650;
+  line-height:1.4;
+  color:rgba(255,255,255,0.94);
+}
+.aim-rd-x{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:24px;
+  height:24px;
+  border-radius:8px;
+  color:rgba(255,255,255,0.55);
+  transition:background-color 140ms ease, color 140ms ease;
+}
+.aim-rd-x:hover{ background:rgba(255,255,255,0.08); color:#fff; }
+
+.aim-rd-score{
+  display:flex;
+  align-items:baseline;
+  gap:6px;
+  margin-top:10px;
+}
+.aim-rd-score-n{
+  font-size:26px;
+  font-weight:700;
+  letter-spacing:-0.02em;
+  font-variant-numeric:tabular-nums;
+  color:#fff;
+}
+.aim-rd-score-c{ font-size:12px; color:rgba(255,255,255,0.62); }
+
+.aim-rd-bar{
+  position:relative;
+  display:block;
+  height:6px;
+  margin-top:8px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.10);
+  overflow:hidden;
+}
+.aim-rd-bar-fill{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  background:rgba(255,255,255,0.85);
+  transition:width 620ms cubic-bezier(0.22,1,0.36,1);
+}
+.aim-rd-bar-mark{
+  position:absolute;
+  top:0;
+  bottom:0;
+  width:2px;
+  background:rgba(255,255,255,0.55);
+  transform:translateX(-1px);
+}
+
+.aim-rd-copy{
+  margin-top:10px;
+  font-size:12px;
+  line-height:1.55;
+  color:rgba(255,255,255,0.68);
+}
+
+.aim-rd-sub{
+  margin-top:12px;
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.55);
+}
+.aim-rd-miss{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  margin-top:7px;
+}
+.aim-rd-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:rgba(255,255,255,0.045);
+  padding:3px 8px;
+  font-size:11px;
+  color:rgba(255,255,255,0.72);
+}
+.aim-rd-chip-w{
+  font-size:10px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,0.52);
+}
+
+.aim-rd-cta{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  height:36px;
+  margin-top:13px;
+  border-radius:999px;
+  background:#fff;
+  color:#0b0b0d;
+  font-size:12.5px;
+  font-weight:650;
+  transition:background-color 160ms ease;
+}
+.aim-rd-cta:hover{ background:rgba(255,255,255,0.9); }
+
+@media (prefers-reduced-motion: reduce){
+  .aim-rd-panel{ animation:none; }
+  .aim-rd-arc,.aim-rd-bar-fill,.aim-rd-btn,.aim-rd-x,.aim-rd-cta{ transition:none; }
+}
+
+/* On a phone the panel is anchored to the SCREEN, not to a 40px button hard
+   against the right edge — hung off that button a 340px panel starts 32px off
+   the left of a 390px phone, which is where it was.
+
+   This sits after the base rule on purpose: the two have equal specificity, so
+   the later one wins, and the same override higher up in the file lost. */
+/* ══ The phone layout for the readiness control ══
+   AFTER the rules it overrides, not before them. Two rules of equal
+   specificity are settled by order, and the same overrides higher up in this
+   file lost silently to the base declarations below — the button kept its
+   corner-pill padding and only looked right because a fixed `width` hid it. */
+@media (max-width:640px){
+  /* ── On a phone this is not a corner pill ──
+     It sits across the bottom of the screen, where a bar can carry the whole
+     sentence instead of a ring somebody has to tap to understand.
+
+     The WRAPPER is what is fixed, not the button: the panel then hangs off the
+     wrapper at `bottom: 100%` and lands exactly above the bar whatever height
+     the bar happens to be. Pinning the panel to a fixed offset instead left it
+     one pixel over the bar at 320px, where the headline wraps to two lines. */
+  .aim-rd{
+    position:fixed;
+    left:12px;
+    right:12px;
+    bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+    z-index:22;
+  }
+  .aim-rd-btn{
+    position:static;
+    width:100%;
+    height:auto;
+    gap:11px;
+    padding:11px 13px;
+    border-radius:16px;
+    background:rgba(20,20,24,0.92);
+    border-color:rgba(255,255,255,0.13);
+    box-shadow:0 18px 44px rgba(0,0,0,0.5);
+    text-align:left;
+  }
+  .aim-rd-btn-ok{ background:rgba(22,32,26,0.94); }
+  .aim-rd-ring,.aim-rd-ring svg{ width:34px; height:34px; }
+  .aim-rd-num{ font-size:11px; }
+  .aim-rd-label{ display:none; }
+
+  .aim-rd-bar-copy{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    min-width:0;
+    flex:1 1 auto;
+  }
+  .aim-rd-h{
+    font-size:12.5px;
+    font-weight:650;
+    letter-spacing:-0.005em;
+    line-height:1.3;
+    color:rgba(255,255,255,0.95);
+  }
+  .aim-rd-s{
+    font-size:11px;
+    line-height:1.35;
+    color:rgba(255,255,255,0.62);
+    /* One line: the bar sits over the results and must not grow into them. */
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .aim-rd-chev{
+    display:block;
+    flex:0 0 auto;
+    color:rgba(255,255,255,0.45);
+  }
+
+  /* The bar floats over the list, so the list ends above it. */
+  .aim-results{ padding-bottom:calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+  /* Above the bar it belongs to, not below a corner button that is no longer
+     there. Capped in height so it can never grow past the top of the screen. */
+  .aim-rd-panel{
+    position:absolute;
+    top:auto;
+    bottom:calc(100% + 8px);
+    left:0;
+    right:0;
+    width:auto;
+    max-height:calc(100vh - 180px);
+    overflow-y:auto;
+    animation:aim-rd-in-up 220ms cubic-bezier(0.22,1,0.36,1) both;
+  }
+  @keyframes aim-rd-in-up{
+    from{ opacity:0; transform:translateY(8px) scale(0.98); }
+    to{ opacity:1; transform:none; }
+  }
+}
+
+/* ══ The answer line ══
+   Bigger than the query it came from, because it is the sentence somebody is
+   here to read. Everything under it is provenance. */
+.aim-sum{
+  font-size:15px;
+  font-weight:600;
+  letter-spacing:-0.01em;
+  line-height:1.35;
+  color:rgba(255,255,255,0.94);
+}
+@media (min-width:640px){
+  .aim-sum{ font-size:16px; }
+}
+
+.aim-meta{
+  margin-top:3px;
+  font-size:11.5px;
+  line-height:1.5;
+  color:rgba(255,255,255,0.55);
+  font-variant-numeric:tabular-nums;
+}
+
+/* What the conversation settled. A row of answers, not a transcript. */
+.aim-turns{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+  margin-top:10px;
+}
+.aim-turns-l{
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.11em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.45);
+}
+.aim-turn{
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(255,255,255,0.06);
+  padding:2.5px 9px;
+  font-size:11px;
+  font-weight:600;
+  line-height:1.3;
+  color:rgba(255,255,255,0.86);
+}
+
+/* The whole lede is one block, so the gap below it is the same whether a
+   question follows, a row of results, or nothing at all. */
+.aim-lede{ margin-bottom:18px; }
+
+/* ══ The brief ══
+   The last block in .aim-below: what is waiting for you, under the examples,
+   on TYRAI's first screen. */
+.aim-brief{
+  /* In the flow of .aim-below, under the examples, however many rows they
+     took. The margin is the gap between two different kinds of thing — one
+     row of suggestions to type, one panel of what is already yours — and it
+     is bigger than the gap inside either of them for that reason. */
+  margin-top:30px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  animation:aim-rise 460ms 140ms cubic-bezier(0.22,1,0.36,1) backwards;
+}
+.aim-stage[data-phase="answer"] .aim-brief{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+}
+
+.aim-brief-hi{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  justify-content:center;
+  gap:8px;
+  font-size:13px;
+  font-weight:650;
+  color:rgba(255,255,255,0.86);
+}
+.aim-brief-sub{
+  font-size:12px;
+  font-weight:400;
+  color:rgba(255,255,255,0.45);
+}
+
+.aim-brief-row{
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0,1fr));
+  gap:8px;
+}
+
+.aim-brief-tile{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+  padding:11px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.015) 100%),
+    rgba(12,12,16,0.45);
+  backdrop-filter:blur(22px) saturate(150%);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+  text-decoration:none;
+  transition:border-color 170ms ease, background-color 170ms ease, transform 140ms ease;
+}
+.aim-brief-tile:hover{
+  border-color:rgba(255,255,255,0.20);
+  transform:translateY(-1px);
+}
+.aim-brief-i{
+  width:13px;
+  height:13px;
+  color:rgba(255,255,255,0.40);
+}
+.aim-brief-n{
+  font-size:19px;
+  font-weight:700;
+  line-height:1.05;
+  letter-spacing:-0.02em;
+  font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,0.95);
+}
+.aim-brief-l{
+  font-size:10.5px;
+  color:rgba(255,255,255,0.50);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.aim-brief-bar{
+  display:block;
+  height:3px;
+  margin-top:5px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.10);
+  overflow:hidden;
+}
+.aim-brief-bar > span{
+  display:block;
+  height:100%;
+  border-radius:999px;
+  transition:width 620ms cubic-bezier(0.22,1,0.36,1);
+}
+
+/* ── Who is hiring ──
+   A row, scrolled rather than wrapped: a second line here would push the
+   whole brief into the bottom of the screen on a phone. */
+.aim-brief-cos{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  overflow-x:auto;
+  scrollbar-width:none;
+  padding-bottom:2px;
+}
+.aim-brief-cos::-webkit-scrollbar{ display:none; }
+.aim-brief-cos-l{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  flex:0 0 auto;
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:0.11em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.42);
+  padding-right:2px;
+}
+.aim-brief-co{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto;
+  max-width:180px;
+  padding:5px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.09);
+  background:rgba(255,255,255,0.045);
+  font-size:11px;
+  color:rgba(255,255,255,0.72);
+  text-decoration:none;
+  transition:border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+.aim-brief-co:hover{
+  border-color:rgba(255,255,255,0.22);
+  background:rgba(255,255,255,0.09);
+  color:#fff;
+}
+.aim-brief-co-n{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.aim-brief-co-j{
+  flex:0 0 auto;
+  font-size:9.5px;
+  font-weight:700;
+  color:rgba(255,255,255,0.42);
+}
+.aim-brief-co-all{ font-weight:600; }
+
+@media (max-width:640px){
+  .aim-brief{ margin-top:22px; gap:9px; }
+  /* The companies rail comes off on a phone. Two reasons, and either would do:
+     the readiness bar owns the bottom strip of this screen and was landing on
+     top of it, and a horizontal scroller of company names in 358px shows one
+     and a half of them. The greeting and the three numbers are the part worth
+     the space. */
+  .aim-brief-cos{ display:none; }
+  .aim-brief-hi{ font-size:12.5px; }
+  .aim-brief-sub{ width:100%; text-align:center; }
+  .aim-brief-tile{ padding:9px 10px; border-radius:12px; }
+  .aim-brief-n{ font-size:17px; }
+  .aim-brief-l{ font-size:10px; }
+}
+
+/* A short window cannot hold the field in the middle AND a brief below it.
+   The brief is the part that goes. */
+@media (max-height:680px){
+  .aim-brief{ display:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .aim-brief{ animation:none; }
+  .aim-brief-tile,.aim-brief-co,.aim-brief-bar > span{ transition:none; }
+  .aim-brief-tile:hover{ transform:none; }
+}

@@ -615,6 +615,10 @@ export default function SuperAdminCommandCenter() {
               <Layout className="mr-2 h-4 w-4" />
               Homepage
             </TabsTrigger>
+            {/* Promotions lives in the Super Admin sidebar
+                (components/SuperAdminPanel.tsx), which is what /super-admin
+                renders. This second shell is the one embedded in the workspace
+                and does not carry it. */}
           </TabsList>
 
           <div className="flex flex-wrap items-center gap-2">

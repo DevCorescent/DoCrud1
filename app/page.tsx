@@ -11,6 +11,7 @@ import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { peekHiringCompanies } from '@/lib/server/hiring-companies';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
 import { seedViewerCounts } from '@/lib/server/recommendation-cache';
+import { getHeroBanners, heroPreloads } from '@/lib/server/hero-banners';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,10 +70,18 @@ export default async function Home() {
   /* The homepage config joins the batch: it is a sub-kilobyte cached read, and
      fetching it here means the marquee, nav and footer no longer wait for a
      round trip after hydration to learn their own configuration. */
-  const [session, themeSettings, hpConfig] = await Promise.all([
+  /* The hero's banners join the batch for the same reason the config did, only
+     more so: the hero is the first thing above the fold, and it used to learn
+     what it was from a client fetch that did not leave the browser until 7.4
+     seconds into the load — it could not be issued until the whole homepage
+     component had downloaded, parsed and mounted, and by then it was
+     twenty-first in a queue of twenty-five. It is a sub-kilobyte cached read
+     here. */
+  const [session, themeSettings, hpConfig, hero] = await Promise.all([
     getAuthSession().catch(() => null),
     getThemeSettings().catch(() => ({ softwareName: 'Docrud', accentLabel: 'Platform' })),
     getHomepageConfig().catch(() => null),
+    getHeroBanners().catch(() => ({ banners: [], heading: '' })),
   ]);
 
   /* The same crawler exemption the middleware applies. Without it a search
@@ -137,15 +146,36 @@ export default async function Home() {
     : { jobs: null, people: null };
 
   return (
-    <PublicHomepage
-      softwareName={themeSettings.softwareName}
-      accentLabel={themeSettings.accentLabel}
-      guestMode={!session && isGuest}
-      initialHpConfig={hpConfig}
-      initialCompanies={initialCompanies}
-      initialViewer={initialViewer}
-      initialJobCount={seededCounts.jobs}
-      initialPeopleCount={seededCounts.people}
-    />
+    <>
+      {/* The first slide's artwork, fetched alongside the HTML instead of
+          after it.
+
+          The picture used to start downloading at 8.7 seconds, because it
+          could not be known until the banners had been fetched, which could not
+          happen until the homepage component had mounted. A preload in the head
+          is a request the browser makes immediately, in parallel with the
+          JavaScript rather than behind it — so by the time the slider mounts,
+          its picture is usually already decoded.
+
+          Only the first slide, and only the shape that will actually be
+          painted: `media` matches the same 640px break the stylesheet uses to
+          choose between the wide and tall artwork, so the phone never pulls the
+          desktop banner and the desktop never pulls the phone's. */}
+      {heroPreloads(hero.banners).map((p) => (
+        <link key={p.href + p.media} rel="preload" as="image" href={p.href} media={p.media} fetchPriority="high" />
+      ))}
+
+      <PublicHomepage
+        softwareName={themeSettings.softwareName}
+        accentLabel={themeSettings.accentLabel}
+        guestMode={!session && isGuest}
+        initialHpConfig={hpConfig}
+        initialCompanies={initialCompanies}
+        initialViewer={initialViewer}
+        initialJobCount={seededCounts.jobs}
+        initialPeopleCount={seededCounts.people}
+        initialBanners={hero.banners}
+      />
+    </>
   );
 }

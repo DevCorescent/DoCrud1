@@ -1,0 +1,64 @@
+{
+  "banners": [
+    {
+      "id": "seed_hero_people",
+      "imageUrl": "/uploads/ad-banners/seed-hero-people.svg",
+      "title": "Find people by what they can do",
+      "subtitle": "Search the directory by skill, role and availability — and see who is open to work right now.",
+      "ctaLabel": "Browse people",
+      "ctaHref": "/people",
+      "active": true,
+      "order": 0,
+      "createdAt": "2026-09-09T20:49:04.642Z",
+      "motif": "nodes",
+      "backgroundColor": "#0b1020",
+      "accentColor": "#8aa2ff",
+      "imageUrlMobile": ""
+    },
+    {
+      "id": "seed_hero_companies",
+      "imageUrl": "/uploads/ad-banners/seed-hero-companies.svg",
+      "title": "The companies hiring on Docrud",
+      "subtitle": "Company pages, open roles and the teams behind them, in one directory.",
+      "ctaLabel": "Explore companies",
+      "ctaHref": "/businesses",
+      "active": true,
+      "order": 1,
+      "createdAt": "2026-09-09T20:50:04.642Z",
+      "motif": "stack",
+      "backgroundColor": "#08120f",
+      "accentColor": "#63e0cb",
+      "imageUrlMobile": ""
+    },
+    {
+      "id": "seed_hero_jobs",
+      "imageUrl": "/uploads/ad-banners/seed-hero-jobs.svg",
+      "title": "Roles matched to your profile",
+      "subtitle": "The more your profile says, the closer the match. Above 95% complete, you are indexed better.",
+      "ctaLabel": "See open roles",
+      "ctaHref": "/jobs",
+      "active": true,
+      "order": 2,
+      "createdAt": "2026-09-09T20:51:04.642Z",
+      "motif": "orbit",
+      "backgroundColor": "#140f08",
+      "accentColor": "#ffd39a",
+      "imageUrlMobile": ""
+    },
+    {
+      "id": "seed_hero_gigs",
+      "imageUrl": "/uploads/ad-banners/seed-hero-gigs.svg",
+      "title": "Post a gig, get bids on it",
+      "subtitle": "Describe the work in a sentence. The people who do it come to you.",
+      "ctaLabel": "Post a gig",
+      "ctaHref": "/gigs",
+      "active": true,
+      "order": 3,
+      "createdAt": "2026-09-09T20:52:04.642Z",
+      "motif": "spark",
+      "backgroundColor": "#150a14",
+      "accentColor": "#f4a3d8",
+      "imageUrlMobile": ""
+    }
+  ]
+}

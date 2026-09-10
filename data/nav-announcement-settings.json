@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "text": "hey",
+  "href": "/profile",
+  "subtitle": "",
+  "ctaLabel": "Check Now !",
+  "ctaHref": "/profile",
+  "showProfileProgress": false,
+  "showSpotsLeft": false,
+  "startAt": "",
+  "endAt": "",
+  "updatedAt": "2026-09-09T09:33:28.876Z",
+  "updatedBy": "superadmin@company.com"
+}

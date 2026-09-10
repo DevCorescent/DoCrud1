@@ -1,0 +1,73 @@
+{
+  "sections": {
+    "trustedCompanies": true,
+    "homeHighlights": true,
+    "heroBanner": true,
+    "featureCards": true,
+    "publishHeading": true,
+    "contentDiscovery": true,
+    "adBanners": true,
+    "gigsGrid": false,
+    "leaderboards": false,
+    "footer": true
+  },
+  "trustedCompanies": {
+    "label": "",
+    "items": [],
+    "autoFromJobs": true
+  },
+  "greeting": {
+    "subtitle": "We've found some jobs and connections for you.",
+    "illustrationUrl": ""
+  },
+  "hero": {
+    "slotWords": [],
+    "backgroundImage": "",
+    "guestCtaPrimary": "",
+    "guestCtaSecondary": "",
+    "authCtaPrimary": "",
+    "authCtaSecondary": ""
+  },
+  "nav": {
+    "logoText": "",
+    "logoUrl": "",
+    "links": [],
+    "showSignIn": true,
+    "showSignUp": true
+  },
+  "featureCards": {
+    "guestFeatureIds": [],
+    "defaultFeatureIds": []
+  },
+  "contentDiscovery": {
+    "tabs": []
+  },
+  "footer": {
+    "columns": [],
+    "securityBadges": [],
+    "tagline": "",
+    "madeIn": "",
+    "copyrightEntity": ""
+  },
+  "announcementBanner": {
+    "id": "ab-mtu4gu1k",
+    "kind": "announcement",
+    "text": "Feature Update",
+    "tone": "success",
+    "ctaLabel": "Checkout",
+    "ctaHref": "",
+    "ctaLabel2": "",
+    "ctaHref2": "",
+    "dismissible": true,
+    "active": true
+  },
+  "companyExplorer": {
+    "items": [],
+    "autoFromJobs": true,
+    "maxItems": 24
+  },
+  "companyLogos": {},
+  "seoTitle": "",
+  "seoDescription": "",
+  "updatedAt": "2026-09-09T13:16:31.418Z"
+}

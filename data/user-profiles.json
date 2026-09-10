@@ -1,4 +1,49 @@
 {
+  "1": {
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.114Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.114Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.114Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.114Z",
+    "docrudDrivePlanPeriod": "monthly",
+    "updatedAt": "2026-09-09T10:42:50.114Z"
+  },
+  "2": {
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.140Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.140Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.140Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.140Z",
+    "docrudDrivePlanPeriod": "monthly",
+    "updatedAt": "2026-09-09T10:42:50.140Z"
+  },
+  "3": {
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.162Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.162Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.162Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.162Z",
+    "docrudDrivePlanPeriod": "monthly",
+    "updatedAt": "2026-09-09T10:42:50.162Z"
+  },
   "individual-1788596770002": {
     "emailVerified": true,
     "emailVerifiedAt": "2026-09-05T08:35:04.484Z",
@@ -16,7 +61,19 @@
       "HTML",
       "Kotlin"
     ],
-    "updatedAt": "2026-09-05T08:35:04.486Z"
+    "updatedAt": "2026-09-09T10:42:50.186Z",
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.186Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.186Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.186Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.186Z",
+    "docrudDrivePlanPeriod": "monthly"
   },
   "individual-1788597926063": {
     "emailVerified": true,
@@ -32,7 +89,19 @@
       "Java",
       "React"
     ],
-    "updatedAt": "2026-09-05T08:45:26.067Z"
+    "updatedAt": "2026-09-09T10:42:50.214Z",
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.214Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.214Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.214Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.214Z",
+    "docrudDrivePlanPeriod": "monthly"
   },
   "individual-1788599113878": {
     "emailVerified": true,
@@ -48,7 +117,7 @@
       "SQL",
       "Swift"
     ],
-    "updatedAt": "2026-09-06T11:26:11.050Z",
+    "updatedAt": "2026-09-09T10:42:50.239Z",
     "matchPreferences": {
       "preferredLocations": [
         "Bengaluru",
@@ -117,7 +186,19 @@
     "avatarUrl": "/uploads/profile/avatar_individual17_87c4cafc3188.jpg",
     "avatarPosition": "50% 50%",
     "experience": [],
-    "education": []
+    "education": [],
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.239Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.239Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.239Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.239Z",
+    "docrudDrivePlanPeriod": "monthly"
   },
   "individual-1788600830323": {
     "emailVerified": true,
@@ -134,7 +215,19 @@
       "CSS",
       "Next.js"
     ],
-    "updatedAt": "2026-09-05T09:33:50.324Z"
+    "updatedAt": "2026-09-09T10:42:50.380Z",
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.380Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.380Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.380Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.380Z",
+    "docrudDrivePlanPeriod": "monthly"
   },
   "individual-1788601938659": {
     "emailVerified": true,
@@ -150,6 +243,18 @@
       "SQL",
       "CSS"
     ],
-    "updatedAt": "2026-09-05T09:52:18.663Z"
+    "updatedAt": "2026-09-09T10:42:50.400Z",
+    "docrudInfinity": true,
+    "docrudGo": true,
+    "docrudInfinityPurchasedAt": "2026-09-09T10:42:50.400Z",
+    "docrudInfinityPeriod": "monthly",
+    "docrudInfinityExpiresAt": "2026-10-09T10:42:50.400Z",
+    "docrudInfinityRenewedAt": "2026-09-09T10:42:50.400Z",
+    "docrudInfinityRenewalCount": 0,
+    "docrudInfinityGrantedFree": true,
+    "docrudDrivePlanId": "infinity",
+    "docrudDrivePlanGb": 5,
+    "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.400Z",
+    "docrudDrivePlanPeriod": "monthly"
   }
 }

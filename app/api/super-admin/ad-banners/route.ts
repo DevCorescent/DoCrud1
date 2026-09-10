@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest } from '@/lib/server/super-admin-auth';
 import { readJsonFile, writeJsonFile, adBannersPath } from '@/lib/server/storage';
+import { normalizeHeroBanner, type HeroBanner } from '@/lib/hero-banner';
+import { invalidateHeroBanners } from '@/lib/server/hero-banners';
 
 export const dynamic = 'force-dynamic';
 
-type AdBanner = {
-  id: string;
-  imageUrl: string;
-  title: string;
-  subtitle?: string;
-  ctaLabel?: string;
-  ctaHref?: string;
-  active: boolean;
-  order: number;
-  createdAt: string;
-};
+/* One definition, in lib/hero-banner.ts, shared with the public route, the
+   slider and the command centre. */
+type AdBanner = HeroBanner;
 
 type AdBannersData = {
   heading?: string;
@@ -61,16 +55,26 @@ export async function POST(req: NextRequest) {
     if (action === 'set-heading') {
       data.heading = (heading ?? '').trim();
       await writeJsonFile(adBannersPath, data);
+      invalidateHeroBanners();
       return NextResponse.json({ success: true, heading: data.heading });
     }
 
     if (action === 'upsert') {
       if (!banner) return NextResponse.json({ error: 'banner required' }, { status: 400 });
       const idx = data.banners.findIndex(b => b.id === banner.id);
+
+      /* Normalised, never stored as it arrived: colours have to be hex, links
+         have to be same-origin or https, and a motif has to be one this build
+         can draw. And MERGED onto what is already there — the older Ad Banner
+         panel does not know about mobile artwork, colours or motifs, and
+         saving a title from it must not silently erase them. */
+      const merged = normalizeHeroBanner(banner, idx >= 0 ? data.banners[idx] : undefined);
+      if (!merged) return NextResponse.json({ error: 'Invalid banner' }, { status: 400 });
+
       if (idx >= 0) {
-        data.banners[idx] = banner;
+        data.banners[idx] = merged;
       } else {
-        data.banners.push({ ...banner, order: data.banners.length });
+        data.banners.push({ ...merged, order: data.banners.length });
       }
     } else if (action === 'delete') {
       if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
@@ -89,6 +93,10 @@ export async function POST(req: NextRequest) {
     }
 
     await writeJsonFile(adBannersPath, data);
+    /* The homepage renders the hero from a cached server read. Without this an
+       admin saves a slide and then watches an unchanged homepage for up to a
+       minute, which reads as the save having failed. */
+    invalidateHeroBanners();
     return NextResponse.json({ success: true, banners: data.banners });
   } catch (err) {
     console.error('[super-admin/ad-banners POST]', err);

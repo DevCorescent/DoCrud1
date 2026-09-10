@@ -22,10 +22,6 @@ type NavLink     = { id: string; label: string; href: string; visible: boolean; 
 type ContentTab  = { id: string; label: string; visible: boolean; order: number };
 type FooterLink  = { label: string; href: string; visible: boolean };
 type FooterColumn = { id: string; title: string; links: FooterLink[] };
-type AnnouncementBanner = {
-  id: string; text: string; ctaLabel: string; ctaHref: string;
-  style: 'info' | 'warning' | 'success' | 'promo'; active: boolean;
-};
 type HomepageConfig = {
   sections: SectionVisibility;
   trustedCompanies: { label: string; items: TrustedCompany[]; autoFromJobs: boolean };
@@ -35,7 +31,10 @@ type HomepageConfig = {
   featureCards: { guestFeatureIds: string[]; defaultFeatureIds: string[] };
   contentDiscovery: { tabs: ContentTab[] };
   footer: { columns: FooterColumn[]; securityBadges: Array<{ label: string; visible: boolean }>; tagline: string; madeIn: string; copyrightEntity: string };
-  announcementBanner: AnnouncementBanner | null;
+  /* Edited in Super Admin → Promotions, not here. Carried through this
+     screen's state untouched so saving the homepage cannot wipe an
+     announcement somebody set on the other screen. */
+  announcementBanner: unknown;
   seoTitle: string; seoDescription: string; updatedAt: string;
 };
 
@@ -119,19 +118,11 @@ const SECTION_META: { key: keyof SectionVisibility; label: string; desc: string;
   { key: 'footer',           label: 'Footer',               desc: 'Full site footer',                     default: true },
 ];
 
-const AB_STYLES = [
-  { id: 'info'    as const, label: 'Info',    bg: 'rgba(59,130,246,0.15)',  border: 'rgba(59,130,246,0.35)',  text: '#93c5fd',  dot: 'bg-blue-400' },
-  { id: 'warning' as const, label: 'Warning', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.35)', text: '#fcd34d',  dot: 'bg-amber-400' },
-  { id: 'success' as const, label: 'Success', bg: 'rgba(34,197,94,0.15)',  border: 'rgba(34,197,94,0.35)',  text: '#86efac',  dot: 'bg-emerald-400' },
-  { id: 'promo'   as const, label: 'Promo',   bg: 'rgba(168,85,247,0.15)', border: 'rgba(168,85,247,0.35)', text: '#d8b4fe',  dot: 'bg-purple-400' },
-];
-
-type Panel = 'sections' | 'trustedCompanies' | 'announcement' | 'hero' | 'nav' | 'featureCards' | 'contentDiscovery' | 'footer' | 'seo';
+type Panel = 'sections' | 'trustedCompanies' | 'hero' | 'nav' | 'featureCards' | 'contentDiscovery' | 'footer' | 'seo';
 
 const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
   { id: 'sections',         label: 'Sections',           icon: <Layout className="h-4 w-4" /> },
   { id: 'trustedCompanies', label: 'Top Companies',      icon: <ImageIcon className="h-4 w-4" /> },
-  { id: 'announcement',     label: 'Announcement Bar',   icon: <Megaphone className="h-4 w-4" /> },
   { id: 'hero',             label: 'Hero Banner',        icon: <Type className="h-4 w-4" /> },
   { id: 'nav',              label: 'Navigation',         icon: <Navigation className="h-4 w-4" /> },
   { id: 'featureCards',     label: 'Feature Cards',      icon: <Globe className="h-4 w-4" /> },
@@ -141,13 +132,16 @@ const PANELS: { id: Panel; label: string; icon: React.ReactNode }[] = [
 ];
 
 /* ── Design tokens ──────────────────────────────────────────────────────────── */
-const card   = 'rounded-2xl border border-zinc-800 bg-zinc-900';
-const label  = 'mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-500';
-const inp    = 'w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-amber-500/60 focus:outline-none focus:ring-1 focus:ring-amber-500/30 transition';
-const infoBox = 'flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/8 px-3.5 py-3 text-xs text-blue-400';
+/* Exported so the Promotions screen looks like this one rather than nearly
+   like it. Two admin screens with almost-matching inputs is worse than either
+   one alone. */
+export const card   = 'rounded-2xl border border-zinc-800 bg-zinc-900';
+export const label  = 'mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-zinc-500';
+export const inp    = 'w-full rounded-xl border border-zinc-700 bg-zinc-800 px-3.5 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-amber-500/60 focus:outline-none focus:ring-1 focus:ring-amber-500/30 transition';
+export const infoBox = 'flex items-start gap-2.5 rounded-xl border border-blue-500/20 bg-blue-500/8 px-3.5 py-3 text-xs text-blue-400';
 
 /* ── Toggle ─────────────────────────────────────────────────────────────────── */
-function Toggle({ on, onToggle, label: lbl }: { on: boolean; onToggle: () => void; label?: string }) {
+export function Toggle({ on, onToggle, label: lbl }: { on: boolean; onToggle: () => void; label?: string }) {
   return (
     <button type="button" onClick={onToggle} className="flex items-center gap-2 group">
       {on
@@ -295,7 +289,6 @@ export default function HomepageCommandCenter() {
             <TrustedCompaniesPanel config={config} setConfig={setConfig}
               uploadImage={uploadImage} uploadingField={uploadingField} />
           )}
-          {panel === 'announcement'     && <AnnouncementPanel config={config} setConfig={setConfig} />}
           {panel === 'hero'             && (
             <HeroPanel config={config} setHero={setHero} uploadingField={uploadingField}
               heroImgRef={heroImgRef as React.RefObject<HTMLInputElement>}
@@ -505,98 +498,6 @@ function TrustedCompaniesPanel({
           className="flex items-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/15 px-3.5 py-2 text-xs font-semibold text-amber-400 transition hover:bg-amber-500/25">
           <Plus className="h-3.5 w-3.5" /> Add Company
         </button>
-      </div>
-    </div>
-  );
-}
-
-function AnnouncementPanel({ config, setConfig }: { config: HomepageConfig; setConfig: React.Dispatch<React.SetStateAction<HomepageConfig>> }) {
-  const ab = config.announcementBanner;
-  const setAb = (patch: Partial<AnnouncementBanner>) =>
-    setConfig(c => ({ ...c, announcementBanner: c.announcementBanner ? { ...c.announcementBanner, ...patch } : null }));
-  const create = () => setConfig(c => ({ ...c, announcementBanner: { id: 'ab1', text: '', ctaLabel: '', ctaHref: '', style: 'info', active: true } }));
-  const remove = () => setConfig(c => ({ ...c, announcementBanner: null }));
-  const ps = AB_STYLES.find(s => s.id === ab?.style) ?? AB_STYLES[0];
-
-  return (
-    <div className={`${card} overflow-hidden`}>
-      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-        <div>
-          <p className="flex items-center gap-2 text-sm font-semibold text-white"><Megaphone className="h-4 w-4 text-amber-400" /> Announcement Banner</p>
-          <p className="mt-0.5 text-xs text-zinc-600">A top-of-page strip for launches, promos, or alerts.</p>
-        </div>
-        {ab && (
-          <button onClick={remove} className="rounded-lg p-1.5 text-zinc-700 transition hover:bg-red-900/30 hover:text-red-400">
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      <div className="p-5">
-        {!ab ? (
-          <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-800/30 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800">
-              <Megaphone className="h-5 w-5 text-zinc-600" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-zinc-400">No active announcement banner</p>
-              <p className="mt-0.5 text-xs text-zinc-600">Create one to show a coloured strip at the top of the homepage</p>
-            </div>
-            <button onClick={create} className="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-amber-400">
-              <Plus className="h-4 w-4" /> Create Announcement
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            <Toggle on={ab.active} onToggle={() => setAb({ active: !ab.active })} label="Active — show on homepage" />
-
-            <div>
-              <label className={label}>Announcement Text <span className="text-red-500 lowercase normal-case font-normal">*</span></label>
-              <textarea value={ab.text} onChange={e => setAb({ text: e.target.value })}
-                placeholder="🎉 Introducing DocSheets — your all-in-one collaborative spreadsheet. Try it free!"
-                rows={2} className={`${inp} resize-none`} />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className={label}>CTA Label</label>
-                <input className={inp} value={ab.ctaLabel} onChange={e => setAb({ ctaLabel: e.target.value })} placeholder="Learn More" />
-              </div>
-              <div>
-                <label className={label}>CTA Link</label>
-                <input className={inp} type="url" value={ab.ctaHref} onChange={e => setAb({ ctaHref: e.target.value })} placeholder="https://…" />
-              </div>
-            </div>
-
-            <div>
-              <label className={label}>Style</label>
-              <div className="flex flex-wrap gap-2">
-                {AB_STYLES.map(s => (
-                  <button key={s.id} type="button" onClick={() => setAb({ style: s.id })}
-                    style={{ background: ab.style === s.id ? s.bg : undefined, borderColor: ab.style === s.id ? s.border : undefined, color: ab.style === s.id ? s.text : undefined }}
-                    className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${
-                      ab.style === s.id ? '' : 'border-zinc-700 bg-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300'
-                    }`}
-                  >
-                    <span className={`h-2 w-2 rounded-full ${s.dot}`} />
-                    <span style={{ color: ab.style === s.id ? s.text : undefined }}>{s.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {ab.text && (
-              <div>
-                <label className={label}>Preview</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderRadius: 12, background: ps.bg, border: `1px solid ${ps.border}` }}>
-                  <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: ps.text, lineHeight: 1.4 }}>{ab.text}</span>
-                  {ab.ctaLabel && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: ps.text, border: `1px solid ${ps.border}`, borderRadius: 8, padding: '4px 12px', whiteSpace: 'nowrap' }}>{ab.ctaLabel}</span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

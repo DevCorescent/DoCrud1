@@ -39,9 +39,14 @@ export function useFeedModuleSlots(): Map<number, { kind: FeedModuleKind; adInde
          ask for the same URL when they mount, so a raw fetch here made the
          homepage request both endpoints twice per load. */
       cachedJson<{ people?: unknown[] }>('/api/recommendations/people').catch(() => ({ people: [] })),
-      fetch('/api/ads/serve').then((r) => (r.ok ? r.json() : { ads: [] })),
+      /* These two went through the cache as well in the end, for the same
+         reason: the ad slots in the feed ask for /api/ads/serve when they
+         mount, so a raw fetch here made the homepage request it twice — on a
+         page already issuing twenty-five calls against a six-connection
+         limit. */
+      cachedJson<{ ads?: unknown[] }>('/api/ads/serve').catch(() => ({ ads: [] })),
       cachedJson<{ jobs?: unknown[] }>('/api/recommendations/jobs').catch(() => ({ jobs: [] })),
-      fetch('/api/feed-config').then((r) => (r.ok ? r.json() : {})),
+      cachedJson<Record<string, unknown>>('/api/feed-config').catch(() => ({})),
     ]).then(([pe, ad, jb, conf]) => {
       if (pe.status === 'fulfilled') setHasPeople((pe.value?.people?.length ?? 0) > 0);
       if (ad.status === 'fulfilled') setAdCount(ad.value?.ads?.length ?? 0);

@@ -14,7 +14,12 @@
  */
 
 export type SearchEntityType =
-  | 'person' | 'service' | 'business' | 'job' | 'gig' | 'post' | 'file' | 'feature' | 'product' | 'event';
+  /* `post` is what a MEMBER published to the feed. `article` is site content —
+     the marketing blog. They were the same type, so a search for "posts"
+     returned "How teams can write faster with DocWord" alongside things people
+     had actually written on the platform. Different things, told apart. */
+  | 'person' | 'service' | 'business' | 'job' | 'gig' | 'post' | 'article'
+  | 'file' | 'feature' | 'product' | 'event';
 
 export interface QueryUnderstanding {
   raw: string;

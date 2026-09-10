@@ -98,7 +98,9 @@ export async function runPublicSearch(query: string) {
     .map(({ entry }) => entry);
 
   const [fileMatches, blogPosts, gigs, resumes] = await Promise.all([
-    searchPublicDirectory({ query: normalizedQuery, limit: 4 }),
+    /* Raised from 4: this is now the ONLY source of published posts, and
+       four slots shared with public files meant a post rarely survived. */
+    searchPublicDirectory({ query: normalizedQuery, limit: 14 }),
     getPublicBlogPosts(),
     getPublicGigListings(),
     searchPublicResumes(normalizedQuery, 4),
@@ -206,15 +208,32 @@ export async function runPublicSearch(query: string) {
     },
   }));
 
-  const fileResults: PublicSearchResult[] = fileMatches.map((item) => ({
-    id: `file-${item.id}`,
-    title: item.title,
-    description: item.notes || `${item.fileName}${item.category ? ` · ${item.category}` : ''}`,
-    href: item.linkHref,
-    type: 'file' as const,
-    category: item.category || 'Public file',
-    badge: 'FILE',
-  }));
+  /* ── Published posts are POSTS, not files ──
+     Everything on the public feed lives in the same store as public file
+     shares, and this mapped all of it to `type: 'file'` with a FILE badge. So
+     a search for something somebody had actually written came back — if at all
+     — labelled as a file, and any caller filtering to posts (AI mode does)
+     dropped it entirely. The feed's own source of truth for "this is a post"
+     is `directoryCategory === 'post'`, which is what the homepage reads, so
+     that is what decides here too.
+
+     The other half of this was `FEED_ITEMS`, which used to hold mock feed rows
+     and is now an empty array — the mocks were removed when the feed moved to
+     the database and nothing replaced them, leaving the "published feed"
+     branch below searching literally nothing. Real posts arrive here instead. */
+  const fileResults: PublicSearchResult[] = fileMatches.map((item) => {
+    const isPost = String(item.category ?? '').trim().toLowerCase() === 'post';
+    return {
+      id: isPost ? `post-${item.id}` : `file-${item.id}`,
+      title: item.title,
+      description: item.notes || `${item.fileName}${item.category ? ` · ${item.category}` : ''}`,
+      href: item.linkHref,
+      /* `article` is what the unified layer maps onto its `post` type. */
+      type: isPost ? ('article' as const) : ('file' as const),
+      category: isPost ? 'Post' : (item.category || 'Public file'),
+      badge: isPost ? 'POST' : 'FILE',
+    };
+  });
 
   // Merge all, dedupe by href, return generous limit for global-search to re-rank
   const seen = new Set<string>();

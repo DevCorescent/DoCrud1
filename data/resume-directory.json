@@ -1,0 +1,1338 @@
+[
+  {
+    "id": "demo-resume-001",
+    "slug": "demo-aanya-sharma-ai-engineer-engineering-4ee2d152",
+    "ownerUserId": "demo",
+    "displayName": "Aanya Sharma",
+    "headline": "AI Engineer",
+    "location": "Indore, India",
+    "category": "Engineering",
+    "skills": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Node.js",
+      "PostgreSQL",
+      "Docker",
+      "AWS",
+      "Go"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "engineering",
+      "open to work",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 40,
+    "contactCount": 0,
+    "createdAt": "2026-09-05T07:28:17.291Z",
+    "updatedAt": "2026-09-07T07:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-002",
+    "slug": "demo-rohan-verma-backend-engineer-design-1fa64505",
+    "ownerUserId": "demo",
+    "displayName": "Rohan Verma",
+    "headline": "Backend Engineer",
+    "location": "Bengaluru, India",
+    "category": "Design",
+    "skills": [
+      "Figma",
+      "UI/UX",
+      "Prototyping",
+      "Design Systems",
+      "User Research",
+      "Interaction Design",
+      "Wireframing"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "design",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 43,
+    "contactCount": 1,
+    "createdAt": "2026-09-04T07:28:17.291Z",
+    "updatedAt": "2026-09-07T06:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-003",
+    "slug": "demo-neha-iyer-frontend-developer-product-9452ef6a",
+    "ownerUserId": "demo",
+    "displayName": "Neha Iyer",
+    "headline": "Frontend Developer",
+    "location": "Delhi, India",
+    "category": "Product",
+    "skills": [
+      "Roadmaps",
+      "PRDs",
+      "Analytics",
+      "User Research",
+      "Stakeholder Mgmt",
+      "Experimentation"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "product",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 46,
+    "contactCount": 2,
+    "createdAt": "2026-09-03T07:28:17.291Z",
+    "updatedAt": "2026-09-07T05:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-004",
+    "slug": "demo-arjun-nair-product-designer-marketing-7e88ed40",
+    "ownerUserId": "demo",
+    "displayName": "Arjun Nair",
+    "headline": "Product Designer",
+    "location": "Mumbai, India",
+    "category": "Marketing",
+    "skills": [
+      "SEO",
+      "Copywriting",
+      "Performance",
+      "Content",
+      "Brand",
+      "Email",
+      "Analytics"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "marketing",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 49,
+    "contactCount": 3,
+    "createdAt": "2026-09-02T07:28:17.291Z",
+    "updatedAt": "2026-09-07T04:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-005",
+    "slug": "demo-pooja-mehta-devops-engineer-sales-35811c79",
+    "ownerUserId": "demo",
+    "displayName": "Pooja Mehta",
+    "headline": "DevOps Engineer",
+    "location": "Pune, India",
+    "category": "Sales",
+    "skills": [
+      "CRM",
+      "Outbound",
+      "Discovery",
+      "Negotiation",
+      "Demos",
+      "Pipeline"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "sales",
+      "available soon",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 52,
+    "contactCount": 4,
+    "createdAt": "2026-09-01T07:28:17.291Z",
+    "updatedAt": "2026-09-07T03:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-006",
+    "slug": "demo-karan-singh-data-scientist-operations-cab55386",
+    "ownerUserId": "demo",
+    "displayName": "Karan Singh",
+    "headline": "Data Scientist",
+    "location": "Hyderabad, India",
+    "category": "Operations",
+    "skills": [
+      "Process",
+      "MIS",
+      "Compliance",
+      "Vendors",
+      "Reporting",
+      "SOPs"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "operations",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 55,
+    "contactCount": 5,
+    "createdAt": "2026-08-31T07:28:17.291Z",
+    "updatedAt": "2026-09-07T02:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-007",
+    "slug": "demo-simran-kaur-mobile-developer-finance-4f600937",
+    "ownerUserId": "demo",
+    "displayName": "Simran Kaur",
+    "headline": "Mobile Developer",
+    "location": "Chandigarh, India",
+    "category": "Finance",
+    "skills": [
+      "GST",
+      "Invoicing",
+      "Tally",
+      "Reconciliation",
+      "Excel",
+      "Compliance"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "finance",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 58,
+    "contactCount": 6,
+    "createdAt": "2026-08-30T07:28:17.291Z",
+    "updatedAt": "2026-09-07T07:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-008",
+    "slug": "demo-zoya-khan-qa-engineer-hr-efb85d41",
+    "ownerUserId": "demo",
+    "displayName": "Zoya Khan",
+    "headline": "QA Engineer",
+    "location": "Kolkata, India",
+    "category": "HR",
+    "skills": [
+      "Hiring",
+      "Onboarding",
+      "Payroll",
+      "Policies",
+      "HR Ops",
+      "Compliance"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "hr",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 61,
+    "contactCount": 7,
+    "createdAt": "2026-08-29T07:28:17.291Z",
+    "updatedAt": "2026-09-07T06:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-009",
+    "slug": "demo-aditya-rao-product-manager-legal-9ed77f4d",
+    "ownerUserId": "demo",
+    "displayName": "Aditya Rao",
+    "headline": "Product Manager",
+    "location": "Jaipur, India",
+    "category": "Legal",
+    "skills": [
+      "Contracts",
+      "NDA",
+      "Drafting",
+      "Compliance",
+      "Review",
+      "Negotiation"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "legal",
+      "available soon",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 64,
+    "contactCount": 8,
+    "createdAt": "2026-08-28T07:28:17.291Z",
+    "updatedAt": "2026-09-07T05:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-010",
+    "slug": "demo-ishaan-gupta-full-stack-engineer-content-e524aa46",
+    "ownerUserId": "demo",
+    "displayName": "Ishaan Gupta",
+    "headline": "Full Stack Engineer",
+    "location": "Remote",
+    "category": "Content",
+    "skills": [
+      "Writing",
+      "Editing",
+      "Docs",
+      "Research",
+      "SEO",
+      "Copy"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "content",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 67,
+    "contactCount": 0,
+    "createdAt": "2026-08-27T07:28:17.291Z",
+    "updatedAt": "2026-09-07T04:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-011",
+    "slug": "demo-meera-pillai-ai-engineer-engineering-1a4b1fbe",
+    "ownerUserId": "demo",
+    "displayName": "Meera Pillai",
+    "headline": "AI Engineer",
+    "location": "Indore, India",
+    "category": "Engineering",
+    "skills": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Node.js",
+      "PostgreSQL",
+      "Docker",
+      "AWS",
+      "Go"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "engineering",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 70,
+    "contactCount": 1,
+    "createdAt": "2026-08-26T07:28:17.291Z",
+    "updatedAt": "2026-09-07T03:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-012",
+    "slug": "demo-siddharth-jain-backend-engineer-design-c6da2d15",
+    "ownerUserId": "demo",
+    "displayName": "Siddharth Jain",
+    "headline": "Backend Engineer",
+    "location": "Bengaluru, India",
+    "category": "Design",
+    "skills": [
+      "Figma",
+      "UI/UX",
+      "Prototyping",
+      "Design Systems",
+      "User Research",
+      "Interaction Design",
+      "Wireframing"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "design",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 73,
+    "contactCount": 2,
+    "createdAt": "2026-08-25T07:28:17.291Z",
+    "updatedAt": "2026-09-07T02:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-013",
+    "slug": "demo-ananya-roy-frontend-developer-product-ea327067",
+    "ownerUserId": "demo",
+    "displayName": "Ananya Roy",
+    "headline": "Frontend Developer",
+    "location": "Delhi, India",
+    "category": "Product",
+    "skills": [
+      "Roadmaps",
+      "PRDs",
+      "Analytics",
+      "User Research",
+      "Stakeholder Mgmt",
+      "Experimentation"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "product",
+      "open to work",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 76,
+    "contactCount": 3,
+    "createdAt": "2026-08-24T07:28:17.291Z",
+    "updatedAt": "2026-09-07T07:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-014",
+    "slug": "demo-harshita-patel-product-designer-marketing-435b27bf",
+    "ownerUserId": "demo",
+    "displayName": "Harshita Patel",
+    "headline": "Product Designer",
+    "location": "Mumbai, India",
+    "category": "Marketing",
+    "skills": [
+      "SEO",
+      "Copywriting",
+      "Performance",
+      "Content",
+      "Brand",
+      "Email",
+      "Analytics"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "marketing",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 79,
+    "contactCount": 4,
+    "createdAt": "2026-08-23T07:28:17.291Z",
+    "updatedAt": "2026-09-07T06:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-015",
+    "slug": "demo-vikram-shetty-devops-engineer-sales-453b1c6a",
+    "ownerUserId": "demo",
+    "displayName": "Vikram Shetty",
+    "headline": "DevOps Engineer",
+    "location": "Pune, India",
+    "category": "Sales",
+    "skills": [
+      "CRM",
+      "Outbound",
+      "Discovery",
+      "Negotiation",
+      "Demos",
+      "Pipeline"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "sales",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 82,
+    "contactCount": 5,
+    "createdAt": "2026-08-22T07:28:17.291Z",
+    "updatedAt": "2026-09-07T05:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-016",
+    "slug": "demo-nandini-bose-data-scientist-operations-7f39982c",
+    "ownerUserId": "demo",
+    "displayName": "Nandini Bose",
+    "headline": "Data Scientist",
+    "location": "Hyderabad, India",
+    "category": "Operations",
+    "skills": [
+      "Process",
+      "MIS",
+      "Compliance",
+      "Vendors",
+      "Reporting",
+      "SOPs"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "operations",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 85,
+    "contactCount": 6,
+    "createdAt": "2026-08-21T07:28:17.291Z",
+    "updatedAt": "2026-09-07T04:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-017",
+    "slug": "demo-rahul-kulkarni-mobile-developer-finance-359bb313",
+    "ownerUserId": "demo",
+    "displayName": "Rahul Kulkarni",
+    "headline": "Mobile Developer",
+    "location": "Chandigarh, India",
+    "category": "Finance",
+    "skills": [
+      "GST",
+      "Invoicing",
+      "Tally",
+      "Reconciliation",
+      "Excel",
+      "Compliance"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "finance",
+      "available soon",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 88,
+    "contactCount": 7,
+    "createdAt": "2026-08-20T07:28:17.291Z",
+    "updatedAt": "2026-09-07T03:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-018",
+    "slug": "demo-priya-das-qa-engineer-hr-1c48e089",
+    "ownerUserId": "demo",
+    "displayName": "Priya Das",
+    "headline": "QA Engineer",
+    "location": "Kolkata, India",
+    "category": "HR",
+    "skills": [
+      "Hiring",
+      "Onboarding",
+      "Payroll",
+      "Policies",
+      "HR Ops",
+      "Compliance"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "hr",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 40,
+    "contactCount": 8,
+    "createdAt": "2026-08-19T07:28:17.291Z",
+    "updatedAt": "2026-09-07T02:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-019",
+    "slug": "demo-samar-khanna-product-manager-legal-0e1ad6ee",
+    "ownerUserId": "demo",
+    "displayName": "Samar Khanna",
+    "headline": "Product Manager",
+    "location": "Jaipur, India",
+    "category": "Legal",
+    "skills": [
+      "Contracts",
+      "NDA",
+      "Drafting",
+      "Compliance",
+      "Review",
+      "Negotiation"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "legal",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 43,
+    "contactCount": 0,
+    "createdAt": "2026-08-18T07:28:17.291Z",
+    "updatedAt": "2026-09-07T07:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-020",
+    "slug": "demo-ira-kapoor-full-stack-engineer-content-0498f710",
+    "ownerUserId": "demo",
+    "displayName": "Ira Kapoor",
+    "headline": "Full Stack Engineer",
+    "location": "Remote",
+    "category": "Content",
+    "skills": [
+      "Writing",
+      "Editing",
+      "Docs",
+      "Research",
+      "SEO",
+      "Copy"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "content",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 46,
+    "contactCount": 1,
+    "createdAt": "2026-08-17T07:28:17.291Z",
+    "updatedAt": "2026-09-07T06:28:17.291Z"
+  },
+  {
+    "id": "demo-resume-001",
+    "slug": "demo-aanya-sharma-ai-engineer-engineering-58ab383c",
+    "ownerUserId": "demo",
+    "displayName": "Aanya Sharma",
+    "headline": "AI Engineer",
+    "location": "Indore, India",
+    "category": "Engineering",
+    "skills": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Node.js",
+      "PostgreSQL",
+      "Docker",
+      "AWS",
+      "Go"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "engineering",
+      "open to work",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 40,
+    "contactCount": 0,
+    "createdAt": "2026-09-05T07:27:57.955Z",
+    "updatedAt": "2026-09-07T07:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-002",
+    "slug": "demo-rohan-verma-backend-engineer-design-2512e74f",
+    "ownerUserId": "demo",
+    "displayName": "Rohan Verma",
+    "headline": "Backend Engineer",
+    "location": "Bengaluru, India",
+    "category": "Design",
+    "skills": [
+      "Figma",
+      "UI/UX",
+      "Prototyping",
+      "Design Systems",
+      "User Research",
+      "Interaction Design",
+      "Wireframing"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "design",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 43,
+    "contactCount": 1,
+    "createdAt": "2026-09-04T07:27:57.955Z",
+    "updatedAt": "2026-09-07T06:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-003",
+    "slug": "demo-neha-iyer-frontend-developer-product-3947cd34",
+    "ownerUserId": "demo",
+    "displayName": "Neha Iyer",
+    "headline": "Frontend Developer",
+    "location": "Delhi, India",
+    "category": "Product",
+    "skills": [
+      "Roadmaps",
+      "PRDs",
+      "Analytics",
+      "User Research",
+      "Stakeholder Mgmt",
+      "Experimentation"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "product",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 46,
+    "contactCount": 2,
+    "createdAt": "2026-09-03T07:27:57.955Z",
+    "updatedAt": "2026-09-07T05:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-004",
+    "slug": "demo-arjun-nair-product-designer-marketing-fbde82d3",
+    "ownerUserId": "demo",
+    "displayName": "Arjun Nair",
+    "headline": "Product Designer",
+    "location": "Mumbai, India",
+    "category": "Marketing",
+    "skills": [
+      "SEO",
+      "Copywriting",
+      "Performance",
+      "Content",
+      "Brand",
+      "Email",
+      "Analytics"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "marketing",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 49,
+    "contactCount": 3,
+    "createdAt": "2026-09-02T07:27:57.955Z",
+    "updatedAt": "2026-09-07T04:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-005",
+    "slug": "demo-pooja-mehta-devops-engineer-sales-1c137a8d",
+    "ownerUserId": "demo",
+    "displayName": "Pooja Mehta",
+    "headline": "DevOps Engineer",
+    "location": "Pune, India",
+    "category": "Sales",
+    "skills": [
+      "CRM",
+      "Outbound",
+      "Discovery",
+      "Negotiation",
+      "Demos",
+      "Pipeline"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "sales",
+      "available soon",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 52,
+    "contactCount": 4,
+    "createdAt": "2026-09-01T07:27:57.955Z",
+    "updatedAt": "2026-09-07T03:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-006",
+    "slug": "demo-karan-singh-data-scientist-operations-ba82e0e0",
+    "ownerUserId": "demo",
+    "displayName": "Karan Singh",
+    "headline": "Data Scientist",
+    "location": "Hyderabad, India",
+    "category": "Operations",
+    "skills": [
+      "Process",
+      "MIS",
+      "Compliance",
+      "Vendors",
+      "Reporting",
+      "SOPs"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "operations",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 55,
+    "contactCount": 5,
+    "createdAt": "2026-08-31T07:27:57.955Z",
+    "updatedAt": "2026-09-07T02:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-007",
+    "slug": "demo-simran-kaur-mobile-developer-finance-6edcda75",
+    "ownerUserId": "demo",
+    "displayName": "Simran Kaur",
+    "headline": "Mobile Developer",
+    "location": "Chandigarh, India",
+    "category": "Finance",
+    "skills": [
+      "GST",
+      "Invoicing",
+      "Tally",
+      "Reconciliation",
+      "Excel",
+      "Compliance"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "finance",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 58,
+    "contactCount": 6,
+    "createdAt": "2026-08-30T07:27:57.955Z",
+    "updatedAt": "2026-09-07T07:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-008",
+    "slug": "demo-zoya-khan-qa-engineer-hr-8e04b1d6",
+    "ownerUserId": "demo",
+    "displayName": "Zoya Khan",
+    "headline": "QA Engineer",
+    "location": "Kolkata, India",
+    "category": "HR",
+    "skills": [
+      "Hiring",
+      "Onboarding",
+      "Payroll",
+      "Policies",
+      "HR Ops",
+      "Compliance"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "hr",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 61,
+    "contactCount": 7,
+    "createdAt": "2026-08-29T07:27:57.955Z",
+    "updatedAt": "2026-09-07T06:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-009",
+    "slug": "demo-aditya-rao-product-manager-legal-3be57a73",
+    "ownerUserId": "demo",
+    "displayName": "Aditya Rao",
+    "headline": "Product Manager",
+    "location": "Jaipur, India",
+    "category": "Legal",
+    "skills": [
+      "Contracts",
+      "NDA",
+      "Drafting",
+      "Compliance",
+      "Review",
+      "Negotiation"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "legal",
+      "available soon",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 64,
+    "contactCount": 8,
+    "createdAt": "2026-08-28T07:27:57.955Z",
+    "updatedAt": "2026-09-07T05:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-010",
+    "slug": "demo-ishaan-gupta-full-stack-engineer-content-749137de",
+    "ownerUserId": "demo",
+    "displayName": "Ishaan Gupta",
+    "headline": "Full Stack Engineer",
+    "location": "Remote",
+    "category": "Content",
+    "skills": [
+      "Writing",
+      "Editing",
+      "Docs",
+      "Research",
+      "SEO",
+      "Copy"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "content",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 67,
+    "contactCount": 0,
+    "createdAt": "2026-08-27T07:27:57.955Z",
+    "updatedAt": "2026-09-07T04:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-011",
+    "slug": "demo-meera-pillai-ai-engineer-engineering-af1af019",
+    "ownerUserId": "demo",
+    "displayName": "Meera Pillai",
+    "headline": "AI Engineer",
+    "location": "Indore, India",
+    "category": "Engineering",
+    "skills": [
+      "TypeScript",
+      "React",
+      "Next.js",
+      "Node.js",
+      "PostgreSQL",
+      "Docker",
+      "AWS",
+      "Go"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "engineering",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 70,
+    "contactCount": 1,
+    "createdAt": "2026-08-26T07:27:57.955Z",
+    "updatedAt": "2026-09-07T03:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-012",
+    "slug": "demo-siddharth-jain-backend-engineer-design-6e6967e9",
+    "ownerUserId": "demo",
+    "displayName": "Siddharth Jain",
+    "headline": "Backend Engineer",
+    "location": "Bengaluru, India",
+    "category": "Design",
+    "skills": [
+      "Figma",
+      "UI/UX",
+      "Prototyping",
+      "Design Systems",
+      "User Research",
+      "Interaction Design",
+      "Wireframing"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "design",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 73,
+    "contactCount": 2,
+    "createdAt": "2026-08-25T07:27:57.955Z",
+    "updatedAt": "2026-09-07T02:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-013",
+    "slug": "demo-ananya-roy-frontend-developer-product-24873d5b",
+    "ownerUserId": "demo",
+    "displayName": "Ananya Roy",
+    "headline": "Frontend Developer",
+    "location": "Delhi, India",
+    "category": "Product",
+    "skills": [
+      "Roadmaps",
+      "PRDs",
+      "Analytics",
+      "User Research",
+      "Stakeholder Mgmt",
+      "Experimentation"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "product",
+      "open to work",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 76,
+    "contactCount": 3,
+    "createdAt": "2026-08-24T07:27:57.955Z",
+    "updatedAt": "2026-09-07T07:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-014",
+    "slug": "demo-harshita-patel-product-designer-marketing-0169911d",
+    "ownerUserId": "demo",
+    "displayName": "Harshita Patel",
+    "headline": "Product Designer",
+    "location": "Mumbai, India",
+    "category": "Marketing",
+    "skills": [
+      "SEO",
+      "Copywriting",
+      "Performance",
+      "Content",
+      "Brand",
+      "Email",
+      "Analytics"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "marketing",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 79,
+    "contactCount": 4,
+    "createdAt": "2026-08-23T07:27:57.955Z",
+    "updatedAt": "2026-09-07T06:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-015",
+    "slug": "demo-vikram-shetty-devops-engineer-sales-76a20e2f",
+    "ownerUserId": "demo",
+    "displayName": "Vikram Shetty",
+    "headline": "DevOps Engineer",
+    "location": "Pune, India",
+    "category": "Sales",
+    "skills": [
+      "CRM",
+      "Outbound",
+      "Discovery",
+      "Negotiation",
+      "Demos",
+      "Pipeline"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "sales",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 82,
+    "contactCount": 5,
+    "createdAt": "2026-08-22T07:27:57.955Z",
+    "updatedAt": "2026-09-07T05:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-016",
+    "slug": "demo-nandini-bose-data-scientist-operations-fd3eeecb",
+    "ownerUserId": "demo",
+    "displayName": "Nandini Bose",
+    "headline": "Data Scientist",
+    "location": "Hyderabad, India",
+    "category": "Operations",
+    "skills": [
+      "Process",
+      "MIS",
+      "Compliance",
+      "Vendors",
+      "Reporting",
+      "SOPs"
+    ],
+    "tags": [
+      "2 yrs exp",
+      "operations",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 85,
+    "contactCount": 6,
+    "createdAt": "2026-08-21T07:27:57.955Z",
+    "updatedAt": "2026-09-07T04:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-017",
+    "slug": "demo-rahul-kulkarni-mobile-developer-finance-1f069eda",
+    "ownerUserId": "demo",
+    "displayName": "Rahul Kulkarni",
+    "headline": "Mobile Developer",
+    "location": "Chandigarh, India",
+    "category": "Finance",
+    "skills": [
+      "GST",
+      "Invoicing",
+      "Tally",
+      "Reconciliation",
+      "Excel",
+      "Compliance"
+    ],
+    "tags": [
+      "3 yrs exp",
+      "finance",
+      "available soon",
+      "remote"
+    ],
+    "summary": "AI Engineer building production-grade systems combining LLMs, machine learning, and backend infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 88,
+    "contactCount": 7,
+    "createdAt": "2026-08-20T07:27:57.955Z",
+    "updatedAt": "2026-09-07T03:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-018",
+    "slug": "demo-priya-das-qa-engineer-hr-b61ebe48",
+    "ownerUserId": "demo",
+    "displayName": "Priya Das",
+    "headline": "QA Engineer",
+    "location": "Kolkata, India",
+    "category": "HR",
+    "skills": [
+      "Hiring",
+      "Onboarding",
+      "Payroll",
+      "Policies",
+      "HR Ops",
+      "Compliance"
+    ],
+    "tags": [
+      "4 yrs exp",
+      "hr",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Backend engineer with strong experience in distributed systems, APIs, and cloud infrastructure.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 40,
+    "contactCount": 8,
+    "createdAt": "2026-08-19T07:27:57.955Z",
+    "updatedAt": "2026-09-07T02:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-019",
+    "slug": "demo-samar-khanna-product-manager-legal-60e2df8f",
+    "ownerUserId": "demo",
+    "displayName": "Samar Khanna",
+    "headline": "Product Manager",
+    "location": "Jaipur, India",
+    "category": "Legal",
+    "skills": [
+      "Contracts",
+      "NDA",
+      "Drafting",
+      "Compliance",
+      "Review",
+      "Negotiation"
+    ],
+    "tags": [
+      "5 yrs exp",
+      "legal",
+      "open to work",
+      "hybrid"
+    ],
+    "summary": "Frontend engineer focused on responsive, accessible, and performant web applications.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 43,
+    "contactCount": 0,
+    "createdAt": "2026-08-18T07:27:57.955Z",
+    "updatedAt": "2026-09-07T07:27:57.955Z"
+  },
+  {
+    "id": "demo-resume-020",
+    "slug": "demo-ira-kapoor-full-stack-engineer-content-ec051dcb",
+    "ownerUserId": "demo",
+    "displayName": "Ira Kapoor",
+    "headline": "Full Stack Engineer",
+    "location": "Remote",
+    "category": "Content",
+    "skills": [
+      "Writing",
+      "Editing",
+      "Docs",
+      "Research",
+      "SEO",
+      "Copy"
+    ],
+    "tags": [
+      "6 yrs exp",
+      "content",
+      "available soon",
+      "hybrid"
+    ],
+    "summary": "Product designer crafting user-centered designs that drive impact and business value.",
+    "resumeText": "",
+    "contact": {
+      "visibility": "hidden"
+    },
+    "visibility": "public",
+    "viewCount": 46,
+    "contactCount": 1,
+    "createdAt": "2026-08-17T07:27:57.955Z",
+    "updatedAt": "2026-09-07T06:27:57.955Z"
+  }
+]

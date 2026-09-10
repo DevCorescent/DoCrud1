@@ -21,7 +21,9 @@ import { parseChartBody, ChartView, PostCtaButton } from '@/components/feed/Post
 import { CardCommentPanel } from '@/components/feed/CardCommentPanel';
 import { composeFeed } from '@/lib/feed-composition';
 import { useFeedModuleSlots } from '@/lib/use-feed-modules';
-import PeopleYouMayKnow, { PersonCardStyles, PersonRow, usePeopleRecommendations } from '@/components/recommendations/PeopleYouMayKnow';
+import PeopleYouMayKnow, { usePeopleRecommendations } from '@/components/recommendations/PeopleYouMayKnow';
+import FeedProfileCard from '@/components/recommendations/FeedProfileCard';
+import AnnouncementBar, { type AnnouncementBannerData } from '@/components/home/AnnouncementBar';
 import RecommendedJobs from '@/components/recommendations/RecommendedJobs';
 import SponsoredAdCard from '@/components/ads/SponsoredAdCard';
 import { buildCategoryMetaChips, FeedMetaChipRow, omitChipsPresentIn } from '@/components/feed/FeedCardMeta';
@@ -112,12 +114,17 @@ import type { AssistantResultCard, DocumentQuickAction, UploadedDocument } from 
 import { fireSearchEvent, SEARCH_CONTEXTS } from '@/lib/search-tracking';
 import { EXPLORE_DESTINATIONS, exploreWash } from '@/lib/explore-destinations';
 import CompanyExplorer from '@/components/jobs/company/CompanyExplorer';
+import type { HeroBanner } from '@/lib/hero-banner';
+import '@/components/home/home-actions.css';
 
 // Heavy modal components — loaded only when first opened, not part of the initial bundle
 const QuickFileEditorDialog = dynamic(() => import('@/components/QuickFileEditorDialog'), { ssr: false });
 const PublishAnythingDialog  = dynamic(() => import('@/components/PublishAnythingDialog'),  { ssr: false });
 const TrustedCompanies       = dynamic(() => import('@/components/home/TrustedCompanies'),   { ssr: false });
-const HomeHighlights         = dynamic(() => import('@/components/home/HomeHighlights'),     { ssr: false });
+/* The summary band lives in TYRAI now (components/ai-mode/TyraiBrief.tsx).
+   HomeHighlights and its Super Admin section flag stay in the tree, unrendered,
+   following the ExploreSection precedent further down this file. */
+const HomeHeroSlider         = dynamic(() => import('@/components/home/HomeHeroSlider'),     { ssr: false });
 const FileTransferCenter     = dynamic(() => import('@/components/FileTransferCenter'),     { ssr: false });
 const PdfStudio              = dynamic(() => import('@/components/PdfStudio'),              { ssr: false });
 const FormsCenter            = dynamic(() => import('@/components/FormsCenter'),            { ssr: false });
@@ -148,7 +155,7 @@ type HPConfig = {
   featureCards: { guestFeatureIds:string[]; defaultFeatureIds:string[] };
   contentDiscovery: { tabs:{id:string;label:string;visible:boolean;order:number}[] };
   footer: { columns:{id:string;title:string;links:{label:string;href:string;visible:boolean}[]}[]; securityBadges:{label:string;visible:boolean}[]; tagline:string; madeIn:string; copyrightEntity:string };
-  announcementBanner: {id:string;text:string;ctaLabel:string;ctaHref:string;style:'info'|'warning'|'success'|'promo';active:boolean} | null;
+  announcementBanner: AnnouncementBannerData | null;
   seoTitle:string; seoDescription:string; updatedAt:string;
 };
 const DEFAULT_HP_SECTIONS: HPSectionVisibility = {
@@ -176,6 +183,11 @@ interface PublicHomepageProps {
      Null means unknown — the card fetches, exactly as before. */
   initialJobCount?: number | null;
   initialPeopleCount?: number | null;
+  /* The hero's slides, read on the server. The hero is the first thing above
+     the fold and it used to be the last thing on the page to learn what it
+     was — see lib/server/hero-banners.ts. Absent, the slider fetches exactly
+     as before. */
+  initialBanners?: HeroBanner[] | null;
 }
 
 type ChatMessage = {
@@ -2879,10 +2891,9 @@ function HomepageLiveFeed({ onPublish, guestMode = false }: { onPublish?: () => 
                 From `lg` up FeedBento lays that same stack out in aligned
                 rows; below it, it renders the stack verbatim. */}
             <div className="mx-auto w-full max-w-2xl lg:max-w-[1600px]">
-              {/* Once, for the person cards scattered below — they are rendered
-                  here rather than by the module, which does not mount at all on
-                  the grid. */}
-              {peopleToMix > 0 && <PersonCardStyles />}
+              {/* The person cards bring their own stylesheet (a real .css file
+                  imported by the component), so nothing has to be mounted here
+                  for them any more. */}
               {jobsToMix > 0 && <FeedJobCardStyles />}
               <FeedBento stackClassName={FEED_STACK}>
               {loading
@@ -2928,7 +2939,11 @@ function HomepageLiveFeed({ onPublish, guestMode = false }: { onPublish?: () => 
                         if (!person) return null;
                         return (
                           <div key={entry.key} className="hp-feed-card-enter" style={{ animationDelay: delay }}>
-                            <PersonRow
+                            {/* Its own card, not the strip's row: mixed in
+                                among posts a person needs to look like a
+                                different kind of thing, and to carry what the
+                                recommendation actually knows about them. */}
+                            <FeedProfileCard
                               person={person}
                               following={peopleFollowing.has(person.userId)}
                               pending={peoplePending.has(person.userId)}
@@ -5846,6 +5861,7 @@ function NewHomepageContent({
   initialViewer = null,
   initialJobCount = null,
   initialPeopleCount = null,
+  initialBanners = null,
   guestMode = false,
 }: {
   softwareName: string;
@@ -5872,6 +5888,8 @@ function NewHomepageContent({
   /** Server-seeded headline counts; see PublicHomepageProps. */
   initialJobCount?: number | null;
   initialPeopleCount?: number | null;
+  /** Server-seeded hero slides; see PublicHomepageProps. */
+  initialBanners?: HeroBanner[] | null;
   guestMode?: boolean;
 }) {
   const { data: nhcSession } = useSession();
@@ -6012,13 +6030,17 @@ function NewHomepageContent({
       /* paddingTop reserves the floating bar's height (published by
          HomepageNav as --dc-topnav-h) while the container itself starts at the
          top of the shell — which is what lets content pass behind the glass.
-         The 56px fallback is the bar's height before the first measurement. */
+         The 56px fallback is the bar's height before the first measurement.
+
+         Plus the guest banner, when there is one: it is fixed directly beneath
+         the header and publishes `--dc-guestbar-h`, which is zero for everyone
+         who is signed in. */
       style={{
         WebkitOverflowScrolling: 'touch',
         transform: 'translateZ(0)',
         willChange: 'scroll-position',
         contain: 'layout style',
-        paddingTop: 'var(--dc-topnav-h, 56px)',
+        paddingTop: 'calc(var(--dc-topnav-h, 56px) + var(--dc-guestbar-h, 0px))',
       }}
     >
       <div className="mx-auto w-full max-w-[1440px] space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-6 lg:px-10 xl:px-12 pt-5 sm:pt-7 lg:pt-8">
@@ -6142,73 +6164,73 @@ function NewHomepageContent({
           document.body
         )}
 
-        {/* ── Top companies marquee — Super Admin owns the list and the logos ──
-            Full bleed: the negative margins cancel the content column's own
-            horizontal padding (px-0 sm:px-6 lg:px-10 xl:px-12) exactly, so the
-            row runs edge to edge instead of stopping at the text gutter. No
-            `w-full` here on purpose — a block element's auto width plus
-            negative margins is what widens the box; `width:100%` would keep the
-            parent's width and simply overhang to one side. */}
-        {hpSections.trustedCompanies && hpConfig?.trustedCompanies && (
-          <div className="min-w-0 sm:-mx-6 lg:-mx-10 xl:-mx-12" style={{ marginBottom: 16 }}>
-            <TrustedCompanies
-              label={hpConfig.trustedCompanies.label}
-              items={hpConfig.trustedCompanies.items ?? []}
-              autoFromJobs={hpConfig.trustedCompanies.autoFromJobs !== false}
-              initialCompanies={initialCompanies}
-            />
+        {/* ── The announcement bar ──
+             This slot used to hold the logo marquee: a row of company marks
+             scrolling on a loop, saying the same thing forever, in the most
+             valuable strip on the page. Those companies are still here — in
+             the Company Explorer inside the hero band below, where they are a
+             list somebody can click rather than a thing that moves.
+
+             TrustedCompanies and its Super Admin panel are left in place and
+             unrendered, following the ExploreSection precedent further down
+             this file: restoring the marquee is uncommenting one block. */}
+        {/* Above the hero in the flow, and the hero's picture runs up behind
+            it — see home-hero-slider.css. Nothing is needed here to keep this
+            bar on top of it: the slider's track sits at z-index -1, which is
+            behind every in-flow thing on the page. */}
+        {hpConfig?.announcementBanner && (
+          <div className="min-w-0" style={{ marginBottom: 16 }}>
+            <AnnouncementBar banner={hpConfig.announcementBanner} />
           </div>
         )}
 
-        {/* ── Greeting + Jobs/Connections matches + profile score ── */}
-        {hpSections.homeHighlights && (
-          <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
-            <HomeHighlights
-              greeting={hpConfig?.greeting ?? null}
-              initialViewer={initialViewer}
-              initialJobCount={initialJobCount}
-              initialPeopleCount={initialPeopleCount}
-            />
+        {/* ── The hero ──
+             A full-bleed slider where the summary band used to be.
+
+             That band — the greeting, the two match counts, the profile score
+             and the companies rail — has moved into TYRAI's first screen
+             (components/ai-mode/TyraiBrief.tsx). It was four cards of "about
+             you" sitting above a feed people came to read; TYRAI opens on an
+             empty screen and a question, which is where a summary of your
+             standing is actually worth reading.
+
+             Full bleed in both directions, and the slider does it itself: it
+             measures how far it sits from each edge of the page and how far it
+             sits below the top of the scrolled content, and escapes by exactly
+             those distances. No negative margins here — a `-mx-6` that has to
+             match a `px-6` is two numbers to keep in step, and it cannot reach
+             up behind the navigation bar at all. */}
+        {hpSections.adBanners && (
+          <div className="min-w-0" style={{ marginBottom: 16 }}>
+            <HomeHeroSlider initialBanners={initialBanners} />
           </div>
         )}
 
-        {/* ── LEGACY EXPLORE SECTION — PRESERVED / DISABLED FOR COMPANY EXPLORER ──
-             Replaced by Company Explorer directly below, in the same slot.
+        {/* ── The two ways on from here ──
+             Between the band that says what is waiting for you and the feed
+             that shows it: one button out to the companies, one to add
+             something of your own. Their own row rather than tucked onto the
+             companies heading — at this size they are a choice being offered,
+             and a choice reads as one when it is given the width. */}
+        <div className="hp-actions w-full min-w-0" style={{ marginBottom: 16 }}>
+          <Link href="/businesses" className="hp-action hp-action-ghost">
+            <Building2 className="h-4 w-4 shrink-0" />
+            <span>Explore Companies</span>
+            <ArrowRight className="hp-action-go h-3.5 w-3.5 shrink-0" />
+          </Link>
 
-             COMMENTED, NOT DELETED. The ExploreSection component, its styles
-             and EXPLORE_DESTINATIONS all remain in the file, so restoring this
-             is a matter of uncommenting these three lines and commenting the
-             block beneath. Nothing became unreachable either way: the bottom
-             navigation's Explore panel reads the SAME destination list
-             (lib/explore-destinations.ts).
-
-        <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
-          <ExploreSection />
+          {/* The same composer the nav and the feed open — one dialog, one
+              handler, so what it publishes cannot depend on which button was
+              pressed. */}
+          <button type="button" onClick={() => onPublishClick()} className="hp-action hp-action-solid">
+            <Plus className="h-4 w-4 shrink-0" />
+            <span>Publish</span>
+          </button>
         </div>
-        */}
 
-        {/* ── Company Explorer — employers actually hiring on DoCrud ──
-             Occupies the slot the Explore row used, with the same wrapper, so
-             the section keeps the homepage's left edge and bottom rhythm. */}
-        <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
-          <CompanyExplorer />
-        </div>
+        {/* The announcement used to be repeated here, mid-page, in inline
+            styles. One message, one place: it is the bar under the nav. */}
 
-        {hpConfig?.announcementBanner?.active && (
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 14px', borderRadius:12, marginBottom:2,
-            background: hpConfig.announcementBanner.style==='warning' ? 'rgba(245,158,11,0.12)' : hpConfig.announcementBanner.style==='success' ? 'rgba(34,197,94,0.12)' : hpConfig.announcementBanner.style==='promo' ? 'rgba(168,85,247,0.12)' : 'rgba(59,130,246,0.12)',
-            border: hpConfig.announcementBanner.style==='warning' ? '1px solid rgba(245,158,11,0.28)' : hpConfig.announcementBanner.style==='success' ? '1px solid rgba(34,197,94,0.28)' : hpConfig.announcementBanner.style==='promo' ? '1px solid rgba(168,85,247,0.28)' : '1px solid rgba(59,130,246,0.28)',
-          }}>
-            <span style={{ flex:1, fontSize:12.5, fontWeight:500, lineHeight:1.4,
-              color: hpConfig.announcementBanner.style==='warning' ? '#fcd34d' : hpConfig.announcementBanner.style==='success' ? '#86efac' : hpConfig.announcementBanner.style==='promo' ? '#d8b4fe' : '#93c5fd',
-            }}>{hpConfig.announcementBanner.text}</span>
-            {hpConfig.announcementBanner.ctaLabel && hpConfig.announcementBanner.ctaHref && (
-              <a href={hpConfig.announcementBanner.ctaHref} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, fontWeight:700, whiteSpace:'nowrap', textDecoration:'none', padding:'3px 10px', borderRadius:6, border:'1px solid rgba(255,255,255,0.20)', color:'rgba(255,255,255,0.85)' }}>
-                {hpConfig.announcementBanner.ctaLabel}
-              </a>
-            )}
-          </div>
-        )}
         {/* ── Row 1: Hero Banner + Feature Cards — REMOVED ── */}
         {false && <div className="flex gap-2 sm:gap-3 min-h-[180px] sm:min-h-[230px] lg:min-h-[260px]">
 
@@ -6839,10 +6861,31 @@ export default function PublicHomepage({
   softwareName, accentLabel, guestMode = false,
   initialHpConfig = null, initialCompanies = null, initialViewer = null,
   initialJobCount = null, initialPeopleCount = null,
+  initialBanners = null,
 }: PublicHomepageProps) {
   const { data: session, status } = useSession();
   const isAuthenticated = status === 'authenticated';
   const pathname = usePathname();
+
+  /* The guest banner's height, published the same way HomepageNav publishes
+     its own — measured rather than assumed, because the sentence inside it
+     wraps to two lines on a narrow window and a hard-coded 44px would leave
+     the feed tucked under it. Removed on cleanup so a signed-in render does
+     not keep reserving space for a bar that is not there. */
+  const guestBarRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = guestBarRef.current;
+    if (!guestMode || !el) {
+      root.style.removeProperty('--dc-guestbar-h');
+      return;
+    }
+    const apply = () => root.style.setProperty('--dc-guestbar-h', `${Math.round(el.getBoundingClientRect().height)}px`);
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => { ro.disconnect(); root.style.removeProperty('--dc-guestbar-h'); };
+  }, [guestMode]);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -8172,9 +8215,24 @@ export default function PublicHomepage({
         overlay
       />
 
-      {/* Guest mode banner */}
+      {/* ── Guest mode banner ──
+          Fixed, directly under the navigation bar, and it publishes its own
+          height as `--dc-guestbar-h` for the scroller below to reserve.
+
+          It used to be an ordinary block right here, which put it in the flow
+          at the very top of the shell — UNDERNEATH the navigation bar, which
+          is `position: fixed` and paints over it. So nobody ever saw it, and
+          it still took its 44px of flow: the whole app started 44px down the
+          window, and the scroller then reserved a further `--dc-topnav-h` on
+          top of that to clear a bar it was already clear of. The result was a
+          44px strip between the header and the feed's sort bar with live feed
+          content scrolling through it. */}
       {guestMode && (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-amber-500/[0.15] bg-amber-500/[0.05] px-4 py-2">
+        <div
+          ref={guestBarRef}
+          className="fixed inset-x-0 z-40 flex items-center justify-between gap-3 border-b border-amber-500/[0.15] bg-amber-500/[0.05] px-4 py-2 backdrop-blur-xl"
+          style={{ top: 'var(--dc-topnav-h, 56px)' }}
+        >
           <div className="flex items-center gap-2 text-[12px] text-white/55">
             <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-amber-400/70" />
             <span><span className="font-semibold text-amber-400/90">Incognito mode</span> — you can chat, read, like and share. Sign in to unlock everything.</span>
@@ -8280,6 +8338,7 @@ export default function PublicHomepage({
                   initialViewer={initialViewer}
                   initialJobCount={initialJobCount}
                   initialPeopleCount={initialPeopleCount}
+                  initialBanners={initialBanners}
                   guestMode={guestMode}
                 />
               ) : (

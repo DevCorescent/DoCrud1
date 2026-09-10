@@ -1,0 +1,292 @@
+/**
+ * The suggested-profile card in the homepage feed.
+ *
+ * A real stylesheet rather than an inline <style>: this repo has shipped a
+ * hydration mismatch from an inline style element twice — see
+ * components/jobs/company/company-explorer.css and app/people/people.css — and
+ * this card renders inside the same feed that caused one of them.
+ */
+
+.fpc{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  padding:15px 16px 14px;
+  border-radius:18px;
+  /* Brighter than a post card, and with a stronger top edge. A post is
+     `bg-white/[0.045]` with a `0.07` border; this reads as the same material
+     lit from above rather than as a different palette. */
+  border:1px solid rgba(255,255,255,0.13);
+  background:linear-gradient(180deg, rgba(255,255,255,0.085) 0%, rgba(255,255,255,0.028) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.14),
+    0 1px 2px rgba(0,0,0,0.26);
+  transition:border-color 180ms ease, background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+/* One warm corner, at four per cent. Enough that the eye registers the card as
+   a different kind of thing before reading a word of it; not enough to compete
+   with a photograph in the next column. */
+.fpc::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  pointer-events:none;
+  background:radial-gradient(120% 90% at 0% 0%, rgba(245,205,150,0.055), transparent 60%);
+}
+.fpc:hover{
+  border-color:rgba(255,255,255,0.22);
+  background:linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.035) 100%);
+  transform:translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    0 16px 38px rgba(0,0,0,0.34);
+}
+.fpc > *{ position:relative; z-index:1; }
+
+/* ── What it is, and why it is here ── */
+.fpc-top{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-width:0;
+}
+.fpc-kind{
+  flex:0 0 auto;
+  border-radius:999px;
+  border:1px solid rgba(245,205,150,0.26);
+  background:rgba(245,205,150,0.10);
+  padding:3px 9px;
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:0.11em;
+  text-transform:uppercase;
+  color:rgba(250,228,196,0.95);
+}
+.fpc-why{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  min-width:0;
+  font-size:11px;
+  line-height:1.35;
+  color:rgba(255,255,255,0.68);
+}
+.fpc-why-quiet{ color:rgba(255,255,255,0.48); }
+.fpc-why-i{ width:12px; height:12px; flex:0 0 auto; opacity:0.75; }
+.fpc-why-t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── Who they are ── */
+.fpc-id{
+  display:flex;
+  /* Centred rather than top-aligned. Roughly half of these members have a
+     headline and a location and roughly half have neither, and a name pinned
+     to the top of a 62px portrait leaves the sparse ones looking like a card
+     that failed to load the rest of itself. */
+  align-items:center;
+  gap:13px;
+  min-width:0;
+  text-decoration:none;
+}
+.fpc-id:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:3px;
+  border-radius:12px;
+}
+
+.fpc-av{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 auto;
+  width:62px;
+  height:62px;
+  overflow:hidden;
+  /* A squircle where a post has a rectangular photo — the difference is
+     legible from across the column, before any text is read. */
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.025));
+}
+.fpc-av img{ width:100%; height:100%; object-fit:cover; display:block; }
+.fpc-av-i{
+  font-size:20px;
+  font-weight:700;
+  letter-spacing:-0.02em;
+  color:rgba(255,255,255,0.6);
+}
+
+.fpc-text{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  min-width:0;
+}
+.fpc-name{
+  font-size:15px;
+  font-weight:650;
+  line-height:1.25;
+  letter-spacing:-0.015em;
+  color:rgba(255,255,255,0.96);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.fpc-headline{
+  font-size:12px;
+  line-height:1.45;
+  color:rgba(255,255,255,0.68);
+  /* Two lines, because a real headline is a sentence and cutting it at one
+     leaves "Product designer building design systems for…" saying nothing. */
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.fpc-loc{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  font-size:11.5px;
+  color:rgba(255,255,255,0.56);
+  min-width:0;
+}
+
+.fpc-bio{
+  font-size:12px;
+  line-height:1.55;
+  color:rgba(255,255,255,0.60);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* ── What they work with ── */
+.fpc-skills{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+}
+.fpc-skill{
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.05);
+  padding:3px 9px;
+  font-size:11px;
+  line-height:1.35;
+  color:rgba(255,255,255,0.70);
+}
+.fpc-more{
+  font-size:11px;
+  color:rgba(255,255,255,0.50);
+}
+
+/* ── Who you both know ── */
+.fpc-mutual{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-size:11.5px;
+  color:rgba(255,255,255,0.62);
+}
+.fpc-faces{ display:flex; flex:0 0 auto; }
+.fpc-face{
+  width:18px;
+  height:18px;
+  border-radius:6px;
+  object-fit:cover;
+  border:1px solid rgba(10,10,12,0.9);
+  background:rgba(255,255,255,0.08);
+}
+.fpc-face + .fpc-face{ margin-left:-6px; }
+
+/* ── The two things you can do ── */
+.fpc-foot{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:2px;
+}
+.fpc-btn{
+  flex:0 0 auto;
+  height:32px;
+  padding:0 17px;
+  border-radius:999px;
+  border:1px solid transparent;
+  background:#fff;
+  color:#0b0b0d;
+  font-size:12.5px;
+  font-weight:650;
+  transition:background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.fpc-btn:hover{ background:rgba(255,255,255,0.9); }
+.fpc-btn:active{ transform:scale(0.97); }
+.fpc-btn:disabled{ opacity:0.55; }
+.fpc-btn-on{
+  background:transparent;
+  border-color:rgba(255,255,255,0.18);
+  color:rgba(255,255,255,0.78);
+}
+.fpc-btn-on:hover{
+  background:rgba(255,255,255,0.07);
+  border-color:rgba(255,255,255,0.3);
+  color:#fff;
+}
+
+.fpc-up{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:32px;
+  height:32px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:rgba(255,255,255,0.05);
+  color:rgba(255,255,255,0.62);
+  transition:border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.fpc-up:hover{
+  border-color:rgba(255,255,255,0.3);
+  background:rgba(255,255,255,0.10);
+  color:#fff;
+}
+.fpc-up:active{ transform:scale(0.94); }
+.fpc-up:disabled{ opacity:0.55; }
+.fpc-up-on{
+  border-color:rgba(134,239,172,0.32);
+  background:rgba(134,239,172,0.14);
+  color:rgba(206,247,224,0.96);
+}
+
+.fpc-view{
+  margin-left:auto;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  font-size:11.5px;
+  font-weight:600;
+  color:rgba(255,255,255,0.52);
+  text-decoration:none;
+  transition:color 160ms ease;
+}
+.fpc:hover .fpc-view{ color:rgba(255,255,255,0.88); }
+
+/* ── Narrow ──
+   In a phone-width column the footer's three items and a long name both want
+   the same space. The label goes first; the two controls never do. */
+@media (max-width:420px){
+  .fpc{ padding:14px; gap:11px; }
+  .fpc-av{ width:54px; height:54px; border-radius:14px; }
+  .fpc-name{ font-size:14.5px; }
+  .fpc-view{ display:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .fpc,.fpc-btn,.fpc-up,.fpc-view{ transition:none; }
+  .fpc:hover{ transform:none; }
+  .fpc-btn:active,.fpc-up:active{ transform:none; }
+}

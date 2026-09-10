@@ -20,6 +20,9 @@
 import { runGlobalSearch, type GlobalSearchResult } from '@/lib/server/global-search';
 import { getStoredUsers } from '@/lib/server/users';
 import { getAllProfiles } from '@/lib/server/user-profiles';
+import { calculateProfileScore } from '@/lib/profile-score';
+import { completenessFactor, preferenceSignals } from '@/lib/server/people-match';
+import type { MatchPreferences } from '@/lib/server/match-preferences';
 import { getAllServices, type Service } from '@/lib/server/services';
 import { listBusinessPages, listJobsForPages, listProductsForPages, listEventsForPages } from '@/lib/server/business-pages';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
@@ -203,6 +206,24 @@ function freshnessScore(iso?: string | null): number {
   return 0;
 }
 
+/**
+ * The reason line, with what the person themselves said appended.
+ *
+ * Kept to one extra clause: a card is read in about a second, and three
+ * reasons that all say "they want this" is three ways of saying one thing.
+ *
+ * The reasons are verb phrases with no subject ("wants remote work", "8 yrs
+ * experience"), so they are joined and sentence-cased rather than given one.
+ * Prefixing "They" produced "They wants remote work", and there is no single
+ * pronoun that agrees with every phrase in the set.
+ */
+function withPreferences(base: string, reasons: string[]): string {
+  if (!reasons.length) return base;
+  const said = reasons.slice(0, 2).join(' · ');
+  if (base !== 'Related match') return `${base} · ${said}`;
+  return said.charAt(0).toUpperCase() + said.slice(1);
+}
+
 /* Weights from the brief — semantic-first, popularity never dominates. */
 const W = { semantic: 0.40, keyword: 0.25, structured: 0.15, location: 0.10, quality: 0.05, freshness: 0.05 };
 
@@ -286,6 +307,17 @@ type ProfileMap = Record<string, {
   headline?: string; bio?: string; location?: string; skills?: string[];
   interests?: string[]; openToWork?: boolean; docrudGo?: boolean; avatarUrl?: string;
   publicFace?: { category: string }; updatedAt?: string; profileSetupDone?: boolean;
+  /* All of these were already in the documents getAllProfiles() returns; the
+     type simply did not admit them, so the ranking never read them. A person's
+     history lives in experience, education and achievements, and what they
+     want next lives in matchPreferences — between them they are most of what
+     somebody is searching for. */
+  website?: string;
+  experience?: Array<{ title?: string; company?: string; period?: string; desc?: string }>;
+  education?: Array<{ degree?: string; school?: string; year?: string }>;
+  achievements?: Array<{ title?: string; desc?: string }>;
+  socialLinks?: Record<string, string | undefined | null>;
+  matchPreferences?: MatchPreferences;
 }>;
 
 function scorePeople(
@@ -299,22 +331,54 @@ function scorePeople(
     if (user.isActive === false || user.pendingDeletion) continue;
     const p = profiles[user.id] ?? {};
     const skills = p.skills ?? [];
+    const prefs = p.matchPreferences;
+    /* The whole profile, not the headline and a skills list. Someone who
+       "shipped design systems" says so in a job entry, not in seven words at
+       the top of their profile, and until these fields were read that sentence
+       matched nobody. Weights keep the emphasis where it belongs: what they do
+       now outranks what they studied. */
+    const roleText = [
+      ...(p.experience ?? []).map((e) => [e?.title, e?.company].filter(Boolean).join(' ')),
+    ].join(' ');
+    const historyText = [
+      ...(p.experience ?? []).map((e) => e?.desc ?? ''),
+      ...(p.achievements ?? []).map((a) => [a?.title, a?.desc].filter(Boolean).join(' ')),
+    ].join(' ');
+    const studyText = (p.education ?? [])
+      .map((e) => [e?.degree, e?.school].filter(Boolean).join(' ')).join(' ');
+    /* Their own words for the work they are after. It is a match surface, not
+       just a signal: "product designer" typed into that form should find them
+       for "product designer". */
+    const wantsText = (prefs?.desiredTitles ?? []).join(' ');
+
     const fields: Field[] = [
       { name: 'name', text: user.name ?? '', weight: 3 },
       { name: 'headline', text: p.headline ?? '', weight: 3 },
       { name: 'skills', text: skills.join(' '), weight: 2.5 },
+      { name: 'roles', text: roleText, weight: 2.5 },
+      { name: 'wants', text: wantsText, weight: 2 },
       { name: 'bio', text: p.bio ?? '', weight: 1.5 },
       { name: 'interests', text: (p.interests ?? []).join(' '), weight: 1.5 },
+      { name: 'history', text: historyText, weight: 1.5 },
+      { name: 'education', text: studyText, weight: 1 },
       { name: 'organization', text: user.organizationName ?? '', weight: 1 },
       { name: 'location', text: p.location ?? '', weight: 1 },
     ];
     const lex = lexicalScore(fields, terms, u.cleaned, opts);
     const con = conceptScore(fields, expanded);
     const locSig = locationSignal(p.location ?? null, u);
-    /* Hard location constraint: not a weak result, not a result. */
-    if (locSig.excluded) continue;
-    const loc = locSig.points;
-    if (lex.score <= 0 && con.score <= 0 && loc <= 0) continue;
+    /* What their answers say about THIS requirement. */
+    const pref = preferenceSignals(prefs, u);
+    /* Hard location constraint: not a weak result, not a result — unless they
+       have stated they will work there. An address is where somebody is; the
+       preference is where they will be, and the second one is the answer to
+       "a developer in Bengaluru". */
+    if (locSig.excluded && !pref.locationAccepted) continue;
+    /* Stated willingness scores below actually being there — the same points a
+       partial address match earns, and never more than the address already
+       earned on its own. */
+    const loc = Math.max(locSig.points, pref.locationAccepted ? TIER_POINTS.partial : 0);
+    if (lex.score <= 0 && con.score <= 0 && loc <= 0 && pref.points <= 0) continue;
 
     // Structured: the query asked for a person and this row looks like one.
     let structured = 0;
@@ -329,7 +393,22 @@ function scorePeople(
     if (p.docrudGo) quality += 2;
     if (p.openToWork) quality += 1;
 
-    const raw = locSig.factor * combine({ semantic: con.score, keyword: lex.score, structured, location: loc, quality, freshness: freshnessScore(p.updatedAt) });
+    /* The same calculation the member is shown on their own profile and in the
+       AI-mode button — so "profiles above 95% are indexed better" is a
+       description of this line rather than a claim about it. */
+    const completeness = calculateProfileScore(p).score;
+
+    /* Factors rather than another weighted term: the mix below is shared with
+       businesses, jobs, services and posts, and a person-only term in it would
+       re-rank all of those against people. See lib/server/people-match.ts. */
+    /* Somebody kept in on a stated preference gets NO location multiplier:
+       they are not there. The willingness is already paid for in `loc` above
+       and in pref.factor, and a multiplier on top of both would put them ahead
+       of people who actually live in the city that was asked for. */
+    const raw = (locSig.excluded ? 1 : locSig.factor)
+      * pref.factor
+      * completenessFactor(completeness)
+      * combine({ semantic: con.score, keyword: lex.score, structured, location: loc, quality, freshness: freshnessScore(p.updatedAt) });
     out.push({
       raw,
       item: {
@@ -342,10 +421,29 @@ function scorePeople(
         score: 0,
         matchPercent: 0,
         matchedFields: Array.from(lex.matched),
-        why: explain(u, Array.from(lex.matched), con.hits, p.location ?? null, loc),
+        /* The ranking's reasons, then the person's own answers. A stated
+           preference is a stronger thing to show than a lexical hit, so it is
+           never dropped to make room for one. */
+        why: withPreferences(
+          /* The ADDRESS score, not the boosted one. `loc` above can be lifted
+             by a stated preference — someone in Pune who will work in
+             Bengaluru — and handing that to explain() made the line claim
+             "Matches … Pune" for a query that asked for Bengaluru. Where they
+             said they would work is the preference reason's job to say. */
+          explain(u, Array.from(lex.matched), con.hits, p.location ?? null, locSig.excluded ? 0 : locSig.points),
+          pref.reasons,
+        ),
         url: `/u/${user.id}`,
         badge: p.openToWork ? 'OPEN TO WORK' : undefined,
-        meta: { skills: skills.slice(0, 6) },
+        meta: {
+          userId: user.id,
+          headline: p.headline ?? '',
+          openToWork: !!p.openToWork,
+          skills: skills.slice(0, 6),
+          /* Shown on the card so a searcher can see how much of a profile is
+             behind the percentage they are being given. */
+          profileScore: completeness,
+        },
       },
     });
   }
@@ -504,7 +602,18 @@ function scoreJobs(jobs: Awaited<ReturnType<typeof getPublishedHiringJobs>>, u: 
         why: explain(u, Array.from(lex.matched), con.hits, j.location ?? null, loc),
         url: j.shareUrl || `/jobs/${j.id}`,
         badge: 'JOB',
-        meta: { experienceLevel: j.experienceLevel, workMode: j.workMode, skills: (j.preferredSkills ?? []).slice(0, 5) },
+        /* The card that renders this is the platform's own job card, so the
+           fields it needs are carried as fields. `subtitle` keeps the joined
+           string for readers that only show a line of text. */
+        meta: {
+          jobId: j.id,
+          organizationName: j.organizationName,
+          employmentType: j.employmentType,
+          hiringUrgency: j.hiringUrgency,
+          experienceLevel: j.experienceLevel,
+          workMode: j.workMode,
+          skills: (j.preferredSkills ?? []).slice(0, 5),
+        },
       },
     });
   }
@@ -578,14 +687,24 @@ function adaptLegacy(entry: GlobalSearchResult, u: QueryUnderstanding, expanded:
   const badge = entry.badge ?? '';
   const type: SearchEntityType =
     badge === 'GIG' ? 'gig'
-    : badge === 'BLOG' ? 'post'
+    /* BLOG is the marketing site's own writing; POST is a member's published
+       feed item. Only the second is a "post" to anybody using this product. */
+    : badge === 'POST' ? 'post'
+    : badge === 'BLOG' ? 'article'
     : badge === 'RESUME' ? 'person'
     : badge === 'PERSON' ? 'person'
     : badge === 'SVC' ? 'service'
     : entry.type === 'file' ? 'file'
-    : entry.type === 'article' ? 'post'
+    : entry.type === 'article' ? 'article'
     : entry.type === 'feature' ? 'feature'
-    : 'post';
+    /* The catch-all is `article`, NOT `post`.
+       Everything the legacy engine produces that is not recognised above —
+       static pages, knowledge-base entries, workspace history — was landing in
+       `post`, so "Posts" was a bucket for anything unclassified rather than a
+       kind of thing. `post` now means exactly one thing: an item a member
+       published to the feed, tagged POST upstream from
+       `directoryCategory === 'post'`. Nothing reaches it by default. */
+    : 'article';
 
   const meta = (entry.meta ?? {}) as Record<string, unknown>;
   const fields: Field[] = [

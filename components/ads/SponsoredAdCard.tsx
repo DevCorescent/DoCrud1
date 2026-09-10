@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { cachedJson } from '@/lib/client/request-cache';
 
 export type ServedAd = {
   id: string;
@@ -29,16 +30,16 @@ export type ServedAd = {
   legacy: boolean;
 };
 
-/* One request per page load, shared by every ad slot in the feed. */
-let adsPromise: Promise<ServedAd[]> | null = null;
+/* One request per page load, shared by every ad slot in the feed — and, now
+   that it goes through the app's own request cache, shared with the feed's
+   module planner too. This used to be a module-level promise of its own, which
+   deduped the slots against each other and against nothing else: the planner
+   in lib/use-feed-modules.ts asks for the same URL on mount, so the homepage
+   fetched it twice on every load. */
 function loadAds(): Promise<ServedAd[]> {
-  if (!adsPromise) {
-    adsPromise = fetch('/api/ads/serve')
-      .then((r) => (r.ok ? r.json() : { ads: [] }))
-      .then((d: { ads?: ServedAd[] }) => (Array.isArray(d.ads) ? d.ads : []))
-      .catch(() => []);          // a failing ad service must not break the feed
-  }
-  return adsPromise;
+  return cachedJson<{ ads?: ServedAd[] }>('/api/ads/serve')
+    .then((d) => (Array.isArray(d.ads) ? d.ads : []))
+    .catch(() => []);            // a failing ad service must not break the feed
 }
 
 function track(adId: string, kind: 'impression' | 'click') {

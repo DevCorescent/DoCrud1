@@ -4,7 +4,7 @@ import { runGlobalSearch } from '@/lib/server/global-search';
 import { runIntelligentSearch } from '@/lib/server/intelligent-search';
 import type { SearchEntityType } from '@/lib/server/search-intelligence';
 
-const ENTITY_TYPES: SearchEntityType[] = ['person', 'service', 'business', 'job', 'gig', 'post', 'file', 'feature', 'product', 'event'];
+const ENTITY_TYPES: SearchEntityType[] = ['person', 'service', 'business', 'job', 'gig', 'post', 'article', 'file', 'feature', 'product', 'event'];
 
 function parseCsv(value: string | null) {
   if (!value) return [];

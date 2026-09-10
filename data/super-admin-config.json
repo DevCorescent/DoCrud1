@@ -1,0 +1,71 @@
+{
+  "email": "",
+  "otpSessions": [],
+  "activeSessions": [
+    {
+      "token": "baabf1f7da9b3eacd7ab77537b4373cc48a2bc1f73fca5a47c90d5d56c66fd52965d2005b1b39ff3b31f7267e7e15ad3",
+      "email": "superadmin@company.com",
+      "createdAt": "2026-09-09T09:24:55.000Z",
+      "expiresAt": "2026-09-09T13:24:55.000Z",
+      "ip": "::1",
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+    }
+  ],
+  "auditLog": [
+    {
+      "id": "19f1f1fa00d0d53b",
+      "timestamp": "2026-09-09T10:42:50.426Z",
+      "action": "bulk_activate_premium",
+      "targetType": "user",
+      "targetId": "ALL_NON_PREMIUM",
+      "details": {
+        "period": "monthly",
+        "totalUsers": 8,
+        "alreadyPremiumCount": 0,
+        "activatedCount": 8,
+        "failedCount": 0,
+        "source": "infinity_tab_bulk"
+      },
+      "ip": "::1"
+    },
+    {
+      "id": "8984812df0e33dfc",
+      "timestamp": "2026-09-09T09:33:28.875Z",
+      "action": "settings_update_announcement",
+      "details": {
+        "keys": [
+          "enabled",
+          "text",
+          "href",
+          "subtitle",
+          "ctaLabel",
+          "ctaHref",
+          "showProfileProgress",
+          "showSpotsLeft",
+          "startAt",
+          "endAt"
+        ]
+      },
+      "ip": "::1"
+    },
+    {
+      "id": "b75c03bb1a562706",
+      "timestamp": "2026-09-09T09:24:55.000Z",
+      "action": "super_admin_login",
+      "details": {
+        "email": "superadmin@company.com",
+        "method": "password"
+      },
+      "ip": "::1"
+    }
+  ],
+  "platformFlags": {
+    "maintenanceMode": false,
+    "maintenanceMessage": "",
+    "newSignupsEnabled": true,
+    "publicGigsEnabled": true,
+    "publicMarketplaceEnabled": true,
+    "publicBlogEnabled": true,
+    "globalBroadcast": null
+  }
+}

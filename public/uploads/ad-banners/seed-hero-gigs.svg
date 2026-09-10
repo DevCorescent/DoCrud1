@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="700" viewBox="0 0 1600 700" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="700" x2="1600" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#150a14"/>
+      <stop offset="1" stop-color="#4a1740"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1"
+      gradientTransform="translate(1210 180) rotate(140) scale(620 520)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e888c8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#e888c8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="0" cy="0" r="1"
+      gradientTransform="translate(240 640) rotate(-40) scale(520 420)" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f4a3d8" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#f4a3d8" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M64 0H0V64" stroke="#ffffff" stroke-opacity="0.045" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1600" height="700" fill="url(#g)"/>
+  <rect width="1600" height="700" fill="url(#grid)"/>
+  <rect width="1600" height="700" fill="url(#glow)"/>
+  <rect width="1600" height="700" fill="url(#glow2)"/>
+
+  <!-- Concentric arcs off the top-right corner: a shape with a direction to
+       it, which a plain gradient does not have. -->
+  <g stroke="#f4a3d8" fill="none" stroke-linecap="round">
+    <circle cx="1250" cy="150" r="210" stroke-opacity="0.22" stroke-width="1.5"/>
+    <circle cx="1250" cy="150" r="330" stroke-opacity="0.14" stroke-width="1.5"/>
+    <circle cx="1250" cy="150" r="470" stroke-opacity="0.08" stroke-width="1.5"/>
+  </g>
+
+  <g fill="#e888c8">
+    <circle cx="1250" cy="150" r="7" fill-opacity="0.85"/>
+    <circle cx="1441" cy="64" r="4" fill-opacity="0.5"/>
+    <circle cx="1063" cy="330" r="3.5" fill-opacity="0.45"/>
+    <circle cx="1520" cy="392" r="3" fill-opacity="0.35"/>
+  </g>
+
+  <!-- A horizon line, so the frame has a floor at any crop. -->
+  <path d="M0 566H1600" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1"/>
+</svg>

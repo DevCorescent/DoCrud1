@@ -1,0 +1,189 @@
+/**
+ * The hero's animated motif.
+ *
+ * Every animation here is `transform` or `opacity` and nothing else. Those two
+ * are the only properties a browser can animate without laying the page out
+ * again or repainting it, which is why a motif with seven moving parts costs
+ * the same as one with two, and why none of this competes with the feed
+ * hydrating underneath it.
+ *
+ * Everything paints in `currentColor`. The component sets `color` from the
+ * banner's accent, so one property in Super Admin recolours the whole graphic.
+ */
+
+.hm{
+  position:absolute;
+  z-index:1;
+  pointer-events:none;
+  /* Opposite the copy: the words are bottom-left, this is centre-right. */
+  right:clamp(24px, 6vw, 92px);
+  top:50%;
+  width:clamp(150px, 20vw, 260px);
+  transform:translateY(-50%);
+  opacity:0.85;
+}
+.hm-svg{
+  display:block;
+  width:100%;
+  height:auto;
+  overflow:visible;
+}
+
+/* On a phone the words run the full width, so there is no "opposite" to sit
+   in. It goes to the empty band above the headline instead — smaller, dimmer,
+   and reading as part of the artwork rather than as a second subject. */
+@media (max-width:767px){
+  .hm{
+    right:16px;
+    bottom:auto;
+    /* ABOVE the slider's own box, not inside it. `.hhs` is only about 230px
+       tall on a phone and the copy takes the lower two thirds of it, which
+       leaves no room — but the picture carries on well past the top of that
+       box, up behind the announcement bar, and this sits in that. A negative
+       offset, so it stays the same distance from the headline however tall
+       the bar above happens to be. */
+    top:-34px;
+    width:98px;
+    opacity:0.5;
+    transform:none;
+  }
+}
+
+/* ══ The pieces ══ */
+.hm-ring{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.4;
+  opacity:0.30;
+}
+.hm-ring-2{ opacity:0.20; }
+.hm-ring-3{ opacity:0.14; }
+
+.hm-dot{
+  fill:currentColor;
+  opacity:0.92;
+}
+.hm-dot-soft{ opacity:0.55; }
+.hm-core{ opacity:0.7; }
+
+.hm-link{
+  stroke:currentColor;
+  stroke-width:1.1;
+  opacity:0.18;
+}
+.hm-floor{ opacity:0.14; }
+
+.hm-card{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.4;
+  opacity:0.34;
+}
+.hm-card-2{ opacity:0.24; }
+.hm-card-3{ opacity:0.16; }
+.hm-rule{
+  fill:currentColor;
+  opacity:0.42;
+}
+.hm-rule-2{ opacity:0.26; }
+
+/* ══ The movement ══ */
+
+/* One slow breath over the whole graphic, so even the still motifs are not
+   pinned to the frame. */
+.hm-drift{ animation:hm-drift 11s ease-in-out infinite alternate; }
+.hm-fade{ animation:hm-breathe 7s ease-in-out infinite alternate; }
+
+@keyframes hm-drift{
+  from{ transform:translate3d(0,-5px,0); }
+  to{ transform:translate3d(4px,5px,0); }
+}
+@keyframes hm-breathe{
+  from{ opacity:0.82; }
+  to{ opacity:1; }
+}
+
+/* Orbit: three rotations at three speeds, one of them the other way. Three
+   points on three rings never line up again, which is what keeps a loop of a
+   few seconds from reading as a loop. */
+.hm-spin{ animation:hm-spin linear infinite; }
+.hm-spin-a{ animation-duration:14s; }
+.hm-spin-b{ animation-duration:22s; animation-direction:reverse; }
+.hm-spin-c{ animation-duration:9s; }
+
+@keyframes hm-spin{
+  from{ transform:rotate(0deg); }
+  to{ transform:rotate(360deg); }
+}
+
+/* Network: the points light in turn and the lines follow them. */
+.hm-blink{ animation:hm-blink 2800ms ease-in-out infinite; }
+@keyframes hm-blink{
+  0%,72%,100%{ opacity:0.42; }
+  20%{ opacity:1; }
+}
+.hm-lines .hm-link{ animation:hm-linkfade 2600ms ease-in-out infinite; }
+@keyframes hm-linkfade{
+  0%,70%,100%{ opacity:0.12; }
+  22%{ opacity:0.34; }
+}
+
+/* Stack: the three cards separate and close again, each a beat behind the one
+   under it, so the pile breathes rather than sliding as a block. */
+.hm-card-1{ animation:hm-float 5.4s ease-in-out infinite alternate; }
+.hm-card-2{ animation:hm-float 5.4s 260ms ease-in-out infinite alternate; }
+.hm-card-3{ animation:hm-float 5.4s 520ms ease-in-out infinite alternate; }
+@keyframes hm-float{
+  from{ transform:translate3d(0,3px,0); }
+  to{ transform:translate3d(0,-6px,0); }
+}
+
+/* Pulse: one ring's worth of keyframes, three rings, staggered — a continuous
+   wave out of three elements and one animation. */
+.hm-wave{
+  transform-box:fill-box;
+  transform-origin:center;
+  animation:hm-wave 3600ms cubic-bezier(0.22,0.62,0.3,1) infinite;
+}
+@keyframes hm-wave{
+  0%{ transform:scale(0.45); opacity:0; }
+  12%{ opacity:0.42; }
+  100%{ transform:scale(2.6); opacity:0; }
+}
+.hm-beat{
+  transform-box:fill-box;
+  transform-origin:center;
+  animation:hm-beat 3600ms ease-in-out infinite;
+}
+@keyframes hm-beat{
+  0%,100%{ transform:scale(0.86); opacity:0.5; }
+  10%{ transform:scale(1); opacity:0.85; }
+}
+
+/* Rise: points leaving the floor and fading out on the way up. Each carries
+   its own duration from the component, so six points never form a row. */
+.hm-rise{
+  transform-box:fill-box;
+  animation-name:hm-rise;
+  animation-timing-function:cubic-bezier(0.3,0.5,0.4,1);
+  animation-iteration-count:infinite;
+}
+@keyframes hm-rise{
+  0%{ transform:translateY(0) scale(0.7); opacity:0; }
+  14%{ opacity:0.9; }
+  70%{ opacity:0.5; }
+  100%{ transform:translateY(-168px) scale(1.05); opacity:0; }
+}
+
+/* Asked to stop, it stops — and it stops somewhere it looks composed rather
+   than wherever the keyframe happened to be. */
+@media (prefers-reduced-motion: reduce){
+  .hm-drift,.hm-fade,.hm-spin,.hm-blink,.hm-lines .hm-link,
+  .hm-card-1,.hm-card-2,.hm-card-3,.hm-wave,.hm-beat,.hm-rise{
+    animation:none;
+  }
+  .hm-wave{ opacity:0.22; }
+  .hm-wave:nth-of-type(2){ transform:scale(1.7); opacity:0.14; }
+  .hm-wave:nth-of-type(3){ transform:scale(2.3); opacity:0.08; }
+  .hm-rise{ opacity:0.5; }
+}

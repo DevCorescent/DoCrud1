@@ -1,0 +1,153 @@
+/**
+ * The way into TYRAI: a button living inside the search field.
+ *
+ * A real stylesheet rather than the inline <style> block GlobalSearchBar keeps
+ * its other rules in. That block is gated on `isMounted`, so it does not exist
+ * until after hydration — fine for a hover rule, not fine for the box model of
+ * a control that has to sit inside the field from the first paint.
+ *
+ * Colour comes from the --gs-* tokens the field itself uses, so the button
+ * follows the theme instead of assuming a dark nav.
+ */
+
+.gs-tyrai{
+  position:absolute;
+  right:5px;
+  top:50%;
+  transform:translateY(-50%);
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  height:28px;
+  padding:0 10px 0 8px;
+  border-radius:999px;
+  border:1px solid var(--gs-w090);
+  background:var(--gs-w060);
+  color:var(--gs-w650);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:0.1em;
+  line-height:1;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease,
+    color 180ms ease,
+    transform 140ms ease;
+}
+.gs-tyrai:hover{
+  border-color:var(--gs-w180);
+  background:var(--gs-w100);
+  color:var(--gs-w900);
+}
+.gs-tyrai:active{ transform:translateY(-50%) scale(0.96); }
+.gs-tyrai:focus-visible{
+  outline:2px solid var(--gs-w450);
+  outline-offset:2px;
+}
+
+.gs-tyrai-i{
+  width:14px;
+  height:14px;
+  flex:0 0 auto;
+  /* The mark carries the brand tint; the word stays in the field's own ink so
+     the pair does not read as two competing labels. */
+  color:var(--gs-w700);
+  transition:color 180ms ease, transform 320ms cubic-bezier(0.22,1,0.36,1);
+}
+.gs-tyrai:hover .gs-tyrai-i{
+  color:var(--gs-w900);
+  transform:rotate(-8deg) scale(1.06);
+}
+
+.gs-tyrai-t{ display:inline; }
+
+/* Below the field's own breakpoint the desktop bar is not rendered at all, so
+   there is nothing to shrink for — but a narrow desktop window is real, and
+   the word is what goes when the field gets tight.
+
+   Scoped to the in-field button: the rule used to match `.gs-tyrai-t` anywhere,
+   which would have taken the word off the phone variants below as well. */
+@media (max-width:900px){
+  .gs-tyrai{ padding:0 8px; gap:0; }
+  .gs-tyrai .gs-tyrai-t{ display:none; }
+}
+
+/* ══ The phone pill ══
+   The same control in a 36px-tall pill instead of a 38px field. The desktop
+   treatment — a bordered chip nearly as tall as what contains it — reads as a
+   box inside a box at this size and eats a third of a 320px search bar, so
+   this one is shorter, has no border of its own, and gives the word back to
+   the field on the narrowest phones. */
+.gs-tyrai-m{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  flex:0 0 auto;
+  height:26px;
+  margin-left:6px;
+  padding:0 9px 0 7px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.11);
+  color:rgba(255,255,255,0.88);
+  font-size:9px;
+  font-weight:700;
+  letter-spacing:0.08em;
+  line-height:1;
+  white-space:nowrap;
+  transition:background-color 160ms ease, transform 120ms ease;
+}
+.gs-tyrai-m:active{ transform:scale(0.95); }
+.gs-tyrai-m .gs-tyrai-i{
+  width:12px;
+  height:12px;
+  color:rgba(255,255,255,0.95);
+}
+
+/* Under ~360px the search label is down to a few characters. The mark alone
+   still says which button this is; the word does not fit anywhere it would. */
+@media (max-width:359px){
+  .gs-tyrai-m{ width:26px; padding:0; justify-content:center; gap:0; }
+  .gs-tyrai-m .gs-tyrai-t{ display:none; }
+}
+
+/* ══ The phone search sheet ══
+   Sized to the Cancel button it sits beside, and themed from the same tokens,
+   because the sheet is a light surface in light mode. */
+.gs-tyrai-sheet{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  flex:0 0 auto;
+  height:34px;
+  padding:0 11px;
+  border-radius:9px;
+  border:1px solid var(--gs-w090);
+  background:var(--gs-w050);
+  color:var(--gs-w650);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:0.06em;
+  line-height:1;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.gs-tyrai-sheet:active{ transform:scale(0.96); }
+.gs-tyrai-sheet .gs-tyrai-i{ width:14px; height:14px; color:var(--gs-w700); }
+
+/* That row holds a search icon, the field, a clear button, this and Cancel.
+   Below ~380px the word is what has to go, or the field is left with barely
+   enough room to show the end of what somebody typed. */
+@media (max-width:379px){
+  .gs-tyrai-sheet{ width:34px; padding:0; justify-content:center; gap:0; }
+  .gs-tyrai-sheet .gs-tyrai-t{ display:none; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .gs-tyrai,.gs-tyrai-i,.gs-tyrai-m,.gs-tyrai-sheet{ transition:none; }
+  .gs-tyrai:active{ transform:translateY(-50%); }
+  .gs-tyrai-m:active,.gs-tyrai-sheet:active{ transform:none; }
+  .gs-tyrai:hover .gs-tyrai-i{ transform:none; }
+}

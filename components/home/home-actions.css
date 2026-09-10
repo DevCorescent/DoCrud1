@@ -1,0 +1,131 @@
+/**
+ * The two actions above the feed: Explore Companies, and Publish.
+ *
+ * Their own file because the row outlived the band it was born under. These
+ * rules used to live in home-hero.css, which only ever loaded because
+ * HomeHighlights imported it — and the moment the hero band came off the
+ * homepage, the stylesheet went with it and both buttons rendered as bare
+ * text. A row that is rendered by PublicHomepage carries its own stylesheet.
+ */
+
+
+/* ══ The two actions above the feed ══
+   Glass, like every other surface on this page, with one of the pair carrying
+   a gradient so the choice has a weight to it: the one that adds something is
+   the lit one, the one that goes somewhere is the quiet one. */
+.hp-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+  /* An inset off the bezel, so the pair sits in from the edge of the screen
+     rather than running to it. `max-width` and an auto margin, not padding:
+     the row is a grid, and padding would come out of the buttons. */
+  max-width:calc(100% - 16px);
+  margin-inline:auto;
+}
+@media (min-width:640px){
+  .hp-actions{
+    display:flex;
+    justify-content:flex-end;
+    max-width:100%;
+  }
+}
+
+.hp-action{
+  position:relative;
+  overflow:hidden;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  height:44px;
+  padding:0 18px;
+  border-radius:14px;
+  font-size:13px;
+  font-weight:650;
+  letter-spacing:-0.005em;
+  white-space:nowrap;
+  text-decoration:none;
+  backdrop-filter:blur(26px) saturate(140%);
+  -webkit-backdrop-filter:blur(26px) saturate(140%);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    transform 140ms ease,
+    box-shadow 180ms ease;
+}
+.hp-action:active{ transform:scale(0.98); }
+.hp-action:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}
+
+/* ── The quiet one ──
+   The page's own glass: a light top edge, a ramp down, a hairline. */
+.hp-action-ghost{
+  border:1px solid rgba(255,255,255,0.085);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.014) 100%),
+    rgba(12,12,16,0.50);
+  color:rgba(255,255,255,0.78);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.hp-action-ghost:hover{
+  border-color:rgba(255,255,255,0.18);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.024) 100%),
+    rgba(12,12,16,0.50);
+  color:#fff;
+}
+/* The arrow leans the way it is going. */
+.hp-action-go{ transition:transform 240ms cubic-bezier(0.22,1,0.36,1); opacity:0.6; }
+.hp-action-ghost:hover .hp-action-go{ transform:translateX(3px); opacity:1; }
+
+/* ── The lit one ──
+   A warm-to-cool sweep at low saturation over the same dark ground — a
+   gradient the eye reads as material rather than as a colour, which is the
+   difference between premium and a coloured button. The sheen across the top
+   is a separate layer so the hover can move it without touching the fill. */
+.hp-action-solid{
+  border:1px solid rgba(255,255,255,0.13);
+  /* Halved. At 0.16/0.14 the sweep read as two colours meeting in the middle
+     of a button; at this strength it reads as one surface catching light from
+     two directions, which is the difference between a gradient you notice and
+     a gradient that makes something look made. */
+  background:
+    linear-gradient(135deg,
+      rgba(240,205,160,0.085) 0%,
+      rgba(255,255,255,0.055) 42%,
+      rgba(160,175,245,0.075) 100%),
+    linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.018) 100%),
+    rgba(16,16,22,0.66);
+  color:rgba(255,255,255,0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.11),
+    0 6px 20px rgba(0,0,0,0.28);
+}
+.hp-action-solid:hover{
+  border-color:rgba(255,255,255,0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    0 10px 26px rgba(0,0,0,0.34);
+}
+/* A slow highlight that crosses the button on hover. Transform only, so it
+   costs a compositor layer for the duration and nothing else. */
+.hp-action-solid::after{
+  content:"";
+  position:absolute;
+  inset:-40% -60%;
+  pointer-events:none;
+  background:linear-gradient(105deg, transparent 42%, rgba(255,255,255,0.09) 50%, transparent 58%);
+  transform:translateX(-70%);
+  transition:transform 620ms cubic-bezier(0.22,1,0.36,1);
+}
+.hp-action-solid:hover::after{ transform:translateX(70%); }
+
+@media (prefers-reduced-motion: reduce){
+  .hp-action,.hp-action-go,.hp-action-solid::after{ transition:none; }
+  .hp-action:active{ transform:none; }
+  .hp-action-solid:hover::after{ transform:translateX(-70%); }
+}

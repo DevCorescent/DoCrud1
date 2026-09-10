@@ -1,0 +1,236 @@
+/**
+ * The announcement bar.
+ *
+ * ═══ HOW THE COLOUR WORKS ═══
+ *
+ * One set of rules, six tones. Each tone sets three custom properties — an
+ * accent, a surface tint and a text colour — and every rule below reads those,
+ * so a new tone is four lines and nothing else changes. Colour never appears
+ * in the component; it only sets `data-tone`.
+ *
+ * The tints are deliberately shallow. This strip sits under the navigation on
+ * a dark page, and a saturated band there reads as an error state whatever it
+ * says. What carries the tone is the chip and the accent line, not the field
+ * behind the words.
+ */
+
+.ann{
+  --ann-accent:255,255,255;
+  --ann-tint:255,255,255;
+  --ann-fg:rgba(255,255,255,0.92);
+
+  position:relative;
+  overflow:hidden;
+  border-radius:16px;
+  border:1px solid rgba(var(--ann-tint),0.16);
+  background:
+    linear-gradient(180deg, rgba(var(--ann-tint),0.11) 0%, rgba(var(--ann-tint),0.05) 100%),
+    linear-gradient(180deg, rgba(14,14,18,0.72) 0%, rgba(10,10,13,0.6) 100%);
+  backdrop-filter:blur(20px) saturate(140%);
+  -webkit-backdrop-filter:blur(20px) saturate(140%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.07);
+  animation:ann-in 320ms cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* The accent: a hairline down the leading edge, the one piece of full-strength
+   colour on the bar. */
+.ann::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:3px;
+  background:rgba(var(--ann-accent),0.85);
+}
+
+@keyframes ann-in{
+  from{ opacity:0; transform:translateY(-6px); }
+  to{ opacity:1; transform:none; }
+}
+
+/* Closing collapses the height as it fades, so the page below rises smoothly
+   instead of jumping the moment the element leaves the flow. */
+.ann-closing{
+  animation:ann-out 260ms cubic-bezier(0.4,0,1,1) both;
+}
+@keyframes ann-out{
+  from{ opacity:1; max-height:120px; margin-bottom:16px; }
+  to{ opacity:0; max-height:0; margin-bottom:0; }
+}
+
+.ann-inner{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  min-width:0;
+  padding:11px 12px 11px 15px;
+}
+
+/* ── What kind of message it is ── */
+.ann-kind{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  border-radius:999px;
+  border:1px solid rgba(var(--ann-accent),0.30);
+  background:rgba(var(--ann-accent),0.13);
+  padding:4px 10px;
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:0.11em;
+  text-transform:uppercase;
+  color:var(--ann-fg);
+  white-space:nowrap;
+}
+.ann-kind-i{ width:12px; height:12px; flex:0 0 auto; }
+
+.ann-text{
+  flex:1 1 auto;
+  min-width:0;
+  font-size:13px;
+  line-height:1.45;
+  color:rgba(255,255,255,0.88);
+  /* Two lines on a phone, one on a wide screen — see the media query. */
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* ── The calls to action ── */
+.ann-ctas{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+.ann-cta{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  height:30px;
+  padding:0 13px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:650;
+  white-space:nowrap;
+  text-decoration:none;
+  transition:background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 120ms ease;
+}
+.ann-cta:active{ transform:scale(0.97); }
+
+/* The primary one takes the tone; the secondary stays out of its way. */
+.ann-cta-solid{
+  border:1px solid rgba(var(--ann-accent),0.42);
+  background:rgba(var(--ann-accent),0.20);
+  color:var(--ann-fg);
+}
+.ann-cta-solid:hover{
+  border-color:rgba(var(--ann-accent),0.6);
+  background:rgba(var(--ann-accent),0.3);
+}
+.ann-cta-ghost{
+  border:1px solid rgba(255,255,255,0.13);
+  background:rgba(255,255,255,0.05);
+  color:rgba(255,255,255,0.78);
+}
+.ann-cta-ghost:hover{
+  border-color:rgba(255,255,255,0.28);
+  background:rgba(255,255,255,0.10);
+  color:#fff;
+}
+
+.ann-x{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:28px;
+  height:28px;
+  border-radius:999px;
+  color:rgba(255,255,255,0.5);
+  transition:background-color 160ms ease, color 160ms ease;
+}
+.ann-x:hover{ background:rgba(255,255,255,0.09); color:#fff; }
+.ann-x:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}
+
+/* ── The tones ──
+   Accent and tint as bare channels; the text colour is the accent lifted to
+   something readable on a dark surface. Neutral is white, which is the right
+   default for a product announcement with no urgency attached to it. */
+.ann[data-tone="neutral"]{
+  --ann-accent:226,232,240;
+  --ann-tint:255,255,255;
+  --ann-fg:rgba(255,255,255,0.94);
+}
+.ann[data-tone="info"]{
+  --ann-accent:96,150,240;
+  --ann-tint:96,150,240;
+  --ann-fg:rgba(198,219,255,0.96);
+}
+.ann[data-tone="success"]{
+  --ann-accent:52,199,123;
+  --ann-tint:52,199,123;
+  --ann-fg:rgba(199,245,220,0.96);
+}
+.ann[data-tone="warning"]{
+  --ann-accent:240,180,80;
+  --ann-tint:240,180,80;
+  --ann-fg:rgba(253,231,190,0.96);
+}
+.ann[data-tone="danger"]{
+  --ann-accent:238,110,110;
+  --ann-tint:238,110,110;
+  --ann-fg:rgba(255,213,213,0.96);
+}
+.ann[data-tone="promo"]{
+  --ann-accent:168,130,240;
+  --ann-tint:168,130,240;
+  --ann-fg:rgba(228,213,255,0.96);
+}
+
+/* ── Narrow ──
+   The kind chip loses its word and keeps its icon; the text is allowed the
+   width that frees. The calls to action wrap under the message rather than
+   squeezing it, because a 90px CTA against a 100px message is neither. */
+@media (max-width:720px){
+  /* Lines up with the hero panel below it, which insets by the same 8px on a
+     phone. Two stacked surfaces with different left edges reads as a mistake
+     in whichever one is narrower. `max-width` rather than a margin for the
+     same reason it is there: the wrapper is full width. */
+  .ann{
+    max-width:calc(100% - 16px);
+    margin-inline:auto;
+  }
+  .ann-inner{
+    flex-wrap:wrap;
+    gap:9px;
+    padding:11px 10px 11px 13px;
+  }
+  .ann-kind{ padding:4px 7px; }
+  .ann-kind-t{ display:none; }
+  .ann-text{
+    flex:1 1 140px;
+    font-size:12.5px;
+    -webkit-line-clamp:3;
+  }
+  .ann-ctas{
+    order:3;
+    width:100%;
+    flex-wrap:wrap;
+  }
+  .ann-cta{ height:32px; }
+  .ann-x{ margin-left:auto; }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .ann{ animation:none; }
+  .ann-closing{ animation:none; opacity:0; }
+  .ann-cta,.ann-x{ transition:none; }
+  .ann-cta:active{ transform:none; }
+}

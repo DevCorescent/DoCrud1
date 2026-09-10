@@ -234,7 +234,7 @@ export default function CompanyExplorer() {
 
   return (
     <div className="w-full min-w-0">
-      <div className="mb-1 flex items-center justify-between gap-3 px-2 sm:px-3">
+      <div className="ce-head mb-1 flex items-center justify-between gap-3 px-2 sm:px-3">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
             {/* 0.28 measured 2.4:1 against the page — a heading nobody could

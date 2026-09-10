@@ -31,13 +31,17 @@ import { useSession } from 'next-auth/react';
 import { ArrowRight, Users } from 'lucide-react';
 import { profileStatusStyle } from '@/lib/profile-score';
 import { cachedJson } from '@/lib/client/request-cache';
+import './home-hero.css';
 
 export type HomeGreetingConfig = {
   subtitle: string;
   illustrationUrl: string;
 };
 
-const CARD = 'rounded-[20px] border border-white/[0.07] bg-white/[0.025]';
+/* The shell for all four cards. Defined in home-hero.css so the panel they
+   sit on and the cards themselves are described together — a card tuned
+   against the page background disappears on a translucent panel. */
+const CARD = 'hh-card';
 
 /* Desktop puts all four cards on ONE row. Two literal templates rather than a
    built string, because Tailwind only emits arbitrary values it can see in the
@@ -85,7 +89,7 @@ function StatTileBase({
          inline background-image would beat any rule that tried to change
          them. */
       style={{ '--wash-rgb': wash } as CSSProperties}
-      className={`hh-wash group flex min-h-[124px] min-w-0 flex-col justify-between p-4 ${CARD} transition-colors hover:bg-white/[0.045]`}>
+      className={`hh-wash group flex min-h-[124px] min-w-0 flex-col justify-between p-4 ${CARD}`}>
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 truncate text-[13px] font-semibold text-white/60">{label}</p>
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.05] text-white/50 transition group-hover:text-white/85">
@@ -128,61 +132,13 @@ const channels = (hex: string) => {
    profile sat in the Fair band; connections' amber collided with the same
    band. Keeping the fixed cards cool means every combination stays legible.
 
-   Just the channels — the gradient that consumes them is WASH_CSS below. */
+   Just the channels — the gradient that consumes them is in home-hero.css. */
 const WASH_VIOLET = '139,127,232';
 const WASH_TEAL = '45,178,196';
 const WASH_BLUE = '96,150,240';
 
-/* The corner accent: a bottom-right glow with concentric rings rising out of
-   it, built to the approved reference.
-
-   Two layers, because one cannot do both jobs. The GLOW is a plain radial on
-   the element's own background-image, anchored at the corner rather than
-   inset from it — the light source is the corner itself. The RINGS are a
-   repeating-radial-gradient on an ::after, since a repeating gradient tiles
-   forever and would march evenly across the whole card; the mask is what
-   fades them out with distance so they read as ripples from the corner and
-   not as a pattern. Both share the corner as origin, so they stay one object.
-
-   ONE set of alphas, not one per theme. An earlier attempt keyed the strength
-   off `.dark`, which was the wrong hook twice over: the rule never matched on
-   a default first paint (the server renders data-ui-mode="light" and adds no
-   `.dark` class until ThemeController runs on mount), and even when it did
-   match it was answering the wrong question — this card has no light variant.
-   `bg-white/[0.025]` over `text-white` is its surface in every theme, so one
-   accent covers both and the card underneath stays clearly dark.
-
-   `overflow: hidden` is what keeps the rings inside the 20px radius, and the
-   z-index rule is what keeps the count and its caption above them — an
-   absolutely positioned ::after otherwise paints over static children. */
-const WASH_CSS = `
-  .hh-wash {
-    position: relative;
-    overflow: hidden;
-    background-image: radial-gradient(
-      circle at 100% 100%,
-      rgba(var(--wash-rgb),0.40) 0%,
-      rgba(var(--wash-rgb),0.21) 26%,
-      rgba(var(--wash-rgb),0.09) 46%,
-      rgba(var(--wash-rgb),0.03) 62%,
-      transparent 76%);
-  }
-  .hh-wash::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background-image: repeating-radial-gradient(
-      circle at 100% 100%,
-      transparent 0 42px,
-      rgba(var(--wash-rgb),0.24) 42px 43.5px,
-      transparent 43.5px 84px);
-    -webkit-mask-image: radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
-    mask-image: radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
-  }
-  .hh-wash > * { position: relative; z-index: 1; }
-`;
-
+/* The wash colours, as bare channels. The gradient that consumes them lives
+   in home-hero.css, next to the panel it has to sit quietly on. */
 /** The score ring. Stroke colour is the shared completion band, not a new palette. */
 function ScoreRing({ score, colour }: { score: number | null; colour: string }) {
   const size = 84;
@@ -292,10 +248,8 @@ export default function HomeHighlights({
        `items-stretch` is what gives them equal height without a fixed value. */
     <section
       aria-label="Your Docrud summary"
-      className={`flex w-full min-w-0 flex-col gap-2.5 px-2 sm:px-3 lg:grid lg:items-stretch lg:gap-2.5 ${showScoreCard ? ROW_4 : ROW_3}`}
+      className={`hh-inner flex w-full min-w-0 flex-col gap-2.5 px-2 sm:px-3 lg:grid lg:items-stretch lg:gap-2.5 ${showScoreCard ? ROW_4 : ROW_3}`}
     >
-      <style>{WASH_CSS}</style>
-
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
       <div
         className={`hh-wash relative flex items-center gap-3 overflow-hidden p-4 sm:p-5 ${CARD}`}

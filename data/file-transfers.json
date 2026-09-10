@@ -18,11 +18,24 @@
     "uploadedByUserId": "individual-1788599113878",
     "avatarUrl": "/uploads/profile/avatar_individual17_87c4cafc3188.jpg",
     "thumbnailUrl": "/api/public/thumbnail/transfer-1788730790345-14190db0",
-    "openCount": 0,
+    "openCount": 2,
     "downloadCount": 0,
-    "accessEvents": [],
+    "accessEvents": [
+      {
+        "id": "fte-1788766245277-51e660",
+        "eventType": "open",
+        "createdAt": "2026-09-07T07:30:45.277Z"
+      },
+      {
+        "id": "fte-1788766245315-24985b",
+        "eventType": "open",
+        "createdAt": "2026-09-07T07:30:45.315Z"
+      }
+    ],
     "createdAt": "2026-09-06T21:39:50.349Z",
-    "updatedAt": "2026-09-06T21:39:50.349Z"
+    "updatedAt": "2026-09-07T07:30:45.315Z",
+    "lastOpenedAt": "2026-09-07T07:30:45.315Z",
+    "viewCount": 2
   },
   {
     "id": "transfer-1788723965126-098841d2",

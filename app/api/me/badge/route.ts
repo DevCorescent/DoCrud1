@@ -17,13 +17,18 @@ const BADGE_FIELDS = [
   'docrudGo', 'docrudInfinity', 'docrudInfinityExpiresAt', 'avatarUrl',
   'headline', 'bio', 'location', 'website',
   'skills', 'interests', 'experience', 'education', 'achievements', 'socialLinks',
+  /* Work Preferences is one of the eleven scored sections and was missing from
+     this projection, so the score every nav surface renders could not reach
+     100 however much a member filled in: the section was always counted
+     incomplete because its field was never fetched. */
+  'matchPreferences',
 ] as const;
 
 export async function GET() {
   const session = await getAuthSession();
   const userId = await resolveSessionUserId(session);
   if (!userId) {
-    return NextResponse.json({ docrudGo: false, premium: false, avatarUrl: null, profileScore: null, freePremium: null });
+    return NextResponse.json({ docrudGo: false, premium: false, avatarUrl: null, profileScore: null, profileMissing: [], freePremium: null });
   }
   // Projected: the full profile document carries resume files and portfolio
   // entries this endpoint never looks at.
@@ -37,7 +42,14 @@ export async function GET() {
   const docrudGo = !!(profile?.docrudGo || hasInfinityActive);
 
   // Derived, never stored — the score cannot go stale against the profile.
-  const { score } = calculateProfileScore(profile);
+  const { score, sections } = calculateProfileScore(profile);
+  /* What is still missing, in the order the model lists it. Sent so a caller
+     can tell someone WHICH sections to fill in rather than only that they
+     should; label and weight come from the same model as the score, so the
+     parts can never add up to a different number than the whole. */
+  const profileMissing = sections
+    .filter((s) => !s.complete)
+    .map((s) => ({ id: s.id, label: s.label, weight: s.weight }));
 
   /* Aggregate only — a count and the allocation, never who holds a grant.
      Premium members are told nothing about the offer, since it cannot apply
@@ -51,6 +63,7 @@ export async function GET() {
       premium: docrudGo,
       avatarUrl: profile?.avatarUrl ?? null,
       profileScore: score,
+      profileMissing,
       freePremium,
     },
     { headers: { 'Cache-Control': 'no-store' } }

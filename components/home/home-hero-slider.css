@@ -1,0 +1,412 @@
+/**
+ * The homepage hero slider.
+ *
+ * ═══ TWO BOXES, NOT ONE ═══
+ *
+ * `.hhs` is the space the hero takes in the page: a fixed height, in the
+ * content column, with the headline, the button and the dots inside it.
+ *
+ * `.hhs-track` is the picture, and it is bigger. It escapes upward by
+ * `--hhs-bleed` — past the announcement bar, past the fixed navigation bar, to
+ * the very top of the page — and sideways by `--hhs-left` / `--hhs-right`, out
+ * to both edges of the screen past the content column's gutters. All three are
+ * measured at runtime by the component; the fallbacks here are only what is
+ * painted in the frame before the first measurement lands.
+ *
+ * Nothing is clipped on the way out: `.hhs` deliberately has no `overflow`, and
+ * the track does its own clipping. What stops the bleed at the top of the page
+ * is the shell's own scroller, which is exactly where it should stop.
+ *
+ * The bars it runs beneath are glass, so the picture is what they blur. That is
+ * the whole point of the bleed — a navigation bar over a moving photograph
+ * reads as a layer of the page, and the same bar over flat black reads as a
+ * strip of chrome.
+ *
+ * ═══ HEIGHT, NOT ASPECT RATIO ═══
+ *
+ * A clamp rather than an aspect ratio: an aspect ratio makes the hero grow
+ * without limit on a wide screen, and a 900px-tall banner above the feed is a
+ * page nobody scrolls past.
+ */
+
+.hhs{
+  position:relative;
+  /* No z-index, deliberately: `.hhs` must NOT open a stacking context, because
+     the track below sits at -1 and has to fall behind the page's content —
+     the buttons under the hero and the top of the feed — not merely behind
+     this element. The nearest context is the shell's own scroller. */
+  height:clamp(230px, 30vw, 340px);
+  /* No overflow of its own — see above. The measured values start at zero so
+     that a slider whose measurement has not landed yet is merely un-bled
+     rather than displaced. */
+  --hhs-bleed:0px;
+  --hhs-left:0px;
+  --hhs-right:0px;
+  --hhs-par:0px;
+  /* Downward, the bleed is a constant rather than a measurement, because
+     nothing depends on where it lands: the tail is masked away to nothing
+     before it ends, and it passes behind the page's content on the way. It is
+     long — the whole point is that the picture does not stop, it goes soft,
+     dissolves, and the feed comes out of it. The words and the dots stay in
+     `.hhs`'s own box, clear of the tail rather than in it. */
+  --hhs-bleed-b:260px;
+
+  /* Where the tail does its work, measured up from the bottom of the track.
+     Below `gone` there is nothing left; between `gone` and `soft` the blurred
+     copy fades away; above `soft` the sharp copy takes over. */
+  --hhs-gone:26px;
+  --hhs-soft:210px;
+  --hhs-sharp:360px;
+}
+
+/* ══ The bleeding layer ══ */
+.hhs-track{
+  position:absolute;
+  top:calc(-1 * var(--hhs-bleed));
+  bottom:calc(-1 * var(--hhs-bleed-b));
+  left:calc(-1 * var(--hhs-left));
+  right:calc(-1 * var(--hhs-right));
+  /* Behind everything in the flow. The tail runs a long way down — past the
+     two buttons and into the top of the feed — and it has to pass BEHIND
+     them. It is also masked to nothing by the time it gets there, so the
+     overlap costs the feed nothing either way. */
+  z-index:-1;
+
+  display:flex;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scroll-snap-type:x mandatory;
+  /* Explicitly NOT smooth. The component animates `scrollLeft` itself, on its
+     own curve; a `scroll-behavior: smooth` inherited from anywhere would have
+     the browser animate each of those frames as well, and the two curves would
+     fight all the way across. */
+  scroll-behavior:auto;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-x:contain;
+}
+.hhs-track::-webkit-scrollbar{ display:none; }
+
+.hhs-slide{
+  position:relative;
+  flex:0 0 100%;
+  scroll-snap-align:start;
+  overflow:hidden;
+  /* The dissolve. On the slide rather than on the image, so the veil over the
+     picture goes with it — a veil that outlived its picture would be a black
+     rectangle laid over the top of the feed.
+
+     Masked to transparent, not faded to the page's colour. Those look the same
+     over an empty page and are not remotely the same thing: the ground colour
+     is opaque, so the tail would sit on the feed and dim it, while a mask
+     leaves nothing behind at all. */
+  -webkit-mask-image:linear-gradient(to top, transparent var(--hhs-gone), #000 var(--hhs-soft));
+  mask-image:linear-gradient(to top, transparent var(--hhs-gone), #000 var(--hhs-soft));
+}
+
+/* The lag, on a layer of its own. Two transforms on one element means the
+   later animation simply wins and the other is never seen — so the scroll
+   parallax moves this, and the slow drift moves the image inside it. */
+.hhs-par{
+  position:absolute;
+  inset:0;
+  transform:translate3d(0, var(--hhs-par), 0);
+}
+/* `will-change` on the active slide only. On every slide it is a promise to
+   the compositor to keep a full-width layer ready for each of them — four
+   layers held for one visible picture, which costs memory on a phone and buys
+   nothing, because three of them are not moving and are not on screen. */
+.hhs-slide[data-on="true"] .hhs-par{ will-change:transform; }
+
+.hhs-img{
+  position:absolute;
+  /* Bigger than the frame in the direction the lag moves it, so the top edge
+     of the picture never comes into view. 96px is the cap the component
+     applies plus a little air. */
+  top:-96px;
+  bottom:-28px;
+  left:0;
+  right:0;
+  /* The artwork comes from a custom property the component sets per slide, and
+     the phone gets a different one. Choosing here rather than in JavaScript
+     means only the picture that matches is ever fetched, and it is right on
+     the first frame instead of after a resize listener has run. */
+  background-image:var(--hhs-src, none);
+  background-size:cover;
+  background-position:center;
+  /* A slow drift, so a still photograph is not a still page. Transform only,
+     and it stops for anyone who has asked motion to stop. */
+  animation:hhs-drift 20s ease-in-out infinite alternate;
+}
+/* Alternate slides drift the other way, so a set of banners does not read as
+   one picture sliding the same direction four times. Sharp copies only: the
+   blurred one has its own keyframes and must keep them. */
+.hhs-slide:nth-child(even) .hhs-img:not(.hhs-img-soft){ animation-name:hhs-drift-alt; }
+
+/* ── The progressive blur ──
+   The same picture again, blurred, over the sharp one. The two masks are
+   complementary: the sharp copy is cut away below `--hhs-sharp`, and the
+   blurred copy is only there below it. Between the two stops they cross, and
+   the picture goes out of focus on its way down the page.
+
+   `filter` applies to a whole element and cannot be ramped across one, so a
+   second copy under a mask is the way this is done. It costs one more
+   composited layer per slide and no JavaScript at all. */
+/* Two classes, not one: `.hhs-img-soft` alone has exactly the specificity of
+   `.hhs-img`, and the `.hhs-img` mask below would win on source order and give
+   the blurred copy the sharp one's mask — the two would then fade out
+   together and there would be no cross-fade and no blur to see. */
+.hhs-img.hhs-img-soft{
+  filter:blur(22px) saturate(1.06);
+  /* Drifts by TRANSLATION only — see hhs-drift-soft below. */
+  animation-name:hhs-drift-soft;
+  /* Bleeding sideways as well: a blur samples past the edge of its element and
+     comes back transparent there, which shows up as pale seams down both
+     sides. Push the edges out and let the slide clip them off. */
+  left:-40px;
+  right:-40px;
+  -webkit-mask-image:linear-gradient(to top, #000 var(--hhs-soft), transparent var(--hhs-sharp));
+  mask-image:linear-gradient(to top, #000 var(--hhs-soft), transparent var(--hhs-sharp));
+}
+.hhs-img{
+  -webkit-mask-image:linear-gradient(to top, transparent var(--hhs-soft), #000 var(--hhs-sharp));
+  mask-image:linear-gradient(to top, transparent var(--hhs-soft), #000 var(--hhs-sharp));
+}
+
+@keyframes hhs-drift{
+  from{ transform:scale(1.05) translate3d(0,0,0); }
+  to{ transform:scale(1.12) translate3d(-1.4%,-1.1%,0); }
+}
+@keyframes hhs-drift-alt{
+  from{ transform:scale(1.12) translate3d(1.2%,-0.8%,0); }
+  to{ transform:scale(1.05) translate3d(0,0,0); }
+}
+
+/* The blurred copy's drift: the same movement, at a FIXED scale.
+   `filter` and `transform` on one element make the browser render the element
+   to a surface, blur that surface, and then transform the result — so a
+   changing `scale` means the blur is recomputed at a new size on every frame,
+   for twenty seconds, on the most expensive layer on the page. A translation
+   does not: the compositor moves the surface it already has.
+
+   The scale is pinned at the midpoint of the sharp copy's range. Nobody can
+   see the difference through a 22px blur under a dark veil, and it is the
+   difference between a layer that re-rasterises every frame and one that
+   does not. */
+@keyframes hhs-drift-soft{
+  from{ transform:scale(1.085) translate3d(0,0,0); }
+  to{ transform:scale(1.085) translate3d(-1.4%,-1.1%,0); }
+}
+
+/* ══ The veil ══
+   Four jobs, which is why it is four gradients and not one flat wash:
+
+   1. Dark at the very top, so the navigation bar's own text stays legible
+      whatever the picture is doing behind its glass.
+   2. Dark from the bottom, where the headline is.
+   3. A diagonal lift across the middle, so the picture is still a picture.
+   4. Dark towards the bottom of the frame, but NOT all the way to the page's
+      colour: what ends the picture is the slide's mask, not a wash of black
+      over it. The veil only has to take the brightness out of the tail before
+      the mask takes the tail away.
+
+   A single 60% black over a photograph makes every banner look the same and
+   none of them look good. */
+.hhs-veil{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(180deg, rgba(6,6,9,0.55) 0%, rgba(6,6,9,0.18) 12%, transparent 26%),
+    linear-gradient(180deg, transparent 30%, rgba(6,6,9,0.40) 56%, rgba(6,6,9,0.66) 74%, rgba(6,6,9,0.80) 100%),
+    linear-gradient(105deg, rgba(6,6,9,0.58) 0%, rgba(6,6,9,0.16) 54%, rgba(6,6,9,0.04) 100%);
+}
+
+/* ══ The words ══
+   In `.hhs`, not in the track: the track runs up behind the navigation bar,
+   and a headline that goes with it would be sitting underneath one. */
+.hhs-body{
+  position:absolute;
+  left:0;
+  bottom:0;
+  z-index:1;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:9px;
+  max-width:640px;
+  padding:0 20px 22px;
+}
+@media (min-width:640px){
+  .hhs-body{ padding:0 34px 30px; }
+}
+@media (min-width:1024px){
+  .hhs-body{ padding:0 48px 34px; }
+}
+
+/* Each line arrives after the one above it. The component gives this block a
+   key of the active banner's id, so React replaces it on every change of slide
+   and the sequence plays again — an animation on a reused element would run
+   once and never again. */
+.hhs-title,
+.hhs-sub,
+.hhs-cta{
+  animation:hhs-in 700ms cubic-bezier(0.22,1,0.36,1) backwards;
+}
+.hhs-title{ animation-delay:40ms; }
+.hhs-sub{ animation-delay:120ms; }
+.hhs-cta{ animation-delay:200ms; }
+
+/* Opacity and transform, and nothing else.
+   This used to animate `filter: blur(6px)` down to zero as well. A filter is
+   not a compositor property: every frame of it is a fresh paint of the text
+   underneath, and all three of these run in the first 800ms of a slide change
+   — which is exactly the window the picture is gliding across in. Dropping it
+   took the paint off the transition; the rise is a little longer and a little
+   slower to make up for the softness it used to add. */
+@keyframes hhs-in{
+  from{ opacity:0; transform:translate3d(0,18px,0); }
+  to{ opacity:1; transform:none; }
+}
+
+.hhs-title{
+  font-size:clamp(20px, 3.4vw, 34px);
+  font-weight:700;
+  line-height:1.12;
+  letter-spacing:-0.025em;
+  color:#fff;
+  text-shadow:0 2px 18px rgba(0,0,0,0.45);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+.hhs-sub{
+  font-size:clamp(12.5px, 1.3vw, 15px);
+  line-height:1.5;
+  color:rgba(255,255,255,0.78);
+  text-shadow:0 1px 12px rgba(0,0,0,0.4);
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* The call to action. Glass, like everything else on this page, over whatever
+   the photograph happens to be — which is why it carries its own blur rather
+   than a flat fill: a translucent white on a pale image is invisible. */
+.hhs-cta{
+  margin-top:3px;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  height:42px;
+  padding:0 20px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,0.22);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.06) 100%),
+    rgba(12,12,16,0.42);
+  backdrop-filter:blur(20px) saturate(150%);
+  -webkit-backdrop-filter:blur(20px) saturate(150%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.18), 0 8px 26px rgba(0,0,0,0.34);
+  font-size:13.5px;
+  font-weight:650;
+  color:#fff;
+  text-decoration:none;
+  transition:border-color 180ms ease, background 180ms ease, transform 140ms ease;
+}
+.hhs-cta:hover{
+  border-color:rgba(255,255,255,0.38);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.09) 100%),
+    rgba(12,12,16,0.42);
+}
+.hhs-cta:active{ transform:scale(0.98); }
+.hhs-cta svg{ transition:transform 220ms cubic-bezier(0.22,1,0.36,1); }
+.hhs-cta:hover svg{ transform:translateX(3px); }
+
+/* ══ Which slide, and how long it has ══
+   Bottom right, away from the words. Bars rather than circles: a bar reads as
+   a position in a sequence, a circle reads as a dot — and a bar has room for
+   the countdown to the next slide to run along inside it. */
+.hhs-dots{
+  position:absolute;
+  right:20px;
+  bottom:22px;
+  z-index:2;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+@media (min-width:640px){
+  .hhs-dots{ right:34px; bottom:30px; }
+}
+@media (min-width:1024px){
+  .hhs-dots{ right:48px; bottom:34px; }
+}
+.hhs-dot{
+  position:relative;
+  overflow:hidden;
+  width:18px;
+  height:4px;
+  padding:0;
+  border:0;
+  border-radius:999px;
+  background:rgba(255,255,255,0.28);
+  cursor:pointer;
+  transition:width 260ms cubic-bezier(0.22,1,0.36,1), background-color 200ms ease;
+}
+.hhs-dot:hover{ background:rgba(255,255,255,0.5); }
+.hhs-dot-on{
+  width:34px;
+  background:rgba(255,255,255,0.26);
+}
+.hhs-dot:focus-visible{
+  outline:2px solid rgba(255,255,255,0.65);
+  outline-offset:3px;
+}
+
+.hhs-dot-fill{
+  position:absolute;
+  inset:0;
+  transform-origin:left center;
+  transform:scaleX(0);
+  border-radius:inherit;
+  background:rgba(255,255,255,0.92);
+}
+/* Seven seconds, matching the timer in the component. It restarts because the
+   class moves to a different button on every change of slide. */
+.hhs-dot-on .hhs-dot-fill{
+  animation:hhs-count 7000ms linear forwards;
+}
+/* Hovering pauses the timer, so it pauses the thing that draws the timer. */
+.hhs[data-paused="true"] .hhs-dot-fill{ animation-play-state:paused; }
+
+@keyframes hhs-count{
+  from{ transform:scaleX(0); }
+  to{ transform:scaleX(1); }
+}
+
+/* The tall artwork, on the screens it was cut for. A wide banner on a phone
+   crops to a thin strip through its middle, which is where nothing usually
+   is. Falls back to the wide one when Super Admin has not uploaded a second. */
+@media (max-width:640px){
+  .hhs-img{ background-image:var(--hhs-src-m, var(--hhs-src, none)); }
+}
+
+@media (prefers-reduced-motion: reduce){
+  .hhs-track{ scroll-behavior:auto; }
+  .hhs-par{ transform:none; }
+  /* Both copies. `.hhs-img.hhs-img-soft` sets `animation-name` at two
+     classes' specificity, so a single-class rule here would lose to it and
+     leave the blurred layer drifting for someone who asked for no motion. */
+  .hhs-img,
+  .hhs-img.hhs-img-soft{ animation:none; transform:scale(1.02); }
+  .hhs-title,.hhs-sub,.hhs-cta{ animation:none; }
+  .hhs-cta,.hhs-cta svg,.hhs-dot{ transition:none; }
+  .hhs-cta:active{ transform:none; }
+  /* No countdown to watch, but the active bar still has to read as active. */
+  .hhs-dot-on .hhs-dot-fill{ animation:none; transform:scaleX(1); }
+}

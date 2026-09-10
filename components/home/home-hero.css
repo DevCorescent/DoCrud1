@@ -1,0 +1,141 @@
+/**
+ * The hero band: the greeting, the two match counts, the profile score and the
+ * companies rail, on one surface.
+ *
+ * ═══ WHY A PANEL ═══
+ *
+ * These four things are one answer to one question — "what is waiting for me
+ * today" — and they were four cards floating on the page background with the
+ * companies rail loose underneath. Grouping them says they belong together,
+ * and it gives the top of the page a horizon: the feed below reads as a
+ * separate thing rather than as more of the same cards.
+ *
+ * ═══ WHY IT IS GLASS AND NOT A FLAT BLOCK ═══
+ *
+ * The page has soft ambient glows behind it. A solid panel would stamp a
+ * rectangle over them; a translucent one lets them through and picks up
+ * whatever is behind it, which is what makes it read as part of the page
+ * instead of a card pasted on top. The gradient is dark-on-dark — the surface
+ * is lit slightly at the top edge and falls away, the same direction as every
+ * other card in the product.
+ *
+ * One blurred element, not thirty: the cost of a backdrop filter is
+ * re-sampling what is behind it on every frame it moves, which is why the feed
+ * cards deliberately have none (see components/feed/cardShell.ts). Here it is
+ * a single surface at the top of the page.
+ */
+
+.hh-panel{
+  position:relative;
+  border-radius:24px;
+  padding:13px;
+  border:1px solid rgba(255,255,255,0.075);
+  background:
+    /* The sheen: light at the top edge, gone by the middle. */
+    linear-gradient(180deg,
+      rgba(255,255,255,0.06) 0%,
+      rgba(255,255,255,0.018) 38%,
+      rgba(255,255,255,0.008) 100%),
+    /* The ground: dark, and dark all the way down. */
+    linear-gradient(180deg,
+      rgba(14,14,18,0.72) 0%,
+      rgba(10,10,13,0.58) 100%);
+  backdrop-filter:blur(22px) saturate(140%);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    0 18px 44px rgba(0,0,0,0.28);
+}
+
+/* The rows inside it. The cards keep their own gaps; this is the space
+   between the two halves of the band. */
+.hh-panel-row + .hh-panel-row{ margin-top:12px; }
+
+/* Inside the panel the section supplies no padding of its own — the panel
+   already has it, and two paddings put the cards in a box in a box. */
+.hh-panel .hh-inner{ padding-left:0; padding-right:0; }
+
+@media (max-width:640px){
+  .hh-panel{
+    padding:10px;
+    border-radius:20px;
+    /* A rounded panel flush to the bezel has its corners sliced by the screen
+       edge and stops reading as a panel at all. `max-width` rather than a
+       margin because the element carries `w-full`, and a margin on a
+       100%-wide box overflows by exactly the margin. */
+    max-width:calc(100% - 16px);
+    margin-inline:auto;
+  }
+}
+
+/* ── The corner accent on each card ──
+   Was an inline <style> in HomeHighlights; it lives here so the panel and the
+   cards that sit on it are described in one place.
+
+   Turned DOWN from where it was. At its old strength — 0.40 peak, rings at
+   0.24 — three differently coloured glows sat on a page that had no other
+   colour in it, and the section read as three tinted cards rather than as one
+   surface. At this strength the hue is still there, and still tells the three
+   cards apart, without any of them announcing itself. */
+.hh-wash{
+  position:relative;
+  overflow:hidden;
+  background-image:radial-gradient(
+    circle at 100% 100%,
+    rgba(var(--wash-rgb),0.22) 0%,
+    rgba(var(--wash-rgb),0.12) 26%,
+    rgba(var(--wash-rgb),0.05) 46%,
+    rgba(var(--wash-rgb),0.018) 62%,
+    transparent 76%);
+}
+.hh-wash::after{
+  content:'';
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background-image:repeating-radial-gradient(
+    circle at 100% 100%,
+    transparent 0 42px,
+    rgba(var(--wash-rgb),0.13) 42px 43.5px,
+    transparent 43.5px 84px);
+  -webkit-mask-image:radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
+  mask-image:radial-gradient(circle at 100% 100%, #000 0%, #000 34%, transparent 74%);
+}
+.hh-wash > *{ position:relative; z-index:1; }
+
+/* ── The cards on the panel ──
+   A card at `bg-white/[0.025]` was tuned against the page background. On a
+   panel that is itself translucent white over dark, that is nearly invisible,
+   so the cards lift by the same amount the panel did. */
+.hh-card{
+  border-radius:20px;
+  border:1px solid rgba(255,255,255,0.085);
+  background:rgba(255,255,255,0.05);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);
+  transition:border-color 180ms ease, background-color 180ms ease;
+}
+a.hh-card:hover{
+  border-color:rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.075);
+}
+
+/* ── The companies rail, inside the panel ──
+   The rail breaks out to the full viewport on the open page, because there the
+   screen edge is where a scrolling row should end. On the panel the PANEL edge
+   is that boundary, so the break-out is undone and the rail takes the panel's
+   own padding as its margins — otherwise the first tile starts outside the
+   panel and is sliced by its rounded corner.
+
+   Undone here rather than in the component: the full-bleed is right everywhere
+   else it is used, and this is the one context that disagrees. */
+.hh-panel .ce-rail-wrap{
+  position:static;
+  left:auto;
+  width:100%;
+  transform:none;
+}
+.hh-panel .ce-rail,
+.hh-panel .ce-head{
+  padding-left:0;
+  padding-right:0;
+}

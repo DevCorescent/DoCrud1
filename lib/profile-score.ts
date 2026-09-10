@@ -171,6 +171,21 @@ export function calculateProfileScore(profile: ScorableProfile | null | undefine
   };
 }
 
+/**
+ * The completeness at which a profile is ranked as a first-class result.
+ *
+ * Search does not hide anyone below it — a person who filled in three fields
+ * is still findable by name, and burying real people would make the product
+ * worse for the person searching. What it does is scale the score: at and
+ * above this line a profile carries the full completeness boost, because every
+ * field the ranking reads is actually there to read.
+ *
+ * Stated here rather than in the ranking so the number a member is shown
+ * ("profiles above 95% are indexed better") is the number the ranking uses.
+ * One constant, both sides.
+ */
+export const PROFILE_INDEX_THRESHOLD = 95;
+
 export const PROFILE_COMPLETION_CTA =
   'Complete your profile to build your presence on Docrud and match with relevant opportunities.';
 export const PROFILE_COMPLETE_SUBTITLE =

@@ -24,6 +24,8 @@ import {
 import { rankBySearch } from '@/lib/search-relevance';
 
 /* ─── constants ──────────────────────────────────────────────────────── */
+import './people.css';
+
 const PAGE_SIZE = 24;
 
 /* ─── types ──────────────────────────────────────────────────────────── */
@@ -83,7 +85,7 @@ function Avatar({ person, size }: { person: Person; size: number }) {
           borderRadius: radius,
           fontSize: size >= 52 ? 15 : 13,
           background: v ? '#0f0e2e' : 'rgba(255,255,255,0.08)',
-          color: v ? '#a5b4fc' : 'rgba(255,255,255,0.65)',
+          color: v ? '#b6c1ff' : 'rgba(255,255,255,0.78)',
           border: v ? 'none' : '1px solid rgba(255,255,255,0.10)',
         }}>
         {person.profile.avatarUrl
@@ -125,18 +127,24 @@ function PersonCard({
         ? { background: 'rgba(99,102,241,0.09)', border: '1px solid rgba(99,102,241,0.18)', color: 'rgba(165,180,252,0.70)' }
         : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.50)' };
 
-  const BANNER_GRADIENTS = [
-    'linear-gradient(135deg,#0f172a 0%,#1e3a8a 100%)',
-    'linear-gradient(135deg,#0d1b0d 0%,#14532d 100%)',
-    'linear-gradient(135deg,#1a0d2e 0%,#4c1d95 100%)',
-    'linear-gradient(135deg,#1c0a0a 0%,#7f1d1d 100%)',
-    'linear-gradient(135deg,#0d1a1a 0%,#134e4a 100%)',
-    'linear-gradient(135deg,#1a150d 0%,#78350f 100%)',
-    'linear-gradient(135deg,#0a0d1a 0%,#1e1b4b 100%)',
-    'linear-gradient(135deg,#0f0a1a 0%,#581c87 100%)',
-  ];
-  const bannerHash = Array.from(person.name).reduce((a, c) => a + c.charCodeAt(0), 0);
+  /* ── The banner, when somebody has not uploaded one ──
+     This used to pick one of eight saturated gradients — navy, forest, violet,
+     maroon — from a hash of the person's name. It made the page a patchwork:
+     the loudest thing in a directory of people was a colour that meant
+     nothing, assigned at random, and no two cards read as the same product.
 
+     One quiet gradient instead, in the same white-on-dark the rest of the
+     surface uses. The things on a card that DO mean something — a Public Face,
+     an Infinity member, an uploaded banner — are then the only colour in the
+     grid, which is what makes them legible. */
+  /* Measured, not eyeballed: on the page's #0A0A0C this lands the banner at
+     about #2C2C30 against a #222225 card body — a step you can see and not one
+     that reads as a separate grey slab stuck to the top of the card. */
+  const NEUTRAL_BANNER =
+    'linear-gradient(150deg,rgba(255,255,255,0.028) 0%,rgba(255,255,255,0.012) 55%,rgba(255,255,255,0.004) 100%)';
+
+  /* A photograph behind the avatar, or the product's own surface. */
+  const hasBannerImage = !!person.profile.bannerUrl;
   const bannerStyle: React.CSSProperties = person.profile.bannerUrl
     ? { backgroundImage: `url(${person.profile.bannerUrl})`, backgroundSize: 'cover', backgroundPosition: person.profile.coverPosition ?? 'center' }
     : person.profile.coverGradient
@@ -145,18 +153,42 @@ function PersonCard({
         ? { background: 'linear-gradient(135deg,#0b0900 0%,#130f05 50%,#0b0900 100%)' }
         : v
           ? { background: 'linear-gradient(135deg,#0f0e2e 0%,#1e1b4b 55%,#0f0e2e 100%)' }
-          : { background: BANNER_GRADIENTS[bannerHash % BANNER_GRADIENTS.length] };
+          : { background: NEUTRAL_BANNER };
 
   const outerBorder = pf
     ? 'linear-gradient(135deg,rgba(180,140,55,0.60),rgba(210,175,80,0.25) 50%,rgba(160,120,45,0.55))'
     : v
       ? 'linear-gradient(135deg,rgba(99,102,241,0.65),rgba(165,180,252,0.30) 50%,rgba(99,102,241,0.60))'
-      : 'rgba(255,255,255,0.09)';
+      /* A layer, not a colour: `background-image` takes gradients only, and
+         the ring is one of this card's background layers now. */
+      : 'linear-gradient(rgba(255,255,255,0.11),rgba(255,255,255,0.07))';
+  /* ── Glass, not a flat panel ──
+     These were opaque fills (#0d0d10 and two near-black tints), which made a
+     grid of them read as a spreadsheet: every card the same dead rectangle
+     whatever was behind it. A translucent surface with a light top edge and a
+     real blur picks up the page underneath, so the grid has depth and the
+     Public Face and Verified treatments read as the same material in a
+     different hue rather than as three unrelated backgrounds.
+
+     The tint is carried by the gradient's colour, and the alpha is the same in
+     all three, so a Public Face card is not also a BRIGHTER card. */
+  /* Two layers: a soft light in the top-left corner, then the ramp down the
+     card. The corner is what gives a flat translucent rectangle a direction —
+     the same trick the hero band and the feed's profile card use, so the three
+     read as one product rather than three takes on glass. */
+  const CORNER_LIGHT = 'radial-gradient(115% 80% at 0% 0%,rgba(255,255,255,0.05) 0%,transparent 55%)';
+  /* The third layer, under the two above and over the card's base colour. It
+     is what makes the ramp a ramp rather than a tint on nothing. */
+  const BASE_SHEEN = 'linear-gradient(180deg,rgba(255,255,255,0.022) 0%,rgba(0,0,0,0.10) 100%)';
+  /* Deeper than it looks like it should be. The blur behind these cards lifts
+     everything a step, so a surface tuned by eye on a flat mock comes out
+     grey — the first attempt at this made the whole grid one pale block with
+     the text sitting on top of it rather than in it. */
   const cardBg = pf
-    ? 'linear-gradient(160deg,#0e0c08,#060504)'
+    ? `${CORNER_LIGHT},linear-gradient(168deg,rgba(170,132,50,0.16) 0%,rgba(255,255,255,0.03) 46%,rgba(255,255,255,0.01) 100%),${BASE_SHEEN}`
     : v
-      ? 'linear-gradient(160deg,#0f0e2e,#06060f)'
-      : '#0d0d10';
+      ? `${CORNER_LIGHT},linear-gradient(168deg,rgba(110,113,245,0.18) 0%,rgba(255,255,255,0.03) 46%,rgba(255,255,255,0.01) 100%),${BASE_SHEEN}`
+      : `${CORNER_LIGHT},linear-gradient(168deg,rgba(255,255,255,0.055) 0%,rgba(255,255,255,0.022) 55%,rgba(255,255,255,0.01) 100%),${BASE_SHEEN}`;
 
   const hoverGlow = pf
     ? '0 24px 72px rgba(160,120,40,0.15), 0 8px 32px rgba(0,0,0,0.6)'
@@ -164,163 +196,37 @@ function PersonCard({
       ? '0 24px 72px rgba(99,102,241,0.12), 0 8px 32px rgba(0,0,0,0.6)'
       : '0 24px 72px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.4)';
 
-  /* ── Mobile card ── */
-  const mobileCard = (
-    <div
-      className="sm:hidden cursor-pointer active:scale-[0.985] transition-transform duration-150"
-      onClick={() => router.push(`/u/${person.id}`)}
-      role="button" tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/u/${person.id}`); }}
-    >
-      <div className="rounded-[20px] p-[1px]" style={{ background: outerBorder }}>
-        <div className="rounded-[19px] flex flex-col" style={{ background: cardBg }}>
-
-          {/* Banner */}
-          <div className="relative shrink-0 rounded-t-[19px] overflow-hidden" style={{ height: 80, ...bannerStyle }}>
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom,rgba(0,0,0,0.06) 0%,rgba(0,0,0,0.72) 100%)' }} />
-            {pf && <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(105deg,transparent 20%,rgba(200,165,70,0.09) 55%,transparent 80%)' }} />}
-            {v && <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(100deg,transparent 30%,rgba(99,102,241,0.12) 60%,transparent 80%)' }} />}
-            {pf && (
-              <span className="pf-badge absolute top-2.5 right-3">
-                <PublicFaceStarIcon size={7} /> Public Face
-              </span>
-            )}
-            {!pf && person.profile.openToWork && (
-              <span className="absolute top-2.5 right-3 rounded-full px-2.5 py-1 text-[9px] font-semibold backdrop-blur-md"
-                style={{ background: 'rgba(16,185,129,0.22)', border: '1px solid rgba(16,185,129,0.35)', color: '#6ee7b7' }}>
-                Open to Work
-              </span>
-            )}
-          </div>
-
-          {/* Body */}
-          <div className="px-4 pb-4" style={{ marginTop: -26, position: 'relative', zIndex: 1 }}>
-            <div className="flex items-end gap-3">
-              {/* Avatar */}
-              <div className="shrink-0 rounded-full" style={{
-                padding: 3,
-                background: pf
-                  ? 'linear-gradient(135deg,#6B4E1A,#C9A84C,#E8CE8A,#9A7A20)'
-                  : v ? 'linear-gradient(135deg,#4f46e5,#818cf8)' : 'rgba(255,255,255,0.14)',
-                boxShadow: '0 8px 28px rgba(0,0,0,0.55)',
-              }}>
-                <Avatar person={person} size={52} />
-              </div>
-
-              {/* Name + headline */}
-              <div className="flex-1 min-w-0 pb-0.5 pt-[22px]">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="font-bold text-[14.5px] leading-tight text-white truncate">{person.name}</span>
-                  {pf && <PublicFaceStarIcon size={13} />}
-                  {v && <GoldBadge />}
-                </div>
-                {pf && pfLabel && (
-                  <p className="text-[10px] font-medium mt-0.5" style={{ color: 'rgba(200,165,80,0.55)' }}>{pfLabel}</p>
-                )}
-                {person.profile.headline && (
-                  <p className="text-[11.5px] leading-snug truncate mt-[3px]"
-                    style={{ color: pf ? 'rgba(210,185,120,0.55)' : v ? 'rgba(165,180,252,0.60)' : 'rgba(255,255,255,0.45)' }}>
-                    {person.profile.headline}
-                  </p>
-                )}
-              </div>
-
-              {/* Actions */}
-              {!isOwnCard && (
-                <div className="flex flex-col gap-1.5 shrink-0 pb-0.5 pt-[22px]" onClick={(e) => e.stopPropagation()}>
-                  {sessionUserId ? (
-                    <>
-                      <button onClick={() => onToggleFollow(person.id)}
-                        className="h-8 px-4 rounded-[10px] text-[12px] font-semibold transition-all"
-                        style={isFollowing
-                          ? { background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.45)', border: '1px solid rgba(255,255,255,0.10)' }
-                          : pf
-                            ? { background: 'rgba(180,140,55,0.16)', border: '1px solid rgba(200,165,70,0.38)', color: 'rgba(215,180,95,0.95)' }
-                            : v
-                              ? { background: 'linear-gradient(135deg,#4f46e5,#6366f1)', color: '#ffffff', boxShadow: '0 4px 16px rgba(99,102,241,0.30)' }
-                              : { background: '#ffffff', color: '#0D0D0F', fontWeight: 700, boxShadow: '0 4px 16px rgba(255,255,255,0.12)' }}>
-                        {isFollowing ? 'Following' : 'Follow'}
-                      </button>
-                      <button onClick={() => onToggleUpraise(person.id)}
-                        className="h-6 px-2.5 rounded-[8px] text-[10.5px] font-semibold transition-all flex items-center justify-center gap-1"
-                        style={isUpraised
-                          ? { background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', color: '#F59E0B' }
-                          : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.38)' }}>
-                        <TrendingUp className="h-2.5 w-2.5" /> Upraise
-                      </button>
-                    </>
-                  ) : (
-                    <Link href={`/u/${person.id}`} onClick={(e) => e.stopPropagation()}
-                      className="h-8 px-3 rounded-[10px] text-[11.5px] font-medium flex items-center gap-1 transition-all"
-                      style={{ background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(255,255,255,0.10)' }}>
-                      View <ArrowUpRight className="h-3 w-3" />
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Location */}
-            {person.profile.location && (
-              <div className="flex items-center gap-1 mt-2.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.32)' }}>
-                <MapPin className="h-3 w-3 shrink-0" />
-                <span className="truncate">{person.profile.location}</span>
-              </div>
-            )}
-
-            {/* Skills */}
-            {(person.profile.skills ?? []).length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {person.profile.skills!.slice(0, 4).map((s) => (
-                  <span key={s} className="rounded-full px-2.5 py-[3.5px] text-[10px] font-medium" style={skillPill(v, pf)}>{s}</span>
-                ))}
-                {person.profile.skills!.length > 4 && (
-                  <span className="rounded-full px-2.5 py-[3.5px] text-[10px] font-medium"
-                    style={{ color: 'rgba(255,255,255,0.25)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    +{person.profile.skills!.length - 4}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Stats */}
-            <div className="flex items-center gap-3 mt-3 pt-3 text-[11px]"
-              style={{
-                borderTop: pf ? '1px solid rgba(180,140,55,0.12)' : v ? '1px solid rgba(99,102,241,0.12)' : '1px solid rgba(255,255,255,0.06)',
-                color: pf ? 'rgba(200,170,100,0.50)' : v ? 'rgba(165,180,252,0.65)' : 'rgba(255,255,255,0.30)',
-              }}>
-              {upraiseCount > 0 && (
-                <span className="flex items-center gap-1"><TrendingUp className="h-3 w-3" />{upraiseCount}</span>
-              )}
-              <span>{person.stats.followers.toLocaleString()} <span className="opacity-55">flw</span></span>
-              {person.stats.gigsCount > 0 && (
-                <span className="flex items-center gap-1 opacity-70 ml-auto">
-                  <Briefcase className="h-3 w-3" />{person.stats.gigsCount} gig{person.stats.gigsCount !== 1 ? 's' : ''}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  /* ── Desktop grid card ── */
+  /* ── The card ──
+     One card at every width. There used to be two: this one from `sm` up, and
+     a wide horizontal row below it, built for a single-column phone list. Two
+     per row on a phone is a grid, not a list, so the row card had nothing left
+     to do — and keeping two layouts of the same thing meant every change had
+     to be made twice or silently diverge. Everything below `sm` is the same
+     card with smaller numbers; see the media block in people.css. */
   const gridCard = (
     <div
-      className="hidden sm:flex flex-col h-full cursor-pointer group"
+      className="flex flex-col h-full cursor-pointer group"
       onClick={() => router.push(`/u/${person.id}`)}
       role="button" tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/u/${person.id}`); }}
     >
-      <div className="rounded-[20px] p-[1px] flex-1 flex flex-col transition-all duration-300 group-hover:-translate-y-[3px]"
-        style={{ background: outerBorder }}>
-        <div className="rounded-[19px] flex flex-col flex-1 transition-shadow duration-300 group-hover:shadow-[var(--card-hover-glow)]"
-          style={{ background: cardBg, '--card-hover-glow': hoverGlow } as React.CSSProperties}>
+      <div className="flex-1 flex flex-col transition-all duration-300 group-hover:-translate-y-[3px]">
+        <div className="pd-glass pd-card rounded-[20px] flex flex-col flex-1 transition-shadow duration-300 group-hover:shadow-[var(--card-hover-glow)]"
+          style={{ backgroundImage: `${cardBg},${outerBorder}`, '--card-hover-glow': hoverGlow } as React.CSSProperties}>
 
           {/* ── Hero banner ── */}
-          <div className="relative shrink-0 rounded-t-[19px] overflow-hidden" style={{ height: 104, ...bannerStyle }}>
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom,rgba(0,0,0,0.04) 0%,rgba(0,0,0,0.72) 100%)' }} />
+          {/* The hairline is what separates the banner from the body now that
+              neither is a colour. Inset rather than a border: a border on a
+              fixed-height box moves everything inside it by a pixel. */}
+          <div className="pd-banner relative shrink-0 rounded-t-[19px] overflow-hidden"
+            style={{ height: 78, boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.07)', ...bannerStyle }}>
+            {/* The wash exists to keep the avatar and the badges legible over
+                somebody's photograph. Over the quiet gradient there is nothing
+                to darken, and painting it there turned the top of every card
+                into a grey smudge. */}
+            {hasBannerImage && (
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to bottom,rgba(0,0,0,0.28) 0%,rgba(0,0,0,0.80) 100%)' }} />
+            )}
             {pf && <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(105deg,transparent 15%,rgba(200,165,70,0.10) 50%,transparent 78%)' }} />}
             {v && <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(105deg,transparent 20%,rgba(99,102,241,0.11) 55%,transparent 75%)' }} />}
 
@@ -343,11 +249,11 @@ function PersonCard({
           </div>
 
           {/* ── Card body ── */}
-          <div className="flex flex-col flex-1 px-4" style={{ position: 'relative', zIndex: 1 }}>
+          <div className="pd-body flex flex-col flex-1 px-4" style={{ position: 'relative', zIndex: 1 }}>
 
             {/* Avatar + actions row */}
-            <div className="flex items-end justify-between" style={{ marginTop: -30 }}>
-              <div className="shrink-0 rounded-full" style={{
+            <div className="pd-idrow flex items-end justify-between" style={{ marginTop: -30 }}>
+              <div className="pd-av shrink-0 rounded-full" style={{
                 padding: 3,
                 background: pf
                   ? 'linear-gradient(135deg,#6B4E1A,#C9A84C,#E8CE8A,#9A7A20)'
@@ -359,8 +265,12 @@ function PersonCard({
                 <Avatar person={person} size={58} />
               </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-1.5 pb-[3px]" onClick={(e) => e.stopPropagation()}>
+              {/* Action buttons.
+                  Beside the avatar where there is room for them, and on their
+                  own row underneath on a phone — at half a 390px screen the
+                  avatar, a Follow button and two icon buttons do not fit on
+                  one line without every one of them shrinking. */}
+              <div className="pd-actions flex items-center gap-1.5 pb-[3px]" onClick={(e) => e.stopPropagation()}>
                 {sessionUserId && !isOwnCard && (
                   <button onClick={() => onToggleUpraise(person.id)}
                     className="flex items-center justify-center h-8 w-8 rounded-[10px] transition-all"
@@ -392,7 +302,7 @@ function PersonCard({
             </div>
 
             {/* Name + headline + location */}
-            <div className="mt-3">
+            <div className="pd-ident mt-3">
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-[14.5px] leading-snug text-white truncate">{person.name}</span>
                 {pf && <PublicFaceStarIcon size={13} />}
@@ -403,12 +313,12 @@ function PersonCard({
               )}
               {person.profile.headline && (
                 <p className="text-[12px] leading-snug truncate mt-[3px]"
-                  style={{ color: pf ? 'rgba(210,185,120,0.55)' : v ? 'rgba(165,180,252,0.62)' : 'rgba(255,255,255,0.45)' }}>
+                  style={{ color: pf ? 'rgba(222,200,145,0.72)' : v ? 'rgba(186,198,255,0.76)' : 'rgba(255,255,255,0.58)' }}>
                   {person.profile.headline}
                 </p>
               )}
               {person.profile.location && (
-                <div className="flex items-center gap-1 mt-1.5 text-[10.5px]" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                <div className="flex items-center gap-1 mt-1.5 text-[10.5px]" style={{ color: 'rgba(255,255,255,0.60)' }}>
                   <MapPin className="h-2.5 w-2.5 shrink-0" />
                   <span className="truncate">{person.profile.location}</span>
                 </div>
@@ -417,7 +327,7 @@ function PersonCard({
 
             {/* Skills */}
             {(person.profile.skills ?? []).length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-3">
+              <div className="pd-skills flex flex-wrap gap-1.5 mt-3">
                 {person.profile.skills!.slice(0, 3).map((s) => (
                   <span key={s} className="rounded-full px-2.5 py-[3.5px] text-[9.5px] font-medium" style={skillPill(v, pf)}>{s}</span>
                 ))}
@@ -430,19 +340,45 @@ function PersonCard({
               </div>
             )}
 
+            {/* The same two actions, on their own row. Rendered only below
+                `sm`, so no screen ever shows both copies. */}
+            {sessionUserId && !isOwnCard && (
+              <div className="pd-actions-m mt-3 hidden items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <button onClick={() => onToggleFollow(person.id)}
+                  className="h-8 flex-1 rounded-[10px] text-[12px] font-semibold transition-all"
+                  style={isFollowing
+                    ? { background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.42)', border: '1px solid rgba(255,255,255,0.09)' }
+                    : pf
+                      ? { background: 'rgba(180,140,55,0.16)', border: '1px solid rgba(200,165,70,0.38)', color: 'rgba(215,180,95,0.95)' }
+                      : v
+                        ? { background: 'linear-gradient(135deg,#4f46e5,#6366f1)', color: '#ffffff' }
+                        : { background: '#ffffff', color: '#0D0D0F', fontWeight: 700 }}>
+                  {isFollowing ? 'Following' : 'Follow'}
+                </button>
+                <button onClick={() => onToggleUpraise(person.id)}
+                  aria-label="Upraise"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] transition-all"
+                  style={isUpraised
+                    ? { background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)', color: '#F59E0B' }
+                    : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.38)' }}>
+                  <TrendingUp className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Stats footer */}
-            <div className="flex items-center gap-3 mt-auto pt-3 pb-4 text-[10.5px]"
+            <div className="pd-foot flex items-center gap-3 mt-auto pt-3 pb-4 text-[10.5px]"
               style={{
                 borderTop: pf ? '1px solid rgba(180,140,55,0.14)' : v ? '1px solid rgba(99,102,241,0.12)' : '1px solid rgba(255,255,255,0.07)',
                 marginTop: 'auto',
-                color: pf ? 'rgba(200,170,100,0.50)' : v ? 'rgba(165,180,252,0.65)' : 'rgba(255,255,255,0.30)',
+                color: pf ? 'rgba(215,190,125,0.74)' : v ? 'rgba(186,198,255,0.78)' : 'rgba(255,255,255,0.58)',
               }}>
               {upraiseCount > 0 && (
                 <span className="flex items-center gap-0.5">
                   <TrendingUp className="h-2.5 w-2.5" />{upraiseCount}
                 </span>
               )}
-              <span>{person.stats.followers.toLocaleString()}<span className="ml-0.5 opacity-55">flw</span></span>
+              <span>{person.stats.followers.toLocaleString()}<span className="ml-0.5">flw</span></span>
               {person.stats.gigsCount > 0 && (
                 <span className="flex items-center gap-0.5 opacity-70 ml-auto">
                   <Briefcase className="h-2.5 w-2.5" />{person.stats.gigsCount} gig{person.stats.gigsCount !== 1 ? 's' : ''}
@@ -456,12 +392,7 @@ function PersonCard({
     </div>
   );
 
-  return (
-    <>
-      {mobileCard}
-      {gridCard}
-    </>
-  );
+  return gridCard;
 }
 
 /* ─── Sidebar filter panel ───────────────────────────────────────────── */
@@ -514,7 +445,7 @@ function FilterPanel({
     <div className="flex flex-col gap-0">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-white/35">Filters</span>
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-white/58">Filters</span>
         {activeCount > 0 && (
           <button onClick={onClear} className="text-[11px] font-semibold text-white/32 hover:text-white/58 transition-colors">
             Clear {activeCount}
@@ -524,14 +455,14 @@ function FilterPanel({
 
       {/* Sort */}
       <div className="mb-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/28 mb-2.5">Sort by</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 mb-2.5">Sort by</p>
         <div className="flex flex-col gap-0.5">
           {sortOptions.map((o) => (
             <button key={o.value} onClick={() => onChange('sort', o.value)}
               className={`flex items-center gap-2.5 h-9 px-3 rounded-[10px] text-[12.5px] font-medium text-left transition-all ${
                 filters.sort === o.value
                   ? 'bg-white text-[#0D0D0F] font-semibold'
-                  : 'text-white/42 hover:text-white/68 hover:bg-white/[0.05]'
+                  : 'text-white/62 hover:text-white/90 hover:bg-white/[0.06]'
               }`}>
               <span className="text-[10px] opacity-55">{o.icon}</span>
               {o.label}
@@ -540,11 +471,11 @@ function FilterPanel({
         </div>
       </div>
 
-      <div className="h-px bg-white/[0.06] mb-6" />
+      <div className="h-px bg-white/[0.05] mb-5" />
 
       {/* Status */}
       <div className="mb-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/28 mb-2.5">Status</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 mb-2.5">Status</p>
         <div className="flex flex-col gap-1">
           {[
             { label: '⭐ Public Faces', key: 'publicFaceOnly' as const, color: 'platinum' },
@@ -562,7 +493,7 @@ function FilterPanel({
                       : color === 'emerald'
                         ? 'bg-emerald-500/10 border border-emerald-500/28 text-emerald-300'
                         : 'bg-violet-500/10 border border-violet-500/28 text-violet-300'
-                  : 'text-white/38 hover:text-white/62 hover:bg-white/[0.04]'
+                  : 'text-white/62 hover:text-white/90 hover:bg-white/[0.06]'
               }`}
               style={filters[key] && color === 'platinum'
                 ? { background: 'rgba(160,160,160,0.09)', border: '1px solid rgba(200,200,200,0.24)', color: '#d8d8d8' }
@@ -575,18 +506,18 @@ function FilterPanel({
         </div>
       </div>
 
-      <div className="h-px bg-white/[0.06] mb-6" />
+      <div className="h-px bg-white/[0.05] mb-5" />
 
       {/* Account type */}
       <div className="mb-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/28 mb-2.5">Account type</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 mb-2.5">Account type</p>
         <div className="flex flex-wrap gap-1.5">
           {['', 'individual', 'business', 'enterprise'].map((t) => (
             <button key={t} onClick={() => onChange('accountType', t)}
-              className={`h-7 px-3 rounded-full text-[11px] font-semibold transition-all capitalize ${
+              className={`pd-chip h-7 px-3 rounded-full text-[11px] font-semibold capitalize ${
                 filters.accountType === t
-                  ? 'bg-white text-[#0D0D0F]'
-                  : 'border border-white/[0.08] text-white/32 hover:text-white/58'
+                  ? 'bg-white text-[#0D0D0F] border border-white'
+                  : 'border border-white/[0.09] bg-white/[0.035] text-white/62 hover:border-white/[0.20] hover:bg-white/[0.07] hover:text-white/90'
               }`}>
               {t === '' ? 'All' : t}
             </button>
@@ -594,14 +525,14 @@ function FilterPanel({
         </div>
       </div>
 
-      <div className="h-px bg-white/[0.06] mb-6" />
+      <div className="h-px bg-white/[0.05] mb-5" />
 
       {/* Thresholds */}
       <div className="mb-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/28 mb-2.5">Thresholds</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 mb-2.5">Thresholds</p>
         <div className="space-y-2.5">
           <div>
-            <label className="text-[10.5px] text-white/28 mb-1 block">Min upraised</label>
+            <label className="text-[10.5px] text-white/58 mb-1 block">Min upraised</label>
             <input
               type="number" min="0" value={filters.minUpraised}
               onChange={(e) => onChange('minUpraised', e.target.value)}
@@ -610,7 +541,7 @@ function FilterPanel({
             />
           </div>
           <div>
-            <label className="text-[10.5px] text-white/28 mb-1 block">Min followers</label>
+            <label className="text-[10.5px] text-white/58 mb-1 block">Min followers</label>
             <input
               type="number" min="0" value={filters.minFollowers}
               onChange={(e) => onChange('minFollowers', e.target.value)}
@@ -621,11 +552,11 @@ function FilterPanel({
         </div>
       </div>
 
-      <div className="h-px bg-white/[0.06] mb-6" />
+      <div className="h-px bg-white/[0.05] mb-5" />
 
       {/* Location */}
       <div className="mb-6">
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/28 mb-2.5">Location</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 mb-2.5">Location</p>
         <div className="relative">
           <MapPin className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-white/22" />
           <input
@@ -637,11 +568,11 @@ function FilterPanel({
         </div>
       </div>
 
-      <div className="h-px bg-white/[0.06] mb-6" />
+      <div className="h-px bg-white/[0.05] mb-5" />
 
       {/* Skills */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/28 mb-2.5">Skills</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/55 mb-2.5">Skills</p>
         <div className="relative mb-2">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-white/22" />
           <input
@@ -656,10 +587,10 @@ function FilterPanel({
             const active = filters.skills.has(s);
             return (
               <button key={s} onClick={() => toggleSkill(s)}
-                className={`h-[26px] px-2.5 rounded-full text-[10.5px] font-medium transition-all ${
+                className={`pd-chip h-[26px] px-2.5 rounded-full text-[10.5px] font-medium ${
                   active
-                    ? 'bg-white/[0.12] border border-white/[0.22] text-white'
-                    : 'border border-white/[0.07] text-white/32 hover:text-white/55 hover:border-white/[0.13]'
+                    ? 'border border-white/[0.26] bg-white/[0.14] text-white'
+                    : 'border border-white/[0.09] bg-white/[0.035] text-white/62 hover:border-white/[0.20] hover:bg-white/[0.07] hover:text-white/90'
                 }`}>
                 {s}
               </button>
@@ -667,14 +598,14 @@ function FilterPanel({
           })}
           {allSkills.filter((s) => s.toLowerCase().includes(skillSearch.toLowerCase())).length > 12 && (
             <button onClick={() => setSkillsExpanded((p) => !p)}
-              className="h-[26px] px-2.5 rounded-full border border-white/[0.07] text-[10.5px] text-white/28 hover:text-white/52 transition-colors">
+              className="h-[26px] px-2.5 rounded-full border border-white/[0.07] text-[10.5px] text-white/58 hover:text-white/85 transition-colors">
               {skillsExpanded ? 'Show less' : `+${allSkills.length - 12} more`}
             </button>
           )}
         </div>
         {filters.skills.size > 0 && (
           <button onClick={() => onChange('skills', new Set())}
-            className="mt-2.5 text-[10.5px] text-white/28 hover:text-white/52 transition-colors">
+            className="mt-2.5 text-[10.5px] text-white/58 hover:text-white/85 transition-colors">
             Clear skills
           </button>
         )}
@@ -707,7 +638,7 @@ function Pagination({ page, totalPages, total, pageSize, onChange }: {
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 pb-2 border-t border-white/[0.06]">
-      <p className="text-[12px] text-white/28">
+      <p className="text-[12px] text-white/58">
         Showing <span className="text-white/52 font-semibold">{from}–{to}</span> of <span className="text-white/52 font-semibold">{total}</span> people
       </p>
       <div className="flex items-center gap-1">
@@ -876,11 +807,32 @@ function PeopleDirectory() {
 
   useEffect(() => { setPage(1); }, [filters]);
 
-  const allSkills = useMemo(() => {
+  /* ── The skills that are actually in this directory ──
+     Counted from the people themselves, never a fixed list: a filter offering
+     a skill nobody has is a dead end, and a directory that grows a new skill
+     should offer it the same day somebody writes it on their profile.
+
+     Counted over ALL people rather than the filtered set on purpose — the
+     number next to a skill is "how many people here have this", and a count
+     that fell as you selected things would be describing the filter rather
+     than the directory. */
+  const skillCounts = useMemo(() => {
     const freq: Record<string, number> = {};
     for (const p of people) for (const s of p.profile.skills ?? []) freq[s] = (freq[s] ?? 0) + 1;
-    return Object.entries(freq).sort((a, b) => b[1] - a[1]).map(([s]) => s);
+    return Object.entries(freq)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([skill, count]) => ({ skill, count }));
   }, [people]);
+
+  const allSkills = useMemo(() => skillCounts.map((s) => s.skill), [skillCounts]);
+
+  /* Selected first, so a chosen skill never scrolls out of reach as the rest
+     of the row moves. */
+  const stripSkills = useMemo(() => {
+    const chosen = skillCounts.filter((s) => filters.skills.has(s.skill));
+    const rest = skillCounts.filter((s) => !filters.skills.has(s.skill));
+    return [...chosen, ...rest];
+  }, [skillCounts, filters.skills]);
 
   const activeFilterCount = useMemo(() => [
     filters.sort !== 'mostUpraised',
@@ -1013,49 +965,12 @@ function PeopleDirectory() {
     return () => document.removeEventListener('keydown', h);
   }, [sidebarOpen]);
 
-  const quickChips = [
-    { id: 'all',         label: 'All',              icon: '◈' },
-    { id: 'publicFaces', label: '⭐ Public Faces',  icon: '' },
-    { id: 'verified',    label: '✦ Verified',       icon: '' },
-    { id: 'openToWork',  label: 'Open to Work',     icon: '' },
-    { id: 'hasGigs',     label: 'Has Gigs',         icon: '' },
-    { id: 'individual',  label: 'Individual',       icon: '' },
-    { id: 'business',    label: 'Business',         icon: '' },
-    { id: 'upraised',    label: '▲ Top Upraised',   icon: '' },
-    { id: 'followed',    label: '◉ Most Followed',  icon: '' },
-    { id: 'newest',      label: '✦ Newest',         icon: '' },
-    { id: 'active',      label: '⚡ Most Active',   icon: '' },
-  ] as const;
-  type QuickChipId = typeof quickChips[number]['id'];
-
-  function isChipActive(id: QuickChipId): boolean {
-    if (id === 'all')         return activeFilterCount === 0 && filters.sort === 'mostUpraised';
-    if (id === 'publicFaces') return filters.publicFaceOnly;
-    if (id === 'verified')    return filters.verifiedOnly;
-    if (id === 'openToWork')  return filters.openToWorkOnly;
-    if (id === 'hasGigs')     return filters.hasGigsOnly;
-    if (id === 'individual')  return filters.accountType === 'individual';
-    if (id === 'business')    return filters.accountType === 'business';
-    if (id === 'upraised')    return filters.sort === 'mostUpraised' && activeFilterCount === 0;
-    if (id === 'followed')    return filters.sort === 'mostFollowed';
-    if (id === 'newest')      return filters.sort === 'recent';
-    if (id === 'active')      return filters.sort === 'mostGigs';
-    return false;
-  }
-
-  function handleChip(id: QuickChipId) {
-    if (id === 'all')         { clearFilters(); return; }
-    if (id === 'publicFaces') { setFilter('publicFaceOnly', !filters.publicFaceOnly); return; }
-    if (id === 'verified')    { setFilter('verifiedOnly',   !filters.verifiedOnly);   return; }
-    if (id === 'openToWork')  { setFilter('openToWorkOnly', !filters.openToWorkOnly); return; }
-    if (id === 'hasGigs')     { setFilter('hasGigsOnly',    !filters.hasGigsOnly);    return; }
-    if (id === 'individual')  { setFilter('accountType', filters.accountType === 'individual' ? '' : 'individual'); return; }
-    if (id === 'business')    { setFilter('accountType', filters.accountType === 'business'   ? '' : 'business');   return; }
-    if (id === 'upraised')    { setFilter('sort', 'mostUpraised'); return; }
-    if (id === 'followed')    { setFilter('sort', 'mostFollowed'); return; }
-    if (id === 'newest')      { setFilter('sort', 'recent');       return; }
-    if (id === 'active')      { setFilter('sort', 'mostGigs');     return; }
-  }
+  /* The eleven quick-filter switches that used to sit under the header —
+     All, Public Faces, Verified, Open to Work, Has Gigs, Individual, Business
+     and four sort orders — are gone from that strip, which now carries the
+     directory's skills instead. Every one of them is still available in the
+     Filters panel, which is where the rest of the controls already were; this
+     removed a second, partial copy of them rather than the filters themselves. */
 
   const HEADER_H = 56;
 
@@ -1069,6 +984,7 @@ function PeopleDirectory() {
         .pc-anim { animation: cardIn 0.42s cubic-bezier(0.22,1,0.36,1) both; }
         .no-sb::-webkit-scrollbar { display:none; }
         .no-sb { scrollbar-width:none; }
+
 
         .pf-badge {
           display: inline-flex; align-items: center; gap: 4px;
@@ -1087,8 +1003,7 @@ function PeopleDirectory() {
       `}</style>
 
       {/* ══ Sticky header ══════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-30 border-b border-white/[0.06]"
-        style={{ height: HEADER_H, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px) saturate(180%)' }}>
+      <header className="pd-bar sticky top-0 z-30" style={{ height: HEADER_H }}>
         <div className="h-full px-3 sm:px-5 lg:px-8 flex items-center gap-3">
 
           {/* Back */}
@@ -1102,7 +1017,7 @@ function PeopleDirectory() {
             <span className="text-[15px] font-bold tracking-[-0.01em] text-white">People</span>
             {!loading && (
               <span className="text-[12px] font-medium"
-                style={{ color: 'rgba(255,255,255,0.28)' }}>{filtered.length.toLocaleString()}</span>
+                style={{ color: 'rgba(255,255,255,0.58)' }}>{filtered.length.toLocaleString()}</span>
             )}
           </div>
 
@@ -1164,56 +1079,68 @@ function PeopleDirectory() {
         </div>
       </header>
 
-      {/* ══ Quick-filter chip strip ══════════════════════════════════════ */}
-      <div className="sticky z-20 border-b border-white/[0.05]"
-        style={{ top: HEADER_H, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px)' }}>
+      {/* ══ Skill filter strip ══════════════════════════════════════════
+           This row used to be eleven switches — All, Public Faces, Verified,
+           Open to Work, Has Gigs, Individual, Business, and four sorts. Every
+           one of them still exists, in the Filters panel where the rest of the
+           controls live; none of them answered the question people actually
+           arrive with, which is "who here can do X".
+
+           The skills are the directory's own: counted from the profiles, in
+           order of how many people have them, so the row is never a list of
+           things nobody can be found by. */}
+      {/* Not sticky. Two bars pinned to the top of a phone took 104px of a
+          844px screen before a single card, and the skills you have already
+          chosen are shown on the cards themselves. It scrolls away with the
+          page and the header stays. */}
+      <div className="pd-bar relative z-20">
         <div className="px-3 sm:px-5 lg:px-8 py-2.5 flex items-center gap-1.5 overflow-x-auto no-sb chip-strip-fade-right">
-          {quickChips.map((chip) => {
-            const active = isChipActive(chip.id);
+          <span className="shrink-0 pr-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
+            Skills
+          </span>
+
+          {/* Clear, first, and only when there is something to clear — a
+              permanent "All" chip is a button that does nothing most of the
+              time it is on screen. */}
+          {filters.skills.size > 0 && (
+            <button
+              onClick={() => setFilter('skills', new Set())}
+              className="pd-chip shrink-0 inline-flex items-center gap-1 h-[30px] px-3 rounded-full text-[11.5px] font-semibold whitespace-nowrap"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.10)', color: 'rgba(255,255,255,0.68)' }}>
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
+
+          {stripSkills.map(({ skill, count }) => {
+            const active = filters.skills.has(skill);
             return (
               <button
-                key={chip.id}
-                onClick={() => handleChip(chip.id)}
-                className="shrink-0 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-all duration-150 whitespace-nowrap"
+                key={skill}
+                onClick={() => {
+                  const next = new Set(filters.skills);
+                  if (next.has(skill)) next.delete(skill); else next.add(skill);
+                  setFilter('skills', next);
+                }}
+                aria-pressed={active}
+                className="pd-chip shrink-0 inline-flex items-center gap-1.5 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap"
                 style={active
-                  ? chip.id === 'publicFaces'
-                    ? { background: 'rgba(180,180,180,0.14)', border: '1px solid rgba(210,210,210,0.38)', color: '#e0e0e0' }
-                    : chip.id === 'verified'
-                      ? { background: 'rgba(99,102,241,0.20)', border: '1px solid rgba(99,102,241,0.42)', color: '#a5b4fc' }
-                      : chip.id === 'openToWork'
-                        ? { background: 'rgba(16,185,129,0.18)', border: '1px solid rgba(16,185,129,0.35)', color: '#6ee7b7' }
-                        : { background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)', color: '#ffffff' }
-                  : chip.id === 'publicFaces'
-                    ? { background: 'rgba(160,160,160,0.05)', border: '1px solid rgba(180,180,180,0.12)', color: 'rgba(200,200,200,0.48)' }
-                    : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.40)' }
-                }>
-                {chip.label}
+                  ? { background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.28)', color: '#ffffff' }
+                  : { background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.09)', color: 'rgba(255,255,255,0.66)' }}>
+                {skill}
+                <span className="tabular-nums text-[10px] font-bold"
+                  style={{ color: active ? 'rgba(255,255,255,0.62)' : 'rgba(255,255,255,0.36)' }}>
+                  {count}
+                </span>
               </button>
             );
           })}
 
-          {Array.from(filters.skills).map((s) => (
-            <button key={s}
-              onClick={() => { const n = new Set(filters.skills); n.delete(s); setFilter('skills', n); }}
-              className="shrink-0 inline-flex items-center gap-1 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-all whitespace-nowrap"
-              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}>
-              {s} <X className="h-2.5 w-2.5" />
-            </button>
-          ))}
-
-          {filters.location && (
-            <button onClick={() => setFilter('location', '')}
-              className="shrink-0 inline-flex items-center gap-1 h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold whitespace-nowrap"
-              style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.20)', color: '#fff' }}>
-              <MapPin className="h-2.5 w-2.5" />{filters.location} <X className="h-2.5 w-2.5" />
-            </button>
-          )}
-
-          {activeFilterCount > 1 && (
-            <button onClick={clearFilters}
-              className="shrink-0 h-[30px] px-3 rounded-full text-[11px] text-white/26 hover:text-white/52 transition-colors whitespace-nowrap">
-              Clear all
-            </button>
+          {/* Nothing to filter by yet. Said out loud rather than leaving an
+              empty rule under the header. */}
+          {stripSkills.length === 0 && !loading && (
+            <span className="shrink-0 text-[11.5px] text-white/35">
+              No skills listed on these profiles yet
+            </span>
           )}
         </div>
       </div>
@@ -1222,8 +1149,11 @@ function PeopleDirectory() {
       <div className="flex">
 
         {/* Desktop sidebar */}
-        <aside className="hidden lg:flex shrink-0 w-[248px] xl:w-[264px] flex-col border-r border-white/[0.05]">
-          <div className="sticky overflow-y-auto px-5 py-6 no-sb"
+        {/* A panel, not a column divided off by a rule. The filters are a tool
+            beside the results rather than a second region of the page, and a
+            single hairline down the full height read as the latter. */}
+        <aside className="hidden lg:flex shrink-0 w-[248px] xl:w-[264px] flex-col">
+          <div className="pd-panel sticky m-3 mr-0 overflow-y-auto rounded-[18px] px-4 py-5 no-sb"
             style={{ top: HEADER_H + 47, height: `calc(100vh - ${HEADER_H + 47}px)` }}>
             <FilterPanel
               filters={filters} allSkills={allSkills}
@@ -1281,7 +1211,10 @@ function PeopleDirectory() {
                   </Link>
                 </div>
               )}
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+              {/* Two per row on a phone. The gap tightens with the screen so
+                  the cards keep their width rather than the gutter keeping
+                  its. */}
+              <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2.5 sm:gap-4">
                 {paginated.map((person, i) => (
                   <div key={person.id} className="pc-anim" style={{ animationDelay: `${Math.min(i, 11) * 0.04}s` }}>
                     <PersonCard

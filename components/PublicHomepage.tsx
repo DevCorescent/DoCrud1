@@ -5402,6 +5402,15 @@ type AdBanner = {
    lib/explore-destinations.ts. Defined once so the two surfaces cannot drift. */
 const EXPLORE_ITEMS = EXPLORE_DESTINATIONS;
 
+/* ── LEGACY EXPLORE SECTION — PRESERVED ──
+   The hand-maintained Explore grid that used to occupy the slot the Company
+   Explorer holds now. Kept in the file and NOT rendered, following the same
+   convention as ContentDiscoveryStrip and TrustedCompanies elsewhere here:
+   the block that replaced it is one component, and restoring this one is a
+   render call rather than an archaeology exercise.
+
+   It has no call site. Nothing below mounts it, so its EXPLORE_ITEMS never
+   reach the DOM and it costs nothing at runtime. */
 function ExploreSection() {
   return (
     /* `px-2 sm:px-3` is copied from HomeHighlights' <section>, not chosen: the
@@ -6220,7 +6229,7 @@ function NewHomepageContent({
              than a gap. */}
         {nhcAuthStatus === 'authenticated' ? (
           <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
-            <TyraiBriefRow />
+            <TyraiBriefRow inline />
           </div>
         ) : (
           <div className="hp-actions w-full min-w-0" style={{ marginBottom: 16 }}>
@@ -6240,6 +6249,15 @@ function NewHomepageContent({
             </Link>
           </div>
         )}
+
+        {/* ── Company Explorer ──
+             The slot the legacy ExploreSection used to fill (see the LEGACY
+             EXPLORE SECTION — PRESERVED note further down this file). The
+             companies that were once a scrolling logo marquee are here as a
+             list somebody can actually click. */}
+        <div className="w-full min-w-0" style={{ marginBottom: 16 }}>
+          <CompanyExplorer />
+        </div>
 
         {/* The announcement used to be repeated here, mid-page, in inline
             styles. One message, one place: it is the bar under the nav. */}

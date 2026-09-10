@@ -43,8 +43,13 @@ const BAND_WORD: Record<string, string> = {
  * `active` gates the fetches. TYRAI passes its open state so the calls happen
  * when the overlay opens rather than on every render of the page behind it;
  * the homepage passes true, because there the row is on screen already.
+ *
+ * `inline` picks the homepage's shape — content-sized tiles aligned right,
+ * matching the action row it replaced — instead of TYRAI's full-width grid.
  */
-export default function TyraiBriefRow({ active = true }: { active?: boolean }) {
+export default function TyraiBriefRow(
+  { active = true, inline = false }: { active?: boolean; inline?: boolean },
+) {
   const { status } = useSession();
   const signedIn = status === 'authenticated';
 
@@ -70,7 +75,12 @@ export default function TyraiBriefRow({ active = true }: { active?: boolean }) {
   const word = BAND_WORD[band.band] ?? 'In progress';
 
   return (
-    <div className="aim-brief-row">
+    /* `inline` is the homepage's shape: content-sized tiles sitting to the
+       right, the way the Companies / Publish / Jobs row did. TYRAI keeps the
+       full-width grid — there the row IS the content of the screen, and three
+       equal columns is what makes it read as a summary rather than as three
+       buttons somebody left in a corner. */
+    <div className={inline ? 'aim-brief-row aim-brief-row-inline' : 'aim-brief-row'}>
       <a href="/jobs?recommended=1" className="aim-brief-tile">
         <Briefcase className="aim-brief-i" aria-hidden />
         <span className="aim-brief-n">{jobCount ?? '—'}</span>

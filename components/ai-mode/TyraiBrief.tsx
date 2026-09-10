@@ -37,10 +37,14 @@ export default function TyraiBrief({ open }: { open: boolean }) {
   const signedIn = status === 'authenticated';
 
   const [companies, setCompanies] = useState<CompanyExplorerTile[]>([]);
-  /* Local, and deliberately not persisted: this is a "not right now", not a
-     preference. Every opening of TYRAI starts with the brief showing, which is
-     the whole reason it is on this screen. */
-  const [briefOpen, setBriefOpen] = useState(true);
+  /* Closed on arrival. The screen TYRAI opens on is one question, and a
+     dashboard unfolded above it answers a question nobody asked yet — the
+     numbers are worth reading, but only when somebody reaches for them. The
+     chevron in the corner is the whole affordance.
+
+     Local and deliberately not persisted: this is a "show me", not a saved
+     preference, so every opening starts from the same quiet state. */
+  const [briefOpen, setBriefOpen] = useState(false);
 
   /* Only while the overlay is open, and only once per opening: these are
      small, cached calls, and TYRAI is opened far more often than the numbers

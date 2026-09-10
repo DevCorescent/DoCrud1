@@ -103,3 +103,55 @@
   outline:2px solid rgba(255,255,255,0.55);
   outline-offset:2px;
 }
+
+/* ══ The homepage shape ══
+   The row that used to be Companies / Publish / Jobs: tiles sized to their own
+   content, sitting to the right, not a grid spanning the column.
+
+   Same sizing model as `.hp-actions` — one line at every width, shrinking
+   through padding, gap and type rather than wrapping, each with a floor — so
+   the two rows are interchangeable in that slot and neither one stretches to
+   fill the container it happens to be in. */
+.aim-brief-row-inline{
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:stretch;
+  justify-content:flex-end;
+  gap:var(--brief-inline-gap);
+
+  --brief-inline-gap:clamp(5px, 1.7vw, 10px);
+  --brief-inline-pad:clamp(8px, 2.5vw, 14px);
+}
+.aim-brief-row-inline > .aim-brief-tile{
+  flex:0 0 auto;
+  width:fit-content;
+  padding-inline:var(--brief-inline-pad);
+}
+/* ── Phones: fill the width ──
+   Content-sized tiles huddled in the middle of a 390px screen leave a margin
+   down each side and a ragged right edge, and the three numbers stop reading
+   as one row. On a phone the row IS the width, so the tiles share it equally
+   and the block gets a straight edge on both sides.
+
+   `flex:1 1 0` and not `1 1 auto`: an `auto` basis starts each tile at its own
+   content width, so "Job matches" would stay wider than "New people" and the
+   three would never line up. A zero basis makes the split even. */
+@media (max-width:639px){
+  .aim-brief-row-inline{
+    justify-content:stretch;
+    /* The same bezel inset the action row used, so the two sit on the same
+       vertical lines as everything else in this column. */
+    max-width:calc(100% - 8px);
+    margin-inline:auto;
+  }
+  .aim-brief-row-inline > .aim-brief-tile{
+    flex:1 1 0;
+    width:auto;
+    /* Centred content, now that the box is wider than the text it holds. */
+    align-items:center;
+    text-align:center;
+  }
+  /* The readiness bar spans its tile rather than sitting under a
+     left-aligned number that is no longer left-aligned. */
+  .aim-brief-row-inline > .aim-brief-score .aim-brief-bar{ width:100%; }
+}

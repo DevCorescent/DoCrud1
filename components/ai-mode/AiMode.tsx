@@ -33,7 +33,7 @@ import {
   useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, Search, Sparkles } from 'lucide-react';
+import { ArrowLeft, Search, Sparkles } from 'lucide-react';
 import AiPersonCard from '@/components/ai-mode/AiPersonCard';
 import ProfileReadiness from '@/components/ai-mode/ProfileReadiness';
 import TyraiMark from '@/components/ai-mode/TyraiMark';
@@ -459,7 +459,15 @@ export default function AiMode({
             }}
             className="aim-field"
           >
-            <Search className="h-4 w-4 shrink-0 text-white/45" aria-hidden />
+            {/* The magnifier IS the submit control now, at the end of the
+                field rather than decorating the start of it. One glyph doing
+                one job: it used to sit on the left saying "this is a search
+                box" while a separate labelled button did the searching, which
+                is two controls' worth of width for one action. The whole gain
+                goes to the input.
+
+                It keeps a real label for anyone not looking at it — an icon
+                button with no accessible name is an unnamed button. */}
             <input
               ref={inputRef}
               className="aim-input"
@@ -471,12 +479,13 @@ export default function AiMode({
               spellCheck={false}
               enterKeyHint="search"
             />
-            <button type="submit" className="aim-go" disabled={busy || value.trim().length < 2}>
-              {/* The word goes on a phone once results are up: the corner
-                  above holds two controls there, and the field needs the
-                  width more than the button needs a label. */}
-              <span className="aim-go-t">{busy ? 'Searching…' : 'Search'}</span>
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+            <button
+              type="submit"
+              className="aim-go"
+              disabled={busy || value.trim().length < 2}
+              aria-label={busy ? 'Searching' : 'Search'}
+            >
+              <Search className="h-4 w-4 shrink-0" aria-hidden />
             </button>
           </form>
 

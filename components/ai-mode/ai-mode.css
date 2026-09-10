@@ -182,17 +182,6 @@
     padding-right:0;
     margin-top:42px;
   }
-  /* A circle once the word is gone. A 13px-radius rectangle holding a single
-     arrow, hard against the inside of a 16px-radius pill, reads as a panel
-     that did not finish loading rather than as a button. */
-  .aim-stage[data-phase="answer"] .aim-go{
-    width:44px;
-    padding:0;
-    gap:0;
-    border-radius:999px;
-    justify-content:center;
-  }
-  .aim-stage[data-phase="answer"] .aim-go-t{ display:none; }
 }
 
 .aim-input{
@@ -207,22 +196,29 @@
 }
 .aim-input::placeholder{ color:rgba(255,255,255,0.42); }
 
+/* The submit control, and the only glyph in the field.
+   No chrome around it: a filled white disc inside the field read as a second
+   surface sitting on the first, which is a lot of weight for the one thing on
+   this screen that already has an obvious meaning. It is the magnifier, at the
+   size and the muted white it had when it was decoration — the difference is
+   that it is now a button and it is on the right.
+   The 44px box stays: it is the tap target, it is just not painted. */
 .aim-go{
   flex:0 0 auto;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  gap:6px;
+  gap:0;
+  width:44px;
   height:44px;
-  padding:0 16px;
-  border-radius:13px;
-  border:1px solid rgba(255,255,255,0.14);
-  background:#fff;
-  color:#0b0b0d;
-  font-size:13px;
-  font-weight:650;
-  transition:transform 140ms ease, opacity 140ms ease;
+  padding:0;
+  border-radius:999px;
+  border:0;
+  background:transparent;
+  color:rgba(255,255,255,0.45);
+  transition:color 160ms ease, transform 140ms ease, opacity 140ms ease;
 }
+.aim-go:hover:not(:disabled){ color:rgba(255,255,255,0.92); }
 .aim-go:disabled{ opacity:0.45; }
 .aim-go:not(:disabled):active{ transform:scale(0.97); }
 
@@ -1316,28 +1312,27 @@
    space the panel was supposed to give back. */
 .aim-brief[data-open="false"]{ gap:0; }
 
+/* The arrow, and nothing around it.
+   In the corner rather than the middle, and unpainted: collapsed, this control
+   IS the entire component, and a pill sitting alone above the title reads as a
+   thing that lost its panel. A bare chevron in the corner reads as an edge you
+   can pull. The 32px box is still there for the thumb — it is just not drawn. */
 .aim-brief-toggle{
-  align-self:center;
+  align-self:flex-end;
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  /* 32px of box for a 14px chevron: small enough to stay subtle, big enough
-     to hit on a phone. */
-  width:44px;
+  width:32px;
   height:32px;
-  margin-top:2px;
-  border-radius:999px;
-  border:1px solid rgba(255,255,255,0.09);
-  background:rgba(255,255,255,0.04);
-  color:rgba(255,255,255,0.45);
+  padding:0;
+  border:0;
+  background:transparent;
+  color:rgba(255,255,255,0.38);
   cursor:pointer;
-  transition:border-color 170ms ease, color 170ms ease, background-color 170ms ease;
+  transition:color 170ms ease, transform 140ms ease;
 }
-.aim-brief-toggle:hover{
-  border-color:rgba(255,255,255,0.20);
-  color:rgba(255,255,255,0.80);
-  background:rgba(255,255,255,0.07);
-}
+.aim-brief-toggle:hover{ color:rgba(255,255,255,0.85); }
+.aim-brief-toggle:active{ transform:scale(0.92); }
 .aim-brief-toggle:focus-visible{
   outline:2px solid rgba(255,255,255,0.55);
   outline-offset:2px;
@@ -1353,7 +1348,6 @@
 
 @media (max-width:640px){
   .aim-crown{ gap:12px; }
-  .aim-brief-toggle{ width:40px; height:28px; }
 }
 
 @media (prefers-reduced-motion: reduce){

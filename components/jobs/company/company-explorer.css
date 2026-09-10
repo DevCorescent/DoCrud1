@@ -167,9 +167,13 @@
 
    Kept as one `--ce-inset` per breakpoint so the two rules cannot drift.
 
-   The RIGHT side is deliberately not matched: the rail is meant to run past
-   the edge of the screen, and a symmetric inset would stop it looking like
-   there is more to scroll to. */
+   The RIGHT side is matched too. On a scroller a trailing `padding-right` is
+   scrollable space, so it does not stop the rail running past the screen — it
+   decides where the LAST tile comes to rest once you reach the end. Mirroring
+   the inset means the band the tiles occupy starts and ends on the same two
+   rules as the Discover heading and the brief row above it, in both
+   directions. The edge shadows (`.ce-rail-wrap::before/::after`) still sit at
+   the viewport edges and still say there is more either way. */
 .ce-head{
   padding-inline:20px;
 }
@@ -177,7 +181,7 @@
   --ce-gutter:max(0px, (100vw - 1440px) / 2);
   --ce-inset:20px;
   padding-left:calc(var(--ce-gutter) + var(--ce-inset));
-  padding-right:12px;
+  padding-right:calc(var(--ce-gutter) + var(--ce-inset));
 }
 @media (min-width:640px){
   .ce-head{ padding-inline:34px; }

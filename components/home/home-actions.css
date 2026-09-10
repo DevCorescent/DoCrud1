@@ -1,5 +1,5 @@
 /**
- * The two actions above the feed: Explore Companies, and Publish.
+ * The three actions above the feed: Explore Companies, Publish, and Jobs.
  *
  * Their own file because the row outlived the band it was born under. These
  * rules used to live in home-hero.css, which only ever loaded because
@@ -9,26 +9,67 @@
  */
 
 
-/* ══ The two actions above the feed ══
-   Glass, like every other surface on this page, with one of the pair carrying
+/* ══ The three actions above the feed ══
+   Glass, like every other surface on this page, with one of the three carrying
    a gradient so the choice has a weight to it: the one that adds something is
-   the lit one, the one that goes somewhere is the quiet one. */
+   the lit one, the ones that go somewhere are quiet.
+
+   ONE LAYOUT AT EVERY WIDTH. This was `grid-template-columns:1fr 1fr` below
+   640px, which is what made the buttons stretch: a 1fr track is an equal share
+   of the row, so "Jobs" was handed exactly as much width as "Companies" and
+   both grew to fill whatever the parent gave them. A flex row instead — the
+   items size to their own content, in source order: Companies / Publish /
+   Jobs. */
 .hp-actions{
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:10px;
-  /* An inset off the bezel, so the pair sits in from the edge of the screen
+  display:flex;
+  /* ONE LINE, EVERY PHONE. Three short labels fit across even a 320px screen
+     once the row stops paying desktop padding for them — so the row does not
+     wrap, and the buttons shrink to fit instead. Nothing is clipped: the
+     shrinking happens in the padding, the gaps and the type, all of which have
+     floors, and the labels themselves still never break. */
+  flex-wrap:nowrap;
+  align-items:center;
+  gap:var(--hp-action-gap);
+  /* An inset off the bezel, so the row sits in from the edge of the screen
      rather than running to it. `max-width` and an auto margin, not padding:
-     the row is a grid, and padding would come out of the buttons. */
+     padding would come out of the buttons. */
   max-width:calc(100% - 16px);
   margin-inline:auto;
+
+  /* The three numbers the row scales with. `clamp` rather than a ladder of
+     breakpoints because phones do not come in four widths — 320, 360, 375,
+     390, 393, 412, 414, 430 and everything between all land somewhere sensible
+     on a continuous curve, and there is no width where the layout jumps. */
+  --hp-action-gap:clamp(5px, 1.7vw, 10px);
+  --hp-action-pad:clamp(9px, 2.7vw, 18px);
+  --hp-action-font:clamp(11.5px, 3vw, 13px);
 }
 @media (min-width:640px){
   .hp-actions{
-    display:flex;
+    flex-wrap:wrap;
     justify-content:flex-end;
     max-width:100%;
   }
+}
+
+/* Content-sized, never stretched. `flex:0 0 auto` stops the row handing out
+   spare space; `width:fit-content` keeps the box on its own label. Heights
+   stay identical because `.hp-action` fixes `height:44px` — equal height was
+   never the thing that needed the grid. */
+.hp-actions > .hp-action{
+  flex:0 0 auto;
+  width:fit-content;
+  padding-inline:var(--hp-action-pad);
+  font-size:var(--hp-action-font);
+  gap:clamp(5px, 1.6vw, 8px);
+}
+
+/* Below ~400px the arrow is the first thing to go: it is decoration on a
+   control whose label already says where it goes, and dropping both of them
+   returns ~44px to the row — the difference between three buttons fitting on a
+   360px phone and not. The label and icon, which carry the meaning, stay. */
+@media (max-width:399px){
+  .hp-actions .hp-action-go{ display:none; }
 }
 
 .hp-action{
@@ -39,6 +80,8 @@
   justify-content:center;
   gap:8px;
   height:44px;
+  /* Overridden per-row by `--hp-action-pad` / `--hp-action-font`; these are the
+     values any `.hp-action` used outside `.hp-actions` still gets. */
   padding:0 18px;
   border-radius:14px;
   font-size:13px;

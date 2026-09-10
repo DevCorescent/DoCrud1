@@ -147,50 +147,40 @@
   border:1px solid rgba(167,139,250,0.28);
 }
 
-/* ══ Aligned with the Discover band above ══
+/* ══ Bounded to the same band as everything else in this column ══
 
-   The heading and the first tile both start on the SAME vertical rule as
-   `.hhs-title` — 20px on a phone, 34px from 640px, 48px from 1024px, which is
-   `.hhs-body`'s padding.
+   The rail used to break out to the full viewport so the tiles could run off
+   the screen edges. It does not any more: the scrollable area is exactly the
+   band the Discover heading and the brief row occupy — 20px in on a phone,
+   34px from 640px, 48px from 1024px, which is `.hhs-body`'s padding.
 
-   The two need different numbers to land on the same line, because they are
-   measured from different edges. `.ce-head` sits inside the page column, so it
-   just takes the inset. `.ce-rail-wrap` breaks out to the full viewport
-   (`left:50%; width:100vw`) so the rail can run off the right edge, which
-   means the rail's padding is measured from the VIEWPORT — and to reach the
-   same rule it has to add back everything between the viewport edge and the
-   column's text:
+   The inset lives on the WRAP, not on the rail. That is what makes the two
+   sides provably equal: `margin-inline` is one value applied to both edges, so
+   there is no second number to drift, and the scroll container's own box is
+   the band. It also puts the edge shadows exactly where the band ends —
+   `.ce-rail-wrap::before/::after` are positioned to the wrap, so left:0 and
+   right:0 are now the band's edges rather than the screen's.
 
-       centring gutter          max(0, (100vw - 1440px) / 2)
-     + the column's own padding 0 / 24 / 40 / 48   (px-0 sm:px-6 lg:px-10 xl:px-12)
-     + the inset                20 / 34 / 48       (.hhs-body)
-
-   Kept as one `--ce-inset` per breakpoint so the two rules cannot drift.
-
-   The RIGHT side is matched too. On a scroller a trailing `padding-right` is
-   scrollable space, so it does not stop the rail running past the screen — it
-   decides where the LAST tile comes to rest once you reach the end. Mirroring
-   the inset means the band the tiles occupy starts and ends on the same two
-   rules as the Discover heading and the brief row above it, in both
-   directions. The edge shadows (`.ce-rail-wrap::before/::after`) still sit at
-   the viewport edges and still say there is more either way. */
+   No viewport unit anywhere. `100vw` is the viewport INCLUDING a classic
+   scrollbar while the document is not, so a bleed built on it runs wider than
+   the page on any desktop that paints one — invisible on overlay-scrollbar
+   machines, which is how it survives review. */
+.ce-rail-wrap{
+  --ce-inset:20px;
+  margin-inline:var(--ce-inset);
+}
 .ce-head{
   padding-inline:20px;
 }
 .ce-rail{
-  --ce-gutter:max(0px, (100vw - 1440px) / 2);
-  --ce-inset:20px;
-  padding-left:calc(var(--ce-gutter) + var(--ce-inset));
-  padding-right:calc(var(--ce-gutter) + var(--ce-inset));
+  /* The band is the wrap; the rail simply fills it. */
+  padding-inline:0;
 }
 @media (min-width:640px){
+  .ce-rail-wrap{ --ce-inset:34px; }
   .ce-head{ padding-inline:34px; }
-  .ce-rail{ --ce-inset:calc(24px + 34px); }
 }
 @media (min-width:1024px){
+  .ce-rail-wrap{ --ce-inset:48px; }
   .ce-head{ padding-inline:48px; }
-  .ce-rail{ --ce-inset:calc(40px + 48px); }
-}
-@media (min-width:1280px){
-  .ce-rail{ --ce-inset:calc(48px + 48px); }
 }

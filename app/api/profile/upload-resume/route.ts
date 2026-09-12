@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { getAuthSession } from '@/lib/server/auth';
 import { getProfileData, updateProfileData } from '@/lib/server/user-profiles';
 import { generateAiText, isAiConfigured } from '@/lib/server/ai';
+import { resolveParsedResume } from '@/lib/server/resume-upload-parse';
 import { isR2Configured, uploadToR2 } from '@/lib/server/r2';
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -194,96 +195,6 @@ async function extractText(buf: Buffer, type: KnownType): Promise<{ text: string
   }
 }
 
-/* ─── AI-parsed resume schema ─────────────────────────────────────────────── */
-interface ParsedResume {
-  headline:     string | null;
-  bio:          string | null;
-  location:     string | null;
-  website:      string | null;
-  skills:       string[];
-  experience:   Array<{ title: string; company: string; period: string; desc: string | null }>;
-  education:    Array<{ degree: string; school: string; year: string | null }>;
-  achievements: Array<{ title: string; desc: string | null }>;
-  socialLinks:  { linkedin: string | null; github: string | null; twitter: string | null };
-}
-
-/* ─── Rule-based ATS scoring (no AI needed, always works) ────────────────── */
-interface AtsScore {
-  score: number;
-  grade: 'A' | 'B' | 'C' | 'D' | 'F';
-  breakdown: {
-    contact:      number;
-    summary:      number;
-    skills:       number;
-    experience:   number;
-    education:    number;
-    achievements: number;
-  };
-  tips: string[];
-}
-
-function computeAts(p: ParsedResume): AtsScore {
-  const tips: string[] = [];
-  let contact = 0, summary = 0, skills = 0, experience = 0, education = 0, achievements = 0;
-
-  // Contact (25 pts)
-  if (p.headline)              contact += 8; else tips.push('Add a headline (e.g. "Senior Engineer at Google") — most ATS systems prioritise this');
-  if (p.location)              contact += 5; else tips.push('Include your city/country — location is a key recruiter filter');
-  if (p.website)               contact += 5;
-  if (p.socialLinks.linkedin)  contact += 7; else tips.push('Add your LinkedIn URL — 87% of recruiters use LinkedIn to verify candidates');
-
-  // Summary/Bio (15 pts)
-  if (p.bio) {
-    summary += 8;
-    if (p.bio.length > 150) summary += 7;
-    else tips.push('Expand your professional summary to 150+ characters for better ATS keyword coverage');
-  } else {
-    tips.push('Write a professional summary — it\'s the first section ATS and recruiters read');
-  }
-
-  // Skills (20 pts)
-  const sc = p.skills.length;
-  if (sc >= 15)      skills = 20;
-  else if (sc >= 10) skills = 15;
-  else if (sc >= 5)  skills = 10;
-  else               skills = sc * 2;
-  if (sc < 10) tips.push(`Add more skills — you have ${sc}, aim for 10–20 relevant keywords`);
-
-  // Experience (25 pts)
-  const ec = p.experience.length;
-  if (ec >= 4)      experience += 15;
-  else if (ec >= 2) experience += 10;
-  else if (ec >= 1) experience += 5;
-  else tips.push('Add work experience entries — experience is the #1 factor in ATS ranking');
-
-  const missingDesc   = p.experience.filter(e => !e.desc).length;
-  const missingPeriod = p.experience.filter(e => !e.period || e.period.toLowerCase() === 'unknown').length;
-
-  if (ec > 0 && missingDesc === 0)   experience += 5;
-  else if (missingDesc > 0)          tips.push('Add impact descriptions to each role — quantify results where possible (e.g. "Reduced load time by 40%")');
-
-  if (ec > 0 && missingPeriod === 0) experience += 5;
-  else if (missingPeriod > 0)        tips.push('Include clear date ranges for all positions (e.g. "Jan 2022 – Present")');
-
-  // Education (10 pts)
-  if (p.education.length >= 1) education = 10;
-  else tips.push('Add your educational background — most ATS systems require at least one entry');
-
-  // Achievements (5 pts)
-  if (p.achievements.length >= 3) achievements = 5;
-  else if (p.achievements.length >= 1) achievements = 2;
-  else tips.push('Add awards, publications, or notable projects to stand out');
-
-  const total = Math.min(contact + summary + skills + experience + education + achievements, 100);
-  const grade = total >= 85 ? 'A' : total >= 70 ? 'B' : total >= 55 ? 'C' : total >= 40 ? 'D' : 'F';
-
-  return {
-    score: total,
-    grade,
-    breakdown: { contact, summary, skills, experience, education, achievements },
-    tips: tips.slice(0, 5),
-  };
-}
 
 /* ─── Route handler ───────────────────────────────────────────────────────── */
 export async function POST(req: NextRequest) {
@@ -328,22 +239,19 @@ export async function POST(req: NextRequest) {
     const { url: fileUrl, storageMethod } = await storeResumeFile(buf, userId, extMap[fileType], file.name);
     console.log(`[upload-resume] storage method=${storageMethod} url=${fileUrl ?? 'null'}`);
 
-    /* ── AI parse ── */
-    let parsed: ParsedResume = {
-      headline: null, bio: null, location: null, website: null,
-      skills: [], experience: [], education: [], achievements: [],
-      socialLinks: { linkedin: null, github: null, twitter: null },
-    };
-
+    /* ── parse: AI first, deterministic parser second ──
+       The AI is no longer the only parser. When it fails — a retired model, a
+       timeout, malformed JSON, or no key at all — `resolveParsedResume` falls
+       back to the pure sectioner in lib/server/ats/resume-text.ts. If BOTH
+       come up empty the score is null, not zero: a parser outage must never be
+       published to a member as "your resume scored 0". */
     const aiAvailable = isAiConfigured();
     console.log(`[upload-resume] AI configured: ${aiAvailable}`);
 
-    if (aiAvailable) {
-      const trimmed = cleaned.slice(0, 12000); // ~3 dense pages
-      console.log(`[upload-resume] calling AI with ${trimmed.length} chars`);
-      let aiRaw = '';
-      try {
-        aiRaw = await generateAiText([
+    const trimmed = cleaned.slice(0, 12000); // ~3 dense pages
+    if (aiAvailable) console.log(`[upload-resume] calling AI with ${trimmed.length} chars`);
+
+    const runAi = async () => generateAiText([
           {
             role: 'system',
             content: `You are an expert resume parser. Your job is to extract EVERY piece of professional information from the resume text.
@@ -379,85 +287,23 @@ Be thorough. Extract EVERYTHING. If a field is genuinely missing from the resume
             content: `Parse this resume completely:\n\n${trimmed}`,
           },
         ]);
-      } catch (aiErr) {
-        console.error('[upload-resume] AI call failed:', aiErr instanceof Error ? `${aiErr.message}\n${aiErr.stack}` : aiErr);
-        aiRaw = '';
-      }
 
-      if (aiRaw.trim()) {
-        console.log(`[upload-resume] AI response: ${aiRaw.length} chars — first 200: ${aiRaw.slice(0, 200)}`);
-        try {
-          const clean = aiRaw.replace(/^```[a-z]*\s*/i, '').replace(/\s*```\s*$/, '').trim();
-          parsed = JSON.parse(clean) as ParsedResume;
-          console.log(`[upload-resume] AI JSON parsed OK — skills=${parsed.skills?.length ?? 0} exp=${parsed.experience?.length ?? 0} edu=${parsed.education?.length ?? 0}`);
-        } catch (parseErr) {
-          console.warn('[upload-resume] direct JSON.parse failed:', parseErr instanceof Error ? parseErr.message : parseErr);
-          const m = aiRaw.match(/\{[\s\S]*\}/);
-          if (m) {
-            try {
-              parsed = JSON.parse(m[0]) as ParsedResume;
-              console.log('[upload-resume] regex JSON.parse OK');
-            } catch (regexErr) {
-              console.error('[upload-resume] regex JSON.parse also failed:', regexErr instanceof Error ? regexErr.message : regexErr);
-            }
-          }
-          console.error('[upload-resume] JSON parse failed on AI response. First 300 chars:', aiRaw.slice(0, 300));
-        }
-      } else {
-        console.warn('[upload-resume] AI returned empty response');
-      }
-    } else {
-      console.warn('[upload-resume] AI not configured — skipping AI parse, using empty parsed data');
+    const { parsed: safe, source: parseSource, atsScore, notes: parseNotes } =
+      await resolveParsedResume(cleaned, aiAvailable ? runAi : null);
+
+    console.log(
+      `[upload-resume] parse source=${parseSource} skills=${safe.skills.length} `
+      + `exp=${safe.experience.length} edu=${safe.education.length} `
+      + `ats=${atsScore ? `${atsScore.score}/${atsScore.grade}` : 'not-scored'}`
+      + (parseNotes.length ? ` notes=${parseNotes.join(',')}` : ''),
+    );
+
+    /* A parse that recovered nothing is an infrastructure fault, not a verdict
+       on the resume. It is logged at error level so it shows up in production
+       triage instead of being absorbed as a very low score. */
+    if (parseSource === 'none') {
+      console.error(`[upload-resume] BOTH parsers returned nothing — no ATS score stored. notes=${parseNotes.join(',')}`);
     }
-
-    /* ── sanitise ── */
-    const safe: ParsedResume = {
-      headline: typeof parsed.headline === 'string' && parsed.headline.trim() ? parsed.headline.trim().slice(0, 100) : null,
-      bio:      typeof parsed.bio      === 'string' && parsed.bio.trim()      ? parsed.bio.trim().slice(0, 500)      : null,
-      location: typeof parsed.location === 'string' && parsed.location.trim() ? parsed.location.trim()               : null,
-      website:  typeof parsed.website  === 'string' && parsed.website.trim()  ? parsed.website.trim()                : null,
-      skills: Array.isArray(parsed.skills)
-        ? (parsed.skills as unknown[]).filter((s): s is string => typeof s === 'string' && s.trim().length > 0).map(s => s.trim()).slice(0, 25)
-        : [],
-      experience: Array.isArray(parsed.experience)
-        ? (parsed.experience as Array<Record<string, unknown>>)
-            .filter(e => e && typeof e.title === 'string' && String(e.title).trim())
-            .map(e => ({
-              title:   String(e.title   ?? '').trim(),
-              company: String(e.company ?? '').trim(),
-              period:  String(e.period  ?? '').trim(),
-              desc:    typeof e.desc === 'string' && e.desc.trim() ? e.desc.trim().slice(0, 160) : null,
-            }))
-            .slice(0, 10)
-        : [],
-      education: Array.isArray(parsed.education)
-        ? (parsed.education as Array<Record<string, unknown>>)
-            .filter(e => e && typeof e.degree === 'string' && String(e.degree).trim())
-            .map(e => ({
-              degree: String(e.degree ?? '').trim(),
-              school: String(e.school ?? '').trim(),
-              year:   typeof e.year === 'string' && e.year.trim() ? e.year.trim() : null,
-            }))
-            .slice(0, 8)
-        : [],
-      achievements: Array.isArray(parsed.achievements)
-        ? (parsed.achievements as Array<Record<string, unknown>>)
-            .filter(e => e && typeof e.title === 'string' && String(e.title).trim())
-            .map(e => ({
-              title: String(e.title ?? '').trim(),
-              desc:  typeof e.desc === 'string' && e.desc.trim() ? e.desc.trim().slice(0, 200) : null,
-            }))
-            .slice(0, 8)
-        : [],
-      socialLinks: {
-        linkedin: typeof parsed.socialLinks?.linkedin === 'string' && parsed.socialLinks.linkedin.trim() ? parsed.socialLinks.linkedin.trim() : null,
-        github:   typeof parsed.socialLinks?.github   === 'string' && parsed.socialLinks.github.trim()   ? parsed.socialLinks.github.trim()   : null,
-        twitter:  typeof parsed.socialLinks?.twitter  === 'string' && parsed.socialLinks.twitter.trim()  ? parsed.socialLinks.twitter.trim()  : null,
-      },
-    };
-
-    /* ── compute ATS score ── */
-    const atsScore = computeAts(safe);
 
     /* ── apply to profile ── */
     const existing = await getProfileData(userId);
@@ -506,6 +352,9 @@ Be thorough. Extract EVERYTHING. If a field is genuinely missing from the resume
       fileName: file.name,
       url: fileUrl,
       uploadedAt: new Date().toISOString(),
+      /* Null when no parser recovered anything. The profile UI already guards
+         on `atsScore` being present and renders "no quality score recorded"
+         instead of a 0% dial. */
       atsScore,
       parsedData: {
         headline:     safe.headline,
@@ -521,7 +370,7 @@ Be thorough. Extract EVERYTHING. If a field is genuinely missing from the resume
     };
     patch.resumeFiles = [newEntry, ...(existing.resumeFiles ?? [])].slice(0, MAX_HISTORY);
 
-    console.log(`[upload-resume] applying fields to profile: ${appliedFields.join(', ') || 'none'} | ATS score=${atsScore.score} grade=${atsScore.grade}`);
+    console.log(`[upload-resume] applying fields to profile: ${appliedFields.join(', ') || 'none'} | ATS ${atsScore ? `score=${atsScore.score} grade=${atsScore.grade}` : 'not scored (parse failed)'}`);
 
     try {
       await updateProfileData(userId, patch as Parameters<typeof updateProfileData>[1]);
@@ -540,7 +389,14 @@ Be thorough. Extract EVERYTHING. If a field is genuinely missing from the resume
       atsScore,
       appliedFields,
       aiConfigured:  aiAvailable,
-      warning:       extractWarning ?? null,
+      /* How the resume was read: 'ai', 'deterministic', or 'none' when neither
+         parser recovered anything. A client must use this — not `atsScore === 0`
+         — to decide whether parsing failed. */
+      parseSource,
+      parseFailed:   parseSource === 'none',
+      warning:       extractWarning ?? (parseSource === 'none'
+        ? "We stored your resume, but couldn't read its contents well enough to score it or fill in your profile. Try a text-based PDF or a .docx file."
+        : null),
     });
 
   } catch (err) {

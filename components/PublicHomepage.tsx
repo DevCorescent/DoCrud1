@@ -2617,7 +2617,7 @@ function HomepageLiveFeed({ onPublish, guestMode = false }: { onPublish?: () => 
           that reads as immersive and media that reads as very slightly inset.
           A frame is worth having where there is margin around it to frame
           against; at 390px there is none. */}
-      <div className="relative mt-2 mb-6 rounded-none border-x-0 sm:-mx-6 sm:rounded-[clamp(12px,1.5vw,24px)] sm:border-x lg:-mx-10 xl:-mx-12"
+      <div className="relative mt-2 mb-6 rounded-none border-x-0 sm:-mx-3 sm:rounded-[clamp(12px,1.5vw,24px)] sm:border-x lg:-mx-4 xl:-mx-5"
         style={{
           overflow: 'clip',
           borderTop: '1px solid rgba(255,255,255,0.08)',
@@ -6053,7 +6053,17 @@ function NewHomepageContent({
         paddingTop: 'calc(var(--dc-topnav-h, 56px) + var(--dc-guestbar-h, 0px))',
       }}
     >
-      <div className="mx-auto w-full max-w-[1440px] space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-6 lg:px-10 xl:px-12 pt-5 sm:pt-7 lg:pt-8">
+      {/* ── The page column ──
+           Thin gutters and no width cap: the content fills the screen and the
+           side margins are just enough to keep it off the bezel — 0 on a
+           phone, where the cards already carry their own inset, then 12/16/20
+           up the breakpoints.
+
+           This deliberately REPLACES the 1280 cap that made a 16" laptop show
+           the same column as a 13". The two cannot both be true: a cap turns
+           extra screen into margin, and this turns it into content. Restoring
+           the cap is one `max-w-[…]` on this element. */}
+      <div className="mx-auto w-full space-y-6 sm:space-y-8 lg:space-y-10 px-0 sm:px-3 lg:px-4 xl:px-5 pt-5 sm:pt-7 lg:pt-8">
 
         {/* ── All-features bottom sheet (mobile only) ── */}
         {showAllFeatures && typeof document !== 'undefined' && createPortal(
@@ -6860,7 +6870,7 @@ function NewHomepageContent({
             worse than no switch. */}
 
         {/* ── Footer ───────────────────────────────────────────────── */}
-        {hpSections.footer && <div className="sm:-mx-6 lg:-mx-10 xl:-mx-12 cv-auto"><PremiumFooter /></div>}
+        {hpSections.footer && <div className="sm:-mx-3 lg:-mx-4 xl:-mx-5 cv-auto"><PremiumFooter /></div>}
 
       </div>
     </div>

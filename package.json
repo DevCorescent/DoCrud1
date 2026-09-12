@@ -32,6 +32,7 @@
     "test:ats-modal": "tsx scripts/ats-modal.selftest.ts",
     "test:resume-upload-fallback": "tsx scripts/resume-upload-fallback.selftest.ts",
     "test:ai-model-config": "tsx scripts/ai-model-config.selftest.ts",
+    "test:cron-scheduler": "tsx scripts/cron-scheduler.selftest.ts",
     "test:job-match": "tsx scripts/job-match-tone.selftest.ts",
     "test:job-match-accuracy": "tsx scripts/job-match-accuracy.selftest.ts",
     "test:match-preferences": "tsx scripts/match-preferences.selftest.ts",

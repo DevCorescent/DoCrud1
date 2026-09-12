@@ -1,0 +1,17 @@
+# Timer for docrud-cron@account-cleanup.service — schedule mirrored from ops/cron/jobs.conf.
+# scripts/cron-scheduler.selftest.ts fails if the two ever disagree.
+[Unit]
+Description=DoCrud cron timer: account-cleanup (Delete expired deactivated accounts)
+Documentation=file:/home/ubuntu/docrud/ops/README.md
+
+[Timer]
+Unit=docrud-cron@account-cleanup.service
+OnCalendar=*-*-* 04:17:00
+# All schedules are UTC so they do not shift with server locale or DST.
+Persistent=false
+# Spreads load so two jobs never start on the same second.
+RandomizedDelaySec=5m
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

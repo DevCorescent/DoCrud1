@@ -1,7 +1,44 @@
 import { DashboardMetrics, DocumentHistory } from '@/types/document';
 
 const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
-const DEFAULT_GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+
+/**
+ * The model every AI feature runs on, in ONE place.
+ *
+ * `llama-3.3-70b-versatile` was decommissioned by Groq. Because nothing
+ * validated the configured name, every one of the ~67 `generateAiText` call
+ * sites kept sending it and kept receiving `model_not_found` — and the resume
+ * upload path, which had no non-AI fallback, turned that into a stored ATS
+ * score of 0/F. The name is therefore no longer a bare string read from the
+ * environment; it is checked against the list below.
+ */
+export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
+
+/**
+ * Models Groq has retired. A deployment whose GROQ_MODEL still names one of
+ * these is REPAIRED at runtime rather than obeyed.
+ *
+ * This is deliberate. The alternative — trusting the environment — means the
+ * fix does not take effect until every deployment's env var is edited by hand,
+ * and a stale value silently disables AI everywhere until someone notices. A
+ * retired name is not a configuration choice, it is a known-dead endpoint.
+ */
+export const RETIRED_GROQ_MODELS: readonly string[] = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama3-70b-8192',
+  'llama3-8b-8192',
+  'mixtral-8x7b-32768',
+  'gemma-7b-it',
+  'gemma2-9b-it',
+];
+
+export function isRetiredModel(name: string): boolean {
+  return RETIRED_GROQ_MODELS.includes(name.trim().toLowerCase());
+}
+
+/** Warned once per process, not once per request — this runs on every AI call. */
+let retiredModelWarned = false;
 
 export interface AiMessage {
   role: 'system' | 'user' | 'assistant';
@@ -36,8 +73,25 @@ function getApiKey() {
   return apiKey;
 }
 
+/**
+ * The model to send. Read at CALL TIME, never captured at module load, so a
+ * test or a runtime config change is picked up rather than frozen in.
+ */
 export function getAiModelName() {
-  return process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
+  const configured = process.env.GROQ_MODEL?.trim();
+  if (!configured) return DEFAULT_GROQ_MODEL;
+  if (isRetiredModel(configured)) {
+    if (!retiredModelWarned) {
+      retiredModelWarned = true;
+      console.error(
+        `[ai] GROQ_MODEL="${configured}" is a retired Groq model and will always fail with `
+        + `model_not_found. Falling back to "${DEFAULT_GROQ_MODEL}". Update GROQ_MODEL in every `
+        + `deployment environment to silence this.`,
+      );
+    }
+    return DEFAULT_GROQ_MODEL;
+  }
+  return configured;
 }
 
 export async function generateAiText(messages: AiMessage[], options?: { jsonMode?: boolean }) {

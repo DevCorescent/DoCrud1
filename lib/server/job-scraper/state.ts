@@ -27,6 +27,17 @@ export interface ScraperRunSummary {
   duplicateInRun?: number;
   truncated?: number;
   sourcesOk?: number;
+  /**
+   * Sources never started because the run ran out of its time budget.
+   *
+   * Recorded because its absence actively misled. The whole-corpus load runs
+   * BEFORE the source loop, so a corpus large enough to consume the window
+   * makes every source skip for `deadline`: the run then reports
+   * `discovered: 0` with `failed: 0` — indistinguishable, on the dashboard,
+   * from seven boards that were read and genuinely had no openings. One number
+   * separates "we did not look" from "we looked and found nothing".
+   */
+  deadlineSkipped?: number;
 }
 
 /**

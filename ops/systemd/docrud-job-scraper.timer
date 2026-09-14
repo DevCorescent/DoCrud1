@@ -1,0 +1,35 @@
+# Timer for docrud-job-scraper.service.
+#
+# ═══ WHY 30 MINUTES AND NOT 5 ═══
+#
+# The measured local run over 7 sources fetches ~1,697 postings in ~13 s of
+# provider time, but a production run also loads the corpus, plans, upserts and
+# mirrors — minutes, not seconds — and that cost grows with both the number of
+# boards and the size of the corpus. A 5-minute tick would spend most of its
+# life colliding with the previous run and being dropped, which hides how long
+# runs actually take.
+#
+# 30 minutes is comfortably longer than a run, and job boards do not change
+# faster than that. Revisit it against real `durationMs` values in the journal
+# rather than by guessing:
+#
+#   journalctl -u docrud-job-scraper.service | grep 'event=complete'
+[Unit]
+Description=DoCrud job scraper timer (public ATS ingestion, every 30 minutes)
+Documentation=file:/home/ubuntu/docrud/ops/README.md
+
+[Timer]
+Unit=docrud-job-scraper.service
+# UTC, like every other schedule here, so it does not shift with locale or DST.
+OnCalendar=*:0/30
+# Catch up ONE missed run after downtime. The scrape is idempotent by identity,
+# and a corpus that went stale during an outage should refresh on boot rather
+# than wait for the next half hour.
+Persistent=true
+# Keeps the scraper off the same second as the :00/:30 cron ticks, so a heavy
+# run does not start alongside the mail and recommendation passes.
+RandomizedDelaySec=120s
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

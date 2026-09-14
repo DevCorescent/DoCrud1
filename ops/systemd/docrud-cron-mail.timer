@@ -1,0 +1,17 @@
+# Timer for docrud-cron@mail.service — schedule mirrored from ops/cron/jobs.conf.
+# scripts/cron-scheduler.selftest.ts fails if the two ever disagree.
+[Unit]
+Description=DoCrud cron timer: mail (Dispatch scheduled mail campaigns)
+Documentation=file:/home/ubuntu/docrud/ops/README.md
+
+[Timer]
+Unit=docrud-cron@mail.service
+OnCalendar=*:0/5
+# All schedules are UTC so they do not shift with server locale or DST.
+Persistent=false
+# Spreads load so two jobs never start on the same second.
+RandomizedDelaySec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

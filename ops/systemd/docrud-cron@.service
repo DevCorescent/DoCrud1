@@ -1,0 +1,64 @@
+# DoCrud scheduled job — one templated service for every entry in
+# ops/cron/jobs.conf.  %i is the job name, e.g. docrud-cron@mail.service.
+#
+# WHY A TEMPLATE: four jobs would otherwise be four near-identical unit files
+# that drift. Adding a job means adding a timer and a row in jobs.conf; this
+# file is never edited.
+#
+# OVERLAP: Type=oneshot means systemd will not start a second copy of
+# docrud-cron@<job>.service while the first is still running. A timer that
+# fires during a long run is dropped, which is the desired behaviour for every
+# job here. The runner also takes an flock, covering a manual run racing a
+# timer.
+[Unit]
+Description=DoCrud scheduled job: %i
+Documentation=file:/home/ubuntu/docrud/ops/README.md
+# Only meaningful once the network is up; the request is to localhost, so this
+# is about boot ordering rather than connectivity.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/docrud
+
+# The secret lives ONLY here, root-owned 0600, outside the repository.
+# systemd reads it as root before dropping to User=, so the ubuntu user never
+# needs read access to the file itself.
+EnvironmentFile=/etc/docrud/cron.env
+
+ExecStart=/home/ubuntu/docrud/ops/cron/run-cron-job.sh %i
+
+# A scheduled job that fails should fail loudly in the journal, not retry in a
+# tight loop — the next timer tick is the retry.
+Restart=no
+TimeoutStartSec=600
+
+# The lock directory, created and owned by systemd, cleaned up on stop.
+RuntimeDirectory=docrud-cron
+RuntimeDirectoryMode=0750
+
+# ── Hardening ───────────────────────────────────────────────────────────────
+# This unit runs a shell script that makes one localhost HTTP call. It needs no
+# write access to anything except its runtime directory.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/docrud-cron
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+# Localhost only — but AF_UNIX/AF_INET are still required for curl.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

@@ -396,6 +396,7 @@ export async function runCanonicalIngest(
       discovered: out.discovered, inserted: out.inserted, updated: out.updated,
       unchanged: out.unchanged, duplicateInRun: out.duplicateInRun,
       truncated: out.truncated, sourcesOk: out.sourcesOk,
+      deadlineSkipped: out.deadlineSkipped,
     },
     perSource: perSourceMap,
     /* Advance the round-robin. A run that attempted nothing leaves the cursor

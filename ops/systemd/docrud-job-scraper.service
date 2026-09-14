@@ -32,11 +32,33 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/docrud
 
-# The application's own environment — MONGODB_URI and the *_BOARDS/*_COMPANIES
-# source lists. The worker must run with EXACTLY the configuration the app runs
-# with, or it would scrape a different set of boards than the dashboard shows.
-EnvironmentFile=/home/ubuntu/docrud/.env
-# Marks the run in the journal as timer-driven rather than hand-started.
+# ═══ NO EnvironmentFile — DELIBERATELY ═══
+#
+# The obvious line here is `EnvironmentFile=/home/ubuntu/docrud/.env`, and it is
+# wrong twice over.
+#
+#  1. systemd's parser is NOT dotenv's. It requires every line to be KEY=VALUE,
+#     treats an unquoted `#` as starting a comment MID-LINE, and fails the unit
+#     on anything it cannot parse. The application's .env contains inline
+#     comments and free prose, so systemd would either refuse to start the
+#     service or — worse — truncate a value at a `#` and hand the worker a
+#     silently corrupted MONGODB_URI.
+#
+#  2. Even parsed perfectly it would be the WRONG precedence. Next.js applies
+#     .env.local over .env.<NODE_ENV> over .env; a single EnvironmentFile
+#     reproduces none of that, so the worker could scrape a different set of
+#     boards than the dashboard displays.
+#
+# Instead the worker calls @next/env's own loadEnvConfig (scripts/load-env.ts),
+# which is the exact function the Next.js server uses. Parity is by
+# construction, and no secret is ever copied into a unit file, into the journal
+# or into the process argument list.
+#
+# NODE_ENV is set here because it SELECTS which env files are loaded. Without
+# it the worker would resolve .env.development on a production host.
+Environment=NODE_ENV=production
+# WorkingDirectory above is what loadEnvConfig resolves .env* against, so it
+# must stay the repository root.
 ExecStart=/usr/bin/env npx tsx scripts/run-job-scraper.ts --trigger timer
 
 # Exit 4 means "another run holds the lease". That is the lock working as

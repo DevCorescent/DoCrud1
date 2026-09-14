@@ -157,8 +157,19 @@ function workerContract() {
     worker.indexOf('acquireScraperLease') < worker.indexOf('runCanonicalIngestion'));
   check('losing the race exits 4 rather than failing', worker.includes('return 4'));
   check('it releases the lease in a finally', /finally\s*\{[\s\S]*releaseScraperLease/.test(worker));
-  check('it logs no secret',
-    !/CRON_SECRET|MONGODB_URI|SMTP_PASSWORD|R2_SECRET|GROQ_API_KEY/.test(worker));
+  /* The worker NAMES MONGODB_URI (it is a required variable, and the missing-
+     config error has to say which one). Naming is not leaking — reading the
+     VALUE and putting it somewhere visible is. So the assertion is about
+     dereferencing a secret, not about mentioning it. */
+  const SECRETS = ['MONGODB_URI', 'CRON_SECRET', 'SMTP_PASSWORD', 'GROQ_API_KEY',
+    'R2_SECRET_ACCESS_KEY', 'NEXTAUTH_SECRET', 'RAZORPAY_KEY_SECRET'];
+  for (const name of SECRETS) {
+    check(`the worker never dereferences ${name}`,
+      !new RegExp(`process\\.env\\.${name}\\b`).test(worker)
+      && !new RegExp(`process\\.env\\[['"\`]${name}`).test(worker));
+  }
+  check('the only thing logged about the environment is which FILES loaded',
+    /files: env\.loadedFiles/.test(worker));
 
   const svc = read('ops/systemd/docrud-job-scraper.service');
   const timer = read('ops/systemd/docrud-job-scraper.timer');

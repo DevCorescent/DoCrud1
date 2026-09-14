@@ -37,11 +37,19 @@
  *   2  the run threw
  *   4  another run holds the lease — not an error, and not a failure
  */
+/* ═══ THIS IMPORT MUST STAY FIRST ═══
+
+   `import` statements are hoisted and evaluated in order, before ANY top-level
+   statement in this file. So the environment cannot be loaded from inside
+   main() if a module imported above it reads process.env while it is being
+   evaluated. Loading it in the first import removes that ordering hazard
+   entirely rather than relying on nobody ever introducing one.
+
+   Everything that touches configuration — the database handle, the lease, the
+   source registry — is imported DYNAMICALLY below, after this has run. */
+import { loadAppEnvOrThrow } from './load-env';
 import { randomUUID } from 'crypto';
 import { hostname } from 'os';
-import {
-  acquireScraperLease, releaseScraperLease, renewScraperLease, LEASE_RENEW_MS,
-} from '@/lib/server/job-sources/run-lock';
 
 /** Structured, greppable, and free of anything secret. */
 function log(fields: Record<string, string | number | boolean | undefined>): void {
@@ -71,6 +79,29 @@ function parseArgs(argv: readonly string[]) {
 
 async function main(): Promise<number> {
   const { limit, trigger } = parseArgs(process.argv.slice(2));
+
+  /* The same `.env*` resolution the Next.js server performs, so the worker
+     scrapes EXACTLY the boards the dashboard lists and writes to EXACTLY the
+     database the app reads. Without it MONGODB_URI is undefined here and the
+     run would either throw on the lease or, worse, proceed against an
+     unconfigured store. Names only are ever reported — never values. */
+  const env = loadAppEnvOrThrow({
+    required: ['MONGODB_URI'],
+    /* At least one board list, or the run would legitimately find nothing and
+       there would be no way to tell that from a misconfiguration. */
+    anyOf: [
+      'GREENHOUSE_BOARDS', 'LEVER_COMPANIES', 'ASHBY_JOB_BOARDS',
+      'SMARTRECRUITERS_COMPANIES', 'WORKDAY_BOARDS', 'WORKABLE_COMPANIES',
+      'RECRUITEE_COMPANIES', 'PERSONIO_COMPANIES', 'BAMBOOHR_COMPANIES',
+      'MICROSOFT_CAREERS',
+    ],
+  });
+  log({ event: 'env', files: env.loadedFiles.join(',') || '(none)' });
+
+  /* Imported only now — after the environment exists. */
+  const {
+    acquireScraperLease, releaseScraperLease, renewScraperLease, LEASE_RENEW_MS,
+  } = await import('@/lib/server/job-sources/run-lock');
   const runId = `run-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   const owner = `${hostname()}:${process.pid}`;
 

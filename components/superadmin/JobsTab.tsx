@@ -40,6 +40,31 @@ type ScraperRun = { runAt: string; fetched: number; valid: number; duplicates: n
   discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
   existingUnknown?: number; duplicateInRun?: number; truncated?: number; sourcesOk?: number;
   deadlineSkipped?: number };
+/** The persisted run record, as the status endpoint returns it. */
+type RunStatus = {
+  runId: string;
+  status: string;
+  stale: boolean;
+  progress: {
+    /** null until a worker claims the run and knows the source count. */
+    sourcesTotal: number | null;
+    sourcesCompleted: number;
+    sourcesSucceeded: number;
+    sourcesFailed: number;
+  };
+  metrics: {
+    discovered: number; inserted: number; updated: number; unchanged: number;
+    duplicates: number; rejected: number; expired: number; deadlineSkipped: number;
+  };
+  sources: Array<{
+    sourceId: string; ok: boolean; skipped: boolean; skipReason: string | null;
+    discovered: number; inserted: number; updated: number; unchanged: number;
+    durationMs: number; error: string | null; errorKind: string | null;
+  }>;
+  durationMs: number | null;
+  error: string | null;
+};
+
 type ScraperStatus = { mode: 'internal' | 'unconfigured'; configured: boolean; sourceNames: string[]; sources: SourceInfo[]; lastRun: ScraperRun | null };
 type ScrapeSummary = { sources: number; sourcesOk?: number; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number;
   discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
@@ -81,6 +106,7 @@ export default function JobsTab() {
   const [scraper, setScraper] = useState<ScraperStatus | null>(null);
   const [scraping, setScraping] = useState(false);
   const [scrapeSummary, setScrapeSummary] = useState<ScrapeSummary | null>(null);
+  const [runStatus, setRunStatus] = useState<RunStatus | null>(null);
   const [scrapeErr, setScrapeErr] = useState('');
   /* Source Status search + filter. Presentation only — these never mutate the
      source data, they only decide which existing rows are drawn. */
@@ -103,77 +129,6 @@ export default function JobsTab() {
     return !q || s.label.toLowerCase().includes(q) || s.provider.toLowerCase().includes(q);
   });
 
-  const runScraper = async () => {
-    if (scraping) return;                        // prevent duplicate clicks
-    setScraping(true); setScrapeErr(''); setScrapeSummary(null); setErr(''); setMsg('');
-    try {
-    /* ═══ WHY THE PARSE IS NOT INSIDE THE TRANSPORT CATCH ═══
-
-       `await r.json()` used to sit next to the fetch under one `catch`, so a
-       response that ARRIVED but was not JSON — nginx's HTML "504 Gateway
-       Time-out" page is the one that matters here — threw at parse time and
-       was reported as "Network error." The status was never read, so a
-       gateway timeout, a 401 and an unplugged cable were indistinguishable in
-       the only place an operator can see them. The scrape runs inline and can
-       exceed a proxy's default 60 s read timeout, which makes the HTML-504
-       case the LIKELY one, not the exotic one.
-
-       So the transport failure and the response are now separate: a rejected
-       fetch is the only thing that may be called a network error, and a
-       response that came back is described by its status whatever its body. */
-    let r: Response;
-    const startedAt = Date.now();
-    try {
-      r = await fetch('/api/super-admin/jobs/scraper/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    } catch {
-      /* The request genuinely never completed: connection refused, reset, or
-         the browser gave up. The elapsed time is the useful half — it
-         separates "refused instantly" from "died after two minutes". */
-      setScrapeErr(`Network error — the request did not complete after ${Math.round((Date.now() - startedAt) / 1000)}s.`);
-      return;
-    }
-
-    const elapsedS = Math.round((Date.now() - startedAt) / 1000);
-    /* Read as text first: a non-JSON error page must not throw before its
-       status has been reported. Safe to show a Super Admin — it is trimmed to
-       a short excerpt and never rendered as markup. */
-    const raw = await r.text().catch(() => '');
-    let d: (Partial<ScrapeSummary> & { error?: string }) | null = null;
-    try { d = raw ? JSON.parse(raw) : null; } catch { d = null; }
-
-    if (!r.ok) {
-      /* A gateway status with a non-JSON body is a PROXY answer, not the
-         app's — the run may well still be executing on the server. Saying so
-         stops the next person concluding the scraper returned zero jobs. */
-      const gateway = d === null && (r.status === 502 || r.status === 503 || r.status === 504);
-      setScrapeErr(
-        gateway
-          ? `Scraper request failed (HTTP ${r.status} from the proxy, after ${elapsedS}s). `
-            + 'The run was not confirmed and may still be executing on the server — '
-            + 'check the server logs and the Last run time before clicking again.'
-          : (d?.error || `Scraper request failed (HTTP ${r.status} after ${elapsedS}s). Check server logs.`),
-      );
-      /* Deliberately NOT clearing the previous run's figures: a failed request
-         is not evidence that zero jobs exist. */
-      return;
-    }
-
-    if (d === null) {
-      setScrapeErr(`Scraper returned a non-JSON response (HTTP ${r.status} after ${elapsedS}s). Check server logs.`);
-      return;
-    }
-
-      setScrapeSummary(d as ScrapeSummary);
-      await load();        // refresh Existing Jobs with the newly imported roles
-      loadStatus();        // refresh last-run + per-source status
-    } finally {
-      /* Every path clears it, including the early returns above. Leaving it set
-         would disable the button until a reload — `if (scraping) return` is the
-         duplicate-click guard, so a stuck flag locks the operator out entirely. */
-      setScraping(false);
-    }
-  };
-
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -185,6 +140,109 @@ export default function JobsTab() {
   }, [query]);
 
   useEffect(() => { void load(); }, [load]);
+
+  /**
+   * Start a run and follow it.
+   *
+   * The button used to hold a fetch open for the whole scrape, which nginx
+   * closed at 60 s — the "Network error" this screen showed for weeks. Now the
+   * POST only ACCEPTS the run (202 + runId) and progress is read by polling
+   * the run record. Nothing here is estimated: every number rendered was
+   * written by the worker.
+   */
+  const pollRun = useCallback(async (runId: string) => {
+    /* Bounded so a run that never reaches a terminal state cannot leave an
+       interval running for the lifetime of the tab. At 3 s this covers ~30
+       minutes, comfortably past any run we have measured. */
+    const MAX_POLLS = 600;
+    for (let n = 0; n < MAX_POLLS; n += 1) {
+      await new Promise((r) => setTimeout(r, 3000));
+      let r: Response;
+      try {
+        r = await fetch(`/api/super-admin/jobs/scraper/runs/${encodeURIComponent(runId)}`);
+      } catch {
+        /* A dropped poll is not a failed run — the worker is a separate
+           process and is unaffected. Keep watching. */
+        continue;
+      }
+      if (!r.ok) continue;
+      const d = await r.json().catch(() => null) as RunStatus | null;
+      if (!d) continue;
+
+      setRunStatus(d);
+
+      if (['completed', 'partial', 'failed', 'cancelled'].includes(d.status)) {
+        setScraping(false);
+        if (d.status === 'failed') setScrapeErr(d.error || 'The scraper run failed.');
+        await load();
+        loadStatus();
+        return;
+      }
+      /* Still running, but the worker has stopped reporting. Say so rather
+         than spinning: the run record is the only evidence either way. */
+      if (d.stale) {
+        setScraping(false);
+        setScrapeErr(
+          'The worker stopped reporting progress. The run may have been killed — '
+          + 'check the server logs. The scraper lease frees itself automatically.',
+        );
+        return;
+      }
+    }
+    setScraping(false);
+    setScrapeErr('Stopped watching this run — it is taking longer than expected. Check the server logs.');
+  }, [load, loadStatus]);
+
+  const runScraper = async () => {
+    if (scraping) return;                        // prevent duplicate clicks
+    setScraping(true); setScrapeErr(''); setScrapeSummary(null); setRunStatus(null);
+    setErr(''); setMsg('');
+
+    let r: Response;
+    try {
+      r = await fetch('/api/super-admin/jobs/scraper/run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+    } catch {
+      setScrapeErr('Network error — the request to start the scraper did not complete.');
+      setScraping(false);
+      return;
+    }
+
+    /* Read as text first: a non-JSON body (a proxy error page) must not throw
+       before its status has been reported. */
+    const raw = await r.text().catch(() => '');
+    let d: { runId?: string; status?: string; error?: string } | null = null;
+    try { d = raw ? JSON.parse(raw) : null; } catch { d = null; }
+
+    /* A run is already going. Not an error — follow that one instead of
+       starting a second scrape of every board. */
+    if (r.status === 409 && d?.runId) {
+      setScrapeErr('A scraper run was already in progress — showing that run.');
+      void pollRun(d.runId);
+      return;
+    }
+
+    if (!r.ok || !d?.runId) {
+      const gateway = d === null && (r.status === 502 || r.status === 503 || r.status === 504);
+      setScrapeErr(
+        gateway
+          ? `Could not start the scraper (HTTP ${r.status} from the proxy). Check server logs.`
+          : (d?.error || `Could not start the scraper (HTTP ${r.status}). Check server logs.`),
+      );
+      setScraping(false);
+      return;
+    }
+
+    setRunStatus({
+      runId: d.runId, status: d.status || 'queued', stale: false,
+      progress: { sourcesTotal: null, sourcesCompleted: 0, sourcesSucceeded: 0, sourcesFailed: 0 },
+      metrics: { discovered: 0, inserted: 0, updated: 0, unchanged: 0, duplicates: 0, rejected: 0, expired: 0, deadlineSkipped: 0 },
+      sources: [], durationMs: 0, error: null,
+    });
+    void pollRun(d.runId);
+  };
+
 
   const onFile = async (file: File | null) => {
     setErr(''); setMsg(''); setSummary(null);
@@ -295,6 +353,68 @@ export default function JobsTab() {
 
             {/* Every bucket is mutually exclusive and reported even when zero,
                 so a run that changed nothing still explains itself. */}
+            {/* Live run progress. Every value here was written by the worker
+                into the run record — nothing is interpolated from elapsed time,
+                so a stalled run looks stalled instead of looking busy. */}
+            {runStatus && (
+              <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 text-[12px]">
+                  <span className={`rounded-md px-2 py-1 font-semibold ${
+                    runStatus.status === 'completed' ? 'bg-emerald-500/10 text-emerald-300'
+                    : runStatus.status === 'partial' ? 'bg-amber-500/10 text-amber-300'
+                    : runStatus.status === 'failed' ? 'bg-red-500/10 text-red-300'
+                    : 'bg-sky-500/10 text-sky-300'}`}
+                  >
+                    {runStatus.stale ? 'NOT RESPONDING' : runStatus.status.toUpperCase()}
+                  </span>
+                  <span className="text-zinc-500">run {runStatus.runId}</span>
+                  {/* null total = a worker has not claimed the run yet. Shown as
+                      "—" rather than 0, which would read as "no sources". */}
+                  <span className="text-zinc-300">
+                    Sources <b className="text-white">
+                      {runStatus.progress.sourcesCompleted}/{runStatus.progress.sourcesTotal ?? '—'}
+                    </b>
+                  </span>
+                  {runStatus.progress.sourcesFailed > 0 && (
+                    <span className="text-red-300">Failed <b>{runStatus.progress.sourcesFailed}</b></span>
+                  )}
+                  <span className="text-sky-300">Discovered <b>{runStatus.metrics.discovered}</b></span>
+                  <span className="text-emerald-300">Inserted <b>{runStatus.metrics.inserted}</b></span>
+                  <span className="text-zinc-300">Updated <b className="text-white">{runStatus.metrics.updated}</b></span>
+                  <span className="text-zinc-300">Unchanged <b className="text-white">{runStatus.metrics.unchanged}</b></span>
+                  {runStatus.durationMs !== null && (
+                    <span className="text-zinc-500">{Math.round(runStatus.durationMs / 1000)}s</span>
+                  )}
+                </div>
+                {runStatus.metrics.deadlineSkipped > 0 && (
+                  <div className="mt-2 text-[11px] font-semibold text-amber-400">
+                    {runStatus.metrics.deadlineSkipped} source(s) were never contacted — the run ran out of time.
+                  </div>
+                )}
+                {/* Per-source rows appear as the worker records them. */}
+                {runStatus.sources.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {runStatus.sources.map((src) => (
+                      <div key={src.sourceId} className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <span className={src.ok ? 'text-emerald-400' : 'text-red-400'}>
+                          {src.skipped ? '–' : src.ok ? '✓' : '✗'}
+                        </span>
+                        <span className="text-zinc-300">{src.sourceId}</span>
+                        {src.skipped
+                          ? <span className="text-zinc-500">skipped{src.skipReason ? ` (${src.skipReason})` : ''}</span>
+                          : <span className="text-zinc-500">
+                              {src.discovered} found · {src.inserted} new · {src.updated} updated · {Math.round(src.durationMs / 1000)}s
+                            </span>}
+                        {src.error && (
+                          <span className="text-red-300">{src.errorKind ? `[${src.errorKind}] ` : ''}{src.error}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {scrapeSummary && (
               <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
                 <span className="rounded-md bg-white/5 px-2 py-1 text-zinc-300">Sources: <b className="text-white">{scrapeSummary.sourcesOk ?? scrapeSummary.sources}/{scrapeSummary.sources}</b></span>

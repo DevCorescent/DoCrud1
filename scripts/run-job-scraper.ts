@@ -62,10 +62,15 @@ function log(fields: Record<string, string | number | boolean | undefined>): voi
 function parseArgs(argv: readonly string[]) {
   let limit: number | undefined;
   let trigger = 'manual';
+  let runId: string | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--limit' && argv[i + 1]) {
       const n = Number(argv[i + 1]);
       if (Number.isFinite(n) && n > 0) limit = Math.floor(n);
+      i += 1;
+    } else if (argv[i] === '--run-id' && argv[i + 1]) {
+      /* Validated, not trusted: this reaches a storage key and a log line. */
+      if (/^[A-Za-z0-9_-]{1,64}$/.test(argv[i + 1])) runId = argv[i + 1];
       i += 1;
     } else if (argv[i] === '--trigger' && argv[i + 1]) {
       /* Constrained: this string is logged, so it is chosen from a known set
@@ -74,11 +79,11 @@ function parseArgs(argv: readonly string[]) {
       i += 1;
     }
   }
-  return { limit, trigger };
+  return { limit, trigger, runId };
 }
 
 async function main(): Promise<number> {
-  const { limit, trigger } = parseArgs(process.argv.slice(2));
+  const { limit, trigger, runId: providedRunId } = parseArgs(process.argv.slice(2));
 
   /* The same `.env*` resolution the Next.js server performs, so the worker
      scrapes EXACTLY the boards the dashboard lists and writes to EXACTLY the
@@ -102,7 +107,12 @@ async function main(): Promise<number> {
   const {
     acquireScraperLease, releaseScraperLease, renewScraperLease, LEASE_RENEW_MS,
   } = await import('@/lib/server/job-sources/run-lock');
-  const runId = `run-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  const runs = await import('@/lib/server/job-sources/runs');
+  /* The API opens the run BEFORE spawning this process, so that its 202 can
+     hand the browser a runId to poll immediately. When that happened the id is
+     passed in and must be reused — minting a second one here would leave the
+     UI polling a run nothing will ever update. */
+  const runId = providedRunId ?? `run-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   const owner = `${hostname()}:${process.pid}`;
 
   /* ONE scraper at a time, across PM2 and systemd alike. Taken before any
@@ -115,6 +125,32 @@ async function main(): Promise<number> {
     });
     return 4;
   }
+
+  /* ═══ SIGNALS MUST RELEASE THE LEASE ═══
+
+     Node's DEFAULT handling of SIGINT/SIGTERM terminates the process
+     immediately: the `finally` below does not run, so the lease is left held
+     and the scraper refuses to start again until the 15-minute TTL expires.
+     That was observed — a Ctrl+C'd run blocked the next attempt for a quarter
+     of an hour — and it matters beyond the keyboard, because `systemctl stop`
+     and a TimeoutStartSec kill both send SIGTERM.
+
+     Installing a handler makes the interrupt orderly: release, then exit with
+     the conventional 128+signal code so systemd and the shell still see a
+     terminated process rather than a clean one. The TTL remains the backstop
+     for the cases no handler can cover (SIGKILL, power loss, OOM). */
+  let releasing = false;
+  const onSignal = (signal: NodeJS.Signals, code: number) => {
+    /* A second Ctrl+C must not start a second release. */
+    if (releasing) return;
+    releasing = true;
+    log({ event: 'interrupted', runId, signal });
+    void releaseScraperLease(runId)
+      .catch(() => { /* the TTL covers a failed release */ })
+      .finally(() => { process.exit(code); });
+  };
+  process.once('SIGINT', () => onSignal('SIGINT', 130));
+  process.once('SIGTERM', () => onSignal('SIGTERM', 143));
 
   /* Keep the lease alive for as long as the run legitimately takes. If a renewal
      reports the lease was lost, another run now owns it and this one must not
@@ -131,6 +167,31 @@ async function main(): Promise<number> {
   const startedAt = Date.now();
   log({ event: 'start', runId, trigger, owner, limit: limit ?? 'default' });
 
+  /* ═══ THE RUN RECORD IS THE UI's ONLY SOURCE OF TRUTH ═══
+
+     Written from here rather than from the API, because this is the process
+     that actually knows what happened. Everything below is best-effort: a
+     storage hiccup while recording PROGRESS must never abort a scrape that is
+     otherwise working. The scrape is the product; the record describes it. */
+  const record = async (fn: () => Promise<unknown>) => {
+    try { await fn(); } catch { /* progress reporting is never fatal */ }
+  };
+
+  if (providedRunId) {
+    /* The API already opened this run as `queued`. */
+    await record(() => runs.claimIngestionRun(runId, owner));
+  } else {
+    await record(() => runs.startIngestionRun(runId, {
+      trigger: trigger === 'timer' ? 'timer' : 'manual',
+      workerId: owner,
+    }));
+  }
+
+  /* Proof of life, so a crashed worker is distinguishable from a slow one. */
+  const heart = setInterval(() => { void record(() => runs.heartbeatIngestionRun(runId)); },
+    LEASE_RENEW_MS);
+  if (typeof heart.unref === 'function') heart.unref();
+
   try {
     const { runCanonicalIngestion } = await import('@/lib/server/job-sources/run-ingestion');
 
@@ -145,6 +206,19 @@ async function main(): Promise<number> {
 
     for (const s of out.perSource) {
       if (s.skipped && s.skipReason === 'requires_partnership') continue;
+      await record(() => runs.recordSourceResult(runId, {
+        sourceId: s.sourceId, ok: s.ok, jobsFound: s.discovered,
+        latencyMs: s.latencyMs, attempts: 1,
+        ...(s.skipped ? { skipped: true } : {}),
+        ...(s.skipReason === 'deadline' || s.skipReason === 'disabled'
+          ? { skipReason: s.skipReason }
+          : {}),
+        inserted: s.inserted, updated: s.updated, unchanged: s.unchanged,
+        duplicates: s.duplicateInRun, rejected: s.rejected,
+        ...(s.error ? { error: s.error } : {}),
+        ...(s.errorKind ? { errorKind: s.errorKind } : {}),
+        ...(s.errorStatus ? { errorStatus: s.errorStatus } : {}),
+      }));
       log({
         event: 'source', runId, source: s.sourceId,
         ok: s.ok, skipped: s.skipped || undefined, reason: s.skipReason,
@@ -156,28 +230,68 @@ async function main(): Promise<number> {
       });
     }
 
+    /* Counted from the per-source results rather than re-derived, so the
+       headline numbers and the per-source lines can never disagree. Partnership
+       skips are excluded: they are configuration, not an operational event. */
+    const attempted = out.perSource.filter(
+      (x) => !(x.skipped && x.skipReason === 'requires_partnership'),
+    );
+    const skippedForTime = attempted.filter((x) => x.skipped && x.skipReason === 'deadline').length;
+
     log({
-      event: 'complete', runId, trigger,
+      event: 'complete', runId, trigger, owner,
+      startedAt: new Date(startedAt).toISOString(),
+      finishedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt,
-      sources: out.sources, sourcesOk: out.sourcesOk, failed: out.failed,
-      skipped: out.skipped, deadlineSkipped: out.deadlineSkipped,
+      sources: attempted.length,
+      sourcesOk: attempted.filter((x) => x.ok && !x.skipped).length,
+      sourcesFailed: attempted.filter((x) => !x.ok).length,
+      sourcesSkipped: attempted.filter((x) => x.skipped).length,
+      failed: out.failed, skipped: out.skipped,
+      deadlineSkipped: out.deadlineSkipped,
       discovered: out.discovered, inserted: out.inserted, updated: out.updated,
       unchanged: out.unchanged, duplicates: out.duplicateInRun,
       rejected: out.rejected, truncated: out.truncated,
+      seenStamped: out.seenStamped,
       leaseLost: lost || undefined,
     });
+
+    /* ═══ THE TWO OUTCOMES THAT LOOK LIKE SUCCESS AND ARE NOT ═══
+
+       Both were observed in production reporting a healthy-looking run. They
+       are called out as their own log line so `journalctl -p warning` and any
+       future alerting can find them without parsing the summary. Neither
+       changes the exit code: the run genuinely completed, and turning a
+       diagnosable condition into a systemd failure would only bury it. */
+    if (skippedForTime > 0) {
+      log({ event: 'warning', runId, issue: 'deadline_skipped',
+        detail: `${skippedForTime} source(s) were never contacted because the run ran out of time` });
+    }
+    if (out.discovered === 0 && attempted.some((x) => !x.skipped)) {
+      log({ event: 'warning', runId, issue: 'zero_discovered',
+        detail: 'sources were contacted but returned no postings at all' });
+    }
+
+    /* `partial` is the point of this call. A run that lost one board used to be
+       recorded as `completed` — the same word as a run where everything worked. */
+    const outcome = runs.runOutcome(attempted);
+    await record(() => runs.finishIngestionRun(runId, outcome, undefined, {
+      discovered: out.discovered, inserted: out.inserted, updated: out.updated,
+      unchanged: out.unchanged, duplicates: out.duplicateInRun,
+      rejected: out.rejected, deadlineSkipped: out.deadlineSkipped,
+    }));
+    log({ event: 'outcome', runId, outcome });
     return 0;
   } catch (error) {
     /* The message only — a stack could name filesystem paths, and the summary
        is what an operator reads in the journal. */
-    log({
-      event: 'failed', runId,
-      durationMs: Date.now() - startedAt,
-      error: error instanceof Error ? error.message : 'scraper run failed',
-    });
+    const message = error instanceof Error ? error.message : 'scraper run failed';
+    log({ event: 'failed', runId, durationMs: Date.now() - startedAt, error: message });
+    await record(() => runs.finishIngestionRun(runId, 'failed', message));
     return 2;
   } finally {
     clearInterval(renewer);
+    clearInterval(heart);
     /* Scoped to this runId, so a run that already lost its lease cannot
        release the successor's. */
     await releaseScraperLease(runId).catch(() => {});

@@ -59,12 +59,38 @@ export function createRunId(): string {
   return `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export interface StartRunOptions {
+  trigger?: 'manual' | 'timer' | 'api';
+  workerId?: string;
+  requestedBy?: string;
+  sourcesTotal?: number;
+  /**
+   * Open the run as `queued` rather than `running`.
+   *
+   * The API accepts a request and returns 202 BEFORE a worker exists, so there
+   * is a real interval with a run that nothing is executing. Recording it as
+   * `running` during that window would make a worker that never starts look
+   * like a worker that is busy — indistinguishable, and the UI would spin
+   * forever. `queued` names the state honestly.
+   */
+  queued?: boolean;
+}
+
 /** Open a run. Recorded immediately so a crashed run is still visible. */
-export async function startIngestionRun(runId: string): Promise<IngestionRun> {
+export async function startIngestionRun(
+  runId: string,
+  options: StartRunOptions = {},
+): Promise<IngestionRun> {
+  const now = new Date().toISOString();
   const run: IngestionRun = {
     runId,
-    startedAt: new Date().toISOString(),
-    status: 'running',
+    startedAt: now,
+    status: options.queued ? 'queued' : 'running',
+    heartbeatAt: now,
+    ...(options.trigger ? { trigger: options.trigger } : {}),
+    ...(options.workerId ? { workerId: options.workerId } : {}),
+    ...(options.requestedBy ? { requestedBy: options.requestedBy } : {}),
+    ...(typeof options.sourcesTotal === 'number' ? { sourcesTotal: options.sourcesTotal } : {}),
     sourcesAttempted: 0,
     sourcesSucceeded: 0,
     sourcesFailed: 0,
@@ -194,16 +220,112 @@ export async function clearAutoDisable(sourceId: string): Promise<void> {
   });
 }
 
-export async function finishIngestionRun(
-  runId: string, status: 'completed' | 'failed', error?: string,
+/**
+ * A worker has picked up a queued run and is now executing it.
+ *
+ * Separate from `startIngestionRun` because the two happen in DIFFERENT
+ * PROCESSES: the API opens the run, the worker claims it. Collapsing them
+ * would mean the API had to know the worker's identity before one existed.
+ */
+export async function claimIngestionRun(
+  runId: string,
+  workerId: string,
+  sourcesTotal?: number,
 ): Promise<void> {
   await withStorageLock(LOCK, async () => {
     const state = await read();
+    const now = new Date().toISOString();
     await writeJsonFile(STATE_PATH, {
       ...state,
       runs: state.runs.map((r) => (r.runId === runId
-        ? { ...r, status, finishedAt: new Date().toISOString(), error }
+        ? {
+            ...r,
+            status: 'running' as const,
+            workerId,
+            heartbeatAt: now,
+            ...(typeof sourcesTotal === 'number' ? { sourcesTotal } : {}),
+          }
         : r)),
     });
   });
+}
+
+/**
+ * Record that the worker is still alive.
+ *
+ * This is what lets the UI distinguish a slow run from a dead one. Cheap and
+ * frequent by design; it writes one timestamp and nothing else.
+ */
+export async function heartbeatIngestionRun(runId: string): Promise<void> {
+  await withStorageLock(LOCK, async () => {
+    const state = await read();
+    const now = new Date().toISOString();
+    await writeJsonFile(STATE_PATH, {
+      ...state,
+      runs: state.runs.map((r) => (r.runId === runId ? { ...r, heartbeatAt: now } : r)),
+    });
+  });
+}
+
+/** Run-level totals, written once when the run ends. */
+export interface RunTotals {
+  discovered?: number;
+  inserted?: number;
+  updated?: number;
+  unchanged?: number;
+  duplicates?: number;
+  rejected?: number;
+  expired?: number;
+  deadlineSkipped?: number;
+}
+
+export async function finishIngestionRun(
+  runId: string,
+  status: 'completed' | 'partial' | 'failed' | 'cancelled',
+  error?: string,
+  totals: RunTotals = {},
+): Promise<void> {
+  await withStorageLock(LOCK, async () => {
+    const state = await read();
+    const finishedAt = new Date().toISOString();
+    await writeJsonFile(STATE_PATH, {
+      ...state,
+      runs: state.runs.map((r) => {
+        if (r.runId !== runId) return r;
+        const started = Date.parse(r.startedAt);
+        return {
+          ...r,
+          status,
+          finishedAt,
+          heartbeatAt: finishedAt,
+          ...(Number.isFinite(started)
+            ? { durationMs: Math.max(0, Date.parse(finishedAt) - started) }
+            : {}),
+          ...totals,
+          ...(error ? { error } : {}),
+        };
+      }),
+    });
+  });
+}
+
+/**
+ * How a finished run should be LABELLED, from what its sources actually did.
+ *
+ * Kept as a pure function so the rule lives in one place and is testable
+ * without a run. The distinction that matters is `partial`: a run where some
+ * boards failed used to be recorded as `completed`, which made a run that
+ * silently lost a source look exactly like a healthy one.
+ */
+export function runOutcome(
+  sources: ReadonlyArray<{ ok: boolean; skipped?: boolean }>,
+): 'completed' | 'partial' | 'failed' {
+  const attempted = sources.filter((s) => !s.skipped);
+  if (attempted.length === 0) return 'completed';
+  const failed = attempted.filter((s) => !s.ok).length;
+  if (failed === 0) return 'completed';
+  /* EVERY attempted source failed. That is not a partial result, it is a run
+     that achieved nothing, and calling it partial would overstate it. */
+  if (failed === attempted.length) return 'failed';
+  return 'partial';
 }

@@ -125,6 +125,7 @@
     "test:observability": "tsx scripts/observability.selftest.ts",
     "test:job-scraper-worker": "tsx scripts/job-scraper-worker.selftest.ts",
     "test:worker-env": "tsx scripts/worker-env.selftest.ts",
+    "test:scraper-run-model": "tsx scripts/scraper-run-model.selftest.ts",
     "scrape": "tsx scripts/run-job-scraper.ts"
   },
   "dependencies": {

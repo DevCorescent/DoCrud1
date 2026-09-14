@@ -9,11 +9,24 @@
 # life colliding with the previous run and being dropped, which hides how long
 # runs actually take.
 #
-# 30 minutes is comfortably longer than a run, and job boards do not change
-# faster than that. Revisit it against real `durationMs` values in the journal
-# rather than by guessing:
+# ═══ THIS CADENCE IS PROVISIONAL AND MUST BE MEASURED ═══
 #
+# 30 minutes is a STARTING POINT chosen to be safely longer than any plausible
+# run — it is NOT a measured value, because no full production run has completed
+# yet. Do not treat it as tuned.
+#
+# Before enabling this timer, complete one controlled manual run and read its
+# real duration:
+#
+#   npx tsx scripts/run-job-scraper.ts --trigger manual
 #   journalctl -u docrud-job-scraper.service | grep 'event=complete'
+#
+# Then set the interval to comfortably exceed the observed `durationMs` — a
+# rule of thumb is at least 3x, so a normal run never approaches the next tick.
+# If runs turn out to take minutes, 30 minutes is right; if they take longer
+# than ~10 minutes, lengthen this rather than relying on the lease to absorb
+# the overlap. Overlap IS prevented (Type=oneshot plus the Mongo lease), but a
+# tick that is routinely skipped hides how long runs actually take.
 [Unit]
 Description=DoCrud job scraper timer (public ATS ingestion, every 30 minutes)
 Documentation=file:/home/ubuntu/docrud/ops/README.md

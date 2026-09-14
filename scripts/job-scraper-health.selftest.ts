@@ -184,8 +184,18 @@ async function main() {
   check('the scraper run route declares a maxDuration',
     /export const maxDuration = \d+;/.test(routeSrc));
   check('and runs on the node runtime', /export const runtime = 'nodejs';/.test(routeSrc));
-  check('and documents that the ceiling is not a guarantee',
-    /CEILING, NOT A GUARANTEE/.test(routeSrc));
+  /* ═══ UPDATED WHEN THE SCRAPE LEFT THE REQUEST ═══
+     This used to assert the route documented its 300 s ceiling as "not a
+     guarantee". That ceiling existed only because the scrape ran inline, and
+     the comment's own conclusion — execute the run outside the request — is
+     now what happens. The property worth protecting is the opposite one: this
+     route must stay SHORT, comfortably under nginx's 60 s proxy_read_timeout,
+     so it can never again be the response the proxy abandons. */
+  const routeMaxDuration = Number(/export const maxDuration = (\d+);/.exec(routeSrc)?.[1] ?? 0);
+  check(`the route's window (${routeMaxDuration}s) stays well under nginx's 60s proxy_read_timeout`,
+    routeMaxDuration > 0 && routeMaxDuration < 60);
+  check('the route no longer performs the scrape inside the request',
+    !/runCanonicalIngest\b/.test(routeSrc));
 
   /* ═══ 11. AN OVERRUNNING RUN MAKES PROGRESS INSTEAD OF LOSING EVERYTHING ══
 
@@ -194,8 +204,14 @@ async function main() {
      already read. Combined with a fixed starting order that starved the tail of
      the list permanently: the same head synced every pass, and the rest showed
      "Never synced" forever. */
-  check('the run is given the route\'s own window, not a repeated literal',
-    /budgetMs: maxDuration \* 1000/.test(routeSrc));
+  /* The route no longer passes a budget, because it no longer runs the scrape.
+     The WORKER is the production path and deliberately passes no deadline at
+     all — a deadline is what starved the source loop and produced a run
+     reporting "0 discovered, 0 failed". `runCanonicalIngest` keeps its budget
+     for any remaining in-request caller. */
+  const workerSrc = readFileSync('scripts/run-job-scraper.ts', 'utf8');
+  check('the worker passes no deadline, so its source loop cannot be starved',
+    !/deadlineAt/.test(workerSrc.replace(/\/\*[\s\S]*?\*\//g, '')));
   /* The reserve is no longer a flat constant. A fixed 45 s had to pay for a
      ~12 MB app_state rewrite plus a mirror of every posting, and once the corpus
      outgrew it the run was killed after app_state was written and before the

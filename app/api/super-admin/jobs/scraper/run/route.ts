@@ -1,52 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSuperAdminSessionFromRequest, appendSuperAdminAudit } from '@/lib/server/super-admin-auth';
-import { runCanonicalIngest } from '@/lib/server/scraper-client';
+import { dispatchScraperRun } from '@/lib/server/job-sources/dispatch';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 /**
- * The platform execution window for this route.
+ * The execution window for this route.
  *
- * THIS ROUTE RUNS THE WHOLE SCRAPE INLINE and answers only when every source
- * has been attempted. Sources are processed SEQUENTIALLY, so the worst case is
- * the sum of them, and one slow board delays everything behind it.
+ * ═══ IT NO LONGER NEEDS ONE ═══
  *
- * The fetchers allow 3 attempts at a 12 s timeout plus ~1.2 s of backoff, so a
- * single unreachable URL can cost ~37 s. Most providers are one request, but
- * Workday pages at 20/request (up to 100 pages) and Lever/SmartRecruiters up to
- * 50 — so ONE badly behaved paginated source can exceed this window on its own.
+ * This route USED to run the whole scrape inline, and the long comment that
+ * stood here explained how 300 s was a ceiling rather than a guarantee. It
+ * also said what the durable answer was: execute the run outside the request,
+ * return a runId, and poll. That is now what happens, so the ceiling is no
+ * longer load-bearing.
  *
- * 300 s is the Vercel maximum, and every other long route in this codebase sets
- * its own (30/45/60/300). This one had none and inherited the default, which is
- * how a long scrape became a dead request with no run state written.
- *
- * ═══ THIS IS A CEILING, NOT A GUARANTEE ═══
- *
- * A large enough source list will still exceed 300 s. That is a real limit of
- * running the scrape inside a request, and raising the number does not fix it —
- * the durable answer is to execute the run outside the request (create run →
- * return runId → poll), which is a larger change than this correctness pass.
- * A run now STOPS VOLUNTARILY before the ceiling and persists what it read,
- * then resumes from that point next time — so a source list too long for one
- * window is covered across several runs instead of losing every pass to the
- * kill. That makes overrun survivable; it does not make the run unbounded, and
- * executing outside the request is still the durable answer.
+ * What the route does today is: authenticate, check the lease, open a run
+ * record, spawn the worker, answer 202. All of that is a handful of database
+ * round-trips. 30 s is generous for it and is deliberately far below nginx's
+ * 60 s `proxy_read_timeout`, so this response can never be the one the proxy
+ * gives up on — which is exactly the failure that produced "Network error" on
+ * the dashboard.
  */
-export const maxDuration = 300;
+export const maxDuration = 30;
 
 /**
- * Run the approved-source scraper through the CANONICAL pipeline.
+ * ACCEPT a scraper run. Does not perform it.
+ *
+ * The scrape itself goes through the canonical pipeline in the standalone
+ * worker — the same entrypoint the systemd timer uses, so there is one
+ * execution path rather than a request-shaped copy of one:
  *
  *   registry -> adapter (paginated) -> normalizeSourceJob -> identity
  *   -> dedupe/upsert -> classification -> lastSeenAt
  *
- * Switched from the legacy CSV importer in Stage 2. The behavioural difference
- * that matters: a posting whose SOURCE CONTENT CHANGED is now updated in place
- * rather than skipped as a duplicate, so stored jobs stop going stale. Job ids,
- * ownership, status and applications are preserved by the upsert.
+ * Super-Admin only.
  *
- * Super-Admin only. Returns the same summary shape the dashboard already reads.
+ * Responses:
+ *   202  { runId, status: 'queued' }   poll GET .../scraper/runs/<runId>
+ *   409  { error, runId, status }      a run is already in progress
+ *   401  unauthenticated
+ *   500  the worker could not be started
  */
 export async function POST(req: NextRequest) {
   const session = await getSuperAdminSessionFromRequest(req);
@@ -60,32 +55,42 @@ export async function POST(req: NextRequest) {
   }
   const totalLimit = Number(body.limit) || undefined;
 
-  try {
-    /* The run is given the SAME window the platform gives this route, so it
-       can stop while there is still time to persist what it read. Derived from
-       `maxDuration` rather than repeated, so the two cannot drift apart. */
-    const summary = await runCanonicalIngest({ totalLimit, budgetMs: maxDuration * 1000 });
+  /* ═══ THE REQUEST NO LONGER RUNS THE SCRAPE ═══
 
-    await appendSuperAdminAudit({
-      action: 'jobs.scrape',
-      targetType: 'hiring_job',
-      details: {
-        actor: session.email || 'super-admin',
-        sources: summary.sources,
-        discovered: summary.discovered,
-        inserted: summary.inserted,
-        updated: summary.updated,
-        unchanged: summary.unchanged,
-        duplicates: summary.duplicates,
-        rejected: summary.rejected,
-        failed: summary.failed,
-      },
-    });
+     It used to, and that is what produced the "Network error" the dashboard
+     showed for weeks: nginx closes a proxied response at 60 s, a run takes
+     minutes, so the browser got an HTML 504 while the scrape carried on
+     unseen. The fix is not a longer timeout — it is not doing minutes of work
+     inside a request. The run is handed to the same standalone worker systemd
+     uses, and this route answers with an id to poll. */
+  const dispatched = await dispatchScraperRun({
+    requestedBy: session.email || 'super-admin',
+    ...(totalLimit ? { perSourceLimit: totalLimit } : {}),
+  });
 
-    return NextResponse.json(summary);
-  } catch (error) {
-    // Safe message only — never leak internal details.
-    const message = error instanceof Error ? error.message : 'Scrape failed.';
-    return NextResponse.json({ error: message }, { status: 400 });
+  if (!dispatched.ok) {
+    if (dispatched.reason === 'already_running') {
+      /* 409, not 500 and not a silent second run. The caller is told which run
+         is already going so the UI can poll THAT one rather than starting a
+         duplicate scrape of every board. */
+      return NextResponse.json(
+        { error: 'A scraper run is already in progress.', runId: dispatched.runId, status: 'running' },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: 'Could not start the scraper.' }, { status: 500 });
   }
+
+  await appendSuperAdminAudit({
+    action: 'jobs.scrape',
+    targetType: 'hiring_job',
+    /* The run was STARTED, not completed — its totals do not exist yet and
+       recording zeros here would be a lie the audit log keeps forever. */
+    details: { actor: session.email || 'super-admin', runId: dispatched.runId, dispatched: true },
+  });
+
+  return NextResponse.json(
+    { runId: dispatched.runId, status: dispatched.status },
+    { status: 202 },
+  );
 }

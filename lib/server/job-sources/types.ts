@@ -116,7 +116,25 @@ export interface SourceHealthState {
   lastJobCount?: number;
 }
 
-export type IngestionRunStatus = 'running' | 'completed' | 'failed';
+/**
+ * A run's lifecycle.
+ *
+ * `queued` and `partial` were added when the run model became the source of
+ * truth for the Super Admin screen, and both describe states the old three
+ * could only misreport:
+ *
+ *   queued   the request was accepted and a worker has not picked it up yet.
+ *            Without it, the moment between the 202 and the worker starting
+ *            has no representation, and the UI has to guess.
+ *   partial  some sources succeeded and others failed. Previously this was
+ *            recorded as `completed`, which is the more dangerous of the two
+ *            wrong answers: a run that lost a board silently looked healthy.
+ *
+ * `cancelled` is present in the type so status handling is written for it once;
+ * cooperative cancellation itself is not implemented yet.
+ */
+export type IngestionRunStatus =
+  | 'queued' | 'running' | 'completed' | 'partial' | 'failed' | 'cancelled';
 
 /** One pass over the enabled sources. */
 export interface IngestionRun {
@@ -133,6 +151,44 @@ export interface IngestionRun {
   sources: IngestionSourceResult[];
   /** Set only when the RUN itself failed, not when a source did. */
   error?: string;
+
+  /* ── Added with the async run model ──────────────────────────────────────
+     ALL OPTIONAL, deliberately. Runs recorded by an earlier build are still in
+     storage and must keep parsing; an absent field means "that build did not
+     record it", which is not the same as zero and must not be rendered as one. */
+
+  /** What started this run: a Super Admin click, or the systemd timer. */
+  trigger?: 'manual' | 'timer' | 'api';
+  /** host:pid of the process executing it. Never a credential. */
+  workerId?: string;
+  /** Super Admin who requested it. Identity only — no session material. */
+  requestedBy?: string;
+  /**
+   * Last sign of life from the worker.
+   *
+   * A run stuck in `running` with a stale heartbeat is a CRASHED run, and it
+   * is the only way to tell that apart from one that is merely slow. Without
+   * it the UI would show a spinner forever after a worker died.
+   */
+  heartbeatAt?: string;
+  finishedAtMs?: number;
+  durationMs?: number;
+
+  /** How many sources this run intends to attempt, known up front. */
+  sourcesTotal?: number;
+
+  /* Ingestion totals, in the same vocabulary the rest of the pipeline uses.
+     `jobsFound` above predates these and counts discovered only. */
+  discovered?: number;
+  inserted?: number;
+  updated?: number;
+  unchanged?: number;
+  duplicates?: number;
+  rejected?: number;
+  /** Postings whose lifecycle closed during this run. */
+  expired?: number;
+  /** Sources never contacted because the run ran out of its time budget. */
+  deadlineSkipped?: number;
 }
 
 export interface IngestionSourceResult {
@@ -145,7 +201,20 @@ export interface IngestionSourceResult {
   error?: string;
   /** True when the source was skipped rather than attempted. */
   skipped?: boolean;
-  skipReason?: 'disabled' | 'auto_disabled' | 'requires_partnership' | 'rate_limited';
+  skipReason?: 'disabled' | 'auto_disabled' | 'requires_partnership' | 'rate_limited'
+    /** The run stopped starting new sources before reaching this one. */
+    | 'deadline';
+
+  /* Per-source write outcomes. Optional for the same backward-compatibility
+     reason as the run-level totals above. */
+  inserted?: number;
+  updated?: number;
+  unchanged?: number;
+  duplicates?: number;
+  rejected?: number;
+  /** Failure CATEGORY, so a dead host reads differently from a bad slug. */
+  errorKind?: string;
+  errorStatus?: number;
 }
 
 /** Bounds the run document. */

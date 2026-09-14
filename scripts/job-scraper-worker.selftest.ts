@@ -157,6 +157,32 @@ function workerContract() {
     worker.indexOf('acquireScraperLease') < worker.indexOf('runCanonicalIngestion'));
   check('losing the race exits 4 rather than failing', worker.includes('return 4'));
   check('it releases the lease in a finally', /finally\s*\{[\s\S]*releaseScraperLease/.test(worker));
+
+  /* ═══ THE GAP THAT A `finally` DOES NOT COVER ═══
+     Node's default SIGINT/SIGTERM handling terminates the process before any
+     pending `finally` runs, so an interrupted worker used to leave the lease
+     held for the full 15-minute TTL. Observed with a Ctrl+C'd run; systemctl
+     stop and a TimeoutStartSec kill both send SIGTERM and hit the same path. */
+  check('SIGINT is handled rather than left to Node\'s default',
+    /process\.once\('SIGINT'/.test(worker));
+  check('SIGTERM is handled too, so systemctl stop does not strand the lease',
+    /process\.once\('SIGTERM'/.test(worker));
+  check('the signal path releases the lease',
+    /onSignal[\s\S]{0,400}releaseScraperLease/.test(worker));
+  check('and still exits with a terminated-by-signal code, not 0',
+    /130/.test(worker) && /143/.test(worker));
+  check('a second signal does not start a second release',
+    /if \(releasing\) return;/.test(worker));
+
+  /* Conditions that completed successfully but are not healthy. Both were seen
+     in production wearing the appearance of a good run. */
+  check('a deadline-skipped run raises an explicit warning',
+    /issue: 'deadline_skipped'/.test(worker));
+  check('a zero-discovered run raises an explicit warning',
+    /issue: 'zero_discovered'/.test(worker));
+  check('the completion line carries the fields an operator needs',
+    ['startedAt', 'finishedAt', 'durationMs', 'sourcesFailed', 'sourcesSkipped', 'owner']
+      .every((f) => worker.includes(f)));
   /* The worker NAMES MONGODB_URI (it is a required variable, and the missing-
      config error has to say which one). Naming is not leaking — reading the
      VALUE and putting it somewhere visible is. So the assertion is about
@@ -180,6 +206,20 @@ function workerContract() {
     !/(SECRET|PASSWORD|_KEY|URI)\s*=\s*\S+/.test(svc.replace(/EnvironmentFile=\S+/g, '')));
   check('the timer points at the service', timer.includes('Unit=docrud-job-scraper.service'));
 
+  /* KillMode=mixed signals the MAIN process only. The default (control-group)
+     would signal the npx/tsx wrapper alongside it and kill the worker before
+     its handler could release the lease — undoing the signal handling above. */
+  check('KillMode gives the worker\'s signal handler a chance to run',
+    /^KillMode=mixed$/m.test(svc));
+  check('TimeoutStopSec allows the release round-trip', /^TimeoutStopSec=\d+$/m.test(svc));
+  check('restart is left to the timer, not to systemd looping on a failing provider',
+    /^Restart=no$/m.test(svc));
+
+  /* The cadence has never been measured against a real run. It must say so,
+     or someone will read 30 minutes as a tuned value. */
+  check('the timer states its cadence is provisional until a run is measured',
+    /PROVISIONAL|provisional/.test(timer) && /measure/i.test(timer));
+
   /* systemd kills at TimeoutStartSec. If that outlived the lease, a killed run
      would leave a lease nobody is renewing and the next tick would wait it out
      for no reason. */
@@ -197,8 +237,17 @@ function uiErrors() {
     ui.includes('from the proxy') && ui.includes('r.status'));
   check('the response body is read as text before being parsed',
     ui.includes('r.text()'));
-  check('a failed request does not clear the previous run\'s figures',
-    /Deliberately NOT clearing/.test(ui));
+  /* Phase A changed HOW this is achieved. The transient summary banner is gone;
+     progress now comes from the polled run record, and a failed START simply
+     leaves `runStatus` null so the block does not render. The persisted
+     last-run tiles are read from scraper status and are never written by a
+     failed request — which is the property that actually matters: a request
+     that could not start the scraper must not make the dashboard claim the
+     last run found nothing. */
+  check('a failed start leaves the run panel unrendered rather than showing zeros',
+    /setScraping\(false\);\s*\n\s*return;/.test(ui));
+  check('the failure paths never write run metrics',
+    !/setRunStatus\([^)]*discovered:\s*0[\s\S]{0,200}setScrapeErr/.test(ui));
 }
 
 async function main() {

@@ -66,9 +66,36 @@ ExecStart=/usr/bin/env npx tsx scripts/run-job-scraper.ts --trigger timer
 # raise an alert.
 SuccessExitStatus=0 4
 
-# The next timer tick is the retry. Restarting in place would hammer a provider
-# that is already failing.
+# ═══ WHY Restart=no, DESPITE "restart on unexpected failure" ═══
+#
+# For a Type=oneshot job driven by a timer, the NEXT TICK is the retry, and it
+# is a better one than systemd's. A scraper failure is almost always a provider
+# outage, an Atlas blip, or a bad configuration — none of which are fixed by
+# trying again three seconds later, and all of which are made worse by it:
+# restarting in place hammers a third party that is already returning errors,
+# and repeated restarts would hold or churn the Mongo lease.
+#
+# Restart=on-failure would also fight the lease: a restarted copy would exit 4
+# ("already running") until the previous lease expired, filling the journal with
+# failures that are not failures.
+#
+# So the retry policy is the timer's cadence, deliberately. RestartSec is set
+# only so that an operator who overrides this to on-failure for debugging does
+# not get a tight loop by default.
 Restart=no
+RestartSec=60
+
+# ═══ SHUTDOWN ═══
+#
+# The worker installs SIGTERM/SIGINT handlers that RELEASE the Mongo lease
+# before exiting. KillMode=mixed sends SIGTERM to the main process only, giving
+# that handler a chance to run, rather than signalling every process in the
+# cgroup at once (which would kill the npx/tsx wrapper out from under it and
+# strand the lease for the full 15-minute TTL).
+KillMode=mixed
+# Long enough for the release round-trip to Atlas, short enough that a stop does
+# not hang. SIGKILL follows if the handler does not finish.
+TimeoutStopSec=30
 # Generous: a cold run over every board, plus the corpus load and the write.
 # Shorter than the lease TTL (15 min) so systemd never kills a run that still
 # believes it holds the lease.

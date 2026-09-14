@@ -1,0 +1,77 @@
+# DoCrud job scraper — the ingestion worker.
+#
+# ═══ WHY THIS IS NOT A docrud-cron@ INSTANCE ═══
+#
+# Every job in ops/cron/jobs.conf is an HTTP call to a route that does the work
+# inside the request. The scraper is the one job that must NOT be shaped that
+# way: a full run over the configured boards exceeds nginx's proxy_read_timeout
+# (60 s in production), and the route's own 300 s ceiling forces it to hand the
+# source loop a deadline that a large corpus load can consume entirely — which
+# is how a run came to report "0 discovered, 0 failed" having contacted nothing.
+#
+# So this unit runs the pipeline DIRECTLY, as a process. No proxy in front of
+# it, no request ceiling, no deadline. That removes both failure modes at once
+# rather than tuning a timeout that will be wrong again at the next scale.
+#
+# OVERLAP: Type=oneshot stops systemd starting a second copy while the first
+# runs. That covers the timer, but NOT a Super Admin triggering a run from the
+# browser at the same moment — a different process entirely — so the worker
+# also takes the durable Mongo lease in lib/server/job-sources/run-lock.ts.
+# systemd's guard and the lease cover different races; both are needed.
+[Unit]
+Description=DoCrud job scraper (public ATS ingestion)
+Documentation=file:/home/ubuntu/docrud/ops/README.md
+# The scraper calls third-party ATS APIs, so this is about real outbound
+# connectivity, not just boot ordering.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/docrud
+
+# The application's own environment — MONGODB_URI and the *_BOARDS/*_COMPANIES
+# source lists. The worker must run with EXACTLY the configuration the app runs
+# with, or it would scrape a different set of boards than the dashboard shows.
+EnvironmentFile=/home/ubuntu/docrud/.env
+# Marks the run in the journal as timer-driven rather than hand-started.
+ExecStart=/usr/bin/env npx tsx scripts/run-job-scraper.ts --trigger timer
+
+# Exit 4 means "another run holds the lease". That is the lock working as
+# designed, not a failure, so it must not mark the unit failed and must not
+# raise an alert.
+SuccessExitStatus=0 4
+
+# The next timer tick is the retry. Restarting in place would hammer a provider
+# that is already failing.
+Restart=no
+# Generous: a cold run over every board, plus the corpus load and the write.
+# Shorter than the lease TTL (15 min) so systemd never kills a run that still
+# believes it holds the lease.
+TimeoutStartSec=840
+
+# ── Hardening ───────────────────────────────────────────────────────────────
+# Deliberately lighter than docrud-cron@.service: this one runs Node, needs
+# outbound TLS to the ATS providers and to MongoDB Atlas, and needs to read the
+# application tree.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+# The app lives under /home, so ProtectHome=read-only would make it unreadable.
+ProtectHome=no
+# Next.js and tsx both write caches inside the project directory.
+ReadWritePaths=/home/ubuntu/docrud
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

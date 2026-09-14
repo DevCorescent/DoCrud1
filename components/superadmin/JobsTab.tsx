@@ -38,7 +38,8 @@ type SourceInfo = { name: string; label: string; provider: string; enabled: bool
   lastError?: string; lastErrorKind?: string; consecutiveFailures?: number };
 type ScraperRun = { runAt: string; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number;
   discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
-  existingUnknown?: number; duplicateInRun?: number; truncated?: number; sourcesOk?: number };
+  existingUnknown?: number; duplicateInRun?: number; truncated?: number; sourcesOk?: number;
+  deadlineSkipped?: number };
 type ScraperStatus = { mode: 'internal' | 'unconfigured'; configured: boolean; sourceNames: string[]; sources: SourceInfo[]; lastRun: ScraperRun | null };
 type ScrapeSummary = { sources: number; sourcesOk?: number; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number;
   discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
@@ -106,14 +107,71 @@ export default function JobsTab() {
     if (scraping) return;                        // prevent duplicate clicks
     setScraping(true); setScrapeErr(''); setScrapeSummary(null); setErr(''); setMsg('');
     try {
-      const r = await fetch('/api/super-admin/jobs/scraper/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      const d = await r.json();
-      if (!r.ok) { setScrapeErr(d.error || 'Scrape failed.'); return; }
+    /* ═══ WHY THE PARSE IS NOT INSIDE THE TRANSPORT CATCH ═══
+
+       `await r.json()` used to sit next to the fetch under one `catch`, so a
+       response that ARRIVED but was not JSON — nginx's HTML "504 Gateway
+       Time-out" page is the one that matters here — threw at parse time and
+       was reported as "Network error." The status was never read, so a
+       gateway timeout, a 401 and an unplugged cable were indistinguishable in
+       the only place an operator can see them. The scrape runs inline and can
+       exceed a proxy's default 60 s read timeout, which makes the HTML-504
+       case the LIKELY one, not the exotic one.
+
+       So the transport failure and the response are now separate: a rejected
+       fetch is the only thing that may be called a network error, and a
+       response that came back is described by its status whatever its body. */
+    let r: Response;
+    const startedAt = Date.now();
+    try {
+      r = await fetch('/api/super-admin/jobs/scraper/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    } catch {
+      /* The request genuinely never completed: connection refused, reset, or
+         the browser gave up. The elapsed time is the useful half — it
+         separates "refused instantly" from "died after two minutes". */
+      setScrapeErr(`Network error — the request did not complete after ${Math.round((Date.now() - startedAt) / 1000)}s.`);
+      return;
+    }
+
+    const elapsedS = Math.round((Date.now() - startedAt) / 1000);
+    /* Read as text first: a non-JSON error page must not throw before its
+       status has been reported. Safe to show a Super Admin — it is trimmed to
+       a short excerpt and never rendered as markup. */
+    const raw = await r.text().catch(() => '');
+    let d: (Partial<ScrapeSummary> & { error?: string }) | null = null;
+    try { d = raw ? JSON.parse(raw) : null; } catch { d = null; }
+
+    if (!r.ok) {
+      /* A gateway status with a non-JSON body is a PROXY answer, not the
+         app's — the run may well still be executing on the server. Saying so
+         stops the next person concluding the scraper returned zero jobs. */
+      const gateway = d === null && (r.status === 502 || r.status === 503 || r.status === 504);
+      setScrapeErr(
+        gateway
+          ? `Scraper request failed (HTTP ${r.status} from the proxy, after ${elapsedS}s). `
+            + 'The run was not confirmed and may still be executing on the server — '
+            + 'check the server logs and the Last run time before clicking again.'
+          : (d?.error || `Scraper request failed (HTTP ${r.status} after ${elapsedS}s). Check server logs.`),
+      );
+      /* Deliberately NOT clearing the previous run's figures: a failed request
+         is not evidence that zero jobs exist. */
+      return;
+    }
+
+    if (d === null) {
+      setScrapeErr(`Scraper returned a non-JSON response (HTTP ${r.status} after ${elapsedS}s). Check server logs.`);
+      return;
+    }
+
       setScrapeSummary(d as ScrapeSummary);
       await load();        // refresh Existing Jobs with the newly imported roles
       loadStatus();        // refresh last-run + per-source status
-    } catch { setScrapeErr('Network error.'); }
-    finally { setScraping(false); }
+    } finally {
+      /* Every path clears it, including the early returns above. Leaving it set
+         would disable the button until a reload — `if (scraping) return` is the
+         duplicate-click guard, so a stuck flag locks the operator out entirely. */
+      setScraping(false);
+    }
   };
 
   const load = useCallback(async () => {
@@ -207,7 +265,22 @@ export default function JobsTab() {
                   written. They are different facts, and showing only "found"
                   and "imported" made a fully up-to-date board — everything
                   discovered, nothing new to write — read as a failed run. */}
-              <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Discovered</div><div className="mt-1 text-xl font-bold text-sky-400">{scraper.lastRun?.discovered ?? scraper.lastRun?.fetched ?? '—'}</div></div>
+              <div className={CARD}>
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Discovered</div>
+                <div className="mt-1 text-xl font-bold text-sky-400">{scraper.lastRun?.discovered ?? scraper.lastRun?.fetched ?? '—'}</div>
+                {/* A run starved by its own time budget reports zero discovered
+                    and zero failed, which reads exactly like "every board was
+                    empty". It is the opposite — no board was ever asked — so it
+                    is labelled rather than left to be misread. */}
+                {(scraper.lastRun?.deadlineSkipped ?? 0) > 0 && (
+                  <div
+                    className="mt-1 text-[10px] font-semibold leading-tight text-amber-400"
+                    title="The run used its whole time budget before reading these sources, so they were never contacted. This is not evidence that they have no jobs."
+                  >
+                    {scraper.lastRun?.deadlineSkipped} source(s) not reached — ran out of time
+                  </div>
+                )}
+              </div>
               <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Inserted (last run)</div><div className="mt-1 text-xl font-bold text-emerald-400">{scraper.lastRun?.inserted ?? scraper.lastRun?.imported ?? '—'}</div></div>
               <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Last run</div><div className="mt-1 text-[12px] font-semibold text-zinc-300">{scraper.lastRun ? new Date(scraper.lastRun.runAt).toLocaleString() : 'Never'}</div></div>
             </div>

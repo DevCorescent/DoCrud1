@@ -92,9 +92,24 @@ function main() {
   console.log('\n── 3. jobs.conf and the systemd timers agree ──');
 
   const unitDir = path.join(ROOT, 'ops/systemd');
-  const timers = readdirSync(unitDir).filter((f) => f.endsWith('.timer'));
-  check('one timer per configured job', timers.length === jobs.length,
+  /* Scoped to the `docrud-cron-` prefix, which is what jobs.conf governs.
+     jobs.conf describes HTTP jobs invoked by run-cron-job.sh; the job scraper
+     is deliberately NOT one of those (it runs the pipeline as a process, so
+     that neither nginx's read timeout nor the route's 300 s ceiling applies),
+     so it has its own unit and is asserted separately below. Counting every
+     *.timer here would have made adding any non-HTTP worker fail this check
+     for the wrong reason. */
+  const allTimers = readdirSync(unitDir).filter((f) => f.endsWith('.timer'));
+  const timers = allTimers.filter((f) => f.startsWith('docrud-cron-'));
+  check('one docrud-cron- timer per configured job', timers.length === jobs.length,
     `${timers.length} timers vs ${jobs.length} jobs`);
+  /* No timer may exist that neither jobs.conf nor this test knows about — the
+     drift this section exists to catch. */
+  const KNOWN_WORKER_TIMERS = ['docrud-job-scraper.timer'];
+  for (const t of allTimers) {
+    check(`${t} is either a jobs.conf timer or a known worker timer`,
+      timers.includes(t) || KNOWN_WORKER_TIMERS.includes(t));
+  }
 
   for (const job of jobs) {
     const timerName = `docrud-cron-${job.name}.timer`;

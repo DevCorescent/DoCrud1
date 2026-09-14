@@ -122,7 +122,10 @@
     "bench:ingestion-scale": "tsx scripts/ingestion-scale.bench.ts",
     "bench:job-scale": "tsx scripts/job-scale.bench.ts",
     "test:public-sort-parity": "tsx scripts/public-sort-parity.selftest.ts",
-    "test:observability": "tsx scripts/observability.selftest.ts"
+    "test:observability": "tsx scripts/observability.selftest.ts",
+    "test:job-scraper-worker": "tsx scripts/job-scraper-worker.selftest.ts",
+    "test:worker-env": "tsx scripts/worker-env.selftest.ts",
+    "scrape": "tsx scripts/run-job-scraper.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

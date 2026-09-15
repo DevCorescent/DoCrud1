@@ -22,7 +22,7 @@
  * scripts/freshness-dry-run.ts does.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { HiringJobPosting } from '@/types/document';
 import {
@@ -254,8 +254,20 @@ function noTombstone() {
 
 function notActivated() {
   console.log('\n── 10. Not activated ──');
-  const env = read('.env');
-  check('.env does not enable the flag', !/^PUBLIC_FRESHNESS_ENABLED=true\s*$/m.test(env));
+  /* `.env` is untracked ON PURPOSE — it holds production credentials — so it
+     does not exist in CI and reading it unconditionally made this suite fail
+     with ENOENT on a runner while passing locally. Its ABSENCE is not evidence
+     that the flag is off, so the real proof is the live environment check
+     below, which holds in both places. The file is still inspected when it
+     happens to be present, because a developer running with the flag enabled
+     locally is worth catching. */
+  const envPath = path.join(ROOT, '.env');
+  if (existsSync(envPath)) {
+    check('.env does not enable the flag',
+      !/^PUBLIC_FRESHNESS_ENABLED=true\s*$/m.test(readFileSync(envPath, 'utf8')));
+  } else {
+    console.log('  – .env absent (CI): activation proven from process.env instead');
+  }
   const example = read('.env.example');
   check('.env.example documents the flag as OFF', /^PUBLIC_FRESHNESS_ENABLED=\s*$/m.test(example));
   check('no frontend reads the flag',

@@ -81,10 +81,12 @@ function pageSortKeepsItsIndex() {
   console.log('\n── 3. The page pipeline was not restructured ──');
   const pipe = QUERY.slice(QUERY.indexOf('export function buildPublicJobsCollectionPipeline'));
   const body = pipe.slice(0, pipe.indexOf('\n}\n'));
-  const iSort = body.indexOf('$sort');
-  const iFacet = body.indexOf('$facet');
-  check('the page sort is still OUTSIDE $facet', iSort >= 0 && iFacet >= 0 && iSort < iFacet,
-    `sort@${iSort} facet@${iFacet}`);
+  /* Originally: the sort must sit OUTSIDE `$facet`, because a facet
+     sub-pipeline cannot use an index. Phase 1 removed `$facet` from the page
+     pipeline altogether, which satisfies that more strongly: there is no facet
+     for the sort to be dragged inside. The guard now asserts exactly that. */
+  check('the page pipeline sorts', /\$sort\s*:/.test(body));
+  check('and has no $facet for the sort to fall inside', !/\$facet\s*:/.test(body));
   check('it still sorts on the persisted key', body.includes('persistedSortField(query.sort)'));
   check('the facet counts are a separate aggregation',
     QUERY.indexOf('selectPublicJobFacetCounts') !== -1

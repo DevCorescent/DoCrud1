@@ -105,10 +105,20 @@ export function jobQueryForRoles(
  * real error — a failure must never be presented as "no jobs found".
  */
 export async function fetchJobPreview(query: string): Promise<JobPreviewResult> {
-  const res = await fetch(`/api/jobs/public?${query}`);
+  /* Two questions, two requests. The feed returns rows; it stopped returning a
+     corpus-wide `total` because producing one meant consuming every match
+     before twenty rows could be sent. The count is asked for separately, is
+     cached, and its failure costs the figure — not the preview. */
+  const countQuery = new URLSearchParams(query);
+  for (const k of ['pageSize', 'page', 'sort', 'cursor']) countQuery.delete(k);
+  const [res, countRes] = await Promise.all([
+    fetch(`/api/jobs/public?${query}`),
+    fetch(`/api/jobs/public/count?${countQuery.toString()}`).catch(() => null),
+  ]);
   if (!res.ok) throw new Error(`Job feed responded ${res.status}`);
   const data = await res.json();
   if (!data || !Array.isArray(data.items)) throw new Error('Job feed returned no item list');
+  const countData = countRes?.ok ? await countRes.json().catch(() => null) : null;
 
   return {
     jobs: (data.items as JobPreview[]).map(item => ({
@@ -120,6 +130,6 @@ export async function fetchJobPreview(query: string): Promise<JobPreviewResult> 
       employmentType: item.employmentType,
       postedAt: item.postedAt,
     })),
-    total: Number(data.total) || 0,
+    total: Number(countData?.total) || 0,
   };
 }

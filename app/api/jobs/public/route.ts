@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getHiringJobsCached } from '@/lib/server/hiring';
 import { publicJobs } from '@/lib/server/job-api/queries';
 import { selectPublicJobFacetCounts } from '@/lib/server/db/public-jobs-query';
+import { decodeCursor } from '@/lib/server/db/public-jobs-cursor';
 import {
   comparePages, describeQuery, jobReadSource, readPublicJobsPage,
   verifySampleRate, type JobReadSource,
@@ -22,6 +23,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest) {
   try {
     const q = request.nextUrl.searchParams;
+    /* Opaque, and only honoured for the query it was produced for — a cursor
+       from a different sort or filter set describes page boundaries that do not
+       exist here, so it is refused rather than applied. */
+    const rawCursor = q.get('cursor') ?? undefined;
     const query = {
       search: q.get('search') ?? undefined,
       country: q.get('country') ?? undefined,
@@ -46,8 +51,12 @@ export async function GET(request: NextRequest) {
 
        Public data only — no session is read here and the key carries no user
        scope, so this response is identical for every visitor by construction. */
+    const cursor = decodeCursor(rawCursor, query);
+    /* A cursor that cannot be trusted must not silently reuse a cached FIRST
+       page under a different key: the cache key carries the raw token so a
+       rejected cursor and an absent one are distinct entries. */
     const payload = await cached(
-      { ns: 'jobs:public', kind: 'list', params: query, ttlSeconds: TTL.publicList },
+      { ns: 'jobs:public', kind: 'list', params: { ...query, cursor: rawCursor }, ttlSeconds: TTL.publicList },
       async () => {
         /* THE WORK HAPPENS IN THE DATABASE. Every posting lives in one ~12 MB
            app_state document, and slicing in JavaScript meant transferring all
@@ -60,7 +69,7 @@ export async function GET(request: NextRequest) {
            defaults to app_state. See lib/server/db/public-jobs-source.ts. No
            request input can select a source. */
         const source = jobReadSource();
-        const fromDb = await readPublicJobsPage(query, source);
+        const fromDb = await readPublicJobsPage(query, source, { cursor });
 
         if (fromDb) {
           /* Verification is SAMPLED and never blocks the answer. Running both

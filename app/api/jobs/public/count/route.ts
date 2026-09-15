@@ -26,19 +26,51 @@
  * render as "there are no jobs", and the caller is built to show nothing at
  * all when the count is unavailable.
  */
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { selectActiveJobCount } from '@/lib/server/db/hiring-jobs-rows';
 import { getHiringJobsCached } from '@/lib/server/hiring';
 import { publicJobs } from '@/lib/server/job-api/queries';
 import { TTL, cached } from '@/lib/server/cache';
+import { countPublicJobs } from '@/lib/server/db/public-jobs-query';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    /* ═══ THIS IS WHERE EXACT COUNTS LIVE NOW ═══
+
+       The listing endpoint stopped computing one: its `$count` branch consumed
+       every matching document before a page could be returned, so asking for
+       twenty rows cost the whole match set. Counting is a separate question
+       with a separate cost, asked for deliberately and cached — not attached to
+       every listing request whether anyone reads it or not.
+
+       The same filter vocabulary as the feed, so a count always describes the
+       set the feed would return. */
+    const q = request.nextUrl.searchParams;
+    const filters = {
+      search: q.get('search') ?? undefined,
+      country: q.get('country') ?? undefined,
+      state: q.get('state') ?? undefined,
+      city: q.get('city') ?? undefined,
+      domain: q.get('domain') ?? undefined,
+      subDomain: q.get('subDomain') ?? undefined,
+      workMode: q.get('workMode') ?? undefined,
+      employmentType: q.get('employmentType') ?? undefined,
+      experienceLevel: q.get('experienceLevel') ?? undefined,
+      minSalary: q.get('minSalary') ?? undefined,
+    };
+    const filtered = Object.values(filters).some((v) => v !== undefined && v !== '');
+
     const total = await cached(
-      { ns: 'jobs:public', kind: 'count', params: {}, ttlSeconds: TTL.publicList },
+      { ns: 'jobs:public', kind: 'count', params: filters, ttlSeconds: TTL.publicList },
       async () => {
+        /* A filtered count has to ask the collection; only the unfiltered one
+           can use the cheap stored figure below. */
+        if (filtered) {
+          const n = await countPublicJobs(filters);
+          if (n !== null) return n;
+        }
         /* The cheap path: one integer off the wire. */
         const counted = await selectActiveJobCount();
         if (counted !== null) return counted;

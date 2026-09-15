@@ -54,6 +54,10 @@ import { SK_NEWEST, SK_SALARY, SK_RELEVANCE } from '@/lib/server/db/public-sort-
 import type { PublicJobQuery } from '@/lib/server/job-api/queries';
 import { pageParams } from '@/lib/server/job-api/queries';
 import { getMongoDb } from '@/lib/server/database';
+import { cursorCondition, encodeCursor, type JobCursor } from '@/lib/server/db/public-jobs-cursor';
+
+/** Internal: the sort value attached to each row so a cursor can be built. */
+const CURSOR_KEY = '_cursorKey';
 import { publicFreshnessEnabled, publiclyFreshCond } from '@/lib/server/job-sources/freshness';
 
 const APP_STATE_KEY = 'json:data/hiring-jobs.json';
@@ -172,6 +176,8 @@ export const PUBLIC_JOB_VIEW_FIELDS = [
  * behaviour fails there rather than reaching a visitor.
  */
 export interface PublicQueryOptions {
+  /** Resume position. Absent for the first page. */
+  cursor?: JobCursor | null;
   /**
    * The instant freshness is judged against. Injected so a boundary can be
    * tested exactly; defaults to the wall clock at the CALL, never at import.
@@ -305,7 +311,11 @@ export interface PublicJobsPage {
   items: Record<string, unknown>[];
   page: number;
   pageSize: number;
-  total: number;
+  /* True when a row beyond this page exists. Costs one extra index key, where
+     an exact `total` cost the whole match set. */
+  hasNextPage: boolean;
+  /** Opaque resume token, or null at the end of the feed. */
+  nextCursor: string | null;
 }
 
 /**
@@ -323,7 +333,13 @@ export async function selectPublicJobsPage(query: PublicJobQuery = {}): Promise<
     const row = docs[0] as { total?: unknown; items?: unknown } | undefined;
     if (!row || !Array.isArray(row.items) || typeof row.total !== 'number') return null;
     const { page, pageSize } = pageParams(query.page, query.pageSize);
-    return { items: row.items as Record<string, unknown>[], page, pageSize, total: row.total };
+    /* The app_state path has no keyset support and is unreachable in
+       production — `jobReadSource()` returns `hiring_jobs` unconditionally. It
+       is kept typing-compatible only so the dual-read comparator still builds.
+       `hasNextPage` is derived from the count it already has; `nextCursor` is
+       null because this path cannot resume. */
+    const items = row.items as Record<string, unknown>[];
+    return { items, page, pageSize, hasNextPage: page * pageSize < row.total, nextCursor: null };
   } catch {
     /* A projection failure must never take the feed down — fall back. */
     return null;
@@ -366,11 +382,17 @@ export function buildPublicJobsCollectionPipeline(
   const { pageSize, skip } = pageParams(query.page, query.pageSize);
   const { direction } = sortKeyExpr(query.sort, DOC_REF);
 
+  /* The keyset seek sits WITH the indexable prefilter, before the `$expr`
+     stage, so `{status, sortKey, id}` can serve match and sort together. Put
+     after the `$expr` it would still be correct and would still scan from the
+     top of the index, which is the whole cost being removed. */
+  const seek = opts.cursor ? cursorCondition(persistedSortField(query.sort), opts.cursor) : null;
+
   return [
     /* Indexable prefilter. Redundant with the $expr below on purpose: it is
        what lets an index be used at all, and it can never widen the result
        because the $expr repeats it. */
-    { $match: { status: 'published' } },
+    { $match: seek ? { status: 'published', ...seek } : { status: 'published' } },
     { $match: { $expr: { $and: conds } } },
     /* Phase 2.7H: sort on the PERSISTED key rather than computing one.
        `$addFields` + a computed `$sort` forced MongoDB to derive a key for
@@ -381,22 +403,41 @@ export function buildPublicJobsCollectionPipeline(
        derivePublicSortKeys), so the ordering is unchanged and the index can
        now provide it. */
     { $sort: { [persistedSortField(query.sort)]: direction, id: 1 } },
+    /* ═══ NO `$facet`, AND NO `$count` ═══
+
+       The count branch had to consume every matching document before the page
+       could be returned, so page 1 examined the whole match set — 12,659
+       documents to serve 20. That is the corpus-proportional work this pipeline
+       exists to remove, and at 1M it is the difference between a feed and an
+       outage.
+
+       `hasNextPage` comes from asking for ONE more row than the page needs: if
+       it arrives there is another page, and it costs exactly one extra index
+       key. Exact counts live at /api/jobs/public/count, where they are asked
+       for deliberately and cached, rather than being computed on every listing
+       request whether anyone reads them or not.
+
+       Dropping `$facet` also lets the sort keep its index: a facet
+       sub-pipeline cannot use one. */
+    ...(skip ? [{ $skip: skip }] : []),
+    { $limit: pageSize + 1 },
+    /* Fields are COMPUTED (`$title`) rather than included (`1`).
+       An inclusion projection returns keys in the stored document's order,
+       which differs from the order the app_state pipeline builds; the values
+       were identical but the serialised bodies were not. Naming each field as
+       an expression constructs a new document in THIS order, so both stores
+       emit byte-identical JSON and the dual-read comparator can stay strict
+       instead of being taught to ignore a difference. A field that is absent is
+       omitted by both, identically. */
+    /* `_cursorKey` carries the sort value of each row so the next cursor can be
+       built from the page itself rather than by re-reading the document. It is
+       an internal field and is STRIPPED before the rows leave the selector — a
+       caller must never see a `_sk*` value, and no consumer may start depending
+       on one. */
     {
-      $facet: {
-        items: [
-          { $skip: skip },
-          { $limit: pageSize },
-          /* Fields are COMPUTED (`$title`) rather than included (`1`).
-             An inclusion projection returns keys in the stored document's
-             order, which differs from the order the app_state pipeline builds;
-             the values were identical but the serialised bodies were not. Naming
-             each field as an expression constructs a new document in THIS
-             order, so both stores emit byte-identical JSON and the dual-read
-             comparator can stay strict instead of being taught to ignore a
-             difference. A field that is absent is omitted by both, identically. */
-          { $project: Object.fromEntries([['_id', 0], ...PUBLIC_JOB_VIEW_FIELDS.map((f) => [f, `$${f}`])]) },
-        ],
-        total: [{ $count: 'n' }],
+      $project: {
+        ...Object.fromEntries([['_id', 0], ...PUBLIC_JOB_VIEW_FIELDS.map((f) => [f, `$${f}`])]),
+        [CURSOR_KEY]: `$${persistedSortField(query.sort)}`,
       },
     },
   ];
@@ -444,6 +485,31 @@ const FACET_FIELDS: Array<[keyof PublicJobFacetCounts, string]> = [
   ['emp', 'employmentType'], ['wm', 'workMode'], ['exp', 'experienceLevel'],
 ];
 
+/**
+ * How many published postings match a filter set.
+ *
+ * Its own query, deliberately: the listing pipeline no longer counts, because
+ * counting consumes every match and a page needs twenty rows. Callers that
+ * genuinely need a number ask for one here, where the cost is visible and the
+ * answer is cached per filter set.
+ *
+ * `null` when the collection cannot answer — never 0, which would read as
+ * "there are no jobs".
+ */
+export async function countPublicJobs(query: PublicJobQuery = {}): Promise<number | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    const conds = buildPublicJobsConditions(query, DOC_REF);
+    return await db.collection(HIRING_JOBS_COL).countDocuments({
+      status: 'published',
+      $expr: { $and: conds },
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function selectPublicJobFacetCounts(
   opts: PublicQueryOptions = {},
 ): Promise<PublicJobFacetCounts | null> {
@@ -482,23 +548,31 @@ export async function selectPublicJobFacetCounts(
 
 export async function selectPublicJobsPageFromCollection(
   query: PublicJobQuery = {},
+  opts: PublicQueryOptions = {},
 ): Promise<PublicJobsPage | null> {
   const db = await getMongoDb();
   if (!db) return null;
   try {
-    const docs = await db.collection(HIRING_JOBS_COL)
-      .aggregate(buildPublicJobsCollectionPipeline(query)).toArray();
-    const row = docs[0] as { items?: unknown; total?: Array<{ n?: number }> } | undefined;
-    if (!row || !Array.isArray(row.items)) return null;
     const { page, pageSize } = pageParams(query.page, query.pageSize);
-    return {
-      items: row.items as Record<string, unknown>[],
-      page,
-      pageSize,
-      /* An empty $facet branch means zero matches — a real answer, not a
-         failure. `total` is absent only when nothing matched. */
-      total: Number(row.total?.[0]?.n ?? 0),
-    };
+    const rows = await db.collection(HIRING_JOBS_COL)
+      .aggregate(buildPublicJobsCollectionPipeline(query, opts)).toArray() as Array<Record<string, unknown>>;
+
+    /* One row beyond the page was asked for; its presence IS `hasNextPage`.
+       It is dropped rather than returned — the caller asked for `pageSize`. */
+    const hasNextPage = rows.length > pageSize;
+    const items = rows.slice(0, pageSize);
+
+    /* Built from the last row of THIS page, so the next request resumes exactly
+       after it. Absent when there is nothing after it to resume to. */
+    const last = items[items.length - 1];
+    const nextCursor = hasNextPage && last
+      ? encodeCursor(last[CURSOR_KEY] as string | number, String(last.id ?? ''), query)
+      : null;
+
+    /* Internal field, never part of the response. */
+    for (const item of items) delete item[CURSOR_KEY];
+
+    return { items, page, pageSize, hasNextPage, nextCursor };
   } catch {
     return null;
   }

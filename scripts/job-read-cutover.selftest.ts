@@ -26,9 +26,9 @@ const read = (p: string) => readFileSync(p, 'utf8');
 const ROUTE = read('app/api/jobs/public/route.ts');
 const SOURCE = read('lib/server/db/public-jobs-source.ts');
 
-const page = (over: Partial<{ items: Record<string, unknown>[]; page: number; pageSize: number; total: number }> = {}) => ({
+const page = (over: Partial<{ items: Record<string, unknown>[]; page: number; pageSize: number; hasNextPage: boolean; nextCursor: string | null }> = {}) => ({
   items: [{ id: 'a', title: 'A' }, { id: 'b', title: 'B' }],
-  page: 1, pageSize: 20, total: 2, ...over,
+  page: 1, pageSize: 20, hasNextPage: false, nextCursor: null, ...over,
 });
 
 /* ═══ 1–4. The source is no longer selectable ════════════════════════════
@@ -88,8 +88,8 @@ check('no environment value can become a collection name',
 check('two identical pages match', comparePages(page(), page()).match);
 
 {
-  const v = comparePages(page(), page({ total: 3 }));
-  check('a differing TOTAL is caught', !v.match && v.kinds.includes('total'));
+  const v = comparePages(page(), page({ hasNextPage: true }));
+  check('a differing hasNextPage is caught', !v.match && v.kinds.includes('hasNextPage'));
 }
 {
   const v = comparePages(page(), page({ items: [{ id: 'b', title: 'B' }, { id: 'a', title: 'A' }] }));
@@ -161,8 +161,17 @@ check('both pipelines build filters from the SAME function',
   === JSON.stringify(buildPublicJobsConditions({ search: 'x' }, DOC_REF)));
 check('the array pipeline still targets app_state',
   JSON.stringify(buildPublicJobsPipeline({})).includes('json:data/hiring-jobs.json'));
-check('the collection pipeline pages and counts in ONE round trip',
-  JSON.stringify(buildPublicJobsCollectionPipeline({})).includes('$facet'));
+/* This used to assert `$facet` — paging and counting in one round trip. The
+   count branch consumed every matching document before a page could return,
+   which is the corpus-proportional work Phase 1 removed. The invariant is now
+   the inverse: the listing pipeline pages, and never counts. Stage KEYS are
+   inspected, not substrings — `"$country"` contains `$count`. */
+{
+  const stages = buildPublicJobsCollectionPipeline({}).map((s) => Object.keys(s)[0]);
+  /* This file's check() takes (label, cond) — the diagnostic goes in the label. */
+  check(`the collection pipeline pages without counting [${stages.join(' → ')}]`,
+    stages.includes('$limit') && !stages.includes('$count') && !stages.includes('$facet'));
+}
 check('it prefilters on status so an index can be used',
   JSON.stringify(buildPublicJobsCollectionPipeline({})[0]) === JSON.stringify({ $match: { status: 'published' } }));
 check('it sorts with the id tie-break, like the JS comparators',

@@ -46,11 +46,11 @@
  */
 import { indiaCity } from './job-scraper/india';
 import {
-  ALL_SURFACE_FORMS, canonicalize, canonicalizeSynonym, isChildOf, isRelated,
+  canonicalize, canonicalizeSynonym, isChildOf, isRelated,
 } from './ats/skill-taxonomy';
-import {
-  containsStandalonePhrase, detectSeniority, extractRequiredYears, titleTokens,
-} from './ats/text';
+import { detectSeniority, extractRequiredYears, titleTokens } from './ats/text';
+/* ONE implementation, shared with the corpus-version feature derivation. */
+import { skillsInText } from './ats/skills-in-text';
 
 /* ─── Weights ──────────────────────────────────────────────────────────────
    They sum to 100. Changing one means changing what a percentage means, so
@@ -149,6 +149,17 @@ export interface RecJob {
   preferredSkills?: string[];
   targetRoleKeywords?: string[];
   createdAt?: string;
+  /* ═══ DERIVED FROM `description`, SUPPLIED INSTEAD OF IT ═══
+
+     `skillsInText` costs 426 us per posting — thirty times the scoring loop
+     that consumes it — and the answer depends only on the text, so it is
+     computed once per corpus version rather than once per ranking pass.
+
+     When present these REPLACE the scan; when absent the scan runs exactly as
+     before. That is what keeps a caller holding raw descriptions (a test, a
+     one-off script) producing identical output to one holding features. */
+  recSkills?: readonly string[];
+  recYears?: number | null;
 }
 
 /** One scored dimension, with the sentence that explains it. */
@@ -348,57 +359,16 @@ function extractRequirements(job: RecJob): Requirement[] {
      are real requirements — most scraped postings have no structured skill
      list at all — but they are weighted lowest, because prose mentions
      something in passing far more often than a structured field does. */
-  if (description) {
-    for (const found of skillsInText(description)) {
-      add(found, title.includes(found.toLowerCase()) ? 'must' : 'nice');
-    }
+  /* Identical input to the same `add` loop either way: the derived array IS
+     `skillsInText(description)`, computed by the one shared implementation. */
+  const textSkills = job.recSkills ?? (description ? skillsInText(description) : []);
+  for (const found of textSkills) {
+    add(found, title.includes(found.toLowerCase()) ? 'must' : 'nice');
   }
 
   return Array.from(byName.values());
 }
 
-/**
- * Taxonomy skills named in a block of prose.
- *
- * Memoised per description, because the same postings are scored against every
- * viewer and the scan is the most expensive thing in a ranking pass. The cache
- * is keyed on the text itself, so an edited posting is re-read rather than
- * remembered wrongly.
- */
-const textSkillCache = new Map<string, string[]>();
-const TEXT_CACHE_MAX = 4000;
-
-function skillsInText(text: string): string[] {
-  const key = `${text.length}:${text.slice(0, 120)}`;
-  const hit = textSkillCache.get(key);
-  if (hit) return hit;
-
-  const lower = text.toLowerCase();
-  const found: string[] = [];
-  const seen = new Set<string>();
-  for (const surface of SCANNABLE_SURFACES) {
-    if (!lower.includes(surface)) continue;                 // cheap reject first
-    if (!containsStandalonePhrase(lower, surface)) continue; // then the honest test
-    const canon = canonicalize(surface) ?? canonicalizeSynonym(surface) ?? surface;
-    if (seen.has(canon)) continue;
-    seen.add(canon);
-    found.push(surface);
-  }
-
-  if (textSkillCache.size >= TEXT_CACHE_MAX) textSkillCache.clear();
-  textSkillCache.set(key, found);
-  return found;
-}
-
-/**
- * The surface forms worth scanning prose for.
- *
- * Single letters and two-character forms are excluded: "go", "r" and "c" appear
- * in ordinary English constantly, and a false requirement is worse than a
- * missed one — it dilutes the coverage every real requirement is measured
- * against.
- */
-const SCANNABLE_SURFACES: string[] = ALL_SURFACE_FORMS.filter((s) => s.length >= 3);
 
 /* ─── Skill correspondence ────────────────────────────────────────────────── */
 
@@ -553,7 +523,9 @@ export function recommendMatch(profile: RecProfile, job: RecJob, now: number): R
 
   /* Years are only ever used to EXPLAIN, never to score — a posting's "5+
      years" is a filter the employer applies, not evidence about this person. */
-  const requiredYears = description ? extractRequiredYears(description) : null;
+  const requiredYears = job.recYears !== undefined
+    ? job.recYears
+    : (description ? extractRequiredYears(description) : null);
   if (requiredYears !== null && typeof profile.years === 'number') {
     factors.push({
       kind: 'seniority',

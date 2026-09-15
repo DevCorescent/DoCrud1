@@ -305,6 +305,34 @@ export async function runCanonicalIngestion(
       duplicateInRun: 0, rejected: 0,
     };
 
+    /* ═══ STRUCTURAL UNAVAILABILITY OUTRANKS THE CLOCK ═══
+
+       These two are properties of the SOURCE, not of this run: they hold
+       whatever the budget is, and they would hold if the run had the whole day.
+       The deadline is a property of the run.
+
+       The order used to be the other way round, and it produced a diagnosis
+       that cost real time. Run run-mu2l3k07-829c9e58 reported all 93 sources as
+       `skipped (deadline)` — LinkedIn, Naukri, Indeed, Glassdoor, Internshala
+       and Instahyre among them. Every one of those six is PARTNERSHIP_ONLY and
+       could never have been fetched; they were mislabelled purely because
+       `outOfTime` was already set when the loop reached them. Read literally,
+       the console said "more time would have helped", which is the one
+       conclusion that is certainly false. A structurally unavailable source
+       must never be reported as a timing problem.
+
+       Neither branch is fetched and neither counts as a failure, so moving them
+       ahead of the deadline check changes no work and no totals — only the
+       reason attached to a skip that was going to happen regardless. */
+    if (isPartnershipBlocked(config.sourceId)) {
+      perSource.push({ ...base, ok: true, skipped: true, skipReason: 'requires_partnership', latencyMs: 0 });
+      continue;
+    }
+    if (!config.enabled) {
+      perSource.push({ ...base, ok: true, skipped: true, skipReason: 'disabled', latencyMs: 0 });
+      continue;
+    }
+
     /* Out of budget. Checked BEFORE the work, never during it: a source that
        has started is allowed to finish, because abandoning it half-read is what
        produces a partial board reported as a complete one. Once set, the flag
@@ -315,17 +343,6 @@ export async function runCanonicalIngestion(
     }
     if (outOfTime) {
       perSource.push({ ...base, ok: true, skipped: true, skipReason: 'deadline', latencyMs: 0 });
-      continue;
-    }
-
-    /* Never fetched, and never counted as a failure: a disabled source was not
-       asked, and a partnership-blocked one must not be asked at all. */
-    if (isPartnershipBlocked(config.sourceId)) {
-      perSource.push({ ...base, ok: true, skipped: true, skipReason: 'requires_partnership', latencyMs: 0 });
-      continue;
-    }
-    if (!config.enabled) {
-      perSource.push({ ...base, ok: true, skipped: true, skipReason: 'disabled', latencyMs: 0 });
       continue;
     }
 

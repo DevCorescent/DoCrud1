@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getHiringJobsCached } from '@/lib/server/hiring';
 import { publicJobs } from '@/lib/server/job-api/queries';
+import { selectPublicJobFacetCounts } from '@/lib/server/db/public-jobs-query';
 import {
   comparePages, describeQuery, jobReadSource, readPublicJobsPage,
   verifySampleRate, type JobReadSource,
@@ -120,6 +121,26 @@ export async function GET(request: NextRequest) {
     /* Admin-uploaded logos, joined here rather than stored on every posting:
        one configuration read per page, no network, and an upload takes effect
        on the next request instead of waiting for a re-scrape. */
+    /* ═══ FACET COUNTS, ADDED ALONGSIDE ═══
+
+       The filter rail shows a count beside every employment type, work mode
+       and experience level. `JobsFeedPage` computes them today from the whole
+       corpus it downloads; serving them here is what lets that page stop
+       downloading it.
+
+       They are GLOBAL — filter-independent by contract, exactly as the client's
+       `useMemo(..., [all])` is — so they get their OWN cache entry rather than
+       one per query shape: one computation serves every filter combination and
+       every visitor.
+
+       ADDITIVE. A consumer that ignores `facets` is unaffected, and a facet
+       read that fails leaves the field off rather than failing the feed. */
+    const facets = await cached(
+      { ns: 'jobs:public', kind: 'facets', params: {}, ttlSeconds: TTL.publicList },
+      () => selectPublicJobFacetCounts(),
+    ).catch(() => null);
+    if (payload && facets) (payload as unknown as Record<string, unknown>).facets = facets;
+
     if (payload && Array.isArray(payload.items)) {
       payload.items = await attachAdminLogos(
         payload.items as Array<Record<string, unknown> & { organizationName?: string | null }>,

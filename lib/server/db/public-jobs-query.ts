@@ -409,6 +409,77 @@ export function buildPublicJobsCollectionPipeline(
  * caller decides what to do — this function never invents a page and never
  * turns a failure into an empty feed.
  */
+/**
+ * Facet counts for the jobs directory's filter rail.
+ *
+ * ═══ THESE COUNTS ARE GLOBAL, AND THAT IS THE CONTRACT ═══
+ *
+ * `JobsFeedPage` computes them with `useMemo(..., [all])` — over the WHOLE
+ * published corpus, never over the filtered result. Selecting "Remote" does not
+ * change the number beside "Full-time". Computing them after the query's
+ * filters would look like a refinement and would silently change what the rail
+ * reports, so the base predicate here is deliberately the feed's universe
+ * MINUS the request's filters.
+ *
+ * ═══ WHY A SEPARATE AGGREGATION ═══
+ *
+ * The page pipeline's `$sort` sits OUTSIDE its `$facet` precisely so the
+ * persisted-sort-key index can provide the order. `$facet` sub-pipelines cannot
+ * use an index, so folding these branches into it would drag the sort inside
+ * and undo that — measured at 294 ms against 157 ms, and it is the blocking
+ * in-memory sort that produced the 32 MB failure in the first place.
+ *
+ * Being filter-independent, one result serves every request and every viewer.
+ *
+ * Buckets mirror the client loop exactly: raw stored value, no lowercasing, and
+ * a missing or empty value contributes to NOTHING rather than to an "" bucket.
+ */
+export interface PublicJobFacetCounts {
+  emp: Record<string, number>;
+  wm: Record<string, number>;
+  exp: Record<string, number>;
+}
+
+const FACET_FIELDS: Array<[keyof PublicJobFacetCounts, string]> = [
+  ['emp', 'employmentType'], ['wm', 'workMode'], ['exp', 'experienceLevel'],
+];
+
+export async function selectPublicJobFacetCounts(
+  opts: PublicQueryOptions = {},
+): Promise<PublicJobFacetCounts | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    /* The same universe the feed serves from, so a count can never describe a
+       posting the list would not return. */
+    const base: Record<string, unknown>[] = [{ $match: { status: 'published' } }];
+    if (publicFreshnessEnabled()) {
+      base.push({ $match: { $expr: publiclyFreshCond(DOC_REF, opts.now ?? Date.now()) } });
+    }
+    const branches = Object.fromEntries(FACET_FIELDS.map(([key, field]) => [key, [
+      /* `|| ''` in the client skips empty AND absent. Both are excluded here. */
+      { $match: { [field]: { $nin: [null, ''] } } },
+      { $group: { _id: `$${field}`, n: { $sum: 1 } } },
+    ]]));
+    const rows = await db.collection(HIRING_JOBS_COL)
+      .aggregate([...base, { $facet: branches }]).toArray();
+    const row = rows[0] as Record<string, Array<{ _id: unknown; n: number }>> | undefined;
+    if (!row) return null;
+    const out: PublicJobFacetCounts = { emp: {}, wm: {}, exp: {} };
+    for (const [key] of FACET_FIELDS) {
+      for (const b of row[key] ?? []) {
+        if (typeof b._id !== 'string' || b._id === '') continue;
+        out[key][b._id] = b.n;
+      }
+    }
+    return out;
+  } catch {
+    /* A count the rail cannot show is better than a feed that fails: the caller
+       omits the field and the page renders without the numbers. */
+    return null;
+  }
+}
+
 export async function selectPublicJobsPageFromCollection(
   query: PublicJobQuery = {},
 ): Promise<PublicJobsPage | null> {

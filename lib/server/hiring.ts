@@ -1,7 +1,7 @@
 import { HiringJobApplication, HiringJobPosting, User } from '@/types/document';
 /* Job applications still live in app_state — that store is untouched by the
    job-corpus cutover and remains legitimate for unrelated state. */
-import { hiringApplicationsPath, readJsonFile, writeJsonFile } from '@/lib/server/storage';
+import { hiringApplicationsPath, readJsonFile, readJsonFileStrict, writeJsonFile } from '@/lib/server/storage';
 import { getAllPublishedBusinessJobs, getBusinessPagesByOwner } from '@/lib/server/business-pages';
 import {
   selectPublishedJobCompanyNames, selectPublishedJobListRows, selectPublishedJobRowById,
@@ -573,6 +573,27 @@ export async function saveHiringJobs(jobs: HiringJobPosting[]): Promise<SaveHiri
 
 export async function getHiringApplications() {
   return readJsonFile<HiringJobApplication[]>(hiringApplicationsPath, []);
+}
+
+/**
+ * The applications, distinguishing an EMPTY store from a BROKEN one.
+ *
+ * `readJsonFileStrict`, NOT `readJsonFile` — the same choice
+ * `getApplicationCountsByJob` already makes against this file, for the same
+ * reason. The non-strict variant swallows a failed read and returns `[]`.
+ *
+ * For anything that derives an applied-job set, `[]` is not a safe default: it
+ * means "this member has applied to nothing", so a storage outage silently
+ * turns applied-job EXCLUSION OFF and puts roles the member already applied to
+ * back in their recommendations, behind a 200. The corpus read on the same page
+ * is deliberately unguarded for exactly this reason; the applied set was the
+ * remaining half of that pair.
+ *
+ * An ABSENT store still returns `[]` — nobody has applied yet is a real and
+ * common answer, and today it is the production state.
+ */
+export async function getHiringApplicationsStrict() {
+  return readJsonFileStrict<HiringJobApplication[]>(hiringApplicationsPath, []);
 }
 
 export async function saveHiringApplications(applications: HiringJobApplication[]) {

@@ -89,6 +89,44 @@ const COUNTRY_TOKENS: Array<[string, RegExp]> = [
 ];
 
 /**
+ * A country code in the one position where two letters cannot mean anything else.
+ *
+ * ═══ THE SHAPE, AND WHY ONLY THIS SHAPE ═══
+ *
+ * Several boards write a remote posting's country as a bare ISO code:
+ *
+ *     "Remote, in"   340 postings, every one of them Nagarro
+ *     "Remote, us"    61        "Remote, de"  31
+ *     "Remote, lk"    28        "Remote, ph"  17
+ *     "Remote, za"     7        "Remote, cn"   7
+ *
+ * `lk`, `ph`, `za` and `cn` have no reading other than Sri Lanka, the
+ * Philippines, South Africa and China, which is what establishes that the
+ * trailing token is a country code rather than a word. Before this, all 340
+ * Indian ones classified as "we could not tell".
+ *
+ * The match is deliberately anchored to the WHOLE string: `remote`, one
+ * separator, exactly two letters, end. A bare `in` anywhere else in a location
+ * is the English preposition far more often than it is India — "Engineer in
+ * Berlin" must never become an Indian job — so nothing looser is accepted, and
+ * `COUNTRY_TOKENS` above stays the only other route to a country.
+ *
+ * `Intl.DisplayNames` decides whether the code is a real region, so no ISO
+ * table is duplicated here. An invalid code echoes itself back (and the
+ * reserved `ZZ` resolves to "Unknown Region"), which is how both are rejected.
+ */
+const REMOTE_COUNTRY_CODE = /^\s*remote\s*[,\-:\u2013\u2014]\s*([a-z]{2})\s*$/i;
+const REGION_NAMES = new Intl.DisplayNames(['en'], { type: 'region' });
+
+function remoteCountryCode(text: string): string | null {
+  const code = REMOTE_COUNTRY_CODE.exec(text)?.[1]?.toUpperCase();
+  if (!code || code === 'ZZ') return null;
+  let name: string;
+  try { name = REGION_NAMES.of(code) ?? code; } catch { return null; }
+  return name === code ? null : code;
+}
+
+/**
  * Work-mode wording found in a location string.
  *
  * ORDER MATTERS. "Hybrid - Remote friendly" contains both words, and hybrid is
@@ -137,8 +175,14 @@ export function classifyLocation(rawLocation: string): LocationClassification {
     out.country = 'IN';
     out.isIndia = true;
   } else {
-    for (const [code, pattern] of COUNTRY_TOKENS) {
-      if (pattern.test(text)) { out.country = code; break; }
+    /* The explicit remote-country form first: it is a whole-string match and
+       therefore more specific than any token search. */
+    const remoteCode = remoteCountryCode(text);
+    if (remoteCode) out.country = remoteCode;
+    else {
+      for (const [code, pattern] of COUNTRY_TOKENS) {
+        if (pattern.test(text)) { out.country = code; break; }
+      }
     }
     /* isIndia is only ever set to false when the country is KNOWN and is not
        India. An unrecognised location leaves it absent, because "we could not

@@ -52,6 +52,14 @@ export type JobSummary = {
   /** See lib/job-urgency.ts. Absent means the employer did not state one. */
   hiringUrgency?: string | null;
   applyUrl?: string;
+  /**
+   * A logo a Super Admin uploaded for this company, joined server-side.
+   *
+   * Absent for most companies, which is why the static lookup below remains the
+   * fallback rather than being replaced: an admin override is authoritative
+   * where one exists, and silent where one does not.
+   */
+  companyLogoUrl?: string;
   /** Present only in the profile-matched "Recommended for You" context. */
   matchScore?: number;
   matchReasons?: string[];
@@ -79,11 +87,20 @@ const APPLY_BASE =
   + ' focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
   + ' focus-visible:ring-slate-900/40 dark:focus-visible:ring-white/50';
 
-function CompanyLogo({ company }: { company: string }) {
-  const logo = getCompanyLogo(company);
+function CompanyLogo({ company, overrideUrl }: { company: string; overrideUrl?: string }) {
+  /* An admin upload outranks the built-in list: a human looked at this company
+     and chose this file. Same precedence the server-side resolver applies, and
+     the same reason — an automatic answer must not replace a chosen one. */
+  const fallback = getCompanyLogo(company);
+  const logo = overrideUrl
+    ? { src: overrideUrl, name: company }
+    : fallback;
   const [failed, setFailed] = useState(false);
   const box = 'h-10 w-10 shrink-0 overflow-hidden rounded-xl sm:h-12 sm:w-12';
 
+  /* A broken override falls through to initials exactly as a broken built-in
+     logo does — the box keeps its dimensions either way, so the card's height
+     never depends on whether an image loaded. */
   if (logo && !failed) {
     return (
       <div className={`${box} flex items-center justify-center border border-white/[0.08] bg-white/[0.05]`}>
@@ -158,7 +175,7 @@ export function JobSummaryCard({ job }: { job: JobSummary }) {
         <div className="p-4 sm:p-5">
           {/* header: company mark + identity + match badge */}
           <div className="flex items-start gap-3">
-            <CompanyLogo company={company} />
+            <CompanyLogo company={company} overrideUrl={job.companyLogoUrl} />
             <div className="min-w-0 flex-1">
               <div className="flex items-start gap-2">
                 <h3 className="min-w-0 flex-1 text-[15px] font-bold leading-tight tracking-tight text-white transition-colors group-hover:text-white/90 line-clamp-2">

@@ -24,7 +24,7 @@ import { NormalizedJob, ProviderDeps, ScrapeSource } from '../types';
 import { fetchJsonPost } from '../fetcher';
 import { htmlToText, deriveKeywords } from '../normalize';
 import { normalizeIndiaLocation } from '../india';
-import { configError, fetchJsonPostOrThrow } from '../source-fetch';
+import { configError, fetchJsonPostOrThrow, fetchJsonOrThrow } from '../source-fetch';
 
 const PAGE_SIZE = 20;
 /** Hard ceiling: 100 pages x 20 = 2000 postings from one board. */
@@ -162,18 +162,36 @@ async function maybeFetchDetails(
 
   const w = source.workday;
   if (!w) return jobs;
-  const get = deps.fetchJson;
-  if (!get) return jobs;
+  /* ═══ WHY NOT `deps.fetchJson` ═══
+
+     This used to read `deps.fetchJson` and return early when it was absent.
+     Production calls `getAdapter(sourceId, {})` — deps is EMPTY outside tests —
+     so the backfill returned immediately every time and the configured
+     DETAIL_LIMIT did nothing at all. Measured on the live corpus: SmartRecruiters
+     had 0% description coverage across 3,797 stored postings and Workday 0%
+     across 1,329, while Microsoft — whose detail fetch already went through
+     `fetchJsonOrThrow(url, deps)` — had 100%. A flag that silently does nothing
+     is worse than an absent feature, because the console shows it as enabled.
+
+     `fetchJsonOrThrow` falls back to the real fetcher when deps supplies none,
+     which is what every working path in this file already does. */
+    const get = (url: string) => fetchJsonOrThrow(url, deps);
 
   let used = 0;
   for (const job of jobs) {
     if (used >= limit) break;
     if (job.description || !job.externalId.startsWith('/')) continue;
     used += 1;
-    const detail = await get(`${baseUrl(w)}/job${job.externalId}`);
-    const info = ((detail ?? {}) as Record<string, unknown>).jobPostingInfo;
-    const text = ((info ?? {}) as Record<string, unknown>).jobDescription;
-    if (typeof text === 'string' && text.trim()) job.description = htmlToText(text);
+    /* One posting's detail request must never fail the whole board: the
+       backfill is best-effort enrichment, and a job with no description is
+       stored without one rather than dropped. `fetchJsonOrThrow` throws, so the
+       guard is what keeps that promise. */
+    try {
+      const detail = await get(`${baseUrl(w)}/job${job.externalId}`);
+      const info = ((detail ?? {}) as Record<string, unknown>).jobPostingInfo;
+      const text = ((info ?? {}) as Record<string, unknown>).jobDescription;
+      if (typeof text === 'string' && text.trim()) job.description = htmlToText(text);
+    } catch { /* leave this posting's description empty */ }
   }
   return jobs;
 }

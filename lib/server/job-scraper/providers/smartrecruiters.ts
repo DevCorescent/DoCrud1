@@ -126,6 +126,39 @@ export async function fetchSmartRecruiters(
   return maybeFetchDetails(company, all, deps);
 }
 
+/**
+ * Turn SmartRecruiters' `jobAd.sections` into readable prose.
+ *
+ * The shape is an object of named sections, each `{ title, text }` with the
+ * text carrying HTML:
+ *
+ *   { companyDescription: { title: "Company Description", text: "<p>…</p>" },
+ *     jobDescription:     { title: "Job Description",     text: "<p>…</p>" }, … }
+ *
+ * This used to be `JSON.stringify(sections)` with HTML tags stripped afterwards,
+ * which left the JSON STRUCTURE in the description — a posting began with
+ * `{"companyDescription":{"title":"Company Description","text":" …` and every
+ * brace, key and quote survived into what a member reads. Stripping tags from
+ * stringified JSON removes markup but not the encoding it was wrapped in.
+ *
+ * Sections are emitted in the order the provider listed them, each preceded by
+ * its own title, so the result reads the way the posting does on the source
+ * site. Nothing is invented: a section without text contributes nothing.
+ */
+function sectionsToText(sections: unknown): string {
+  if (!sections || typeof sections !== 'object') return '';
+  const parts: string[] = [];
+  for (const value of Object.values(sections as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const section = value as { title?: unknown; text?: unknown };
+    const body = typeof section.text === 'string' ? htmlToText(section.text) : '';
+    if (!body.trim()) continue;
+    const title = typeof section.title === 'string' ? section.title.trim() : '';
+    parts.push(title ? `${title}\n${body}` : body);
+  }
+  return parts.join('\n\n').trim();
+}
+
 /** Bounded description backfill. Off unless SMARTRECRUITERS_DETAIL_LIMIT is set. */
 async function maybeFetchDetails(
   company: string,
@@ -135,21 +168,39 @@ async function maybeFetchDetails(
   const configured = Number(process.env.SMARTRECRUITERS_DETAIL_LIMIT ?? DEFAULT_DETAIL_LIMIT);
   const limit = Number.isFinite(configured) ? Math.max(0, Math.min(200, configured)) : 0;
   if (limit === 0) return jobs;
-  const get = deps.fetchJson;
-  if (!get) return jobs;
+  /* ═══ WHY NOT `deps.fetchJson` ═══
+
+     This used to read `deps.fetchJson` and return early when it was absent.
+     Production calls `getAdapter(sourceId, {})` — deps is EMPTY outside tests —
+     so the backfill returned immediately every time and the configured
+     DETAIL_LIMIT did nothing at all. Measured on the live corpus: SmartRecruiters
+     had 0% description coverage across 3,797 stored postings and Workday 0%
+     across 1,329, while Microsoft — whose detail fetch already went through
+     `fetchJsonOrThrow(url, deps)` — had 100%. A flag that silently does nothing
+     is worse than an absent feature, because the console shows it as enabled.
+
+     `fetchJsonOrThrow` falls back to the real fetcher when deps supplies none,
+     which is what every working path in this file already does. */
+    const get = (url: string) => fetchJsonOrThrow(url, deps);
 
   let used = 0;
   for (const job of jobs) {
     if (used >= limit) break;
     if (job.description || !job.externalId) continue;
     used += 1;
-    const detail = await get(
-      `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(company)}/postings/${encodeURIComponent(job.externalId)}`,
-    );
-    const ad = ((detail ?? {}) as Record<string, unknown>).jobAd;
-    const sections = ((ad ?? {}) as Record<string, unknown>).sections;
-    const text = JSON.stringify(sections ?? '');
-    if (text && text !== '""') job.description = htmlToText(text.replace(/<[^>]+>/g, ' '));
+    /* One posting's detail request must never fail the whole board: the
+       backfill is best-effort enrichment, and a job with no description is
+       stored without one rather than dropped. `fetchJsonOrThrow` throws, so the
+       guard is what keeps that promise. */
+    try {
+      const detail = await get(
+        `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(company)}/postings/${encodeURIComponent(job.externalId)}`,
+      );
+      const ad = ((detail ?? {}) as Record<string, unknown>).jobAd;
+      const sections = ((ad ?? {}) as Record<string, unknown>).sections;
+      const text = sectionsToText(sections);
+      if (text) job.description = text;
+    } catch { /* leave this posting's description empty */ }
   }
   return jobs;
 }

@@ -13,6 +13,7 @@
  */
 import type { HiringJobPosting, HiringJobApplication } from '@/types/document';
 import { isJobActive } from '@/lib/server/job-sources/lifecycle';
+import { isPubliclyFresh, publicFreshnessEnabled } from '@/lib/server/job-sources/freshness';
 import { STATUS_API_NAME, statusCounts, type ApplicationStatus } from './status';
 
 /* ── Pagination ───────────────────────────────────────────────────────────*/
@@ -387,8 +388,21 @@ export interface PublicJobQuery {
 export function publicJobs(
   jobs: readonly HiringJobPosting[],
   query: PublicJobQuery = {},
+  /* `now` is injectable so a freshness boundary can be tested exactly. It is
+     read at the call, never at import, and is ignored while the flag is off. */
+  opts: { now?: number } = {},
 ): Page<Record<string, unknown>> {
   let rows = jobs.filter(isJobActive);
+
+  /* ═══ FRESHNESS — IMPLEMENTED, NOT ACTIVATED ═══
+     The in-memory twin of the clause in public-jobs-query.ts, gated on the
+     same PUBLIC_FRESHNESS_ENABLED === "true". Off by default, so this path is
+     unchanged in production. On, it excludes only scraped postings whose
+     lastSeenAt is 168h or older; unknown and manual/employer postings pass. */
+  if (publicFreshnessEnabled()) {
+    const now = opts.now ?? Date.now();
+    rows = rows.filter((j) => isPubliclyFresh(j, now));
+  }
 
   const search = lower(query.search);
   if (search) {

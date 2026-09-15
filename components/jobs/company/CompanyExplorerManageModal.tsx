@@ -162,6 +162,22 @@ export default function CompanyExplorerManageModal({
      write per letter, and the resolver invalidates that company on each one. */
   const commitWebsite = () => { if (items) save(items); };
 
+  /* Operator-typed company facts. Nothing here is derived: no ATS provider
+     reports an industry or a head office, and inferring either from the jobs
+     would be a guess wearing the clothes of a fact — a company posting in
+     twelve cities is not headquartered in the busiest one.
+
+     Caps mirror the server's exactly (80 / 120). Enforcing them here as well
+     means the field cannot silently lose characters on save; the server
+     remains the authority either way. */
+  const setMeta = (id: string, field: 'industry' | 'headquarters', value: string) => {
+    if (!items) return;
+    const max = field === 'industry' ? 80 : 120;
+    setItems(items.map((c) => (c.id === id ? { ...c, [field]: value.slice(0, max) } : c)));
+  };
+  /* Same blur-commit rhythm as the website field. */
+  const commitMeta = () => { if (items) save(items); };
+
   const add = (c: CompanyExplorerTile) => {
     if (!items || items.some((i) => i.id === c.id)) return;   // never a duplicate
     const next = [...items, { id: c.id, name: c.name, order: items.length, visible: true }];
@@ -320,6 +336,51 @@ export default function CompanyExplorerManageModal({
                       style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.70)' }}
                     />
                   </label>
+
+                  {/* Operator-supplied company facts. Both OPTIONAL and both
+                      blank by default: a company with nothing typed here shows
+                      nothing, which is the honest answer. Blank clears the
+                      stored value rather than saving an empty string.
+
+                      Deliberately NOT here: employee count, size band. No
+                      configured provider reports them, and a field on this form
+                      would invite someone to estimate one. */}
+                  <label className="col-span-full block w-full basis-full">
+                    <span className="sr-only">{c.name} industry</span>
+                    <input
+                      type="text"
+                      value={c.industry ?? ''}
+                      onChange={(e) => setMeta(c.id, 'industry', e.target.value)}
+                      onBlur={commitMeta}
+                      maxLength={80}
+                      placeholder="Industry — optional, e.g. FinTech"
+                      className="h-7 w-full rounded-lg px-2 text-[11px] outline-none"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.70)' }}
+                    />
+                  </label>
+
+                  <label className="col-span-full block w-full basis-full">
+                    <span className="sr-only">{c.name} headquarters</span>
+                    <input
+                      type="text"
+                      value={c.headquarters ?? ''}
+                      onChange={(e) => setMeta(c.id, 'headquarters', e.target.value)}
+                      onBlur={commitMeta}
+                      maxLength={120}
+                      placeholder="Headquarters — optional, e.g. Bengaluru, India"
+                      className="h-7 w-full rounded-lg px-2 text-[11px] outline-none"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.70)' }}
+                    />
+                  </label>
+
+                  {/* Provenance, read-only. The server sets both; the client
+                      cannot claim a human verified something. */}
+                  {c.metadataUpdatedAt && (
+                    <p className="col-span-full basis-full text-[10px]" style={{ color: 'rgba(255,255,255,0.30)' }}>
+                      Edited {new Date(c.metadataUpdatedAt).toLocaleDateString()}
+                      {c.metadataUpdatedBy ? ` by ${c.metadataUpdatedBy}` : ''}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

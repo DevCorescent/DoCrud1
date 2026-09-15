@@ -37,6 +37,28 @@ function check(label: string, cond: boolean) {
 }
 const COLLECTION = readFileSync('lib/server/db/hiring-jobs-collection.ts', 'utf8');
 
+/**
+ * One exported function's source, from its `export` line to the next one.
+ *
+ * Some assertions below are about what THE WRITER does, and scanning the whole
+ * file conflates that with every reader in it. `selectJobAdminPage` sorts the
+ * admin table by `createdAt` — the newest-first order that page has always
+ * shown — which is a display concern with nothing to do with how positions are
+ * assigned on write. Matching it against a writer rule reports a defect that
+ * does not exist, and the only ways out are to delete the rule or to break the
+ * admin page. Targeting the region says what was actually meant.
+ */
+function regionOf(source: string, exportedName: string): string {
+  const start = source.search(new RegExp(`^export (?:async )?function ${exportedName}\\b`, 'm'));
+  if (start < 0) throw new Error(`regionOf: ${exportedName} not found`);
+  const rest = source.slice(start + 1);
+  const next = rest.search(/^export (?:async )?(?:function|const|interface|type)\s/m);
+  return next < 0 ? source.slice(start) : source.slice(start, start + 1 + next);
+}
+
+/** The production writer: the function that assigns and persists `_order`. */
+const WRITER = regionOf(COLLECTION, 'upsertHiringJobs');
+
 type Doc = Record<string, unknown> & { id: string };
 interface Canonical { _id: string; job: Doc; _fp: string; _order: number }
 
@@ -288,9 +310,18 @@ const businessState = (m: Map<string, Canonical>) =>
   check('REBALANCE: nothing in the writer triggers it automatically',
     !/planRebalance|rebalance/i.test(COLLECTION));
 
-  /* ── createdAt was NOT substituted ── */
-  check('createdAt is NOT used as the ordering mechanism',
-    !/sort\(\{ *createdAt/.test(COLLECTION));
+  /* ── createdAt was NOT substituted ──
+     Scoped to the WRITER. `_order` is the ordering mechanism; the invariant is
+     that the writer never falls back to a timestamp to invent a position.
+     Readers are free to sort by `createdAt` for display — `selectJobAdminPage`
+     does exactly that for the admin table's newest-first order, and must keep
+     doing it. Two different concerns that a whole-file scan cannot tell apart. */
+  check('the writer does not order by createdAt',
+    !/sort\(\{ *createdAt/.test(WRITER));
+  check('the writer does not read createdAt at all',
+    !/createdAt/.test(WRITER));
+  check('the writer still assigns positions through _order',
+    /_order/.test(WRITER));
 
   /* ── The writer still refuses to invent a position ── */
   check('the writer refuses a new job with no order',

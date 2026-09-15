@@ -139,6 +139,7 @@
     "test:scale-gap-closure": "tsx scripts/scale-gap-closure.selftest.ts",
     "test:job-freshness": "tsx scripts/job-freshness.selftest.ts",
     "test:scraper-resumability": "tsx scripts/scraper-resumability.selftest.ts",
+    "test:sitemap-scale": "tsx scripts/sitemap-scale.selftest.ts",
     "freshness:dry-run": "tsx scripts/freshness-dry-run.ts",
     "test:job-detail-enrichment": "tsx scripts/job-detail-enrichment.selftest.ts",
     "test:scraper-rollout-readiness": "tsx scripts/scraper-rollout-readiness.selftest.ts",

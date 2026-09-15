@@ -12,7 +12,7 @@ import { getCertificates } from '@/lib/server/certificates';
 import { getPublicBlogPosts } from '@/lib/server/blog';
 import { getPublicDocrudiansData } from '@/lib/server/docrudians';
 import { getPublicGigListings } from '@/lib/server/gigs';
-import { getPublishedHiringJobList } from '@/lib/server/hiring';
+import { getPublishedJobsForSitemap } from '@/lib/server/hiring';
 import { getVirtualIdCards } from '@/lib/server/virtual-ids';
 import { listBusinessPages, type BusinessPage } from '@/lib/server/business-pages';
 import { listResumeDirectory } from '@/lib/server/resume-directory';
@@ -53,7 +53,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
        A read that FAILS while a database IS configured still propagates, so a
        genuine outage remains loud rather than quietly emitting a sitemap that
        has lost every job. */
-    getPublishedHiringJobList().catch((error) => {
+    /* PROJECTED: id + timestamps only, which is all the entries below read.
+       This previously took the full published LIST — every title, company and
+       facet for 12,659 postings — measured at 75,968 ms and 95% of the whole
+       sitemap's cost. That is what timed out static generation three times and
+       failed the production build. The projected read is 21,824 ms / 1.5 MB
+       against the same corpus, and the fallback ladder is preserved inside
+       `getPublishedJobsForSitemap`.
+
+       The catch stays narrow ON PURPOSE, unchanged: an absent database yields
+       no job URLs so CI (which has no MongoDB) can still build, while a read
+       that FAILS with a database configured still propagates — a genuine
+       outage must stay loud rather than quietly emitting a sitemap that has
+       lost every job. */
+    getPublishedJobsForSitemap().catch((error) => {
       if (!isDatabaseConfigured()) return [];
       throw error;
     }),

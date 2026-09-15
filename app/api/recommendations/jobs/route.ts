@@ -21,7 +21,8 @@ import { registerRecommendationCache, rememberViewerCount } from '@/lib/server/r
 import { readFreshRecommendationRecord, renderPrecomputed } from '@/lib/server/db/recommendation-read-source';
 import { selectPublishedJobsByIds, readHiringCorpusVersion } from '@/lib/server/db/hiring-jobs-collection';
 import { corpusVersionKey } from '@/lib/server/recommendation-refresh';
-import { getHiringApplications } from '@/lib/server/hiring';
+import { recFeaturesFor } from '@/lib/server/recommendation-features';
+import { getHiringApplicationsStrict } from '@/lib/server/hiring';
 import { personalizedPage } from '@/lib/server/job-api/personalized';
 import { buildEligibilityProfile } from '@/lib/server/job-sources/eligibility';
 import { toEligibilityPreferences } from '@/lib/server/match-preferences';
@@ -61,6 +62,36 @@ const STALE_TTL = 10 * 60_000;
 const cache = new Map<string, CachedRecs>();
 /* Registered so a job write can clear it — see lib/server/recommendation-cache.ts. */
 registerRecommendationCache(cache);
+
+/* ═══ THE PERSONALIZED RANKING, CACHED SEPARATELY ═══
+
+   `scope=personalized` returned before ever reaching the cache above, so every
+   request — including every PAGE CHANGE, because `page` sits in the client's
+   useCallback deps — re-ran the whole ranking pass over the corpus.
+
+   What is cached here is the RANKING, not the response. That distinction is the
+   point: the ranking is page-independent and expensive, while pagination,
+   applied-job exclusion and the ATS/eligibility enrichment are per-request and
+   cheap (the enrichment touches only the page's rows). Caching finished pages
+   instead would have made page 2 a miss and re-ranked the corpus for it.
+
+   Applications are deliberately NOT part of this. They are read fresh on every
+   request, so applying to a job still removes it from the very next response
+   rather than lingering for the TTL. */
+const rankingCache = new Map<string, { value: PersonalizedRanking; ts: number }>();
+registerRecommendationCache(rankingCache);
+/* Concurrent callers for one viewer share ONE ranking pass. */
+const rankingInFlight = new Map<string, Promise<PersonalizedRanking>>();
+
+interface PersonalizedRanking {
+  ranked: unknown[];
+  reasons: Map<string, string[]>;
+  summaries: Map<string, string>;
+  factors: Map<string, Array<{ kind: string; label: string; detail: string; points: number; max: number }>>;
+  missing: Map<string, string[]>;
+  candidate: MatchCandidate | null;
+  prefs: ReturnType<typeof buildEligibilityProfile> | null;
+}
 
 /**
  * Background refreshes in flight, keyed exactly like the cache.
@@ -221,22 +252,116 @@ async function computePersonalized(
     return { items: [], page: 1, pageSize, total: 0, scored: false };
   }
 
-  const [jobs, fields, applications] = await Promise.all([
-    /* NOT `.catch(() => [])`. Swallowing a corpus read failure turns
-       infrastructure being down into a response carrying zero
-       recommendations — indistinguishable from "we found nothing for you".
-       A StorageReadError now reaches the route's catch, which answers
-       honestly. Scoring, ranking, eligibility and applied-job exclusion are
-       untouched. */
-    getPublishedHiringJobs(),
-    getProfileFields(meId, ['headline', 'bio', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences']).catch(() => null),
+  /* The profile is read FIRST and on every request: it carries the
+     `profileVersion` the cache key is built from, so an edited profile is a
+     different key and re-ranks immediately rather than waiting out the TTL.
+     Applications are read every request too — see the note on rankingCache. */
+  const [fields, applications] = await Promise.all([
+    getProfileFields(meId, ['headline', 'bio', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences', 'profileVersion']).catch(() => null),
     /* Scoped to THIS viewer. The applied set is the reason a job leaves the
-       feed, so it must never be another member's. */
-    getHiringApplications().then((all) => all.filter((a) => a?.candidateUserId === meId)).catch(() => []),
+       feed, so it must never be another member's.
+
+       NO `.catch(() => [])`, and a STRICT read underneath. An empty applied set
+       means "applied to nothing", so swallowing a storage failure here would
+       quietly switch applied-job exclusion off and serve roles this member has
+       already applied to — behind a 200, indistinguishable from a correct feed.
+       A failure reaches the route's catch and answers 503 instead, exactly as a
+       corpus read failure already does. An ABSENT store is still `[]`. */
+    getHiringApplicationsStrict().then((all) => all.filter((a) => a?.candidateUserId === meId)),
   ]);
-  if (!Array.isArray(jobs) || jobs.length === 0) {
-    return { items: [], page: 1, pageSize, total: 0, scored: false };
+
+  /* Keyed on the SERVER-RESOLVED viewer id — never anything from the request —
+     and on the profile version, so one member can never be handed another's
+     ranking and a stale profile can never rank a fresh request. */
+  const profileVersion = Number((fields as { profileVersion?: unknown } | null)?.profileVersion) || 0;
+  const key = `${meId}:personalized:v${profileVersion}`;
+
+  const ranking = await cachedRanking(key, () => rankPersonalized(meId, fields));
+  if (!ranking) return { items: [], page: 1, pageSize, total: 0, scored: false };
+
+  return personalizedPage({
+    rankedJobs: ranking.ranked as never,
+    candidate: ranking.candidate,
+    appliedJobIds: new Set(applications.map((a) => String(a.jobId))),
+    eligibilityProfile: ranking.prefs,
+    reasonsByJobId: ranking.reasons,
+    summaryByJobId: ranking.summaries,
+    factorsByJobId: ranking.factors,
+    missingByJobId: ranking.missing,
+    page,
+    pageSize,
+  });
+}
+
+/**
+ * Serve a ranking from cache, refresh it in the background when stale, and let
+ * concurrent callers for one viewer share a single pass.
+ *
+ * The same TTL, stale window and single-flight the other scopes already use —
+ * this is that behaviour extended to the scope that never had it, not a second
+ * caching scheme with its own rules.
+ */
+async function cachedRanking(
+  key: string,
+  compute: () => Promise<PersonalizedRanking | null>,
+): Promise<PersonalizedRanking | null> {
+  const hit = rankingCache.get(key);
+  const age = hit ? Date.now() - hit.ts : Infinity;
+  if (hit && age < CACHE_TTL) return hit.value;
+
+  /* Stale but usable: answer NOW with the ranking this same code produced
+     minutes ago, and refresh behind the response. A failed refresh leaves the
+     good entry in place rather than replacing it with an empty success. */
+  if (hit && age < STALE_TTL) {
+    if (!rankingInFlight.has(key)) {
+      const run = compute()
+        .then((fresh) => { if (fresh) rankingCache.set(key, { value: fresh, ts: Date.now() }); })
+        .catch((error) => { console.error('[recommendations/personalized] background refresh failed', error); })
+        .finally(() => { rankingInFlight.delete(key); });
+      rankingInFlight.set(key, run as unknown as Promise<PersonalizedRanking>);
+    }
+    return hit.value;
   }
+
+  const pending = rankingInFlight.get(key);
+  if (pending) return pending;
+
+  const run = compute()
+    .then((fresh) => {
+      if (fresh) rankingCache.set(key, { value: fresh, ts: Date.now() });
+      return fresh as PersonalizedRanking;
+    })
+    .finally(() => { rankingInFlight.delete(key); });
+  rankingInFlight.set(key, run);
+  return run;
+}
+
+/**
+ * The expensive, page-independent half: score every posting for this viewer and
+ * keep the ones that matched, with the explanation that produced each score.
+ *
+ * Unchanged from what `computePersonalized` did inline — same scorer, same
+ * ranking, same tie-break, same candidate and preference construction.
+ */
+async function rankPersonalized(
+  meId: string,
+  fields: Awaited<ReturnType<typeof getProfileFields>> | null,
+): Promise<PersonalizedRanking | null> {
+  /* NOT `.catch(() => [])`. Swallowing a corpus read failure turns
+     infrastructure being down into a response carrying zero recommendations —
+     indistinguishable from "we found nothing for you". A StorageReadError
+     reaches the route's catch, which answers honestly. */
+  const jobs = await getPublishedHiringJobs();
+  if (!Array.isArray(jobs) || jobs.length === 0) return null;
+
+  /* Derived once for this corpus snapshot and reused by every ranking pass over
+     it, instead of re-scanning every description for every viewer. `null` means
+     the set could not be built for THIS version — the scan then runs inline
+     exactly as it did before, so a failure here is slower, never different. */
+  const features = await recFeaturesFor(
+    corpusVersionKey(await readHiringCorpusVersion().catch(() => null)),
+    jobs as unknown as Array<Record<string, unknown>>,
+  ).catch(() => null);
 
   const signals = mergeResumeSignals(
     fields as Parameters<typeof mergeResumeSignals>[0],
@@ -268,6 +393,12 @@ async function computePersonalized(
       preferredSkills: Array.isArray(j.preferredSkills) ? (j.preferredSkills as string[]) : [],
       targetRoleKeywords: Array.isArray(j.targetRoleKeywords) ? (j.targetRoleKeywords as string[]) : [],
       createdAt: String(j.createdAt ?? ''),
+      /* Spread only when this posting HAS features: an absent key leaves the
+         scorer scanning `description`, which is the pre-existing path. */
+      ...(features?.get(String(j.id ?? ''))
+        ? { recSkills: features.get(String(j.id ?? ''))!.skills,
+            recYears: features.get(String(j.id ?? ''))!.years }
+        : {}),
     };
     const match = recommendMatch(profile, recJob, now);
     if (showMatch) {
@@ -324,18 +455,10 @@ async function computePersonalized(
   });
   const hasPrefs = Object.keys(prefs).length > 0;
 
-  return personalizedPage({
-    rankedJobs: ranked as never,
-    candidate,
-    appliedJobIds: new Set(applications.map((a) => String(a.jobId))),
-    eligibilityProfile: hasPrefs ? prefs : null,
-    reasonsByJobId: reasons,
-    summaryByJobId: summaries,
-    factorsByJobId: factors,
-    missingByJobId: missing,
-    page,
-    pageSize,
-  });
+  /* Everything the page step needs, and nothing that depends on which page it
+     is. `ranked` holds REFERENCES into the shared corpus array, not copies, so
+     retaining it costs a pointer per posting rather than a document. */
+  return { ranked, reasons, summaries, factors, missing, candidate, prefs: hasPrefs ? prefs : null };
 }
 
 export async function GET(request: Request) {

@@ -14,6 +14,7 @@ import {
   verifySampleRate, type JobReadSource,
 } from '@/lib/server/db/public-jobs-source';
 import { TTL, cached } from '@/lib/server/cache';
+import { attachAdminLogos } from '@/lib/server/company-logo-public';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,6 +117,14 @@ export async function GET(request: NextRequest) {
         return publicJobs(await getHiringJobsCached(), query);
       },
     );
+    /* Admin-uploaded logos, joined here rather than stored on every posting:
+       one configuration read per page, no network, and an upload takes effect
+       on the next request instead of waiting for a re-scrape. */
+    if (payload && Array.isArray(payload.items)) {
+      payload.items = await attachAdminLogos(
+        payload.items as Array<Record<string, unknown> & { organizationName?: string | null }>,
+      );
+    }
     return NextResponse.json(payload);
   } catch {
     return NextResponse.json({ error: 'Failed to load jobs.' }, { status: 500 });

@@ -32,19 +32,78 @@ export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ st
       });
       if (res.status === 401 || res.status === 403) return null;         // respect access control
       if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
-        if (attempt < retries) { await sleep(300 * 2 ** attempt); continue; }
+        if (attempt < retries) { await sleep(retryDelayMs(attempt, 300, res)); continue; }
         return null;
       }
       if (res.status !== 200) return null;
       return { status: 200, text: await res.text() };
     } catch {
-      if (attempt < retries) { await sleep(300 * 2 ** attempt); continue; }
+      if (attempt < retries) { await sleep(retryDelayMs(attempt, 300)); continue; }
       return null;
     } finally {
       clearTimeout(timer);
     }
   }
   return null;
+}
+
+/**
+ * How long to wait before the next attempt.
+ *
+ * ═══ RETRY-AFTER ═══
+ *
+ * A 429 was previously retried on the same blind exponential schedule as any
+ * other failure — roughly 0.4 s, then 0.8 s. When a provider answers 429 it is
+ * usually TELLING us how long to wait, and ignoring that header is both
+ * impolite and ineffective: the retry lands inside the same window and is
+ * refused again, burning the attempt budget without ever succeeding.
+ *
+ * `Retry-After` is honoured in both documented forms — delta-seconds and an
+ * HTTP-date — and CLAMPED. A server asking for an hour must not stall a run
+ * that has other sources waiting; past the cap it is better to fail this source
+ * and let the next run retry it than to hold the worker hostage.
+ *
+ * ═══ JITTER ═══
+ *
+ * The backoff was exactly `base * 2^attempt`, so every client retrying the same
+ * provider retried in lockstep. Equal jitter — half the delay fixed, half
+ * random — spreads them without ever waiting less than half the intended
+ * backoff. That matters more as the source list grows: a provider that returns
+ * 429 to one board tends to return it to the rest.
+ */
+export const MAX_RETRY_AFTER_MS = 30_000;
+
+export function parseRetryAfter(value: string | null, now = Date.now()): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  /* delta-seconds. */
+  if (/^\d+$/.test(trimmed)) {
+    const ms = Number(trimmed) * 1000;
+    return Number.isFinite(ms) && ms >= 0 ? ms : null;
+  }
+  /* HTTP-date.
+     `Date.parse` is extremely lenient — it accepts "-5" and other malformed
+     input as a date, which would turn a broken header into a delay of 0 and
+     therefore into an immediate hammering retry. Every HTTP-date form carries
+     a month name, so requiring a letter rejects the numeric junk that slips
+     past while accepting all three legal formats.
+     A date already in the past means "you may retry now", not a negative wait. */
+  if (!/[A-Za-z]/.test(trimmed)) return null;
+  const at = Date.parse(trimmed);
+  if (!Number.isFinite(at)) return null;
+  return Math.max(0, at - now);
+}
+
+export function retryDelayMs(
+  attempt: number,
+  baseMs: number,
+  res?: { headers: { get(name: string): string | null } } | null,
+): number {
+  const asked = parseRetryAfter(res?.headers?.get('retry-after') ?? null);
+  if (asked !== null) return Math.min(asked, MAX_RETRY_AFTER_MS);
+  const backoff = baseMs * 2 ** attempt;
+  /* Equal jitter: never shorter than half the backoff, never longer than it. */
+  return Math.round(backoff / 2 + Math.random() * (backoff / 2));
 }
 
 export function sleep(ms: number): Promise<void> {
@@ -76,7 +135,7 @@ export async function fetchJson(url: string, opts: FetchOpts = {}): Promise<unkn
       });
       if (res.status === 401 || res.status === 403) return null;
       if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
-        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        if (attempt < retries) { await sleep(retryDelayMs(attempt, 400, res)); continue; }
         return null;
       }
       if (res.status !== 200) return null;
@@ -86,7 +145,7 @@ export async function fetchJson(url: string, opts: FetchOpts = {}): Promise<unkn
       if (text.length > MAX_JSON_BYTES) return null;
       try { return JSON.parse(text); } catch { return null; }
     } catch {
-      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      if (attempt < retries) { await sleep(retryDelayMs(attempt, 400)); continue; }
       return null;
     } finally {
       clearTimeout(timer);
@@ -131,7 +190,7 @@ export async function fetchJsonPost(
       });
       if (res.status === 401 || res.status === 403) return null;
       if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
-        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        if (attempt < retries) { await sleep(retryDelayMs(attempt, 400, res)); continue; }
         return null;
       }
       if (res.status !== 200) return null;
@@ -139,7 +198,7 @@ export async function fetchJsonPost(
       if (text.length > MAX_JSON_BYTES) return null;
       try { return JSON.parse(text); } catch { return null; }
     } catch {
-      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      if (attempt < retries) { await sleep(retryDelayMs(attempt, 400)); continue; }
       return null;
     } finally {
       clearTimeout(timer);
@@ -183,7 +242,7 @@ export async function fetchTextStrict(
       /* A redirect means the slug is wrong. Not an empty board. */
       if (res.status >= 300 && res.status < 400) return null;
       if (res.status === 429 || (res.status >= 500 && res.status < 600)) {
-        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        if (attempt < retries) { await sleep(retryDelayMs(attempt, 400, res)); continue; }
         return null;
       }
       if (res.status !== 200) return null;
@@ -195,7 +254,7 @@ export async function fetchTextStrict(
       if (text.length > MAX_JSON_BYTES) return null;
       return { status: 200, text };
     } catch {
-      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      if (attempt < retries) { await sleep(retryDelayMs(attempt, 400)); continue; }
       return null;
     } finally {
       clearTimeout(timer);
@@ -290,7 +349,7 @@ export async function fetchJsonResult(url: string, opts: FetchOpts = {}): Promis
       const verdict = triage(res.status);
       if (verdict === 'retry') {
         last = { ok: false, kind: 'http', status: res.status };
-        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        if (attempt < retries) { await sleep(retryDelayMs(attempt, 400, res)); continue; }
         return last;
       }
       if (verdict) return verdict;
@@ -302,7 +361,7 @@ export async function fetchJsonResult(url: string, opts: FetchOpts = {}): Promis
       catch { return { ok: false, kind: 'parse' }; }
     } catch (error) {
       last = classifyThrow(error);
-      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      if (attempt < retries) { await sleep(retryDelayMs(attempt, 400)); continue; }
       return last;
     } finally {
       clearTimeout(timer);
@@ -335,7 +394,7 @@ export async function fetchJsonPostResult(
       const verdict = triage(res.status);
       if (verdict === 'retry') {
         last = { ok: false, kind: 'http', status: res.status };
-        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        if (attempt < retries) { await sleep(retryDelayMs(attempt, 400, res)); continue; }
         return last;
       }
       if (verdict) return verdict;
@@ -345,7 +404,7 @@ export async function fetchJsonPostResult(
       catch { return { ok: false, kind: 'parse' }; }
     } catch (error) {
       last = classifyThrow(error);
-      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      if (attempt < retries) { await sleep(retryDelayMs(attempt, 400)); continue; }
       return last;
     } finally {
       clearTimeout(timer);
@@ -376,7 +435,7 @@ export async function fetchTextStrictResult(
       const verdict = triage(res.status);
       if (verdict === 'retry') {
         last = { ok: false, kind: 'http', status: res.status };
-        if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+        if (attempt < retries) { await sleep(retryDelayMs(attempt, 400, res)); continue; }
         return last;
       }
       if (verdict) return verdict;
@@ -389,7 +448,7 @@ export async function fetchTextStrictResult(
       return { ok: true, value: { status: 200, text } };
     } catch (error) {
       last = classifyThrow(error);
-      if (attempt < retries) { await sleep(400 * 2 ** attempt); continue; }
+      if (attempt < retries) { await sleep(retryDelayMs(attempt, 400)); continue; }
       return last;
     } finally {
       clearTimeout(timer);

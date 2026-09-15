@@ -54,6 +54,7 @@ import { SK_NEWEST, SK_SALARY, SK_RELEVANCE } from '@/lib/server/db/public-sort-
 import type { PublicJobQuery } from '@/lib/server/job-api/queries';
 import { pageParams } from '@/lib/server/job-api/queries';
 import { getMongoDb } from '@/lib/server/database';
+import { publicFreshnessEnabled, publiclyFreshCond } from '@/lib/server/job-sources/freshness';
 
 const APP_STATE_KEY = 'json:data/hiring-jobs.json';
 const COL = 'app_state';
@@ -170,8 +171,37 @@ export const PUBLIC_JOB_VIEW_FIELDS = [
  * against that function for 47 query shapes, so a change here that alters
  * behaviour fails there rather than reaching a visitor.
  */
-export function buildPublicJobsConditions(query: PublicJobQuery, ref: FieldRef): unknown[] {
+export interface PublicQueryOptions {
+  /**
+   * The instant freshness is judged against. Injected so a boundary can be
+   * tested exactly; defaults to the wall clock at the CALL, never at import.
+   * Ignored entirely while PUBLIC_FRESHNESS_ENABLED is not "true".
+   */
+  now?: number;
+}
+
+export function buildPublicJobsConditions(
+  query: PublicJobQuery,
+  ref: FieldRef,
+  opts: PublicQueryOptions = {},
+): unknown[] {
   const conds: unknown[] = [activeCond(ref)];
+
+  /* ═══ FRESHNESS — IMPLEMENTED, NOT ACTIVATED ═══
+
+     Gated on PUBLIC_FRESHNESS_ENABLED === "true" and OFF by default. While off,
+     `conds` is exactly what it has always been, so both pipelines — and the
+     facet `total` computed from the same conditions — are contract-identical
+     to production. When on, scraped postings last observed 168h or more ago
+     are excluded; manual/employer postings and postings with no usable
+     lastSeenAt are NOT (see freshness.ts for why unknown is not stale).
+
+     Placed here rather than in `activeCond` so "what active means" stays the
+     single, unchanged definition and freshness is visibly a separate, switched
+     clause layered on top of it. */
+  if (publicFreshnessEnabled()) {
+    conds.push(publiclyFreshCond(ref, opts.now ?? Date.now()));
+  }
 
   const search = lower(query.search);
   if (search) {
@@ -328,8 +358,11 @@ export async function selectPublicJobsPage(query: PublicJobQuery = {}): Promise<
  * `$facet` matters for correctness as much as latency: computing `total` in a
  * second query could observe a different corpus if a write landed between them.
  */
-export function buildPublicJobsCollectionPipeline(query: PublicJobQuery = {}): Record<string, unknown>[] {
-  const conds = buildPublicJobsConditions(query, DOC_REF);
+export function buildPublicJobsCollectionPipeline(
+  query: PublicJobQuery = {},
+  opts: PublicQueryOptions = {},
+): Record<string, unknown>[] {
+  const conds = buildPublicJobsConditions(query, DOC_REF, opts);
   const { pageSize, skip } = pageParams(query.page, query.pageSize);
   const { direction } = sortKeyExpr(query.sort, DOC_REF);
 

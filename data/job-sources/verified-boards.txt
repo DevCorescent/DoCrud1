@@ -1,0 +1,110 @@
+# DoCrud verified job-board inventory.
+#
+# EVERY line here was confirmed against the live public endpoint by
+# `npm run scrape:sources:probe` — HTTP 200, parsed by the existing adapter,
+# and returning at least one posting. Nothing in this file is a guess.
+#
+# That verification is the point: of 164 plausible candidates probed, 69 were
+# wrong (mostly 404 — the company uses a different slug or a different ATS).
+# An unverified slug is not a harmless typo, it costs ~37 s of retries every
+# run and shows as a permanently failing source.
+#
+# Columns are separated by TWO OR MORE SPACES:
+#   provider  slug  Display Name  [ISO country]
+#
+# Re-verify with:  npm run scrape:sources:probe -- --file data/job-sources/verified-boards.txt
+
+# ── Greenhouse ───────────────────────────────────────────────────────────────
+greenhouse  razorpaysoftwareprivatelimited  Razorpay  IN
+greenhouse  groww  Groww  IN
+greenhouse  druva  Druva  IN
+greenhouse  postman  Postman  IN
+greenhouse  thoughtworks  Thoughtworks  IN
+greenhouse  turing  Turing  IN
+greenhouse  zenoti  Zenoti  IN
+greenhouse  stripe  Stripe
+greenhouse  airbnb  Airbnb
+greenhouse  dropbox  Dropbox
+greenhouse  coinbase  Coinbase
+greenhouse  figma  Figma
+greenhouse  gitlab  GitLab
+greenhouse  cloudflare  Cloudflare
+greenhouse  instacart  Instacart
+greenhouse  lyft  Lyft
+greenhouse  pinterest  Pinterest
+greenhouse  reddit  Reddit
+greenhouse  twilio  Twilio
+greenhouse  asana  Asana
+greenhouse  brex  Brex
+greenhouse  samsara  Samsara
+greenhouse  affirm  Affirm
+greenhouse  robinhood  Robinhood
+greenhouse  discord  Discord
+greenhouse  scaleai  Scale AI
+greenhouse  vercel  Vercel
+greenhouse  elastic  Elastic
+greenhouse  mongodb  MongoDB
+greenhouse  okta  Okta
+greenhouse  datadog  Datadog
+greenhouse  wise  Wise
+greenhouse  chime  Chime
+greenhouse  gusto  Gusto
+greenhouse  airtable  Airtable
+greenhouse  duolingo  Duolingo
+greenhouse  roblox  Roblox
+greenhouse  peloton  Peloton
+greenhouse  zscaler  Zscaler
+greenhouse  flexport  Flexport
+greenhouse  faire  Faire
+greenhouse  amplitude  Amplitude
+greenhouse  mixpanel  Mixpanel
+greenhouse  intercom  Intercom
+greenhouse  monzo  Monzo
+greenhouse  n26  N26
+greenhouse  trustpilot  Trustpilot
+greenhouse  mediaocean  Mediaocean
+greenhouse  udemy  Udemy
+greenhouse  coursera  Coursera
+greenhouse  betterment  Betterment
+greenhouse  carta  Carta
+greenhouse  cockroachlabs  Cockroach Labs
+greenhouse  fivetran  Fivetran
+greenhouse  starburst  Starburst
+greenhouse  grafanalabs  Grafana Labs
+greenhouse  sumologic  Sumo Logic
+greenhouse  tanium  Tanium
+greenhouse  netskope  Netskope
+greenhouse  rubrik  Rubrik
+greenhouse  klaviyo  Klaviyo
+greenhouse  squarespace  Squarespace
+greenhouse  wayve  Wayve
+greenhouse  sigmacomputing  Sigma Computing
+greenhouse  imply  Imply
+greenhouse  smartsheet  Smartsheet
+greenhouse  pendo  Pendo
+greenhouse  seatgeek  SeatGeek
+greenhouse  tripadvisor  Tripadvisor
+
+# ── Lever ────────────────────────────────────────────────────────────────────
+lever  mindtickle  MindTickle  IN
+lever  cred  CRED  IN
+lever  meesho  Meesho  IN
+lever  spotify  Spotify
+lever  matchgroup  Match Group
+
+# ── Ashby ────────────────────────────────────────────────────────────────────
+ashby  atlan  Atlan  IN
+ashby  linear  Linear
+ashby  posthog  PostHog
+ashby  vanta  Vanta
+ashby  clickhouse  ClickHouse
+ashby  hex  Hex
+ashby  supabase  Supabase
+ashby  replit  Replit
+ashby  cursor  Cursor
+ashby  modal  Modal
+
+# ── SmartRecruiters ──────────────────────────────────────────────────────────
+smartrecruiters  servicenow  ServiceNow
+smartrecruiters  freshworks  Freshworks  IN
+smartrecruiters  swiggy  Swiggy  IN

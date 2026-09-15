@@ -521,3 +521,32 @@ export async function bulkReplaceFileTransferRows(rows: SecureFileTransfer[]): P
 function escRe(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+/**
+ * How many transfers exist, without transferring one.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * The public homepage computed "secure shares sent" as
+ * `(await readJsonFile(fileTransfersPath, [])).length` — which resolves to
+ * `selectAllFileTransferRows()`, WHOLE documents, `dataUrl` blobs and all.
+ * Measured against the live store: 77,567 ms and 6.9 MB to learn that there
+ * are 197 of them. That single read was 98.5% of the homepage metrics cost
+ * once the job count had been fixed the same way.
+ *
+ * This is the identical defect the sitemap comment above describes, closed the
+ * same way: ask the database for the number.
+ *
+ * Returns null when the store cannot be counted — never 0, because "no shares
+ * yet" and "could not find out" must stay distinguishable to the caller, even
+ * where the caller then chooses to degrade.
+ */
+export async function countFileTransferRows(): Promise<number | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    return await db.collection(COL).countDocuments({});
+  } catch {
+    return null;
+  }
+}

@@ -15,6 +15,8 @@ import { HiringJobPosting } from '@/types/document';
 import { getHiringJobs } from '@/lib/server/hiring';
 import { writeHiringJobs } from '@/lib/server/hiring-write';
 import { parseCsv } from '@/lib/server/csv';
+import { selectJobAdminCounts, selectJobAdminPage } from '@/lib/server/db/hiring-jobs-collection';
+import { getApplicationCountsForJobs } from '@/lib/server/job-applications/counts';
 
 // Enums are the source of truth from HiringJobPosting (types/document.ts).
 export const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract', 'internship', 'freelance'] as const;
@@ -425,28 +427,63 @@ export async function importJobsFromCsv(
 }
 
 /** Aggregate stats for the Super Admin Jobs tab. */
+/**
+ * The Super Admin Jobs overview.
+ *
+ * ═══ WHAT CHANGED, AND WHY IT MATTERED ═══
+ *
+ * This used to call `getHiringJobs()` — every posting, into memory — and then
+ * compute five counters with five `.filter().length` passes and slice 500 rows
+ * off the front. Measured on the real corpus of 7,105 postings that read took
+ * 229,753 ms and moved 20.2 MB, against 262 ms for the same counters computed
+ * by the database. It could not complete inside nginx's 60 s read timeout, and
+ * a dashboard that could not load its statistics displayed them as ZERO.
+ *
+ * Counts now come from one aggregation and rows from one projected, sorted,
+ * limited query — both against canonical `hiring_jobs`, both computed fresh on
+ * every request. Nothing is cached and no number is remembered between calls.
+ *
+ * ═══ FAILURE IS NOT ZERO ═══
+ *
+ * A storage failure THROWS out of here. It must not be flattened into
+ * `{ total: 0 }`, because the caller cannot then tell "the corpus is empty"
+ * from "the corpus could not be read" — and those two rendered identically is
+ * precisely the incident this function caused.
+ */
 export async function getJobAdminOverview(query?: string) {
-  const jobs = await getHiringJobs();
-  const q = (query || '').toLowerCase().trim();
-  const filtered = q
-    ? jobs.filter((j) => `${j.title} ${j.organizationName} ${j.location || ''} ${j.department || ''}`.toLowerCase().includes(q))
-    : jobs;
+  const [counts, rows] = await Promise.all([
+    selectJobAdminCounts(),
+    selectJobAdminPage(query, 500),
+  ]);
+
+  /* `null` means the storage layer could not answer. Throwing propagates that
+     to the route, which turns it into a non-2xx the UI is now obliged to
+     render as an error state rather than as zeros. */
+  if (!counts || !rows) throw new Error('job admin overview unavailable');
+
+  /* ═══ ONE GROUPED READ FOR THE WHOLE PAGE ═══
+
+     Counts for the rows this page returns, resolved in a single pass over the
+     application store. Asking per row would re-read the entire store once per
+     job to answer one screen.
+
+     This THROWS if the application store cannot be read, deliberately: it
+     propagates to the route and becomes an error the dashboard renders as an
+     error. A caught failure would show "0 applications" on every job at once —
+     the precise failure this codebase was already bitten by with TOTAL 0.
+     Zero applications and an unreadable store are different facts. */
+  const applications = await getApplicationCountsForJobs(rows.map((j) => String(j.id)));
+
   return {
-    stats: {
-      total: jobs.length,
-      published: jobs.filter((j) => j.status === 'published').length,
-      draft: jobs.filter((j) => j.status === 'draft').length,
-      closed: jobs.filter((j) => j.status === 'closed').length,
-      scraped: jobs.filter((j) => j.source === 'scraper').length,
-    },
-    jobs: filtered
-      .slice()
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 500)
-      .map((j) => ({
-        id: j.id, title: j.title, organizationName: j.organizationName, location: j.location || '',
-        employmentType: j.employmentType || '', workMode: j.workMode || '', experienceLevel: j.experienceLevel || '',
-        status: j.status, source: j.source || 'hiring', applyUrl: j.applyUrl || '', createdAt: j.createdAt,
-      })),
+    stats: counts,
+    jobs: rows.map((j) => ({
+      id: j.id, title: j.title, organizationName: j.organizationName, location: j.location || '',
+      employmentType: j.employmentType || '', workMode: j.workMode || '', experienceLevel: j.experienceLevel || '',
+      status: j.status, source: j.source || 'hiring', applyUrl: j.applyUrl || '', createdAt: j.createdAt,
+      /* Aggregates only. No application record and no candidate detail
+         ever leaves this function. */
+      applications: applications.get(String(j.id))?.total ?? 0,
+      activeApplicants: applications.get(String(j.id))?.active ?? 0,
+    })),
   };
 }

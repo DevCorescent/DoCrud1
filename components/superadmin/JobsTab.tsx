@@ -20,6 +20,10 @@ type JobRow = {
   id: string; title: string; organizationName: string; location: string;
   employmentType: string; workMode: string; experienceLevel: string;
   status: string; source: string; applyUrl: string; createdAt: string;
+  /** Exact count of application records, including withdrawn. */
+  applications?: number;
+  /** Applications excluding withdrawn. */
+  activeApplicants?: number;
 };
 type Stats = { total: number; published: number; draft: number; closed: number; scraped: number };
 type ImportSummary = {
@@ -65,7 +69,8 @@ type RunStatus = {
   error: string | null;
 };
 
-type ScraperStatus = { mode: 'internal' | 'unconfigured'; configured: boolean; sourceNames: string[]; sources: SourceInfo[]; lastRun: ScraperRun | null };
+type ScraperStatus = { mode: 'internal' | 'unconfigured'; configured: boolean; sourceNames: string[]; sources: SourceInfo[];
+  verifiedCount: number | null; verifiedNotEnabled: number | null; lastRun: ScraperRun | null };
 type ScrapeSummary = { sources: number; sourcesOk?: number; fetched: number; valid: number; duplicates: number; imported: number; rejected: number; failed: number;
   discovered?: number; inserted?: number; updated?: number; unchanged?: number; contentChanged?: number;
   existingUnknown?: number; duplicateInRun?: number; truncated?: number;
@@ -91,6 +96,9 @@ const STATE_TONE: Record<SourceState, { dot: string; text: string; label: string
 
 export default function JobsTab() {
   const [stats, setStats] = useState<Stats | null>(null);
+  /* Non-empty when the last overview request failed. Never cleared by a
+     failure — only by a subsequent SUCCESSFUL load. */
+  const [statsErr, setStatsErr] = useState('');
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -129,14 +137,48 @@ export default function JobsTab() {
     return !q || s.label.toLowerCase().includes(q) || s.provider.toLowerCase().includes(q);
   });
 
+  /**
+   * ═══ A FAILED LOAD MUST NEVER RENDER AS ZERO ═══
+   *
+   * This used to be `if (r.ok) { setStats(...) }` with `catch { /* ignore *\/ }`,
+   * and `stats` starts as null while every counter renders `stats?.total ?? 0`.
+   * So ANY failure painted TOTAL 0 / PUBLISHED 0 / SCRAPED 0 — which is exactly
+   * what a production database holding 7,105 jobs displayed, because the
+   * overview read could not finish inside nginx's 60 s timeout.
+   *
+   * ERROR IS NOT ZERO. A failure now sets an explicit error, and — critically —
+   * LEAVES ANY PREVIOUSLY LOADED FIGURES IN PLACE. A transient refresh failure
+   * must not wipe numbers that were true a moment ago; showing stale-but-real
+   * counts beside an error is strictly better than replacing them with a
+   * fiction.
+   */
   const load = useCallback(async () => {
     setLoading(true);
+    setStatsErr('');
     try {
       const r = await fetch(`/api/super-admin/jobs?query=${encodeURIComponent(query)}`);
-      const d = await r.json();
-      if (r.ok) { setStats(d.stats); setJobs(Array.isArray(d.jobs) ? d.jobs : []); }
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
+      const raw = await r.text().catch(() => '');
+      let d: { stats?: Stats; jobs?: unknown; error?: string } | null = null;
+      try { d = raw ? JSON.parse(raw) : null; } catch { d = null; }
+
+      if (!r.ok || !d?.stats) {
+        /* A proxy timeout arrives as a non-JSON gateway page. Naming it is the
+           difference between "the server is slow" and "there are no jobs". */
+        const gateway = d === null && (r.status === 502 || r.status === 503 || r.status === 504);
+        setStatsErr(
+          gateway
+            ? `Unable to load job statistics — the request timed out at the proxy (HTTP ${r.status}). The figures below, if any, are from the last successful load.`
+            : (d?.error
+                ? `Unable to load job statistics: ${d.error}`
+                : `Unable to load job statistics (HTTP ${r.status}).`),
+        );
+        return;                       // previous stats/jobs deliberately kept
+      }
+      setStats(d.stats);
+      setJobs(Array.isArray(d.jobs) ? d.jobs : []);
+    } catch {
+      setStatsErr('Unable to load job statistics — the request did not complete.');
+    } finally { setLoading(false); }
   }, [query]);
 
   useEffect(() => { void load(); }, [load]);
@@ -273,10 +315,21 @@ export default function JobsTab() {
     finally { setBusy(''); }
   };
 
-  const stat = (label: string, value: number, color: string) => (
+  /**
+   * A counter.
+   *
+   * `value` is `number | null`, and null renders an em dash. That type is the
+   * whole fix: the old signature took a plain `number`, so the only way to
+   * render "not loaded" was to pass 0 — and a dashboard cannot distinguish a
+   * zero it measured from a zero it invented. An unknown value must LOOK
+   * unknown.
+   */
+  const stat = (label: string, value: number | null, color: string) => (
     <div className={CARD}>
       <div className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${color}`}>{value}</div>
+      <div className={`mt-1 text-2xl font-bold ${value === null ? 'text-zinc-600' : color}`}>
+        {value === null ? '—' : value.toLocaleString()}
+      </div>
     </div>
   );
 
@@ -288,12 +341,28 @@ export default function JobsTab() {
       </div>
 
       {/* Stats */}
+      {/* A failed overview read is stated plainly. Any figures still shown
+          below are from the last SUCCESSFUL load and are labelled as such —
+          they are never replaced with zeros. */}
+      {statsErr && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+          <span className="flex-1">{statsErr}</span>
+          <button
+            type="button"
+            onClick={() => { void load(); }}
+            disabled={loading}
+            className="rounded-md border border-amber-400/40 px-2 py-1 font-semibold text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
+          >
+            {loading ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {stat('Total', stats?.total ?? 0, 'text-white')}
-        {stat('Published', stats?.published ?? 0, 'text-emerald-400')}
-        {stat('Draft', stats?.draft ?? 0, 'text-amber-400')}
-        {stat('Closed', stats?.closed ?? 0, 'text-zinc-400')}
-        {stat('Scraped', stats?.scraped ?? 0, 'text-sky-400')}
+        {stat('Total', stats?.total ?? null, 'text-white')}
+        {stat('Published', stats?.published ?? null, 'text-emerald-400')}
+        {stat('Draft', stats?.draft ?? null, 'text-amber-400')}
+        {stat('Closed', stats?.closed ?? null, 'text-zinc-400')}
+        {stat('Scraped', stats?.scraped ?? null, 'text-sky-400')}
       </div>
 
       {/* Job Scraper — runs INSIDE DoCrud against approved public job APIs
@@ -303,13 +372,13 @@ export default function JobsTab() {
           <div className="text-sm font-semibold text-white">Job Scraper</div>
           <span className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${scraper?.configured ? 'text-emerald-400' : 'text-zinc-500'}`}>
             <span className={`h-1.5 w-1.5 rounded-full ${scraper?.configured ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-            {scraper?.configured ? 'Active' : 'No approved sources'}
+            {scraper?.configured ? 'Active' : 'No sources enabled'}
           </span>
         </div>
 
         {!scraper?.configured ? (
           <p className="mt-2 text-[12px] text-zinc-500">
-            No approved sources are configured. Set{' '}
+            No sources are enabled. Set{' '}
             <span className="font-mono text-zinc-400">GREENHOUSE_BOARDS</span>,{' '}
             <span className="font-mono text-zinc-400">ASHBY_JOB_BOARDS</span> and/or{' '}
             <span className="font-mono text-zinc-400">LEVER_COMPANIES</span> on the server (public APIs, no secret), or use manual CSV import below.
@@ -318,7 +387,29 @@ export default function JobsTab() {
           <>
             {/* Dashboard */}
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div className={CARD}><div className="text-[10px] uppercase tracking-wide text-zinc-500">Approved sources</div><div className="mt-1 text-xl font-bold text-white">{scraper.sources.filter((s) => s.enabled).length}</div></div>
+              {/* ═══ "ENABLED", NOT "APPROVED" ═══
+                  The number here has always been the count of boards present in
+                  the ENVIRONMENT — the boards a run will actually fetch. That is
+                  the right number, but "Approved sources: 2" read as "only two
+                  boards exist", while 87 had been verified and were simply not
+                  switched on. The label now says which of the two things it
+                  means, and the verified total sits beside it so the difference
+                  is visible rather than inferred. */}
+              <div className={CARD}>
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Enabled sources</div>
+                <div className="mt-1 text-xl font-bold text-white">{scraper.sources.filter((s) => s.enabled).length}</div>
+                {/* null = the inventory file could not be read. Shown as nothing
+                    at all rather than as 0 verified, which would be a claim the
+                    server cannot support. */}
+                {scraper.verifiedCount !== null && (
+                  <div className="mt-0.5 text-[10px] font-semibold text-zinc-500">
+                    {scraper.verifiedCount} verified
+                    {(scraper.verifiedNotEnabled ?? 0) > 0 && (
+                      <span className="text-amber-400/70"> · {scraper.verifiedNotEnabled} not enabled</span>
+                    )}
+                  </div>
+                )}
+              </div>
               {/* DISCOVERED is what the sources returned; INSERTED is what was
                   written. They are different facts, and showing only "found"
                   and "imported" made a fully up-to-date board — everything
@@ -654,6 +745,10 @@ export default function JobsTab() {
                   <th className="px-2 py-2 font-medium">Type</th>
                   <th className="px-2 py-2 font-medium">Mode</th>
                   <th className="px-2 py-2 font-medium">Exp</th>
+                  {/* Exact counts from actual application records — never a
+                      recommendation count, a view count or an estimate. */}
+                  <th className="px-2 py-2 font-medium" title="All application records, including withdrawn">Apps</th>
+                  <th className="px-2 py-2 font-medium" title="Applications excluding withdrawn">Active</th>
                   <th className="px-2 py-2 font-medium">Status</th>
                   <th className="px-2 py-2 font-medium">Source</th>
                   <th className="px-2 py-2 font-medium">Created</th>
@@ -668,6 +763,10 @@ export default function JobsTab() {
                     <td className="px-2 py-2 text-zinc-400">{j.employmentType || '—'}</td>
                     <td className="px-2 py-2 text-zinc-400">{j.workMode || '—'}</td>
                     <td className="px-2 py-2 text-zinc-400">{j.experienceLevel || '—'}</td>
+                    {/* A real measured zero. The request fails loudly rather
+                        than reaching here with a fabricated 0 — see load(). */}
+                    <td className="px-2 py-2 tabular-nums text-white">{j.applications ?? 0}</td>
+                    <td className="px-2 py-2 tabular-nums text-zinc-400">{j.activeApplicants ?? 0}</td>
                     <td className="px-2 py-2">
                       <span className={j.status === 'published' ? 'text-emerald-400' : j.status === 'draft' ? 'text-amber-400' : 'text-zinc-500'}>{j.status}</span>
                     </td>

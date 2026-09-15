@@ -43,6 +43,32 @@ export interface CompanyExplorerEntry {
    * shows initials.
    */
   websiteUrl?: string;
+
+  /* ── Operator-supplied company metadata ─────────────────────────────────
+     Every field here is TYPED IN BY A HUMAN. Nothing is derived, inferred or
+     fetched, for the same reason `websiteUrl` is not: no configured ATS
+     provider reports company firmographics, and guessing produces confident
+     wrong answers. A field left blank stays blank.
+
+     Deliberately ABSENT, and not to be added without a real source:
+     employee count, employee range, size band. The Phase 4 audit established
+     that no configured provider exposes them, and they must never be inferred
+     from job volume — a company with 1,214 open postings has 1,214 open
+     postings, which says nothing about its headcount. */
+
+  /** e.g. "FinTech", "Cybersecurity". Free text: no taxonomy is imposed. */
+  industry?: string;
+  /**
+   * Where the company is headquartered, as the operator states it.
+   *
+   * NEVER derived from job locations. A company with postings in twelve cities
+   * is not headquartered in the busiest one, and an office is not a head office.
+   */
+  headquarters?: string;
+  /** When a human last edited the metadata above. Provenance, not display. */
+  metadataUpdatedAt?: string;
+  /** Who edited it. An identity, never session material. */
+  metadataUpdatedBy?: string;
 }
 
 export interface CompanyExplorerConfig {
@@ -139,6 +165,16 @@ export function normalizeCompanyExplorerConfig(raw: unknown): CompanyExplorerCon
     if (!id || seen.has(id)) continue;
     seen.add(id);
     const website = String(e.websiteUrl ?? '').trim();
+    /* Trimmed, length-capped, and stored only when non-empty. A cap keeps one
+       pasted article out of a document the homepage reads on every request;
+       an empty string is dropped rather than persisted as a value that every
+       reader then has to test for. */
+    const text = (value: unknown, max: number): string => String(value ?? '').trim().slice(0, max);
+    const industry = text(e.industry, 80);
+    const headquarters = text(e.headquarters, 120);
+    const updatedAt = text(e.metadataUpdatedAt, 40);
+    const updatedBy = text(e.metadataUpdatedBy, 160);
+
     items.push({
       id,
       name: String(e.name ?? '').trim() || id,
@@ -150,6 +186,12 @@ export function normalizeCompanyExplorerConfig(raw: unknown): CompanyExplorerCon
       /* Absent means visible: a config written before this field existed should
          show its companies, not silently hide them all. */
       visible: e.visible !== false,
+      ...(industry ? { industry } : {}),
+      ...(headquarters ? { headquarters } : {}),
+      /* Only stored when it parses. A malformed stamp would be worse than none:
+         it reads as provenance while proving nothing. */
+      ...(updatedAt && Number.isFinite(Date.parse(updatedAt)) ? { metadataUpdatedAt: updatedAt } : {}),
+      ...(updatedBy ? { metadataUpdatedBy: updatedBy } : {}),
     });
   }
 

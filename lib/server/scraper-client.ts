@@ -19,6 +19,7 @@ import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { importJobsFromCsv } from '@/lib/server/job-import';
 import { countPublishedJobs } from '@/lib/server/db/hiring-jobs-collection';
 import type { SourceRunStat } from '@/lib/server/job-scraper/types';
+import { summariseInventory, isVerifiedBoard } from '@/lib/server/job-sources/verified-inventory';
 
 export interface SourceInfo {
   name: string;
@@ -38,6 +39,14 @@ export interface SourceInfo {
    */
   websiteUrl: string;
   enabled: boolean;
+  /**
+   * This board was confirmed against its live endpoint by the source probe.
+   *
+   * Independent of `enabled`: verified says "we know this board works",
+   * enabled says "this run will fetch it". A verified board that is not
+   * enabled is switched off on purpose, not broken.
+   */
+  verified: boolean;
   lastSyncAt?: string;
   jobs?: number;
   failed?: boolean;
@@ -55,6 +64,15 @@ export interface ScraperStatus {
   configured: boolean;
   sourceNames: string[];
   sources: SourceInfo[];
+  /**
+   * Boards in the verified inventory, and how many of them are NOT enabled.
+   *
+   * `null` means the inventory file could not be read — reported as "unknown"
+   * rather than as zero, because a deployment missing the file must not make
+   * the console claim no board was ever verified.
+   */
+  verifiedCount: number | null;
+  verifiedNotEnabled: number | null;
   lastRun: ScraperRunSummary | null;
 }
 
@@ -102,6 +120,7 @@ export async function getScraperStatus(): Promise<ScraperStatus> {
     logoUrl: logos.get(logoKey(s.label || s.name))?.logoUrl ?? '',
     websiteUrl: websiteFor(configuredWebsites, s.label || s.name) ?? '',
     enabled: s.enabled,
+    verified: isVerifiedBoard(s.name),
     lastSyncAt: perSource[s.name]?.lastSyncAt,
     jobs: perSource[s.name]?.jobs,
     failed: perSource[s.name]?.failed,
@@ -111,11 +130,17 @@ export async function getScraperStatus(): Promise<ScraperStatus> {
     lastErrorStatus: perSource[s.name]?.lastErrorStatus,
     consecutiveFailures: perSource[s.name]?.consecutiveFailures,
   }));
+  /* Counted from the SAME registry list the scraper fetches from, so "enabled"
+     on this screen and "will be fetched" by a run cannot disagree. */
+  const inventory = summariseInventory(all.map((s) => s.name));
+
   return {
     mode: enabled.length > 0 ? 'internal' : 'unconfigured',
     configured: enabled.length > 0,
     sourceNames: enabled.map((s) => s.name),
     sources,
+    verifiedCount: inventory.verified,
+    verifiedNotEnabled: inventory.verifiedNotEnabled,
     lastRun: (state as { lastRun?: ScraperRunSummary }).lastRun ?? null,
   };
 }

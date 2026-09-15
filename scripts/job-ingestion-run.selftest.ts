@@ -276,13 +276,24 @@ async function main() {
       deps: spyDeps, now: NOW, commit: false, ...store(), deadlineAt: Date.now() - 1,
     });
     check('an expired budget starts no source at all', attempted.length === 0);
-    check('and every source is reported skipped for time',
-      none.deadlineSkipped === none.sources && none.sources > 0,
-      `${none.deadlineSkipped}/${none.sources}`);
+    /* Every FETCHABLE source is reported skipped for time. The count is not
+       `none.sources`: the registry also carries the partnership-blocked entries,
+       and those report `requires_partnership` whatever the clock says — see
+       scripts/skip-reason-precedence.selftest.ts. Asserting the totals were
+       equal is what let a run of 93 structurally-unavailable sources read as
+       "ran out of time" in production. */
+    const fetchable = none.perSource.filter((r) => r.skipReason === 'deadline');
+    check('and every fetchable source is reported skipped for time',
+      none.deadlineSkipped === fetchable.length && fetchable.length === 3,
+      `${none.deadlineSkipped} deadline of ${none.sources} sources`);
+    check('the blocked sources are not counted as a timing problem',
+      none.perSource.filter((r) => r.skipReason === 'requires_partnership').length
+        === none.sources - fetchable.length);
     check('a source skipped for time is NOT a failure', none.failed === 0);
     /* The point of skipped-not-failed: the caller leaves prior state alone. */
     check('and every one is marked skipped so its state is left untouched',
-      none.perSource.every((r) => r.skipped && r.skipReason === 'deadline'));
+      none.perSource.every((r) => r.skipped)
+      && none.perSource.every((r) => r.skipReason === 'deadline' || r.skipReason === 'requires_partnership'));
     check('an untouched run does not move the cursor',
       none.nextStartAfterSourceId === undefined);
 

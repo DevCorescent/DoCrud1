@@ -94,6 +94,23 @@ const STATE_TONE: Record<SourceState, { dot: string; text: string; label: string
   never: { dot: 'bg-zinc-600', text: 'text-zinc-500', label: 'Never synced' },
 };
 
+/* Why a source produced nothing, in words an operator can act on.
+
+   `deadline` means "this run ran out of time" — more budget would have helped.
+   The others mean "this source cannot be fetched at all", and conflating the
+   two is what sent a production investigation after a timeout that was never
+   the cause. The wording keeps them visibly different. */
+function skipLabel(reason: string | null): string {
+  switch (reason) {
+    case 'requires_partnership': return 'not ingested — requires partnership';
+    case 'disabled': return 'not ingested — disabled';
+    case 'auto_disabled': return 'not ingested — auto-disabled after repeated failures';
+    case 'rate_limited': return 'not ingested — rate limited';
+    case 'deadline': return 'skipped — run ran out of time';
+    default: return reason ? `skipped (${reason})` : 'skipped';
+  }
+}
+
 export default function JobsTab() {
   const [stats, setStats] = useState<Stats | null>(null);
   /* Non-empty when the last overview request failed. Never cleared by a
@@ -492,7 +509,7 @@ export default function JobsTab() {
                         </span>
                         <span className="text-zinc-300">{src.sourceId}</span>
                         {src.skipped
-                          ? <span className="text-zinc-500">skipped{src.skipReason ? ` (${src.skipReason})` : ''}</span>
+                          ? <span className="text-zinc-500">{skipLabel(src.skipReason)}</span>
                           : <span className="text-zinc-500">
                               {src.discovered} found · {src.inserted} new · {src.updated} updated · {Math.round(src.durationMs / 1000)}s
                             </span>}

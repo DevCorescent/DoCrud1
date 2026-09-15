@@ -125,8 +125,12 @@ function ordering() {
      must therefore be dynamic imports. */
   check('the lease is imported dynamically, after the env load',
     /await import\('@\/lib\/server\/job-sources\/run-lock'\)/.test(worker));
-  check('the ingestion pipeline is imported dynamically too',
-    /await import\('@\/lib\/server\/job-sources\/run-ingestion'\)/.test(worker));
+  /* The worker now enters the pipeline through `scraper-client`, which carries
+     the resume bookkeeping (deadline, rotation cursor, per-source cursors) the
+     direct `run-ingestion` call used to skip. It is still a config-touching
+     module, so it must still be imported AFTER the environment is loaded. */
+  check('the ingestion entrypoint is imported dynamically too',
+    /await import\('@\/lib\/server\/scraper-client'\)/.test(worker));
   check('there is no static import of any @/lib module',
     !/^import\s[^\n]*from\s+'@\/lib/m.test(worker));
   check('the env load happens before the lease is acquired',

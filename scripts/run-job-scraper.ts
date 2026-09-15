@@ -23,7 +23,12 @@
  *     failed sources — reproduced in scripts/job-scraper-worker.selftest.ts.
  *
  * A worker has neither constraint: no proxy in front of it and no request
- * ceiling, so it passes NO deadline at all and the source loop always runs.
+ * ceiling. It is NOT unbounded, though — `TimeoutStartSec` in the systemd unit
+ * is a hard execution window, and every write in a run happens after the source
+ * loop, so a kill mid-loop loses the entire pass. This worker therefore runs on
+ * an explicit budget SMALLER than that timeout, stops reading new sources while
+ * there is still time to persist, and resumes from where it stopped on the next
+ * invocation. See DEFAULT_BUDGET_MS and the call into `runCanonicalIngest`.
  *
  * ═══ WHAT IT DELIBERATELY DOES NOT DO ═══
  *
@@ -51,6 +56,15 @@ import { loadAppEnvOrThrow } from './load-env';
 import { randomUUID } from 'crypto';
 import { hostname } from 'os';
 
+/**
+ * The worker's execution window, in milliseconds.
+ *
+ * Paired with `TimeoutStartSec=840` in ops/systemd/docrud-job-scraper.service:
+ * this must be comfortably SMALLER, so the run stops on its own terms and
+ * persists, rather than being killed with everything still in memory.
+ */
+export const DEFAULT_BUDGET_MS = 780_000;
+
 /** Structured, greppable, and free of anything secret. */
 function log(fields: Record<string, string | number | boolean | undefined>): void {
   const parts = Object.entries(fields)
@@ -63,10 +77,15 @@ function parseArgs(argv: readonly string[]) {
   let limit: number | undefined;
   let trigger = 'manual';
   let runId: string | undefined;
+  let budgetMs: number | undefined;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--limit' && argv[i + 1]) {
       const n = Number(argv[i + 1]);
       if (Number.isFinite(n) && n > 0) limit = Math.floor(n);
+      i += 1;
+    } else if (argv[i] === '--budget-ms' && argv[i + 1]) {
+      const n = Number(argv[i + 1]);
+      if (Number.isFinite(n) && n > 0) budgetMs = Math.floor(n);
       i += 1;
     } else if (argv[i] === '--run-id' && argv[i + 1]) {
       /* Validated, not trusted: this reaches a storage key and a log line. */
@@ -79,11 +98,11 @@ function parseArgs(argv: readonly string[]) {
       i += 1;
     }
   }
-  return { limit, trigger, runId };
+  return { limit, trigger, runId, budgetMs };
 }
 
 async function main(): Promise<number> {
-  const { limit, trigger, runId: providedRunId } = parseArgs(process.argv.slice(2));
+  const { limit, trigger, runId: providedRunId, budgetMs: budgetArg } = parseArgs(process.argv.slice(2));
 
   /* The same `.env*` resolution the Next.js server performs, so the worker
      scrapes EXACTLY the boards the dashboard lists and writes to EXACTLY the
@@ -102,6 +121,21 @@ async function main(): Promise<number> {
     ],
   });
   log({ event: 'env', files: env.loadedFiles.join(',') || '(none)' });
+
+  /* ═══ THE EXECUTION WINDOW ═══
+
+     MUST stay below the unit's `TimeoutStartSec` (840 s), because the run has
+     to finish AND persist while the process is still alive — a kill at the
+     systemd boundary loses the whole pass. 780 s leaves a minute of headroom
+     for the final writes to land and the lease to be released.
+
+     Overridable for a one-off longer or shorter run, but the default is the
+     one that matches the installed unit. If the unit's timeout is ever raised,
+     raise this too — and never above it. */
+  const envBudget = Number(process.env.SCRAPER_BUDGET_MS);
+  const budgetMs = budgetArg
+    ?? (Number.isFinite(envBudget) && envBudget > 0 ? envBudget : DEFAULT_BUDGET_MS);
+  log({ event: 'budget', budgetMs, source: budgetArg ? 'flag' : (process.env.SCRAPER_BUDGET_MS ? 'env' : 'default') });
 
   /* Imported only now — after the environment exists. */
   const {
@@ -193,16 +227,48 @@ async function main(): Promise<number> {
   if (typeof heart.unref === 'function') heart.unref();
 
   try {
-    const { runCanonicalIngestion } = await import('@/lib/server/job-sources/run-ingestion');
+    const { runCanonicalIngest } = await import('@/lib/server/scraper-client');
 
-    /* ═══ NO `deadlineAt` — THIS IS THE POINT OF THE WORKER ═══
-       The admin route must pass one because the platform will kill the request
-       at 300 s. Nothing kills this process, so the source loop is never starved
-       by a slow corpus load and `discovered: 0` cannot be produced by the
-       clock. Runtime is bounded by systemd's own timeout instead. */
-    const out = await runCanonicalIngestion({
-      ...(limit ? { perSourceLimit: limit } : {}),
+    /* ═══ THE WORKER IS BOUNDED, AND MUST KNOW IT ═══
+
+       This previously called `runCanonicalIngestion` DIRECTLY with no deadline,
+       reasoning that "nothing kills this process". That was wrong in three
+       ways, and a full 87-source run proved all three at once by being killed
+       at ~14 minutes with no `event=complete` and nothing persisted:
+
+         1. systemd DOES kill it. `TimeoutStartSec=840` is a hard execution
+            window, so the worker is exactly as bounded as the HTTP route was —
+            it just had no idea. Every write in a run happens AFTER the source
+            loop, so a kill mid-loop loses the ENTIRE pass: no jobs, no
+            per-source state, no cursors, no timestamps.
+
+         2. Without a deadline the loop never stops voluntarily, so it can never
+            reach the write it was killed before performing. The mechanism to
+            stop early and persist already existed and was simply unused.
+
+         3. Calling the pipeline directly skipped the resume bookkeeping that
+            lives in `runCanonicalIngest`: the round-robin cursor and the
+            per-source resume tokens were never loaded and never saved. With 87
+            sources and a window that fits only some of them, the worker
+            re-read the head of the list on every invocation and could never
+            reach the tail.
+
+       Routing through `runCanonicalIngest` fixes all three: it sizes a
+       persistence reserve against the corpus, sets `deadlineAt`, resumes after
+       the last attempted source, restores each source's cursor, and writes the
+       state back. A run that cannot fit 87 sources now covers what it can and
+       the NEXT run continues from there — instead of losing everything.
+
+       The budget is deliberately SHORTER than the systemd timeout: the run must
+       finish and persist while the process is still alive. */
+    const summary = await runCanonicalIngest({
+      budgetMs,
+      ...(limit ? { totalLimit: limit } : {}),
     });
+    /* The unflattened summary: per-source skip reasons, write breakdown,
+       deadlineSkipped and seenStamped — the fields the journal needs. */
+    const out = summary.raw;
+    if (!out) throw new Error('scraper run returned no detailed summary');
 
     for (const s of out.perSource) {
       if (s.skipped && s.skipReason === 'requires_partnership') continue;
@@ -298,9 +364,31 @@ async function main(): Promise<number> {
   }
 }
 
-main()
-  .then((code) => { process.exitCode = code; })
-  .catch((error) => {
-    log({ event: 'startup_error', error: error instanceof Error ? error.message : 'unknown' });
-    process.exitCode = 1;
-  });
+/**
+ * ═══ ONLY WHEN INVOKED DIRECTLY ═══
+ *
+ * This module used to call `main()` at import time, so merely importing it —
+ * to read a constant, say — STARTED A REAL SCRAPE: it loaded production
+ * environment, took the Mongo lease, and began fetching boards. That happened:
+ * a self-test importing DEFAULT_BUDGET_MS acquired the lease and ran for five
+ * minutes before being killed. Nothing was written (the run died before the
+ * post-loop write) and the lease self-expired on its TTL, but the module has no
+ * business doing any of that unless it was actually run.
+ *
+ * `process.argv[1]` is the script the runtime was pointed at. Comparing against
+ * it works under `npx tsx scripts/run-job-scraper.ts`, which is how both systemd
+ * and an operator invoke it, and is false for any import.
+ */
+const invokedDirectly = (() => {
+  const entry = process.argv[1] ?? '';
+  return entry.endsWith('run-job-scraper.ts') || entry.endsWith('run-job-scraper.js');
+})();
+
+if (invokedDirectly) {
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((error) => {
+      log({ event: 'startup_error', error: error instanceof Error ? error.message : 'unknown' });
+      process.exitCode = 1;
+    });
+}

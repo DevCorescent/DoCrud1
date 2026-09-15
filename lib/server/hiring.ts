@@ -9,7 +9,11 @@ import {
 import { invalidateRecommendationCaches } from '@/lib/server/recommendation-cache';
 import { invalidateHiringCompanies } from '@/lib/server/hiring-companies';
 import { writeHiringJobs, retireHiringJobById } from '@/lib/server/hiring-write';
-import { selectAllJobDocs, selectJobDocById } from '@/lib/server/db/hiring-jobs-collection';
+import {
+  selectAllJobDocs,
+  selectJobDocById,
+  selectPublishedJobSitemapRows,
+} from '@/lib/server/db/hiring-jobs-collection';
 import { invalidateNamespaces } from '@/lib/server/cache';
 import {
   countPublishedJobs, mirrorPublishedJobs, readHiringCorpusVersion,
@@ -293,6 +297,35 @@ type NamesCache = { value: string[]; ts: number };
 let namesCache: NamesCache | null = null;
 
 /** Every published posting as a listing card — see toPublicHiringJobListItem. */
+/**
+ * Published postings for the SITEMAP: id and timestamps only.
+ *
+ * The sitemap needs a URL and a `lastModified` per job and nothing else, but it
+ * was calling `getPublishedHiringJobList()` — full list rows for all 12,659
+ * published postings, measured at 75,968 ms and accounting for 95% of the whole
+ * sitemap's build cost. That is what timed out static generation of
+ * /sitemap.xml and failed the production build.
+ *
+ * Mirrors `getPublicFileTransfersForSitemap`, which already solved this for
+ * transfers: take the projected rows when the collection can serve them, and
+ * fall back to the existing ladder otherwise so an unavailable replica yields a
+ * slower sitemap and never one with the jobs missing.
+ */
+export async function getPublishedJobsForSitemap(
+  limit = 50_000,
+): Promise<Array<{ id: string; updatedAt?: string; createdAt?: string }>> {
+  const rows = await selectPublishedJobSitemapRows(limit).catch(() => null);
+  if (rows) return rows;
+  /* The collection could not answer. Fall back to the full list rather than
+     publishing a sitemap that has quietly lost every job URL. */
+  const list = await getPublishedHiringJobList();
+  return list.slice(0, limit).map((j) => ({
+    id: j.id,
+    updatedAt: (j as { updatedAt?: string }).updatedAt,
+    createdAt: (j as { createdAt?: string }).createdAt,
+  }));
+}
+
 export async function getPublishedHiringJobList(): Promise<PublicHiringJobListItem[]> {
   if (listCache && Date.now() - listCache.ts < PUBLISHED_PROBE_INTERVAL) return listCache.value;
 

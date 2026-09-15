@@ -19,6 +19,7 @@ import { getHomepageConfig } from '@/lib/server/homepage-config';
 import { importJobsFromCsv } from '@/lib/server/job-import';
 import { countPublishedJobs } from '@/lib/server/db/hiring-jobs-collection';
 import type { SourceRunStat } from '@/lib/server/job-scraper/types';
+import type { IngestionRunSummary } from '@/lib/server/job-sources/run-ingestion';
 import { summariseInventory, isVerifiedBoard } from '@/lib/server/job-sources/verified-inventory';
 
 export interface SourceInfo {
@@ -172,6 +173,20 @@ export interface ScrapeSummary {
   truncated: number;
   perSource: SourceRunStat[];
   runAt: string;
+  /**
+   * The untranslated run summary.
+   *
+   * `ScrapeSummary` exists to feed the admin screen and deliberately flattens
+   * the run: it has no per-source skip reason, no per-source write breakdown,
+   * no `deadlineSkipped` and no `seenStamped`. The systemd worker needs all of
+   * those for its journal — "which boards did this run not reach, and did
+   * anything actually get renewed" is the question an operator asks — so the
+   * original is carried through rather than widening the flattened shape or
+   * having the worker re-run the pipeline itself.
+   *
+   * Optional: the legacy CSV path does not produce one, and no UI reads it.
+   */
+  raw?: IngestionRunSummary;
 }
 
 /**
@@ -411,6 +426,7 @@ export async function runCanonicalIngest(
     truncated: out.truncated,
     perSource,
     runAt: out.runAt,
+    raw: out,
   };
 
   await saveScraperState({

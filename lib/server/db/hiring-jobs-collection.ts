@@ -982,3 +982,49 @@ export async function selectJobDocsByOrganizations(
     return null;
   }
 }
+
+/** The only fields a sitemap entry needs from a posting. */
+export type JobSitemapRow = { id: string; updatedAt?: string; createdAt?: string };
+
+/**
+ * Published postings, projected to the three fields the sitemap reads.
+ *
+ * ═══ WHY THIS EXISTS ═══
+ *
+ * `app/sitemap.ts` built its job URLs from `getPublishedHiringJobList()`, which
+ * returns full LIST rows — title, company, location, facets — for every
+ * published posting, to use exactly `id`, `updatedAt` and `createdAt`. Measured
+ * against the live corpus of 12,659 published jobs:
+ *
+ *   getPublishedHiringJobList()                       75,968 ms
+ *   this projection                                   21,824 ms   1.5 MB
+ *
+ * and the jobs read was 95% of the whole sitemap's cost — every other source on
+ * that page totals under four seconds. That is what made static generation of
+ * /sitemap.xml time out three times and fail the production build.
+ *
+ * This is the same fix `selectPublicFileTransferSitemapRows` above already
+ * applies, for the same reason: a list of URLs does not need the documents.
+ *
+ * `{ status: 'published' }` is served by the existing `open_status` index, so
+ * the remaining cost is transferring the rows, not finding them. No index is
+ * added here.
+ *
+ * Returns null when the collection cannot be read, never [] — the caller falls
+ * back rather than silently publishing a sitemap with no jobs in it.
+ */
+export async function selectPublishedJobSitemapRows(
+  limit = 50_000,
+): Promise<JobSitemapRow[] | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    const docs = await db.collection(COL)
+      .find(PUBLISHED, { projection: { _id: 0, id: 1, updatedAt: 1, createdAt: 1 } })
+      .limit(Math.max(1, Math.min(50_000, limit)))
+      .toArray();
+    return docs as unknown as JobSitemapRow[];
+  } catch {
+    return null;
+  }
+}

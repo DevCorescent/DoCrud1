@@ -173,7 +173,14 @@ check('the array pipeline still targets app_state',
     stages.includes('$limit') && !stages.includes('$count') && !stages.includes('$facet'));
 }
 check('it prefilters on status so an index can be used',
-  JSON.stringify(buildPublicJobsCollectionPipeline({})[0]) === JSON.stringify({ $match: { status: 'published' } }));
+  /* P2.9-A: the first stage now carries every index-safe predicate as a plain
+     `$and` — status first, then the active predicate and any plain filters —
+     and no `$expr`, which is what lets the planner bound an index scan. */
+  (() => {
+    const first = buildPublicJobsCollectionPipeline({})[0] as { $match?: { $and?: unknown[]; $expr?: unknown } };
+    const and = first.$match?.$and ?? [];
+    return JSON.stringify(and[0]) === JSON.stringify({ status: 'published' }) && first.$match?.$expr === undefined;
+  })());
 check('it sorts with the id tie-break, like the JS comparators',
   JSON.stringify(buildPublicJobsCollectionPipeline({})).includes('"id":1'));
 check('the projection emits fields in the SAME order, so bodies are identical',

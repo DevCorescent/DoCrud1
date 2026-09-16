@@ -54,6 +54,7 @@ import { createHash } from 'crypto';
 import type { HiringJobPosting } from '@/types/document';
 import { getMongoDb } from '@/lib/server/database';
 import { derivePublicSortKeys } from '@/lib/server/db/public-sort-keys';
+import { derivePublicIndiaBucket } from '@/lib/server/db/public-india-bucket';
 
 const COL = 'hiring_jobs';
 const PUBLISHED = { status: 'published' } as const;
@@ -518,7 +519,7 @@ export async function upsertHiringJobs(
          fields by the single shared function. Stamped on every write so a
          posting can never be indexed under a stale key. */
       const set: Record<string, unknown> = {
-        ...input.job, _id: id, [FP_FIELD]: fp, ...derivePublicSortKeys(input.job),
+        ...input.job, _id: id, [FP_FIELD]: fp, ...derivePublicSortKeys(input.job), ...derivePublicIndiaBucket(input.job),
       };
       /* Only stamp a position when the caller supplied one, so an update never
          moves a posting that the caller had no opinion about. */
@@ -732,7 +733,7 @@ export async function mirrorPublishedJobs(
             /* Sort keys stamped here too: this writer is rollback-only, but a
                rollback that produced keyless documents would break the feed
                ordering it was meant to restore. */
-            update: { $set: { ...job, _id: id, [ORDER_FIELD]: index, [FP_FIELD]: fp, ...derivePublicSortKeys(job) } },
+            update: { $set: { ...job, _id: id, [ORDER_FIELD]: index, [FP_FIELD]: fp, ...derivePublicSortKeys(job), ...derivePublicIndiaBucket(job) } },
             upsert: true,
           },
         });

@@ -60,6 +60,7 @@ import { cursorCondition, encodeCursor, type JobCursor } from '@/lib/server/db/p
 const CURSOR_KEY = '_cursorKey';
 import { publicFreshnessEnabled, publiclyFreshCond } from '@/lib/server/job-sources/freshness';
 import { indiaCityAliasEntries, delhiNcrCanonicals } from '@/lib/server/job-scraper/india';
+import { INDIA_BUCKET_FIELD } from '@/lib/server/db/public-india-bucket';
 
 const APP_STATE_KEY = 'json:data/hiring-jobs.json';
 const COL = 'app_state';
@@ -438,11 +439,155 @@ export async function selectPublicJobsPage(query: PublicJobQuery = {}): Promise<
  * `$facet` matters for correctness as much as latency: computing `total` in a
  * second query could observe a different corpus if a write landed between them.
  */
+/**
+ * The collection query, split into what an index can bound and what cannot.
+ *
+ * ═══ WHY TWO HALVES (P2.9-A) ═══
+ *
+ * `buildPublicJobsConditions` expresses every filter as `$expr`. That is the
+ * only form the app_state ARRAY pipeline can use, and it is semantically
+ * exact — but MongoDB cannot turn an `$expr` wrapped in `$toLower`/`$trim`
+ * into index bounds, so every filtered listing walked the sort index and
+ * evaluated the expression on each fetched document: 211 documents for a
+ * 20-row India page, 1,001 for remote India, 1,358 (704 ms) for Delhi NCR,
+ * and the WHOLE published corpus (12,659 documents, ~2 s) for any filter that
+ * matched nothing. Filtered counts examined every published row.
+ *
+ * The audit measured that the stored `workMode`, `employmentType`,
+ * `experienceLevel` and `domain` values are already lower-cased and trimmed
+ * (0 exceptions), and `country` is stored as upper-case ISO (all 5,766
+ * non-null rows). For those fields a plain equality is the SAME predicate the
+ * expression evaluated, spelled so the planner can bound an index scan with
+ * it. Everything the audit could not prove index-safe — search, location
+ * text, `state` (1,152 mixed-case values), `subDomain`, `city`, minSalary,
+ * freshness — stays in `$expr`, unchanged.
+ *
+ * ═══ THE INDIA CHIPS (P2.9-C) ═══
+ *
+ * `india` is `{ country: 'IN' }` — every Indian row, as P2B defined it. The
+ * other chips read the persisted `_indiaBucket` (public-india-bucket.ts),
+ * which is P2B's `$switch` computed once at write time; the backfill gate
+ * proves every published row carries the value the expression would compute
+ * before this predicate is served.
+ *
+ * ═══ ACTIVE, AS A PLAIN PREDICATE ═══
+ *
+ *   $ne [isActive, false]              ⇔  { isActive: { $ne: false } }
+ *   $eq [{$ifNull [expiresAt, '']}, ''] ⇔  { expiresAt: { $in: [null, ''] } }
+ *
+ * (`null` in a query matches a missing field as well as an explicit null.)
+ * Expressed plainly so a count over indexed predicates has no `$expr` left
+ * to force a per-document evaluation.
+ *
+ * The array pipeline and `buildPublicJobsConditions` are untouched; the
+ * equivalence and parity suites hold the two forms to identical result sets.
+ */
+export function buildPublicJobsMatch(
+  query: PublicJobQuery,
+  opts: PublicQueryOptions = {},
+): { plain: Record<string, unknown>[]; expr: unknown[] } {
+  const plain: Record<string, unknown>[] = [
+    { status: 'published' },
+    { isActive: { $ne: false } },
+    { expiresAt: { $in: [null, ''] } },
+  ];
+  const expr: unknown[] = [];
+  const ref = DOC_REF;
+
+  if (publicFreshnessEnabled()) expr.push(publiclyFreshCond(ref, opts.now ?? Date.now()));
+
+  const search = lower(query.search);
+  if (search && query.searchScope === 'card') {
+    expr.push({ $or: [
+      includesExpr(ref('title'), search),
+      includesExpr(ref('organizationName'), search),
+      includesExpr(ref('location'), search),
+    ] });
+  } else if (search) {
+    expr.push({ $or: [
+      includesExpr(ref('title'), search),
+      includesExpr(ref('organizationName'), search),
+      includesExpr(ref('description'), search),
+      { $anyElementTrue: { $map: { input: { $ifNull: [ref('preferredSkills'), []] }, as: 's', in: includesExpr('$$s', search) } } },
+    ] });
+  }
+
+  /* Index-safe equalities: the stored value is already what lowerExpr would
+     produce, so the wrapper is dropped and the comparison kept. */
+  const values = (v: unknown) => lower(v).split(',').map((x) => x.trim()).filter(Boolean);
+  const PLAIN_EQ: Array<[keyof PublicJobQuery, string]> = [
+    ['domain', 'domain'], ['workMode', 'workMode'],
+    ['employmentType', 'employmentType'], ['experienceLevel', 'experienceLevel'],
+  ];
+  for (const [param, field] of PLAIN_EQ) {
+    const wants = values(query[param]);
+    if (wants.length === 1) plain.push({ [field]: wants[0] });
+    else if (wants.length > 1) plain.push({ [field]: { $in: wants } });
+  }
+  /* Country is stored upper-case ISO; the request value was lower-cased by the
+     expression on both sides, so upper-casing it here compares the same pair. */
+  const countries = values(query.country).map((c) => c.toUpperCase());
+  if (countries.length === 1) plain.push({ country: countries[0] });
+  else if (countries.length > 1) plain.push({ country: { $in: countries } });
+
+  /* Not proven normalised — stays an expression. */
+  const EXPR_EQ: Array<[keyof PublicJobQuery, string]> = [['state', 'state'], ['subDomain', 'subDomain']];
+  for (const [param, field] of EXPR_EQ) {
+    const wants = values(query[param]);
+    if (wants.length === 1) expr.push({ $eq: [lowerExpr(ref(field)), literal(wants[0])] });
+    else if (wants.length > 1) expr.push({ $in: [lowerExpr(ref(field)), wants.map(literal)] });
+  }
+
+  const locText = lower(query.location);
+  if (locText) expr.push(includesExpr(ref('location'), locText));
+
+  const bucket = lower(query.indiaBucket);
+  if (bucket === 'india') plain.push({ country: 'IN' });
+  else if (bucket) plain.push({ [INDIA_BUCKET_FIELD]: bucket });
+
+  const city = lower(query.city);
+  if (city) expr.push({ $or: [{ $eq: [lowerExpr(ref('city')), literal(city)] }, includesExpr(ref('location'), city)] });
+
+  const minSalary = Number(query.minSalary);
+  if (Number.isFinite(minSalary) && minSalary > 0) {
+    expr.push({ $let: {
+      vars: { ceiling: { $ifNull: [ref('salaryMax'), { $ifNull: [ref('salaryMin'), null] }] } },
+      in: { $or: [{ $eq: ['$$ceiling', null] }, { $gte: ['$$ceiling', minSalary] }] },
+    } });
+  }
+  return { plain, expr };
+}
+
+/**
+ * P2.9-F — root the seek when the planner can exploit it, and only then.
+ *
+ * Rooted, `{$or: [{$and: [plain…, sk<v]}, {$and: [plain…, sk=v, id>i]}]}`
+ * gives the planner two independent, fully index-bounded scans it merges in
+ * order: every single-value deep page measured 21 keys with no in-memory sort,
+ * where the `$and: [plain…, {$or}]` form had let it choose an index
+ * intersection or walk a whole bucket (hybrid 422 keys; Bengaluru 296 with a
+ * SORT). With a multi-value `$in` among the plain FILTERS the opposite holds:
+ * the rooted form asks for `$in × branch` explosions the planner declines, and
+ * it fell back to an OR of two range scans plus a blocking sort — 2,271 keys
+ * on Atlas for `remote,hybrid`. The unrooted form of that shape walks the
+ * newest index bounded by selectivity (28–53 keys measured). So: root when
+ * every plain filter is a single equality, otherwise keep the conjunction.
+ * (The active predicate's `expiresAt: {$in: [null, '']}` is not a filter and
+ * does not count.) Both forms are the same predicate:
+ * `A ∧ (B ∨ C) ≡ (A ∧ B) ∨ (A ∧ C)`.
+ */
+function rootedSeek(plain: Record<string, unknown>[], seek: Record<string, unknown>): Record<string, unknown> {
+  const multiValued = plain.some((p) => !('expiresAt' in p)
+    && Object.values(p).some((v) => typeof v === 'object' && v !== null && '$in' in (v as Record<string, unknown>)));
+  if (multiValued) return { $and: [...plain, seek] };
+  return { $or: (seek.$or as Record<string, unknown>[]).map((branch) => ({ $and: [...plain, branch] })) };
+}
+
 export function buildPublicJobsCollectionPipeline(
   query: PublicJobQuery = {},
   opts: PublicQueryOptions = {},
 ): Record<string, unknown>[] {
-  const conds = buildPublicJobsConditions(query, DOC_REF, opts);
+  const { plain, expr } = buildPublicJobsMatch(query, opts);
   const { pageSize, skip } = pageParams(query.page, query.pageSize);
   const { direction } = sortKeyExpr(query.sort, DOC_REF);
 
@@ -456,8 +601,17 @@ export function buildPublicJobsCollectionPipeline(
     /* Indexable prefilter. Redundant with the $expr below on purpose: it is
        what lets an index be used at all, and it can never widen the result
        because the $expr repeats it. */
-    { $match: seek ? { status: 'published', ...seek } : { status: 'published' } },
-    { $match: { $expr: { $and: conds } } },
+    /* P2.9-F — the seek is ROOTED: the plain predicates are repeated inside
+       each cursor branch, so the planner sees two independent, fully
+       index-bounded scans ({status, X, sk<v} and {status, X, sk=v, id>i}) that
+       it merges in order. Written as `$and: [plain…, {$or}]`, the same
+       predicates left the planner free to choose an index intersection or to
+       walk a whole bucket and post-filter — measured on Atlas after the P2.9-B
+       indexes: hybrid deep page 422 keys, Bengaluru deep 296 keys with an
+       in-memory SORT. Rooted, every deep shape examines 21 keys and no plan
+       sorts. A pure logical distribution: `A ∧ (B ∨ C) ≡ (A ∧ B) ∨ (A ∧ C)`. */
+    { $match: seek ? rootedSeek(plain, seek) : { $and: plain } },
+    ...(expr.length ? [{ $match: { $expr: { $and: expr } } }] : []),
     /* Phase 2.7H: sort on the PERSISTED key rather than computing one.
        `$addFields` + a computed `$sort` forced MongoDB to derive a key for
        every match and sort them all in memory — 1,493 ms at 100K to return
@@ -564,10 +718,9 @@ export async function countPublicJobs(query: PublicJobQuery = {}): Promise<numbe
   const db = await getMongoDb();
   if (!db) return null;
   try {
-    const conds = buildPublicJobsConditions(query, DOC_REF);
+    const { plain, expr } = buildPublicJobsMatch(query);
     return await db.collection(HIRING_JOBS_COL).countDocuments({
-      status: 'published',
-      $expr: { $and: conds },
+      $and: expr.length ? [...plain, { $expr: { $and: expr } }] : plain,
     });
   } catch {
     return null;

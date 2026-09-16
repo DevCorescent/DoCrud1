@@ -9,6 +9,7 @@ tmp-logo-extract
 .env.*
 # Backfill change ledgers — operational rollback records, not source.
 data/india-backfill-ledger-*.json
+data/india-bucket-ledger-*.json
 data/history.json
 data/ats-reports.json
 data/mail-settings.json

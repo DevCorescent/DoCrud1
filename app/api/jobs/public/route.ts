@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     const rawCursor = q.get('cursor') ?? undefined;
     const query = {
       search: q.get('search') ?? undefined,
+      searchScope: q.get('searchScope') === 'card' ? 'card' as const : undefined,
       country: q.get('country') ?? undefined,
       state: q.get('state') ?? undefined,
       city: q.get('city') ?? undefined,
@@ -37,6 +38,8 @@ export async function GET(request: NextRequest) {
       workMode: q.get('workMode') ?? undefined,
       employmentType: q.get('employmentType') ?? undefined,
       experienceLevel: q.get('experienceLevel') ?? undefined,
+      indiaBucket: q.get('indiaBucket') ?? undefined,
+      location: q.get('location') ?? undefined,
       minSalary: q.get('minSalary') ?? undefined,
       sort: (q.get('sort') as 'newest' | 'relevance' | 'salary' | null) ?? undefined,
       page: q.get('page') ?? undefined,

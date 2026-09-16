@@ -59,6 +59,7 @@ import { cursorCondition, encodeCursor, type JobCursor } from '@/lib/server/db/p
 /** Internal: the sort value attached to each row so a cursor can be built. */
 const CURSOR_KEY = '_cursorKey';
 import { publicFreshnessEnabled, publiclyFreshCond } from '@/lib/server/job-sources/freshness';
+import { indiaCityAliasEntries, delhiNcrCanonicals } from '@/lib/server/job-scraper/india';
 
 const APP_STATE_KEY = 'json:data/hiring-jobs.json';
 const COL = 'app_state';
@@ -210,7 +211,23 @@ export function buildPublicJobsConditions(
   }
 
   const search = lower(query.search);
-  if (search) {
+  if (search && query.searchScope === 'card') {
+    /* ═══ THE JOBS PAGE'S SEARCH, MOVED INTO THE DATABASE ═══
+
+       Measured on the real corpus, the two scopes disagree badly:
+           "bengaluru"  card 624   default  57    (default never reads location)
+           "python"     card  15   default 1524   (default reads descriptions)
+       The Jobs page has always searched title + organisation + location; this
+       reproduces that exactly so the page can stop downloading the corpus to
+       do it in the browser. The default scope is untouched for its consumers. */
+    conds.push({
+      $or: [
+        includesExpr(ref('title'), search),
+        includesExpr(ref('organizationName'), search),
+        includesExpr(ref('location'), search),
+      ],
+    });
+  } else if (search) {
     conds.push({
       $or: [
         includesExpr(ref('title'), search),
@@ -236,8 +253,55 @@ export function buildPublicJobsConditions(
     ['employmentType', 'employmentType'], ['experienceLevel', 'experienceLevel'],
   ];
   for (const [param, field] of EQ) {
-    const want = lower(query[param]);
-    if (want) conds.push({ $eq: [lowerExpr(ref(field)), literal(want)] });
+    /* Several values, comma-separated, is the Jobs page's multi-select:
+       `filters.workMode.has(job.workMode)` over a Set. One value stays the
+       plain equality it always was. */
+    const wants = lower(query[param]).split(',').map((v) => v.trim()).filter(Boolean);
+    if (wants.length === 1) conds.push({ $eq: [lowerExpr(ref(field)), literal(wants[0])] });
+    else if (wants.length > 1) conds.push({ $in: [lowerExpr(ref(field)), wants.map(literal)] });
+  }
+
+  /* ═══ THE INDIA CHIPS, REPRODUCED — NOT REDEFINED ═══
+
+     `indiaBucket(location, workMode)` in job-scraper/india.ts is the single
+     definition. Its rules, in order: a remote India posting is `remote-india`
+     BEFORE any city is considered; otherwise the FIRST alias hit in CITY_CANON
+     order names the city; Delhi-NCR is a set of those canonicals.
+
+     Two deliberate departures, both approved after measurement:
+       · `india` / `remote-india` test the STORED country, not the location
+         text. The 8.1B backfill made stored classification authoritative, and
+         it sees 340 "Remote, in" postings the text test cannot.
+       · City buckets match location TEXT, not the stored `city` field, which
+         is unset on ~100 real Bengaluru/Pune postings (multi-city or stale). */
+  /* The Jobs page's location box: `location.includes(text)`, nothing more.
+     `city` above ALSO matches the stored city field, which makes it a superset
+     — "Bangalore, India" carries city=Bengaluru, and would match a search for
+     "bengaluru" that the page's own substring test does not. */
+  const locText = lower(query.location);
+  if (locText) conds.push(includesExpr(ref('location'), locText));
+
+  const bucket = lower(query.indiaBucket);
+  if (bucket) {
+    const remote = { $or: [
+      { $eq: [lowerExpr(ref('workMode')), literal('remote')] },
+      includesExpr(ref('location'), 'remote'),
+    ] };
+    const isIndia = { $eq: [ref('country'), literal('IN')] };
+    /* First alias wins, in table order — exactly `indiaCity`. */
+    const firstCity = { $switch: {
+      branches: indiaCityAliasEntries().map(([alias, canon]) => ({
+        case: includesExpr(ref('location'), alias), then: literal(canon.toLowerCase()),
+      })),
+      default: literal(''),
+    } };
+    if (bucket === 'india') conds.push(isIndia);
+    else if (bucket === 'remote-india') conds.push({ $and: [isIndia, remote] });
+    else if (bucket === 'delhi-ncr') {
+      conds.push({ $and: [{ $not: [remote] }, { $in: [firstCity, delhiNcrCanonicals().map(literal)] }] });
+    } else {
+      conds.push({ $and: [{ $not: [remote] }, { $eq: [firstCity, literal(bucket)] }] });
+    }
   }
 
   /* City matches the RAW location too, so a multi-location posting stays

@@ -52,8 +52,8 @@ export interface JobCursor {
 
 /** Every filter that changes which rows exist, and therefore the page boundaries. */
 const BINDING_FIELDS: Array<keyof PublicJobQuery> = [
-  'sort', 'search', 'country', 'state', 'city', 'domain', 'subDomain',
-  'workMode', 'employmentType', 'experienceLevel', 'minSalary',
+  'sort', 'search', 'searchScope', 'country', 'state', 'city', 'domain', 'subDomain',
+  'workMode', 'employmentType', 'experienceLevel', 'indiaBucket', 'location', 'minSalary',
 ];
 
 /**

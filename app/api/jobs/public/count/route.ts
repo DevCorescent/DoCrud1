@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
     const q = request.nextUrl.searchParams;
     const filters = {
       search: q.get('search') ?? undefined,
+      searchScope: q.get('searchScope') === 'card' ? 'card' as const : undefined,
       country: q.get('country') ?? undefined,
       state: q.get('state') ?? undefined,
       city: q.get('city') ?? undefined,
@@ -58,6 +59,8 @@ export async function GET(request: NextRequest) {
       workMode: q.get('workMode') ?? undefined,
       employmentType: q.get('employmentType') ?? undefined,
       experienceLevel: q.get('experienceLevel') ?? undefined,
+      indiaBucket: q.get('indiaBucket') ?? undefined,
+      location: q.get('location') ?? undefined,
       minSalary: q.get('minSalary') ?? undefined,
     };
     const filtered = Object.values(filters).some((v) => v !== undefined && v !== '');

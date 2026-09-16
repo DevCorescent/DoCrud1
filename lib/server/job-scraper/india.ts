@@ -54,6 +54,21 @@ export function normalizeIndiaLocation(location: string): string {
   return canon || (location || '').trim();
 }
 
+/**
+ * The alias table and the NCR set, in the order `indiaCity` consults them.
+ *
+ * Exposed so the public jobs query can reproduce `indiaBucket` INSIDE MongoDB —
+ * the same first-alias-wins rule, the same "remote wins over city" rule — rather
+ * than a second, drifting definition. Read-only; nothing else may derive an
+ * India judgement from any other list.
+ */
+export function indiaCityAliasEntries(): ReadonlyArray<readonly [string, string]> {
+  return Object.entries(CITY_CANON);
+}
+export function delhiNcrCanonicals(): ReadonlyArray<string> {
+  return Array.from(DELHI_NCR);
+}
+
 export type IndiaBucket = 'india' | 'bengaluru' | 'hyderabad' | 'pune' | 'mumbai' | 'delhi-ncr' | 'chennai' | 'remote-india' | '';
 
 /** Bucket a job's location for the India location filter chips. */

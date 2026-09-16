@@ -6,14 +6,15 @@
  *
  * ═══ WHY THIS SUITE IS THE GATE ═══
  *
- * `JobsFeedPage` downloads every published posting (12,662 rows, 6.15 MB) and
+ * `JobsFeedPage` used to download every published posting (12,662 rows, 6.15 MB) and
  * filters, searches and pages them in the browser. Moving that work into the
  * database is only a performance change if the SET of jobs a filter state
  * produces does not move. "Faster but shows different jobs" is a product
  * regression wearing an optimisation's clothes.
  *
  * So the comparator below is the page's own predicate, copied verbatim from
- * JobsFeedPage.tsx:417-427, applied to the real corpus, and compared against
+ * JobsFeedPage's own predicate (now kept only for the recommended-only view; the
+ * all-jobs list is served by the API this suite verifies), applied to the real corpus, and compared against
  * the API walked through its cursor — ORDERED ids, not counts, for every filter
  * dimension and combinations drawn from the corpus's real values.
  *

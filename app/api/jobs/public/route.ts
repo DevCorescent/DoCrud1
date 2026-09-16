@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
        from a different sort or filter set describes page boundaries that do not
        exist here, so it is refused rather than applied. */
     const rawCursor = q.get('cursor') ?? undefined;
+    /* P2D — `view=card` projects only what a list card renders (13 fields, the
+       former list-view contract). Absent = the full public view, unchanged. */
+    const view = q.get('view') === 'card' ? 'card' as const : undefined;
     const query = {
       search: q.get('search') ?? undefined,
       searchScope: q.get('searchScope') === 'card' ? 'card' as const : undefined,
@@ -59,7 +62,7 @@ export async function GET(request: NextRequest) {
        page under a different key: the cache key carries the raw token so a
        rejected cursor and an absent one are distinct entries. */
     const payload = await cached(
-      { ns: 'jobs:public', kind: 'list', params: { ...query, cursor: rawCursor }, ttlSeconds: TTL.publicList },
+      { ns: 'jobs:public', kind: 'list', params: { ...query, cursor: rawCursor, view }, ttlSeconds: TTL.publicList },
       async () => {
         /* THE WORK HAPPENS IN THE DATABASE. Every posting lives in one ~12 MB
            app_state document, and slicing in JavaScript meant transferring all
@@ -72,7 +75,7 @@ export async function GET(request: NextRequest) {
            defaults to app_state. See lib/server/db/public-jobs-source.ts. No
            request input can select a source. */
         const source = jobReadSource();
-        const fromDb = await readPublicJobsPage(query, source, { cursor });
+        const fromDb = await readPublicJobsPage(query, source, { cursor, view });
 
         if (fromDb) {
           /* Verification is SAMPLED and never blocks the answer. Running both

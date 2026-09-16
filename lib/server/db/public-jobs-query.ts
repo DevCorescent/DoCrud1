@@ -177,7 +177,23 @@ export const PUBLIC_JOB_VIEW_FIELDS = [
  * against that function for 47 query shapes, so a change here that alters
  * behaviour fails there rather than reaching a visitor.
  */
+/**
+ * P2D — the LIST CARD view: exactly the fields the Jobs page card renders,
+ * which is the contract `/api/public/hiring/jobs?view=list` served (see
+ * `PublicHiringJobListItem`). `description`, `responsibilities` and
+ * `requirements` are 90% of a posting's bytes (115.9 KB of a 128.8 KB page
+ * of 20, measured) and no card reads them. A strict subset of the public
+ * allow-list, so it can never expose a field the full view does not.
+ */
+export const PUBLIC_JOB_CARD_FIELDS = [
+  'id', 'title', 'organizationName', 'location', 'department',
+  'employmentType', 'workMode', 'experienceLevel',
+  'preferredSkills', 'applyUrl', 'shareUrl', 'createdAt', 'updatedAt',
+] as const satisfies ReadonlyArray<(typeof PUBLIC_JOB_VIEW_FIELDS)[number]>;
+
 export interface PublicQueryOptions {
+  /** `card` projects PUBLIC_JOB_CARD_FIELDS; absent projects the full public view. */
+  view?: 'card';
   /** Resume position. Absent for the first page. */
   cursor?: JobCursor | null;
   /**
@@ -654,7 +670,7 @@ export function buildPublicJobsCollectionPipeline(
        on one. */
     {
       $project: {
-        ...Object.fromEntries([['_id', 0], ...PUBLIC_JOB_VIEW_FIELDS.map((f) => [f, `$${f}`])]),
+        ...Object.fromEntries([['_id', 0], ...(opts.view === 'card' ? PUBLIC_JOB_CARD_FIELDS : PUBLIC_JOB_VIEW_FIELDS).map((f) => [f, `$${f}`])]),
         [CURSOR_KEY]: `$${persistedSortField(query.sort)}`,
       },
     },
@@ -697,9 +713,15 @@ export interface PublicJobFacetCounts {
   emp: Record<string, number>;
   wm: Record<string, number>;
   exp: Record<string, number>;
+  /**
+   * P2D — the three header figures JobsFeedPage computed over the corpus it
+   * downloaded: published postings, distinct organisations, remote postings.
+   * Global like the facets, computed in the same cached aggregation.
+   */
+  stats: { open: number; companies: number; remote: number };
 }
 
-const FACET_FIELDS: Array<[keyof PublicJobFacetCounts, string]> = [
+const FACET_FIELDS: Array<['emp' | 'wm' | 'exp', string]> = [
   ['emp', 'employmentType'], ['wm', 'workMode'], ['exp', 'experienceLevel'],
 ];
 
@@ -739,16 +761,25 @@ export async function selectPublicJobFacetCounts(
     if (publicFreshnessEnabled()) {
       base.push({ $match: { $expr: publiclyFreshCond(DOC_REF, opts.now ?? Date.now()) } });
     }
-    const branches = Object.fromEntries(FACET_FIELDS.map(([key, field]) => [key, [
+    const branches: Record<string, Record<string, unknown>[]> = Object.fromEntries(FACET_FIELDS.map(([key, field]) => [key, [
       /* `|| ''` in the client skips empty AND absent. Both are excluded here. */
       { $match: { [field]: { $nin: [null, ''] } } },
       { $group: { _id: `$${field}`, n: { $sum: 1 } } },
     ]]));
+    /* P2D — the header figures, in the same pass: every published posting,
+       distinct organisations (case-folded, blanks excluded), remote postings. */
+    branches.stats = [{ $group: {
+      _id: null,
+      open: { $sum: 1 },
+      remote: { $sum: { $cond: [{ $eq: ['$workMode', 'remote'] }, 1, 0] } },
+      orgs: { $addToSet: { $toLower: { $ifNull: ['$organizationName', ''] } } },
+    } }, { $project: { _id: 0, open: 1, remote: 1, companies: { $size: { $setDifference: ['$orgs', ['']] } } } }];
     const rows = await db.collection(HIRING_JOBS_COL)
       .aggregate([...base, { $facet: branches }]).toArray();
     const row = rows[0] as Record<string, Array<{ _id: unknown; n: number }>> | undefined;
     if (!row) return null;
-    const out: PublicJobFacetCounts = { emp: {}, wm: {}, exp: {} };
+    const stat = (row.stats as unknown as Array<{ open?: number; companies?: number; remote?: number }> | undefined)?.[0];
+    const out: PublicJobFacetCounts = { emp: {}, wm: {}, exp: {}, stats: { open: stat?.open ?? 0, companies: stat?.companies ?? 0, remote: stat?.remote ?? 0 } };
     for (const [key] of FACET_FIELDS) {
       for (const b of row[key] ?? []) {
         if (typeof b._id !== 'string' || b._id === '') continue;

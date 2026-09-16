@@ -23,24 +23,39 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
-  ArrowLeft, Briefcase, Building2, ChevronLeft, ChevronRight, Globe, LayoutGrid, MapPin, Plus, Search,
+  ArrowLeft, Briefcase, Building2, Globe, LayoutGrid, MapPin, Plus, Search,
   SlidersHorizontal, Sparkles, TrendingUp, X, Zap,
 } from 'lucide-react';
 import { EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, EXPERIENCE_LABELS } from '@/lib/jobs-ui';
 import { matchesIndiaFilter, type IndiaBucket } from '@/lib/server/job-scraper/india';
 import { JobSummaryCard, type JobSummary } from '@/components/jobs/JobSummaryCard';
+import {
+  DEFAULT_JOBS_FEED_FILTERS, EMPLOYMENT_TYPES, EXPERIENCE_LEVELS, JOBS_FEED_PAGE_SIZE, SEARCH_DEBOUNCE_MS, WORK_MODES,
+  createDebouncer, createJobsFeedController, filtersFromParams, filtersToParams, sameFilters,
+  type JobsFeedController, type JobsFeedFilters, type JobsFeedPageResult, type JobsFeedState, type SortMode,
+} from '@/lib/jobs-feed';
+
+/* ═══ P2D — THE SERVER OWNS THE LIST ═══
+
+   This page used to download every published posting from
+   /api/public/hiring/jobs?view=list (~6 MB, 12,659 rows) and filter, search,
+   sort, count and paginate it in four useMemos. Now every one of those is a
+   request to /api/jobs/public with the SAME semantics — P2B reproduced the
+   predicate below server-side and proved it on the real corpus (32/32
+   ordered-id parity) — and the browser holds only the cards it shows.
+
+   The URL is the single source of truth for the filters (refresh, share and
+   Back/Forward all restore the list); lib/jobs-feed.ts owns the request
+   lifecycle (abort, de-duplicate, debounce, never-zero-on-error). The
+   recommended-only view is UNCHANGED: it is the viewer's matched set from
+   /api/recommendations/jobs, filtered here exactly as before. */
 
 /* ─── constants ──────────────────────────────────────────────────────── */
-const PAGE_SIZE = 24;
+const PAGE_SIZE = JOBS_FEED_PAGE_SIZE;
 const POST_HREF = '/jobs/post';
 const MY_JOBS_HREF = '/jobs/my';
-const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract', 'internship', 'freelance'] as const;
-const WORK_MODES = ['remote', 'hybrid', 'onsite'] as const;
-const EXPERIENCE_LEVELS = ['entry', 'associate', 'mid', 'senior', 'lead'] as const;
-
-type SortMode = 'recommended' | 'newest';
 
 /* Quick-filter categories — India-first location focus, the product's core
    requirement and the Jobs analogue of People's quick chips. */
@@ -57,25 +72,8 @@ const LOCATION_NAV: Array<{ id: IndiaBucket; label: string; icon: typeof MapPin 
 ];
 
 /* ─── Sidebar filter panel ───────────────────────────────────────────── */
-interface FilterState {
-  sort: SortMode;
-  search: string;
-  employment: Set<string>;
-  workMode: Set<string>;
-  experience: Set<string>;
-  india: IndiaBucket;
-  location: string;
-}
-
-const DEFAULT_FILTERS: FilterState = {
-  sort: 'recommended',
-  search: '',
-  employment: new Set(),
-  workMode: new Set(),
-  experience: new Set(),
-  india: '',
-  location: '',
-};
+type FilterState = JobsFeedFilters;
+const DEFAULT_FILTERS: FilterState = DEFAULT_JOBS_FEED_FILTERS;
 
 type Facets = { emp: Record<string, number>; wm: Record<string, number>; exp: Record<string, number> };
 
@@ -220,61 +218,24 @@ function FilterPanel({
   );
 }
 
-/* ─── Pagination ─────────────────────────────────────────────────────── */
-function Pagination({ page, totalPages, total, pageSize, onChange }: {
-  page: number; totalPages: number; total: number; pageSize: number; onChange: (p: number) => void;
+/* ─── Load more ──────────────────────────────────────────────────────── */
+function LoadMore({ shown, total, hasNext, loading, onMore }: {
+  shown: number; total: number | null; hasNext: boolean; loading: boolean; onMore: () => void;
 }) {
-  const pages = useMemo(() => {
-    const arr: (number | 'ellipsis')[] = [];
-    if (totalPages <= 7) {
-      for (let i = 1; i <= totalPages; i++) arr.push(i);
-    } else {
-      arr.push(1);
-      if (page > 3) arr.push('ellipsis');
-      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) arr.push(i);
-      if (page < totalPages - 2) arr.push('ellipsis');
-      arr.push(totalPages);
-    }
-    return arr;
-  }, [page, totalPages]);
-
-  if (totalPages <= 1) return null;
-  const from = (page - 1) * pageSize + 1;
-  const to = Math.min(page * pageSize, total);
-
+  if (!hasNext && shown === 0) return null;
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-6 pb-2 border-t border-white/[0.06]">
       <p className="text-[12px] text-white/28">
-        Showing <span className="text-white/52 font-semibold">{from}–{to}</span> of <span className="text-white/52 font-semibold">{total}</span> jobs
+        Showing <span className="text-white/52 font-semibold">{shown.toLocaleString()}</span>
+        {total !== null && <> of <span className="text-white/52 font-semibold">{total.toLocaleString()}</span></>} jobs
       </p>
-      <div className="flex items-center gap-1">
+      {hasNext && (
         <button
-          onClick={() => onChange(page - 1)} disabled={page === 1}
-          aria-label="Previous page"
-          className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-white/38 hover:text-white/68 hover:bg-white/[0.08] transition-all disabled:opacity-25 disabled:cursor-not-allowed">
-          <ChevronLeft className="h-4 w-4" />
+          onClick={onMore} disabled={loading}
+          className="flex h-9 items-center justify-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-4 text-[12.5px] font-semibold text-white/48 hover:text-white/72 hover:bg-white/[0.08] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+          {loading ? 'Loading…' : 'Load more'}
         </button>
-        {pages.map((p, i) =>
-          p === 'ellipsis' ? (
-            <span key={`e${i}`} className="flex h-8 w-8 items-center justify-center text-white/18 text-[12px]">…</span>
-          ) : (
-            <button key={p} onClick={() => onChange(p)}
-              className={`flex h-8 w-8 items-center justify-center rounded-[10px] text-[12px] font-semibold transition-all ${
-                p === page
-                  ? 'bg-white text-[#0D0D0F]'
-                  : 'border border-white/[0.08] text-white/38 hover:text-white/68 hover:bg-white/[0.06]'
-              }`}>
-              {p}
-            </button>
-          )
-        )}
-        <button
-          onClick={() => onChange(page + 1)} disabled={page === totalPages}
-          aria-label="Next page"
-          className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-white/38 hover:text-white/68 hover:bg-white/[0.08] transition-all disabled:opacity-25 disabled:cursor-not-allowed">
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -305,11 +266,11 @@ export default function JobsFeedPage() {
   /* ?recommended=1 — arriving from the homepage Jobs tile. The page then shows
      ONLY the viewer's matched roles, so it can never list more (or other) jobs
      than the count that was clicked. */
-  const recommendedOnly = useSearchParams()?.get('recommended') === '1';
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const recommendedOnly = searchParams?.get('recommended') === '1';
 
-  const [all, setAll] = useState<JobSummary[]>([]);
   const [recommended, setRecommended] = useState<JobSummary[]>([]);
-  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   /* The recommendation request has its own state. `state` above tracks the
      all-jobs list, which in recommended mode supplies NOTHING the page renders
      — it resolves in milliseconds while ranking can take far longer, so the
@@ -317,26 +278,42 @@ export default function JobsFeedPage() {
      jobs found" over data that was still in flight. That was the 149 → 0 bug. */
   const [recState, setRecState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [recReloadKey, setRecReloadKey] = useState(0);
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
-  const [page, setPage] = useState(1);
+  /* The filters ARE the URL. */
+  const filters = useMemo<FilterState>(() => filtersFromParams(searchParams ?? new URLSearchParams()), [searchParams]);
+  /* The search box keeps its own text so typing is instant; the URL (and so
+     the request) follows after a pause. */
+  const [searchInput, setSearchInput] = useState(filters.search);
+  const [feed, setFeed] = useState<JobsFeedState<JobSummary>>({
+    status: 'loading', items: [], hasNextPage: false, nextCursor: null, facets: null, count: null, query: '',
+  });
+  const controller = useRef<JobsFeedController | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLElement>(null);
 
-  const load = useCallback(() => {
-    setState('loading');
-    let active = true;
-    /* view=list drops description/responsibilities/requirements — ~2.7 MB of
-       payload the cards never render. Filtering, search, sort and facets all
-       read fields the list view keeps. */
-    fetch('/api/public/hiring/jobs?view=list', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('load-failed'))))
-      .then((d) => { if (active) { setAll(Array.isArray(d) ? d : []); setState('ready'); } })
-      .catch(() => { if (active) setState('error'); });
-    return () => { active = false; };
+  /* One controller for the page's life: it aborts what is in flight when the
+     filters change, appends cursor pages without repeating a card, and never
+     turns a failed request into an empty list. */
+  useEffect(() => {
+    const fetchPage = async (query: string, signal: AbortSignal): Promise<JobsFeedPageResult<JobSummary>> => {
+      const r = await fetch(`/api/jobs/public?${query}`, { cache: 'no-store', signal });
+      if (!r.ok) throw new Error(`jobs ${r.status}`);
+      const d = await r.json();
+      if (!d || !Array.isArray(d.items)) throw new Error('jobs: malformed page');
+      return { items: d.items as JobSummary[], hasNextPage: Boolean(d.hasNextPage), nextCursor: typeof d.nextCursor === 'string' ? d.nextCursor : null, facets: d.facets ?? null };
+    };
+    const fetchCount = async (query: string, signal: AbortSignal): Promise<number | null> => {
+      const r = await fetch(`/api/jobs/public/count?${query}`, { cache: 'no-store', signal });
+      if (!r.ok) return null;
+      const d = await r.json().catch(() => null);
+      return typeof d?.total === 'number' ? d.total : null;
+    };
+    const c = createJobsFeedController<JobSummary>({ fetchPage, fetchCount, onState: setFeed });
+    controller.current = c;
+    return () => { c.dispose(); controller.current = null; };
   }, []);
-  useEffect(() => load(), [load]);
+  useEffect(() => { controller.current?.setFilters(filters); }, [filters]);
 
   // Session-scoped recommendations — signed-out/no-profile viewers get [] (hidden).
   useEffect(() => {
@@ -372,13 +349,28 @@ export default function JobsFeedPage() {
     return () => window.removeEventListener('keydown', h);
   }, []);
 
-  useEffect(() => { setPage(1); }, [filters]);
-
+    /* Writing the URL IS setting the filters. Other params (?recommended=1) are kept. */
+  const commit = useCallback((next: FilterState) => {
+    if (sameFilters(next, filters)) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    for (const k of ['q', 'india', 'loc', 'emp', 'wm', 'exp', 'sort']) params.delete(k);
+    for (const [k, v] of Array.from(filtersToParams(next).entries())) params.set(k, v);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [filters, pathname, router, searchParams]);
   const setFilter = useCallback(<K extends keyof FilterState>(key: K, value: FilterState[K]) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
-  }, []);
-
-  const clearFilters = useCallback(() => setFilters(DEFAULT_FILTERS), []);
+    commit({ ...filters, [key]: value });
+  }, [commit, filters]);
+  const clearFilters = useCallback(() => { setSearchInput(''); commit(DEFAULT_FILTERS); }, [commit]);
+  /* Typed search reaches the URL SEARCH_DEBOUNCE_MS after the last keystroke. */
+  const debouncer = useRef(createDebouncer(SEARCH_DEBOUNCE_MS));
+  const onSearchInput = useCallback((value: string) => {
+    setSearchInput(value);
+    debouncer.current.call(() => commit({ ...filters, search: value.trim() }));
+  }, [commit, filters]);
+  useEffect(() => { const d = debouncer.current; return () => d.cancel(); }, []);
+  /* Back/Forward or a cleared URL: the box follows the URL. */
+  useEffect(() => { setSearchInput((cur) => (cur.trim() === filters.search ? cur : filters.search)); }, [filters.search]);
 
   useEffect(() => {
     if (!sidebarOpen) return;
@@ -387,15 +379,11 @@ export default function JobsFeedPage() {
     return () => document.removeEventListener('keydown', h);
   }, [sidebarOpen]);
 
-  const facets = useMemo<Facets>(() => {
-    const emp: Record<string, number> = {}, wm: Record<string, number> = {}, exp: Record<string, number> = {};
-    for (const j of all) {
-      const e = j.employmentType || ''; if (e) emp[e] = (emp[e] ?? 0) + 1;
-      const w = j.workMode || ''; if (w) wm[w] = (wm[w] ?? 0) + 1;
-      const x = j.experienceLevel || ''; if (x) exp[x] = (exp[x] ?? 0) + 1;
-    }
-    return { emp, wm, exp };
-  }, [all]);
+  /* Global counts beside every filter, served with the page (see
+     selectPublicJobFacetCounts) — the same numbers the page once computed over
+     the corpus it downloaded. */
+  const facets = useMemo<Facets>(() => ({ emp: feed.facets?.emp ?? {}, wm: feed.facets?.wm ?? {}, exp: feed.facets?.exp ?? {} }), [feed.facets]);
+  const stats = feed.facets?.stats ?? null;
 
   const activeFilterCount = useMemo(() => [
     filters.sort !== 'recommended',
@@ -406,14 +394,15 @@ export default function JobsFeedPage() {
     filters.location !== '',
   ].filter(Boolean).length, [filters]);
 
-  /* Unchanged matching logic — same fields, same substring search, same sort. */
-  const filtered = useMemo(() => {
+  /* Recommended-only mode: the matched roles ARE the list — they already
+     carry matchScore and are ranked best-first by the server — and every
+     filter still applies to them, with the page's original predicate, so the
+     viewer can narrow their matches further. (For the all-jobs list this
+     predicate now runs on the server; see lib/jobs-feed.ts.) */
+  const filteredRecommended = useMemo(() => {
     const q = filters.search.trim().toLowerCase();
     const loc = filters.location.trim().toLowerCase();
-    /* In recommended-only mode the matched roles ARE the list — they already
-       carry matchScore and are ranked best-first by the server. Every filter
-       below still applies, so the viewer can narrow their matches further. */
-    const source = recommendedOnly ? recommended : all;
+    const source = recommended;
     let out = source.filter((j) => {
       if (filters.employment.size && !filters.employment.has(j.employmentType || '')) return false;
       if (filters.workMode.size && !filters.workMode.has(j.workMode || '')) return false;
@@ -431,18 +420,18 @@ export default function JobsFeedPage() {
       out = out.slice().sort((a, b) => ts(b) - ts(a));
     }
     return out;
-  }, [all, recommended, recommendedOnly, filters]);
+  }, [recommended, filters]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const items = recommendedOnly ? filteredRecommended : feed.items;
+  /* The exact filtered count: the recommended set's length, or the count
+     endpoint's answer — `null` until it arrives, and null (not 0) if it failed. */
+  const total: number | null = recommendedOnly ? filteredRecommended.length : feed.count;
 
   /* In recommended mode the page is driven by the recommendation request; in
      normal mode by the all-jobs list. Reading the wrong one is the whole bug. */
-  const loading = recommendedOnly ? recState === 'loading' : state === 'loading';
-  const errored = recommendedOnly ? recState === 'error' : state === 'error';
+  const loading = recommendedOnly ? recState === 'loading' : feed.status === 'loading';
+  const errored = recommendedOnly ? recState === 'error' : feed.status === 'error';
   const isSearching = filters.search.trim().length > 0;
-  const companies = useMemo(() => new Set(all.map((j) => (j.organizationName || '').toLowerCase()).filter(Boolean)).size, [all]);
-  const remoteCount = useMemo(() => all.filter((j) => j.workMode === 'remote').length, [all]);
 
   /* Active non-category filters, mirrored into the chip strip as removable pills. */
   const activePills = useMemo(() => {
@@ -490,9 +479,9 @@ export default function JobsFeedPage() {
           {/* Title */}
           <div className="hidden sm:flex items-baseline gap-2 shrink-0">
             <span className="text-[15px] font-bold tracking-[-0.01em] text-white">Jobs</span>
-            {!loading && (
+            {!loading && total !== null && (
               <span className="text-[12px] font-medium"
-                style={{ color: 'rgba(255,255,255,0.28)' }}>{filtered.length.toLocaleString()}</span>
+                style={{ color: 'rgba(255,255,255,0.28)' }}>{total.toLocaleString()}</span>
             )}
           </div>
 
@@ -501,8 +490,8 @@ export default function JobsFeedPage() {
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: 'rgba(255,255,255,0.25)' }} />
             <input
               ref={searchRef}
-              value={filters.search}
-              onChange={(e) => setFilter('search', e.target.value)}
+              value={searchInput}
+              onChange={(e) => onSearchInput(e.target.value)}
               placeholder="Search jobs, companies, location…"
               aria-label="Search jobs"
               className="h-9 w-full rounded-[11px] text-white pl-9 pr-9 text-[13px] transition-all focus:outline-none"
@@ -514,8 +503,8 @@ export default function JobsFeedPage() {
               onFocus={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.20)'; e.target.style.background = 'rgba(255,255,255,0.07)'; }}
               onBlur={(e) => { e.target.style.borderColor = 'rgba(255,255,255,0.09)'; e.target.style.background = 'rgba(255,255,255,0.055)'; }}
             />
-            {filters.search && (
-              <button onClick={() => setFilter('search', '')} aria-label="Clear search"
+            {searchInput && (
+              <button onClick={() => onSearchInput('')} aria-label="Clear search"
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/28 hover:text-white/55 transition-colors">
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -523,21 +512,21 @@ export default function JobsFeedPage() {
           </div>
 
           {/* Desktop stats */}
-          {!loading && (
+          {!loading && stats && (
             <div className="hidden lg:flex items-center gap-4 shrink-0 text-[11.5px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
               <span className="flex items-center gap-1.5 font-medium">
                 <Briefcase className="h-3 w-3" />
-                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{all.length}</span>
+                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{stats.open}</span>
                 open
               </span>
               <span className="flex items-center gap-1.5">
                 <Building2 className="h-3 w-3" />
-                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{companies}</span>
+                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{stats.companies}</span>
                 companies
               </span>
               <span className="flex items-center gap-1.5">
                 <Globe className="h-3 w-3" />
-                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{remoteCount}</span>
+                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.45)' }}>{stats.remote}</span>
                 remote
               </span>
             </div>
@@ -631,11 +620,11 @@ export default function JobsFeedPage() {
         <main ref={mainRef} className="flex-1 min-w-0 overflow-y-auto px-3 sm:px-4 lg:px-6 xl:px-8 pt-5 pb-12">
 
           {/* Mobile stats */}
-          {!loading && filtered.length > 0 && (
+          {!loading && items.length > 0 && stats && (
             <div className="sm:hidden flex items-center gap-3.5 mb-4 text-[11.5px]" style={{ color: 'rgba(255,255,255,0.28)' }}>
-              <span className="flex items-center gap-1.5"><Briefcase className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{filtered.length}</span> jobs</span>
-              <span className="flex items-center gap-1.5"><TrendingUp className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{companies}</span> companies</span>
-              <span className="flex items-center gap-1.5"><Zap className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{remoteCount}</span> remote</span>
+              <span className="flex items-center gap-1.5"><Briefcase className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{(total ?? items.length).toLocaleString()}</span> jobs</span>
+              <span className="flex items-center gap-1.5"><TrendingUp className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{stats.companies}</span> companies</span>
+              <span className="flex items-center gap-1.5"><Zap className="h-3 w-3" /><span className="font-semibold" style={{ color: 'rgba(255,255,255,0.48)' }}>{stats.remote}</span> remote</span>
             </div>
           )}
 
@@ -696,12 +685,12 @@ export default function JobsFeedPage() {
                 Something went wrong. Try again in a moment.
               </p>
               {/* Retries whichever request actually failed. */}
-              <button onClick={() => (recommendedOnly ? setRecReloadKey((k) => k + 1) : load())}
+              <button onClick={() => (recommendedOnly ? setRecReloadKey((k) => k + 1) : controller.current?.retry())}
                 className="h-10 px-7 rounded-[13px] border border-white/[0.10] bg-white/[0.04] text-[13.5px] font-semibold text-white/52 hover:bg-white/[0.08] hover:text-white/72 transition-all">
                 Try again
               </button>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-36 text-center">
               <div className="h-18 w-18 rounded-[22px] border border-white/[0.07] flex items-center justify-center mb-6"
                 style={{ background: 'rgba(255,255,255,0.025)', boxShadow: '0 0 0 1px rgba(255,255,255,0.04)' }}>
@@ -723,18 +712,20 @@ export default function JobsFeedPage() {
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-                {paginated.map((job, i) => (
+                {items.map((job, i) => (
                   <div key={job.id} className="pc-anim" style={{ animationDelay: `${Math.min(i, 11) * 0.04}s` }}>
                     <JobSummaryCard job={job} />
                   </div>
                 ))}
               </div>
-              <div className="mt-10">
-                <Pagination
-                  page={page} totalPages={totalPages} total={filtered.length}
-                  pageSize={PAGE_SIZE} onChange={(p) => { setPage(p); mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                />
-              </div>
+              {!recommendedOnly && (
+                <div className="mt-10">
+                  <LoadMore
+                    shown={items.length} total={total} hasNext={feed.hasNextPage}
+                    loading={feed.status === 'loading-more'} onMore={() => controller.current?.loadMore()}
+                  />
+                </div>
+              )}
             </>
           )}
         </main>
@@ -776,7 +767,7 @@ export default function JobsFeedPage() {
               <button onClick={() => setSidebarOpen(false)}
                 className="w-full h-12 rounded-[14px] font-bold text-[14.5px] tracking-[-0.01em] transition-all"
                 style={{ background: '#ffffff', color: '#0A0A0C', boxShadow: '0 4px 20px rgba(255,255,255,0.15)' }}>
-                Show {filtered.length.toLocaleString()} {filtered.length === 1 ? 'job' : 'jobs'}
+                Show {(total ?? items.length).toLocaleString()} {(total ?? items.length) === 1 ? 'job' : 'jobs'}
               </button>
             </div>
           </div>

@@ -229,8 +229,8 @@ check('a typed role searches instead, since it has no domain',
   jobQueryForRoles([], ['Product Engineer'], DEFAULT_ROLE_OPTIONS).includes('search=Product+Engineer'));
 check('no filter is invented when nothing is chosen',
   !/domain=|search=/.test(jobQueryForRoles([], [], DEFAULT_ROLE_OPTIONS)));
-check('role availability is read from the existing public feed',
-  /\/api\/jobs\/public\?domain=/.test(src('lib/onboarding-roles.ts')));
+check('role availability is read from the public jobs COUNT endpoint',
+  /\/api\/jobs\/public\/count\?domain=/.test(src('lib/onboarding-roles.ts')));
 check('a direction with an unknown count is not shown as zero',
   /entries\.filter\(Boolean\)/.test(src('lib/onboarding-roles.ts')));
 

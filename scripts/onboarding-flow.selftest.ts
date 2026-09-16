@@ -18,7 +18,7 @@ import { DEFAULT_ROLE_OPTIONS } from '../lib/onboarding-roles';
 import { DEFAULT_SKILL_OPTIONS } from '../lib/onboarding-skills';
 import { DEFAULT_BUSINESS_SPACE_OPTIONS } from '../lib/onboarding-business-spaces';
 import { JOB_DOMAIN_LABELS } from '../lib/server/job-sources/taxonomy';
-import { formatRecommendedJobCount, jobQueryForRoles } from '../lib/onboarding-jobs';
+import { countUpSteps, formatRecommendedJobCount, matchBucket } from '../lib/onboarding-jobs';
 import { validateResumeUpload, RESUME_MAX_BYTES } from '../lib/onboarding-resume';
 
 let passed = 0, failed = 0;
@@ -189,12 +189,15 @@ check('skills and spaces are both populated',
   DEFAULT_SKILL_OPTIONS.length > 0 && DEFAULT_BUSINESS_SPACE_OPTIONS.length > 0);
 check('nothing is marked recommended without a real source',
   !DEFAULT_ROLE_OPTIONS.some((r) => r.recommended) && !DEFAULT_SKILL_OPTIONS.some((s) => s.recommended));
-/* Jobs must come from the public API, never a fixture. */
+/* The match count must come from the server-side engine, never a fixture. */
 const JOBS = strip(src('lib/onboarding-jobs.ts'));
-check('jobs are read from the existing public endpoint', /\/api\/jobs\/public/.test(JOBS));
+check('the match count is read from the onboarding job-matches endpoint',
+  /\/api\/onboarding\/job-matches\/count/.test(JOBS));
 check('and no job list is hardcoded', !/(title:\s*'|organizationName:\s*')/.test(JOBS));
-check('a failed job request is not turned into an empty result',
-  /throw new Error\(`Job feed responded/.test(JOBS));
+check('a failed count request is not turned into an empty result',
+  /throw new Error\(`Job matches responded/.test(JOBS));
+check('a malformed count is refused rather than read as zero',
+  /throw new Error\('Job matches returned no count'\)/.test(JOBS));
 
 /* ═══ 6. Shared shell and canvas ════════════════════════════════════════ */
 console.log('── 6. Shell, canvas, motion ──');
@@ -221,14 +224,28 @@ for (let n = 0; n <= 300; n += 1) {
 }
 check('large counts stay readable', formatRecommendedJobCount(1019) === '1,015+');
 
-/* ═══ 8. Roles and the resume ═══════════════════════════════════════════ */
-console.log('── 8. Role query and resume rules ──');
-check('a chosen direction filters the feed by domain',
-  jobQueryForRoles(['software'], [], DEFAULT_ROLE_OPTIONS).includes('domain=software'));
-check('a typed role searches instead, since it has no domain',
-  jobQueryForRoles([], ['Product Engineer'], DEFAULT_ROLE_OPTIONS).includes('search=Product+Engineer'));
-check('no filter is invented when nothing is chosen',
-  !/domain=|search=/.test(jobQueryForRoles([], [], DEFAULT_ROLE_OPTIONS)));
+/* The climb the card makes: every value is a multiple of five and none passes
+   the bucket, so no frame can over-promise. */
+check('the count-up starts at zero', countUpSteps(105)[0] === 0);
+check('and ends on the bucket', countUpSteps(105).at(-1) === 105);
+check('a bucket of zero is a single zero step', countUpSteps(0).join() === '0');
+for (const b of [5, 20, 105, 1460]) {
+  const steps = countUpSteps(b);
+  check(`no step for ${b} exceeds the bucket or leaves the fives`,
+    steps.every((v) => v <= b && v % 5 === 0) && steps.every((v, i) => i === 0 || v > steps[i - 1]));
+}
+check('the bucket is what the copy formats', formatRecommendedJobCount(109) === `${matchBucket(109)}+`);
+
+/* ═══ 8. The count request and the resume ═══════════════════════════════ */
+console.log('── 8. Count request and resume rules ──');
+check('the count request carries the skills the person chose',
+  /fetchJobMatchCount\(\{ skills, roles, customRoles \}/.test(FLOW));
+check('and re-runs when the skills change',
+  /\}, \[skills, roles, customRoles\]\);/.test(FLOW));
+check('leaving the step aborts an in-flight count',
+  /controller\.abort\(\)/.test(FLOW));
+check('the card is told both the count and its bucket',
+  /total=\{jobMatches\.total\}/.test(FLOW) && /bucket=\{jobMatches\.bucket\}/.test(FLOW));
 check('role availability is read from the public jobs COUNT endpoint',
   /\/api\/jobs\/public\/count\?domain=/.test(src('lib/onboarding-roles.ts')));
 check('a direction with an unknown count is not shown as zero',

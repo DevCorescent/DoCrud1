@@ -70,6 +70,12 @@ export const RATE_POLICIES = {
   atsEvaluateAccount:     { limit: 30, windowMs: 60 * MIN },
   atsEvaluateIp:          { limit: 90, windowMs: 60 * MIN },
   atsUploadAccount:       { limit: 20, windowMs: 60 * MIN },
+  /* The onboarding job-match count is pre-auth and pure CPU: one ranking pass
+     over the in-memory corpus per distinct answer set, memoised for a minute.
+     A person reaches the jobs step once per visit, plus a retry or two; twelve
+     a minute per address is far above that and far below what makes scripted
+     probing of the corpus worthwhile. IP-only, because there is no account. */
+  onboardingMatchCountIp: { limit: 120, windowMs: 10 * MIN },
 } as const satisfies Record<string, RatePolicy>;
 
 export type RatePolicyName = keyof typeof RATE_POLICIES;

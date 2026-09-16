@@ -1,41 +1,40 @@
 'use client';
 
 /**
- * Job preview — the individual branch's final step before authentication.
+ * Job matches — the individual branch's final step before authentication.
  *
- * Its job is to show real product value before login, so every fact on screen
- * comes from /api/jobs/public. See lib/onboarding-jobs.ts for the data layer
- * and for why there is no match score here.
+ * ═══ THE NUMBER IS THE ENGINE'S ═══
  *
- * ═══ WHAT THE SOURCE DID, AND WHAT THIS DOES INSTEAD ═══
+ * The figure is the candidate's real job-match count: how many published
+ * postings the recommendation engine recommends for the skills they just
+ * chose, counted by the same rule as the homepage "Job matches" tile (see
+ * lib/server/onboarding-match-count.ts). It is not a corpus-wide total and not
+ * a domain filter. It arrives through lib/onboarding-jobs.ts, which throws on
+ * any failure, so a broken read is shown as an error with a retry — never as
+ * "no matches", which is a real answer with a different meaning.
  *
- *  · The source printed `(skills.length || 1) * 3137 + 1862` as a "Matches"
- *    figure. Invented. The number here is the job feed's own `total` for the
- *    chosen direction, unrounded, and it is labelled "open roles" because that
- *    is what it counts — these are not personalised matches and are not called
- *    matches.
- *  · The source's Google and Email buttons set `authenticated: true` in local
- *    state and nothing else. There is no fake sign-in here; the CTA goes to the
- *    real /login route, which is where applying has to start.
+ * ═══ WHAT IS SHOWN, AND HOW ═══
  *
- * ═══ THE COUNT, NOT THE LISTINGS ═══
- *
- * This step shows how much work is out there and then asks for an account. It
- * deliberately does NOT list individual jobs: browsing belongs on /jobs, which
- * already does it properly, and a four-row teaser here mostly showed four
- * near-identical titles from one employer.
- *
- * The figure is still the job feed's own `total` for the person's chosen
- * directions — nothing is estimated, and the empty and error states below stay
- * distinct so a failed request is never dressed up as "no jobs".
+ *  · The card starts at 0 and counts up in fives to the display bucket — the
+ *    real count floored to a multiple of five — so no frame shows a value the
+ *    engine did not reach. Under five the bucket is 0: the card reads 0 and the
+ *    copy says a few roles match, rather than a "0+" that reads as a bug.
+ *  · No list. Browsing belongs on /jobs, which already does it properly, and
+ *    the matches themselves are behind the account this step asks for.
+ *  · The source design printed `(skills.length || 1) * 3137 + 1862` as
+ *    "Matches". Invented, and not carried over. Its Google and Email buttons
+ *    set `authenticated: true` in local state and nothing else; there is no
+ *    fake sign-in here — the CTA goes to the real gate.
  */
 
 import { ArrowRight, RotateCcw } from 'lucide-react';
 import { formatRecommendedJobCount } from '@/lib/onboarding-jobs';
+import MatchCounter from './MatchCounter';
 import { OnboardingProgress, StepHeading } from './StepChrome';
 
 export default function JobPreviewStep({
   total,
+  bucket,
   status,
   direction,
   firstName,
@@ -44,8 +43,10 @@ export default function JobPreviewStep({
   step = 6,
   stepTotal = 6,
 }: {
-  /** The feed's own count for this query. */
+  /** The engine's count for this candidate. */
   total: number;
+  /** `total` floored to a multiple of five — what the card displays. */
+  bucket: number;
   status: 'loading' | 'ready' | 'error';
   /** The direction the person chose, used only in copy. */
   direction: string;
@@ -56,20 +57,29 @@ export default function JobPreviewStep({
   stepTotal?: number;
 }) {
   const possessive = firstName.trim() ? `${firstName.trim()}'s` : 'Your';
+  const ready = status === 'ready';
+
+  const description = ready && bucket > 0
+    ? `${formatRecommendedJobCount(total)} jobs match your skills right now. Create your account to see them and apply.`
+    : ready && total > 0
+      ? 'A few jobs match your skills right now. Create your account to see them and apply.'
+      : `Jobs matched to your skills in ${direction}.`;
 
   return (
     <div className="step-panel">
       <OnboardingProgress step={step} total={stepTotal} />
 
-      {/* The figure is shown only once a real count has arrived. */}
-      {status === 'ready' && total > 0 && (
+      {/* The card is on screen from the start at 0; it climbs only once the
+          real count has arrived. A failed read hides it — an error is not a
+          number. */}
+      {status !== 'error' && (
         <div className="match-card">
           <div className="match-card-brand">
             <span className="match-card-mark" aria-hidden="true">D</span>
             <span>docrud</span>
           </div>
-          <div className="match-card-number">{formatRecommendedJobCount(total)}</div>
-          <div className="match-card-caption">Open roles</div>
+          {ready ? <MatchCounter bucket={bucket} /> : <div className="match-card-number">0</div>}
+          <div className="match-card-caption">Job matches</div>
         </div>
       )}
 
@@ -77,21 +87,17 @@ export default function JobPreviewStep({
         <StepHeading
           eyebrow="Opportunities / 06"
           title={`${possessive} shortlist`}
-          description={
-            status === 'ready' && total > 0
-              ? `${formatRecommendedJobCount(total)} open roles matching ${direction} right now. Create your account to see them and apply.`
-              : `Open roles in ${direction}.`
-          }
+          description={description}
         />
       </div>
 
       {status === 'loading' && (
-        <p className="jobs-status" role="status">Loading open roles…</p>
+        <p className="jobs-status" role="status">Counting your matches…</p>
       )}
 
       {status === 'error' && (
         <div className="jobs-status jobs-status-error" role="alert">
-          <p>We couldn&apos;t load jobs just now. This is a loading problem, not an empty result.</p>
+          <p>We couldn&apos;t count your matches just now. This is a loading problem, not an empty result.</p>
           <button type="button" className="jobs-retry" onClick={onRetry}>
             <RotateCcw aria-hidden="true" />
             <span>Try again</span>
@@ -99,10 +105,10 @@ export default function JobPreviewStep({
         </div>
       )}
 
-      {status === 'ready' && total === 0 && (
+      {ready && total === 0 && (
         <p className="jobs-status" role="status">
-          No open roles in {direction} right now. Your choices are saved — sign in
-          and we&apos;ll tell you when something matching opens.
+          No jobs match your skills yet. Your choices are saved — sign in and
+          we&apos;ll tell you when something matching opens.
         </p>
       )}
 

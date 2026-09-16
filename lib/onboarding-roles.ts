@@ -67,7 +67,11 @@ export async function fetchRoleAvailability(
 ): Promise<RoleAvailability> {
   const entries = await Promise.all(options.map(async (option) => {
     try {
-      const res = await fetch(`/api/jobs/public?domain=${encodeURIComponent(option.id)}&pageSize=1`);
+      /* The COUNT endpoint, not the feed. This asked the listing API for one
+         row purely to read its `total`, seventeen times in parallel — and that
+         `total` cost the whole matching set each time. The feed no longer
+         returns one; counting is its own question with its own cache. */
+      const res = await fetch(`/api/jobs/public/count?domain=${encodeURIComponent(option.id)}`);
       if (!res.ok) return null;
       const data = await res.json();
       const total = Number(data?.total);

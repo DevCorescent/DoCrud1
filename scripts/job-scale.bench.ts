@@ -229,11 +229,11 @@ async function main() {
           const t = Date.now();
           const page = await selectPublicJobsPageFromCollection(query as never);
           runs.push(Date.now() - t);
-          if (page) { total = page.total; items = page.items.length; bytes = Buffer.byteLength(JSON.stringify(page.items), 'utf8'); }
+          if (page) { total = page.hasNextPage ? -1 : page.items.length; items = page.items.length; bytes = Buffer.byteLength(JSON.stringify(page.items), 'utf8'); }
           peak = Math.max(peak, heapMB()); void h0;
         }
         console.log(`  ${label.padEnd(14)} p50 ${String(pct(runs, 0.5)).padStart(5)} ms | p95 ${String(pct(runs, 0.95)).padStart(5)} ms `
-          + `| ${items} of ${total} | payload ${(bytes / 1024).toFixed(0)} KB`);
+          + `| ${items} rows${total < 0 ? '+' : ''} | payload ${(bytes / 1024).toFixed(0)} KB`);
       }
 
       /* ── count ─────────────────────────────────────────────────────────── */

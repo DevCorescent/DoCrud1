@@ -60,7 +60,7 @@ import {
 } from '@/lib/onboarding-roles';
 import { DEFAULT_SKILL_OPTIONS } from '@/lib/onboarding-skills';
 import { DEFAULT_BUSINESS_SPACE_OPTIONS } from '@/lib/onboarding-business-spaces';
-import { fetchJobPreview, jobQueryForRoles } from '@/lib/onboarding-jobs';
+import { fetchJobMatchCount, type JobMatchCount } from '@/lib/onboarding-jobs';
 import { fetchTalentMetrics, type TalentMetric } from '@/lib/onboarding-talent';
 import { extractResume, type ExtractionState } from '@/lib/onboarding-resume';
 
@@ -107,7 +107,7 @@ export default function PreviewClient() {
 
   /* ── Derived from real data ── */
   const [availability, setAvailability] = useState<RoleAvailability>({});
-  const [jobTotal, setJobTotal] = useState(0);
+  const [jobMatches, setJobMatches] = useState<JobMatchCount>({ total: 0, bucket: 0 });
   const [jobStatus, setJobStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [talentMetrics, setTalentMetrics] = useState<TalentMetric[]>([]);
   const [talentStatus, setTalentStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -196,13 +196,26 @@ export default function PreviewClient() {
     return () => { live = false; };
   }, [step]);
 
-  const loadJobs = useCallback(() => {
+  /**
+   * The candidate's real job-match count, from the recommendation engine.
+   *
+   * The answers sent are the ones signup will persist — skills, roles, custom
+   * roles — so the number here is the one the homepage shows once the account
+   * exists. Leaving the step aborts an in-flight request, so a slow answer can
+   * never land on a later visit with different skills.
+   */
+  const loadJobs = useCallback((signal?: AbortSignal) => {
     setJobStatus('loading');
-    fetchJobPreview(jobQueryForRoles(roles, customRoles, DEFAULT_ROLE_OPTIONS))
-      .then(result => { setJobTotal(result.total); setJobStatus('ready'); })
-      .catch(() => setJobStatus('error'));
-  }, [roles, customRoles]);
-  useEffect(() => { if (step === 'jobs') loadJobs(); }, [step, loadJobs]);
+    fetchJobMatchCount({ skills, roles, customRoles }, signal)
+      .then(result => { setJobMatches(result); setJobStatus('ready'); })
+      .catch(() => { if (!signal?.aborted) setJobStatus('error'); });
+  }, [skills, roles, customRoles]);
+  useEffect(() => {
+    if (step !== 'jobs') return;
+    const controller = new AbortController();
+    loadJobs(controller.signal);
+    return () => controller.abort();
+  }, [step, loadJobs]);
 
   const loadTalent = useCallback(() => {
     setTalentStatus('loading');
@@ -307,11 +320,12 @@ export default function PreviewClient() {
       )}
       {step === 'jobs' && (
         <JobPreviewStep
-          total={jobTotal}
+          total={jobMatches.total}
+          bucket={jobMatches.bucket}
           status={jobStatus}
           direction={roleLabel}
           firstName={name}
-          onRetry={loadJobs}
+          onRetry={() => loadJobs()}
           onLogin={() => toAuth('jobs')}
           stepTotal={7}
         />

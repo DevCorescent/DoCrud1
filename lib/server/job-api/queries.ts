@@ -360,14 +360,26 @@ export function candidateApplications(
 
 export interface PublicJobQuery {
   search?: string;
+  /**
+   * Which fields `search` reads. Absent = the discovery default (title,
+   * organisation, description, skills). `card` = exactly what the Jobs page
+   * has always searched client-side: title, organisation, location.
+   */
+  searchScope?: 'card';
   country?: string;
   state?: string;
   city?: string;
   domain?: string;
   subDomain?: string;
+  /** One value, or several comma-separated — the Jobs page multi-selects. */
   workMode?: string;
   employmentType?: string;
   experienceLevel?: string;
+  /** Pure substring on the raw `location` text — the Jobs page's location box.
+      Unlike `city`, never matches the stored city field. */
+  location?: string;
+  /** The Jobs page's India chips, reproduced server-side. See public-jobs-query.ts. */
+  indiaBucket?: string;
   minSalary?: unknown;
   sort?: 'newest' | 'relevance' | 'salary';
   page?: unknown;

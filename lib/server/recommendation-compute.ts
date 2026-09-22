@@ -28,8 +28,43 @@
 import {
   isRecommended, recommendMatch, type RecJob, type RecProfile,
 } from '@/lib/server/job-recommend';
+import type { RecFeatures } from '@/lib/server/recommendation-features';
 import { isValidApplyUrl } from '@/lib/jobs-ui';
 import { coerceJobUrgency } from '@/lib/job-urgency';
+
+/**
+ * The scorer's view of one posting — ONE projection, shared by every ranking
+ * pass (the row/recommended scopes here and the personalized ranking in the
+ * route), so the two can never disagree about what a posting looks like.
+ *
+ * Derived features are spread in only when this posting HAS them. An absent
+ * key leaves `recommendMatch` scanning `description` inline
+ * (`job.recSkills ?? skillsInText(description)`,
+ * `job.recYears !== undefined ? job.recYears : extractRequiredYears(...)`),
+ * which is the pre-existing path — so a missing or failed feature set is
+ * slower, never different.
+ */
+export function toRecJob(
+  j: Record<string, unknown>,
+  features?: Map<string, RecFeatures> | null,
+): RecJob {
+  const id = String(j.id ?? '');
+  const f = features?.get(id);
+  return {
+    id,
+    title: String(j.title ?? ''),
+    organizationName: String(j.organizationName ?? ''),
+    location: String(j.location ?? ''),
+    employmentType: String(j.employmentType ?? ''),
+    workMode: String(j.workMode ?? ''),
+    experienceLevel: String(j.experienceLevel ?? ''),
+    description: String(j.description ?? ''),
+    preferredSkills: Array.isArray(j.preferredSkills) ? (j.preferredSkills as string[]) : [],
+    targetRoleKeywords: Array.isArray(j.targetRoleKeywords) ? (j.targetRoleKeywords as string[]) : [],
+    createdAt: String(j.createdAt ?? ''),
+    ...(f ? { recSkills: f.skills, recYears: f.years } : {}),
+  };
+}
 
 /** One scored posting, before a scope decides what to return. */
 export interface ScoredRecommendation {
@@ -46,6 +81,14 @@ export interface ComputeInput {
   jobs: ReadonlyArray<Record<string, unknown>>;
   /** Injected so the result is deterministic for a given instant. */
   now: number;
+  /**
+   * Per-posting features derived ONCE per corpus version (recFeaturesFor):
+   * `skillsInText(description)` and `extractRequiredYears(description)`, the
+   * exact values the scorer would otherwise recompute for every posting on
+   * every pass — 426 µs of the ~440 µs a posting costs. Optional: absent or
+   * null, every posting is scanned inline exactly as before.
+   */
+  features?: Map<string, RecFeatures> | null;
 }
 
 /**
@@ -55,22 +98,10 @@ export interface ComputeInput {
  * fields, same `showMatch` gating, same sort (score desc, then createdAt desc).
  */
 export function scoreRecommendations(input: ComputeInput): ScoredRecommendation[] {
-  const { profile, showMatch, jobs, now } = input;
+  const { profile, showMatch, jobs, now, features } = input;
 
   const scored = jobs.map((j) => {
-    const recJob: RecJob = {
-      id: String(j.id ?? ''),
-      title: String(j.title ?? ''),
-      organizationName: String(j.organizationName ?? ''),
-      location: String(j.location ?? ''),
-      employmentType: String(j.employmentType ?? ''),
-      workMode: String(j.workMode ?? ''),
-      experienceLevel: String(j.experienceLevel ?? ''),
-      description: String(j.description ?? ''),
-      preferredSkills: Array.isArray(j.preferredSkills) ? (j.preferredSkills as string[]) : [],
-      targetRoleKeywords: Array.isArray(j.targetRoleKeywords) ? (j.targetRoleKeywords as string[]) : [],
-      createdAt: String(j.createdAt ?? ''),
-    };
+    const recJob = toRecJob(j, features);
     const match = recommendMatch(profile, recJob, now);
     const job: Record<string, unknown> = {
       id: recJob.id,

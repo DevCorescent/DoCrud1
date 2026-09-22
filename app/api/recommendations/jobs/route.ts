@@ -9,7 +9,7 @@
  */
 import { NextResponse } from 'next/server';
 import { coerceJobUrgency } from '@/lib/job-urgency';
-import { recommendedSet, rowScope, scoreRecommendations } from '@/lib/server/recommendation-compute';
+import { recommendedSet, rowScope, scoreRecommendations, toRecJob } from '@/lib/server/recommendation-compute';
 import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
@@ -182,6 +182,22 @@ async function computeRecommendations(
     ]);
     if (!Array.isArray(jobs) || jobs.length === 0) return { jobs: [], total: 0 };
 
+    /* THE FIX FOR THE COLD >15 s / 9 s-PER-MISS PATH.
+       Scoring scans every description for skills (426 µs of a posting's
+       ~440 µs). The personalized ranking already derives those features ONCE
+       per corpus version through `recFeaturesFor` and hands them to the same
+       scorer; this scope never did, so every cache miss — per viewer, per
+       60 s, per worker — re-scanned 12,659 descriptions (~9 s measured).
+       Same version key, same single-flighted derivation, same fallback: a
+       `null` set makes the scorer scan inline exactly as before. The version
+       is read AFTER the corpus, as the personalized path does, so a write
+       landing mid-read shows as a new version rather than being absorbed.
+       One version probe and one `recFeaturesFor` per pass — never per job. */
+    const features = await recFeaturesFor(
+      corpusVersionKey(await readHiringCorpusVersion().catch(() => null)),
+      jobs as unknown as Array<Record<string, unknown>>,
+    ).catch(() => null);
+
     /* Profile first, parsed resume second. The scorer is unchanged; it is
        simply given a fuller description of the viewer. */
     const signals = mergeResumeSignals(
@@ -202,7 +218,7 @@ async function computeRecommendations(
        makes this endpoint slow. Same scorer, same field projection, same
        ranking and tie-break; this route supplies the corpus and profile it
        already loaded. `hiringUrgency` and `preferences` are preserved. */
-    const scored = scoreRecommendations({ profile, showMatch, jobs: jobs as unknown as Array<Record<string, unknown>>, now });
+    const scored = scoreRecommendations({ profile, showMatch, jobs: jobs as unknown as Array<Record<string, unknown>>, now, features });
 
     scored.sort((a, b) => b.score - a.score || Date.parse(String(b.job.createdAt)) - Date.parse(String(a.job.createdAt)));
     /* THE RECOMMENDED SET: roles that genuinely overlap the viewer's profile
@@ -381,25 +397,9 @@ async function rankPersonalized(
   const factors = new Map<string, Array<{ kind: string; label: string; detail: string; points: number; max: number }>>();
   const missing = new Map<string, string[]>();
   const scored = (jobs as unknown as Array<Record<string, unknown>>).map((j) => {
-    const recJob: RecJob = {
-      id: String(j.id ?? ''),
-      title: String(j.title ?? ''),
-      organizationName: String(j.organizationName ?? ''),
-      location: String(j.location ?? ''),
-      employmentType: String(j.employmentType ?? ''),
-      workMode: String(j.workMode ?? ''),
-      experienceLevel: String(j.experienceLevel ?? ''),
-      description: String(j.description ?? ''),
-      preferredSkills: Array.isArray(j.preferredSkills) ? (j.preferredSkills as string[]) : [],
-      targetRoleKeywords: Array.isArray(j.targetRoleKeywords) ? (j.targetRoleKeywords as string[]) : [],
-      createdAt: String(j.createdAt ?? ''),
-      /* Spread only when this posting HAS features: an absent key leaves the
-         scorer scanning `description`, which is the pre-existing path. */
-      ...(features?.get(String(j.id ?? ''))
-        ? { recSkills: features.get(String(j.id ?? ''))!.skills,
-            recYears: features.get(String(j.id ?? ''))!.years }
-        : {}),
-    };
+    /* The ONE shared projection (recommendation-compute.ts): features are
+       spread only when this posting has them, else the scorer scans inline. */
+    const recJob = toRecJob(j, features);
     const match = recommendMatch(profile, recJob, now);
     if (showMatch) {
       reasons.set(recJob.id, match.reasons);

@@ -73,18 +73,24 @@ function bucketsMirrorTheClient() {
     /\$nin: \[null, ''\]/.test(fn));
   check('and a non-string bucket is dropped rather than coerced',
     /typeof b\._id !== 'string' \|\| b\._id === ''/.test(fn));
-  check('values are not lowercased, matching the client loop',
-    !/toLower/.test(fn.slice(0, fn.indexOf('return out;'))));
+  /* The facet BUCKETS are the raw stored values, as the client loop kept them.
+     (The P2D `stats.companies` branch folds case on purpose — the page's own
+     `organizationName.toLowerCase()` distinct count — and is not a bucket.) */
+  check('facet buckets are grouped on the raw value, not lowercased',
+    /\$group: \{ _id: `\$\$\{field\}`, n: \{ \$sum: 1 \} \}/.test(fn)
+    && !/\$group: \{ _id: \{ \$toLower/.test(fn));
 }
 
 function pageSortKeepsItsIndex() {
   console.log('\n── 3. The page pipeline was not restructured ──');
   const pipe = QUERY.slice(QUERY.indexOf('export function buildPublicJobsCollectionPipeline'));
   const body = pipe.slice(0, pipe.indexOf('\n}\n'));
-  const iSort = body.indexOf('$sort');
-  const iFacet = body.indexOf('$facet');
-  check('the page sort is still OUTSIDE $facet', iSort >= 0 && iFacet >= 0 && iSort < iFacet,
-    `sort@${iSort} facet@${iFacet}`);
+  /* Originally: the sort must sit OUTSIDE `$facet`, because a facet
+     sub-pipeline cannot use an index. Phase 1 removed `$facet` from the page
+     pipeline altogether, which satisfies that more strongly: there is no facet
+     for the sort to be dragged inside. The guard now asserts exactly that. */
+  check('the page pipeline sorts', /\$sort\s*:/.test(body));
+  check('and has no $facet for the sort to fall inside', !/\$facet\s*:/.test(body));
   check('it still sorts on the persisted key', body.includes('persistedSortField(query.sort)'));
   check('the facet counts are a separate aggregation',
     QUERY.indexOf('selectPublicJobFacetCounts') !== -1
@@ -110,10 +116,14 @@ function clientContractUnchanged() {
   /* If the page ever starts computing facets from the filtered list, these
      server counts stop matching it and the rail silently disagrees with
      itself. Pin the dependency that makes them global. */
+  /* P2D: the page no longer downloads the corpus, so it cannot derive the
+     counts itself — it reads the GLOBAL facets served with the page. The
+     property is the same: the rail's numbers describe the whole corpus, never
+     the filtered list. */
   const memo = FEED.slice(FEED.indexOf('const facets = useMemo'));
-  check('the client still derives facets from the full list, not the filtered one',
-    /\}, \[all\]\);/.test(memo.slice(0, memo.indexOf('\n\n'))));
-  check('and still skips empty values', /if \(e\) emp\[e\]/.test(memo));
+  check('the client reads facets from the response, not from a list it filtered',
+    /feed\.facets\?\.emp/.test(memo.slice(0, memo.indexOf('\n\n'))) && !/\bfor \(const j of all\)/.test(FEED));
+  check('and the server still skips empty values', /\$nin: \[null, ''\]/.test(QUERY));
 }
 
 function main() {

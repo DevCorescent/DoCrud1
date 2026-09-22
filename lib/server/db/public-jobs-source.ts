@@ -29,6 +29,7 @@
 import type { PublicJobQuery } from '@/lib/server/job-api/queries';
 import {
   selectPublicJobsPage, selectPublicJobsPageFromCollection, type PublicJobsPage,
+  type PublicQueryOptions,
 } from '@/lib/server/db/public-jobs-query';
 
 export type JobReadSource = 'app_state' | 'hiring_jobs';
@@ -62,15 +63,16 @@ export function verifySampleRate(): number {
 export function readPublicJobsPage(
   query: PublicJobQuery,
   source: JobReadSource = jobReadSource(),
+  opts: PublicQueryOptions = {},
 ): Promise<PublicJobsPage | null> {
   return source === 'hiring_jobs'
-    ? selectPublicJobsPageFromCollection(query)
+    ? selectPublicJobsPageFromCollection(query, opts)
     : selectPublicJobsPage(query);
 }
 
 /* ── Dual-read verification ───────────────────────────────────────────────*/
 
-export type MismatchKind = 'total' | 'page' | 'pageSize' | 'itemCount' | 'order' | 'fields' | 'availability';
+export type MismatchKind = 'hasNextPage' | 'page' | 'pageSize' | 'itemCount' | 'order' | 'fields' | 'availability';
 
 export interface VerificationResult {
   match: boolean;
@@ -102,7 +104,10 @@ export function comparePages(
     };
   }
 
-  if (a.total !== b.total) kinds.push('total');
+  /* `total` is gone from both shapes: the exact count left the listing path.
+     `hasNextPage` is the comparable signal now, and it is the one that affects
+     what a caller does next. */
+  if (a.hasNextPage !== b.hasNextPage) kinds.push('hasNextPage');
   if (a.page !== b.page) kinds.push('page');
   if (a.pageSize !== b.pageSize) kinds.push('pageSize');
   if (a.items.length !== b.items.length) kinds.push('itemCount');
@@ -116,7 +121,7 @@ export function comparePages(
     match: kinds.length === 0,
     kinds,
     detail: {
-      totalA: a.total, totalB: b.total,
+      hasNextA: a.hasNextPage, hasNextB: b.hasNextPage,
       itemsA: a.items.length, itemsB: b.items.length,
       page: a.page, pageSize: a.pageSize,
     },

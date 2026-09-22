@@ -54,7 +54,13 @@ import { SK_NEWEST, SK_SALARY, SK_RELEVANCE } from '@/lib/server/db/public-sort-
 import type { PublicJobQuery } from '@/lib/server/job-api/queries';
 import { pageParams } from '@/lib/server/job-api/queries';
 import { getMongoDb } from '@/lib/server/database';
+import { cursorCondition, encodeCursor, type JobCursor } from '@/lib/server/db/public-jobs-cursor';
+
+/** Internal: the sort value attached to each row so a cursor can be built. */
+const CURSOR_KEY = '_cursorKey';
 import { publicFreshnessEnabled, publiclyFreshCond } from '@/lib/server/job-sources/freshness';
+import { indiaCityAliasEntries, delhiNcrCanonicals } from '@/lib/server/job-scraper/india';
+import { INDIA_BUCKET_FIELD } from '@/lib/server/db/public-india-bucket';
 
 const APP_STATE_KEY = 'json:data/hiring-jobs.json';
 const COL = 'app_state';
@@ -171,7 +177,25 @@ export const PUBLIC_JOB_VIEW_FIELDS = [
  * against that function for 47 query shapes, so a change here that alters
  * behaviour fails there rather than reaching a visitor.
  */
+/**
+ * P2D — the LIST CARD view: exactly the fields the Jobs page card renders,
+ * which is the contract `/api/public/hiring/jobs?view=list` served (see
+ * `PublicHiringJobListItem`). `description`, `responsibilities` and
+ * `requirements` are 90% of a posting's bytes (115.9 KB of a 128.8 KB page
+ * of 20, measured) and no card reads them. A strict subset of the public
+ * allow-list, so it can never expose a field the full view does not.
+ */
+export const PUBLIC_JOB_CARD_FIELDS = [
+  'id', 'title', 'organizationName', 'location', 'department',
+  'employmentType', 'workMode', 'experienceLevel',
+  'preferredSkills', 'applyUrl', 'shareUrl', 'createdAt', 'updatedAt',
+] as const satisfies ReadonlyArray<(typeof PUBLIC_JOB_VIEW_FIELDS)[number]>;
+
 export interface PublicQueryOptions {
+  /** `card` projects PUBLIC_JOB_CARD_FIELDS; absent projects the full public view. */
+  view?: 'card';
+  /** Resume position. Absent for the first page. */
+  cursor?: JobCursor | null;
   /**
    * The instant freshness is judged against. Injected so a boundary can be
    * tested exactly; defaults to the wall clock at the CALL, never at import.
@@ -204,7 +228,23 @@ export function buildPublicJobsConditions(
   }
 
   const search = lower(query.search);
-  if (search) {
+  if (search && query.searchScope === 'card') {
+    /* ═══ THE JOBS PAGE'S SEARCH, MOVED INTO THE DATABASE ═══
+
+       Measured on the real corpus, the two scopes disagree badly:
+           "bengaluru"  card 624   default  57    (default never reads location)
+           "python"     card  15   default 1524   (default reads descriptions)
+       The Jobs page has always searched title + organisation + location; this
+       reproduces that exactly so the page can stop downloading the corpus to
+       do it in the browser. The default scope is untouched for its consumers. */
+    conds.push({
+      $or: [
+        includesExpr(ref('title'), search),
+        includesExpr(ref('organizationName'), search),
+        includesExpr(ref('location'), search),
+      ],
+    });
+  } else if (search) {
     conds.push({
       $or: [
         includesExpr(ref('title'), search),
@@ -230,8 +270,55 @@ export function buildPublicJobsConditions(
     ['employmentType', 'employmentType'], ['experienceLevel', 'experienceLevel'],
   ];
   for (const [param, field] of EQ) {
-    const want = lower(query[param]);
-    if (want) conds.push({ $eq: [lowerExpr(ref(field)), literal(want)] });
+    /* Several values, comma-separated, is the Jobs page's multi-select:
+       `filters.workMode.has(job.workMode)` over a Set. One value stays the
+       plain equality it always was. */
+    const wants = lower(query[param]).split(',').map((v) => v.trim()).filter(Boolean);
+    if (wants.length === 1) conds.push({ $eq: [lowerExpr(ref(field)), literal(wants[0])] });
+    else if (wants.length > 1) conds.push({ $in: [lowerExpr(ref(field)), wants.map(literal)] });
+  }
+
+  /* ═══ THE INDIA CHIPS, REPRODUCED — NOT REDEFINED ═══
+
+     `indiaBucket(location, workMode)` in job-scraper/india.ts is the single
+     definition. Its rules, in order: a remote India posting is `remote-india`
+     BEFORE any city is considered; otherwise the FIRST alias hit in CITY_CANON
+     order names the city; Delhi-NCR is a set of those canonicals.
+
+     Two deliberate departures, both approved after measurement:
+       · `india` / `remote-india` test the STORED country, not the location
+         text. The 8.1B backfill made stored classification authoritative, and
+         it sees 340 "Remote, in" postings the text test cannot.
+       · City buckets match location TEXT, not the stored `city` field, which
+         is unset on ~100 real Bengaluru/Pune postings (multi-city or stale). */
+  /* The Jobs page's location box: `location.includes(text)`, nothing more.
+     `city` above ALSO matches the stored city field, which makes it a superset
+     — "Bangalore, India" carries city=Bengaluru, and would match a search for
+     "bengaluru" that the page's own substring test does not. */
+  const locText = lower(query.location);
+  if (locText) conds.push(includesExpr(ref('location'), locText));
+
+  const bucket = lower(query.indiaBucket);
+  if (bucket) {
+    const remote = { $or: [
+      { $eq: [lowerExpr(ref('workMode')), literal('remote')] },
+      includesExpr(ref('location'), 'remote'),
+    ] };
+    const isIndia = { $eq: [ref('country'), literal('IN')] };
+    /* First alias wins, in table order — exactly `indiaCity`. */
+    const firstCity = { $switch: {
+      branches: indiaCityAliasEntries().map(([alias, canon]) => ({
+        case: includesExpr(ref('location'), alias), then: literal(canon.toLowerCase()),
+      })),
+      default: literal(''),
+    } };
+    if (bucket === 'india') conds.push(isIndia);
+    else if (bucket === 'remote-india') conds.push({ $and: [isIndia, remote] });
+    else if (bucket === 'delhi-ncr') {
+      conds.push({ $and: [{ $not: [remote] }, { $in: [firstCity, delhiNcrCanonicals().map(literal)] }] });
+    } else {
+      conds.push({ $and: [{ $not: [remote] }, { $eq: [firstCity, literal(bucket)] }] });
+    }
   }
 
   /* City matches the RAW location too, so a multi-location posting stays
@@ -305,7 +392,11 @@ export interface PublicJobsPage {
   items: Record<string, unknown>[];
   page: number;
   pageSize: number;
-  total: number;
+  /* True when a row beyond this page exists. Costs one extra index key, where
+     an exact `total` cost the whole match set. */
+  hasNextPage: boolean;
+  /** Opaque resume token, or null at the end of the feed. */
+  nextCursor: string | null;
 }
 
 /**
@@ -323,7 +414,13 @@ export async function selectPublicJobsPage(query: PublicJobQuery = {}): Promise<
     const row = docs[0] as { total?: unknown; items?: unknown } | undefined;
     if (!row || !Array.isArray(row.items) || typeof row.total !== 'number') return null;
     const { page, pageSize } = pageParams(query.page, query.pageSize);
-    return { items: row.items as Record<string, unknown>[], page, pageSize, total: row.total };
+    /* The app_state path has no keyset support and is unreachable in
+       production — `jobReadSource()` returns `hiring_jobs` unconditionally. It
+       is kept typing-compatible only so the dual-read comparator still builds.
+       `hasNextPage` is derived from the count it already has; `nextCursor` is
+       null because this path cannot resume. */
+    const items = row.items as Record<string, unknown>[];
+    return { items, page, pageSize, hasNextPage: page * pageSize < row.total, nextCursor: null };
   } catch {
     /* A projection failure must never take the feed down — fall back. */
     return null;
@@ -358,20 +455,179 @@ export async function selectPublicJobsPage(query: PublicJobQuery = {}): Promise<
  * `$facet` matters for correctness as much as latency: computing `total` in a
  * second query could observe a different corpus if a write landed between them.
  */
+/**
+ * The collection query, split into what an index can bound and what cannot.
+ *
+ * ═══ WHY TWO HALVES (P2.9-A) ═══
+ *
+ * `buildPublicJobsConditions` expresses every filter as `$expr`. That is the
+ * only form the app_state ARRAY pipeline can use, and it is semantically
+ * exact — but MongoDB cannot turn an `$expr` wrapped in `$toLower`/`$trim`
+ * into index bounds, so every filtered listing walked the sort index and
+ * evaluated the expression on each fetched document: 211 documents for a
+ * 20-row India page, 1,001 for remote India, 1,358 (704 ms) for Delhi NCR,
+ * and the WHOLE published corpus (12,659 documents, ~2 s) for any filter that
+ * matched nothing. Filtered counts examined every published row.
+ *
+ * The audit measured that the stored `workMode`, `employmentType`,
+ * `experienceLevel` and `domain` values are already lower-cased and trimmed
+ * (0 exceptions), and `country` is stored as upper-case ISO (all 5,766
+ * non-null rows). For those fields a plain equality is the SAME predicate the
+ * expression evaluated, spelled so the planner can bound an index scan with
+ * it. Everything the audit could not prove index-safe — search, location
+ * text, `state` (1,152 mixed-case values), `subDomain`, `city`, minSalary,
+ * freshness — stays in `$expr`, unchanged.
+ *
+ * ═══ THE INDIA CHIPS (P2.9-C) ═══
+ *
+ * `india` is `{ country: 'IN' }` — every Indian row, as P2B defined it. The
+ * other chips read the persisted `_indiaBucket` (public-india-bucket.ts),
+ * which is P2B's `$switch` computed once at write time; the backfill gate
+ * proves every published row carries the value the expression would compute
+ * before this predicate is served.
+ *
+ * ═══ ACTIVE, AS A PLAIN PREDICATE ═══
+ *
+ *   $ne [isActive, false]              ⇔  { isActive: { $ne: false } }
+ *   $eq [{$ifNull [expiresAt, '']}, ''] ⇔  { expiresAt: { $in: [null, ''] } }
+ *
+ * (`null` in a query matches a missing field as well as an explicit null.)
+ * Expressed plainly so a count over indexed predicates has no `$expr` left
+ * to force a per-document evaluation.
+ *
+ * The array pipeline and `buildPublicJobsConditions` are untouched; the
+ * equivalence and parity suites hold the two forms to identical result sets.
+ */
+export function buildPublicJobsMatch(
+  query: PublicJobQuery,
+  opts: PublicQueryOptions = {},
+): { plain: Record<string, unknown>[]; expr: unknown[] } {
+  const plain: Record<string, unknown>[] = [
+    { status: 'published' },
+    { isActive: { $ne: false } },
+    { expiresAt: { $in: [null, ''] } },
+  ];
+  const expr: unknown[] = [];
+  const ref = DOC_REF;
+
+  if (publicFreshnessEnabled()) expr.push(publiclyFreshCond(ref, opts.now ?? Date.now()));
+
+  const search = lower(query.search);
+  if (search && query.searchScope === 'card') {
+    expr.push({ $or: [
+      includesExpr(ref('title'), search),
+      includesExpr(ref('organizationName'), search),
+      includesExpr(ref('location'), search),
+    ] });
+  } else if (search) {
+    expr.push({ $or: [
+      includesExpr(ref('title'), search),
+      includesExpr(ref('organizationName'), search),
+      includesExpr(ref('description'), search),
+      { $anyElementTrue: { $map: { input: { $ifNull: [ref('preferredSkills'), []] }, as: 's', in: includesExpr('$$s', search) } } },
+    ] });
+  }
+
+  /* Index-safe equalities: the stored value is already what lowerExpr would
+     produce, so the wrapper is dropped and the comparison kept. */
+  const values = (v: unknown) => lower(v).split(',').map((x) => x.trim()).filter(Boolean);
+  const PLAIN_EQ: Array<[keyof PublicJobQuery, string]> = [
+    ['domain', 'domain'], ['workMode', 'workMode'],
+    ['employmentType', 'employmentType'], ['experienceLevel', 'experienceLevel'],
+  ];
+  for (const [param, field] of PLAIN_EQ) {
+    const wants = values(query[param]);
+    if (wants.length === 1) plain.push({ [field]: wants[0] });
+    else if (wants.length > 1) plain.push({ [field]: { $in: wants } });
+  }
+  /* Country is stored upper-case ISO; the request value was lower-cased by the
+     expression on both sides, so upper-casing it here compares the same pair. */
+  const countries = values(query.country).map((c) => c.toUpperCase());
+  if (countries.length === 1) plain.push({ country: countries[0] });
+  else if (countries.length > 1) plain.push({ country: { $in: countries } });
+
+  /* Not proven normalised — stays an expression. */
+  const EXPR_EQ: Array<[keyof PublicJobQuery, string]> = [['state', 'state'], ['subDomain', 'subDomain']];
+  for (const [param, field] of EXPR_EQ) {
+    const wants = values(query[param]);
+    if (wants.length === 1) expr.push({ $eq: [lowerExpr(ref(field)), literal(wants[0])] });
+    else if (wants.length > 1) expr.push({ $in: [lowerExpr(ref(field)), wants.map(literal)] });
+  }
+
+  const locText = lower(query.location);
+  if (locText) expr.push(includesExpr(ref('location'), locText));
+
+  const bucket = lower(query.indiaBucket);
+  if (bucket === 'india') plain.push({ country: 'IN' });
+  else if (bucket) plain.push({ [INDIA_BUCKET_FIELD]: bucket });
+
+  const city = lower(query.city);
+  if (city) expr.push({ $or: [{ $eq: [lowerExpr(ref('city')), literal(city)] }, includesExpr(ref('location'), city)] });
+
+  const minSalary = Number(query.minSalary);
+  if (Number.isFinite(minSalary) && minSalary > 0) {
+    expr.push({ $let: {
+      vars: { ceiling: { $ifNull: [ref('salaryMax'), { $ifNull: [ref('salaryMin'), null] }] } },
+      in: { $or: [{ $eq: ['$$ceiling', null] }, { $gte: ['$$ceiling', minSalary] }] },
+    } });
+  }
+  return { plain, expr };
+}
+
+/**
+ * P2.9-F — root the seek when the planner can exploit it, and only then.
+ *
+ * Rooted, `{$or: [{$and: [plain…, sk<v]}, {$and: [plain…, sk=v, id>i]}]}`
+ * gives the planner two independent, fully index-bounded scans it merges in
+ * order: every single-value deep page measured 21 keys with no in-memory sort,
+ * where the `$and: [plain…, {$or}]` form had let it choose an index
+ * intersection or walk a whole bucket (hybrid 422 keys; Bengaluru 296 with a
+ * SORT). With a multi-value `$in` among the plain FILTERS the opposite holds:
+ * the rooted form asks for `$in × branch` explosions the planner declines, and
+ * it fell back to an OR of two range scans plus a blocking sort — 2,271 keys
+ * on Atlas for `remote,hybrid`. The unrooted form of that shape walks the
+ * newest index bounded by selectivity (28–53 keys measured). So: root when
+ * every plain filter is a single equality, otherwise keep the conjunction.
+ * (The active predicate's `expiresAt: {$in: [null, '']}` is not a filter and
+ * does not count.) Both forms are the same predicate:
+ * `A ∧ (B ∨ C) ≡ (A ∧ B) ∨ (A ∧ C)`.
+ */
+function rootedSeek(plain: Record<string, unknown>[], seek: Record<string, unknown>): Record<string, unknown> {
+  const multiValued = plain.some((p) => !('expiresAt' in p)
+    && Object.values(p).some((v) => typeof v === 'object' && v !== null && '$in' in (v as Record<string, unknown>)));
+  if (multiValued) return { $and: [...plain, seek] };
+  return { $or: (seek.$or as Record<string, unknown>[]).map((branch) => ({ $and: [...plain, branch] })) };
+}
+
 export function buildPublicJobsCollectionPipeline(
   query: PublicJobQuery = {},
   opts: PublicQueryOptions = {},
 ): Record<string, unknown>[] {
-  const conds = buildPublicJobsConditions(query, DOC_REF, opts);
+  const { plain, expr } = buildPublicJobsMatch(query, opts);
   const { pageSize, skip } = pageParams(query.page, query.pageSize);
   const { direction } = sortKeyExpr(query.sort, DOC_REF);
+
+  /* The keyset seek sits WITH the indexable prefilter, before the `$expr`
+     stage, so `{status, sortKey, id}` can serve match and sort together. Put
+     after the `$expr` it would still be correct and would still scan from the
+     top of the index, which is the whole cost being removed. */
+  const seek = opts.cursor ? cursorCondition(persistedSortField(query.sort), opts.cursor) : null;
 
   return [
     /* Indexable prefilter. Redundant with the $expr below on purpose: it is
        what lets an index be used at all, and it can never widen the result
        because the $expr repeats it. */
-    { $match: { status: 'published' } },
-    { $match: { $expr: { $and: conds } } },
+    /* P2.9-F — the seek is ROOTED: the plain predicates are repeated inside
+       each cursor branch, so the planner sees two independent, fully
+       index-bounded scans ({status, X, sk<v} and {status, X, sk=v, id>i}) that
+       it merges in order. Written as `$and: [plain…, {$or}]`, the same
+       predicates left the planner free to choose an index intersection or to
+       walk a whole bucket and post-filter — measured on Atlas after the P2.9-B
+       indexes: hybrid deep page 422 keys, Bengaluru deep 296 keys with an
+       in-memory SORT. Rooted, every deep shape examines 21 keys and no plan
+       sorts. A pure logical distribution: `A ∧ (B ∨ C) ≡ (A ∧ B) ∨ (A ∧ C)`. */
+    { $match: seek ? rootedSeek(plain, seek) : { $and: plain } },
+    ...(expr.length ? [{ $match: { $expr: { $and: expr } } }] : []),
     /* Phase 2.7H: sort on the PERSISTED key rather than computing one.
        `$addFields` + a computed `$sort` forced MongoDB to derive a key for
        every match and sort them all in memory — 1,493 ms at 100K to return
@@ -381,22 +637,41 @@ export function buildPublicJobsCollectionPipeline(
        derivePublicSortKeys), so the ordering is unchanged and the index can
        now provide it. */
     { $sort: { [persistedSortField(query.sort)]: direction, id: 1 } },
+    /* ═══ NO `$facet`, AND NO `$count` ═══
+
+       The count branch had to consume every matching document before the page
+       could be returned, so page 1 examined the whole match set — 12,659
+       documents to serve 20. That is the corpus-proportional work this pipeline
+       exists to remove, and at 1M it is the difference between a feed and an
+       outage.
+
+       `hasNextPage` comes from asking for ONE more row than the page needs: if
+       it arrives there is another page, and it costs exactly one extra index
+       key. Exact counts live at /api/jobs/public/count, where they are asked
+       for deliberately and cached, rather than being computed on every listing
+       request whether anyone reads them or not.
+
+       Dropping `$facet` also lets the sort keep its index: a facet
+       sub-pipeline cannot use one. */
+    ...(skip ? [{ $skip: skip }] : []),
+    { $limit: pageSize + 1 },
+    /* Fields are COMPUTED (`$title`) rather than included (`1`).
+       An inclusion projection returns keys in the stored document's order,
+       which differs from the order the app_state pipeline builds; the values
+       were identical but the serialised bodies were not. Naming each field as
+       an expression constructs a new document in THIS order, so both stores
+       emit byte-identical JSON and the dual-read comparator can stay strict
+       instead of being taught to ignore a difference. A field that is absent is
+       omitted by both, identically. */
+    /* `_cursorKey` carries the sort value of each row so the next cursor can be
+       built from the page itself rather than by re-reading the document. It is
+       an internal field and is STRIPPED before the rows leave the selector — a
+       caller must never see a `_sk*` value, and no consumer may start depending
+       on one. */
     {
-      $facet: {
-        items: [
-          { $skip: skip },
-          { $limit: pageSize },
-          /* Fields are COMPUTED (`$title`) rather than included (`1`).
-             An inclusion projection returns keys in the stored document's
-             order, which differs from the order the app_state pipeline builds;
-             the values were identical but the serialised bodies were not. Naming
-             each field as an expression constructs a new document in THIS
-             order, so both stores emit byte-identical JSON and the dual-read
-             comparator can stay strict instead of being taught to ignore a
-             difference. A field that is absent is omitted by both, identically. */
-          { $project: Object.fromEntries([['_id', 0], ...PUBLIC_JOB_VIEW_FIELDS.map((f) => [f, `$${f}`])]) },
-        ],
-        total: [{ $count: 'n' }],
+      $project: {
+        ...Object.fromEntries([['_id', 0], ...(opts.view === 'card' ? PUBLIC_JOB_CARD_FIELDS : PUBLIC_JOB_VIEW_FIELDS).map((f) => [f, `$${f}`])]),
+        [CURSOR_KEY]: `$${persistedSortField(query.sort)}`,
       },
     },
   ];
@@ -438,11 +713,41 @@ export interface PublicJobFacetCounts {
   emp: Record<string, number>;
   wm: Record<string, number>;
   exp: Record<string, number>;
+  /**
+   * P2D — the three header figures JobsFeedPage computed over the corpus it
+   * downloaded: published postings, distinct organisations, remote postings.
+   * Global like the facets, computed in the same cached aggregation.
+   */
+  stats: { open: number; companies: number; remote: number };
 }
 
-const FACET_FIELDS: Array<[keyof PublicJobFacetCounts, string]> = [
+const FACET_FIELDS: Array<['emp' | 'wm' | 'exp', string]> = [
   ['emp', 'employmentType'], ['wm', 'workMode'], ['exp', 'experienceLevel'],
 ];
+
+/**
+ * How many published postings match a filter set.
+ *
+ * Its own query, deliberately: the listing pipeline no longer counts, because
+ * counting consumes every match and a page needs twenty rows. Callers that
+ * genuinely need a number ask for one here, where the cost is visible and the
+ * answer is cached per filter set.
+ *
+ * `null` when the collection cannot answer — never 0, which would read as
+ * "there are no jobs".
+ */
+export async function countPublicJobs(query: PublicJobQuery = {}): Promise<number | null> {
+  const db = await getMongoDb();
+  if (!db) return null;
+  try {
+    const { plain, expr } = buildPublicJobsMatch(query);
+    return await db.collection(HIRING_JOBS_COL).countDocuments({
+      $and: expr.length ? [...plain, { $expr: { $and: expr } }] : plain,
+    });
+  } catch {
+    return null;
+  }
+}
 
 export async function selectPublicJobFacetCounts(
   opts: PublicQueryOptions = {},
@@ -456,16 +761,25 @@ export async function selectPublicJobFacetCounts(
     if (publicFreshnessEnabled()) {
       base.push({ $match: { $expr: publiclyFreshCond(DOC_REF, opts.now ?? Date.now()) } });
     }
-    const branches = Object.fromEntries(FACET_FIELDS.map(([key, field]) => [key, [
+    const branches: Record<string, Record<string, unknown>[]> = Object.fromEntries(FACET_FIELDS.map(([key, field]) => [key, [
       /* `|| ''` in the client skips empty AND absent. Both are excluded here. */
       { $match: { [field]: { $nin: [null, ''] } } },
       { $group: { _id: `$${field}`, n: { $sum: 1 } } },
     ]]));
+    /* P2D — the header figures, in the same pass: every published posting,
+       distinct organisations (case-folded, blanks excluded), remote postings. */
+    branches.stats = [{ $group: {
+      _id: null,
+      open: { $sum: 1 },
+      remote: { $sum: { $cond: [{ $eq: ['$workMode', 'remote'] }, 1, 0] } },
+      orgs: { $addToSet: { $toLower: { $ifNull: ['$organizationName', ''] } } },
+    } }, { $project: { _id: 0, open: 1, remote: 1, companies: { $size: { $setDifference: ['$orgs', ['']] } } } }];
     const rows = await db.collection(HIRING_JOBS_COL)
       .aggregate([...base, { $facet: branches }]).toArray();
     const row = rows[0] as Record<string, Array<{ _id: unknown; n: number }>> | undefined;
     if (!row) return null;
-    const out: PublicJobFacetCounts = { emp: {}, wm: {}, exp: {} };
+    const stat = (row.stats as unknown as Array<{ open?: number; companies?: number; remote?: number }> | undefined)?.[0];
+    const out: PublicJobFacetCounts = { emp: {}, wm: {}, exp: {}, stats: { open: stat?.open ?? 0, companies: stat?.companies ?? 0, remote: stat?.remote ?? 0 } };
     for (const [key] of FACET_FIELDS) {
       for (const b of row[key] ?? []) {
         if (typeof b._id !== 'string' || b._id === '') continue;
@@ -482,23 +796,31 @@ export async function selectPublicJobFacetCounts(
 
 export async function selectPublicJobsPageFromCollection(
   query: PublicJobQuery = {},
+  opts: PublicQueryOptions = {},
 ): Promise<PublicJobsPage | null> {
   const db = await getMongoDb();
   if (!db) return null;
   try {
-    const docs = await db.collection(HIRING_JOBS_COL)
-      .aggregate(buildPublicJobsCollectionPipeline(query)).toArray();
-    const row = docs[0] as { items?: unknown; total?: Array<{ n?: number }> } | undefined;
-    if (!row || !Array.isArray(row.items)) return null;
     const { page, pageSize } = pageParams(query.page, query.pageSize);
-    return {
-      items: row.items as Record<string, unknown>[],
-      page,
-      pageSize,
-      /* An empty $facet branch means zero matches — a real answer, not a
-         failure. `total` is absent only when nothing matched. */
-      total: Number(row.total?.[0]?.n ?? 0),
-    };
+    const rows = await db.collection(HIRING_JOBS_COL)
+      .aggregate(buildPublicJobsCollectionPipeline(query, opts)).toArray() as Array<Record<string, unknown>>;
+
+    /* One row beyond the page was asked for; its presence IS `hasNextPage`.
+       It is dropped rather than returned — the caller asked for `pageSize`. */
+    const hasNextPage = rows.length > pageSize;
+    const items = rows.slice(0, pageSize);
+
+    /* Built from the last row of THIS page, so the next request resumes exactly
+       after it. Absent when there is nothing after it to resume to. */
+    const last = items[items.length - 1];
+    const nextCursor = hasNextPage && last
+      ? encodeCursor(last[CURSOR_KEY] as string | number, String(last.id ?? ''), query)
+      : null;
+
+    /* Internal field, never part of the response. */
+    for (const item of items) delete item[CURSOR_KEY];
+
+    return { items, page, pageSize, hasNextPage, nextCursor };
   } catch {
     return null;
   }

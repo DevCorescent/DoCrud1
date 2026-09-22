@@ -139,7 +139,10 @@ async function main() {
     /* ── filters must not change the ordering contract ── */
     const filtered = await selectPublicJobsPageFromCollection({ country: 'IN', pageSize: 50 } as never);
     check('a filtered page still returns rows', (filtered?.items.length ?? 0) > 0);
-    check('and its total is the filtered count', filtered?.total === FIXTURES.length);
+    /* `total` left the listing contract with the corpus-wide $count; the
+       comparable signal is whether the page exhausted the filtered set. */
+    check('and it reports no further page for a set that fits',
+      filtered?.hasNextPage === false && filtered?.items.length === FIXTURES.length);
 
     /* ── the index is actually used now ── */
     await col.createIndex({ status: 1, [SK_NEWEST]: -1, id: 1 }, { name: 'published_sk_newest' });

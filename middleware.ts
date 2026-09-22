@@ -8,6 +8,7 @@ import { getAuthSecret } from '@/lib/auth-secret';
 const UNVERIFIED_ALLOWED_PREFIXES = [
   '/onboarding',
   '/login',
+  '/forgot-password',
   '/api/auth',
   '/api/onboarding/send-otp',
   '/api/onboarding/verify-otp',

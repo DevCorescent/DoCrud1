@@ -31,6 +31,8 @@
 import { buildRecProfile, hasProfileSignals } from '@/lib/server/job-recommend';
 import { mergeResumeSignals } from '@/lib/server/recommend-profile';
 import { recommendedSet, scoreRecommendations } from '@/lib/server/recommendation-compute';
+import { storedEntryOf } from '@/lib/server/recommendation-snapshots';
+import type { RecFeatures } from '@/lib/server/recommendation-features';
 
 /* SCORER_VERSION, freshness and the replace guard live in the PERSISTENCE
    module and are re-exported here. They were briefly defined in both places,
@@ -107,15 +109,26 @@ export function computeRecordForProfile(
   jobs: ReadonlyArray<Record<string, unknown>>,
   corpusVersion: string,
   now: number,
+  /** Per-posting features derived once per corpus version (recFeaturesFor).
+      Optional; absent, the scorer scans every description inline. */
+  features?: Map<string, RecFeatures> | null,
 ): RecommendationRecord {
   const signals = mergeResumeSignals(
     input.fields as Parameters<typeof mergeResumeSignals>[0],
     (input.fields as { resumeFiles?: Parameters<typeof mergeResumeSignals>[1] })?.resumeFiles,
   );
-  const profile = buildRecProfile(signals as Parameters<typeof buildRecProfile>[0]);
+  /* The SAME profile the live route builds: stated match preferences included.
+     This batch used to omit them, so a record it wrote and the live answer for
+     the same member could disagree — and the store is now shared with the live
+     path's own snapshots, which the version guard would let a batch overwrite.
+     One profile construction, in both places. */
+  const profile = buildRecProfile({
+    ...(signals as Parameters<typeof buildRecProfile>[0]),
+    preferences: (input.fields as { matchPreferences?: Record<string, never> } | null)?.matchPreferences,
+  });
   const showMatch = hasProfileSignals(profile);
 
-  const scored = scoreRecommendations({ profile, showMatch, jobs, now });
+  const scored = scoreRecommendations({ profile, showMatch, jobs, now, features });
   const { recommended, total } = recommendedSet(scored);
 
   return {
@@ -131,19 +144,7 @@ export function computeRecordForProfile(
     /* The FULL match payload — see StoredRecommendation. Fields the live card
        omits when empty are omitted here too, so a reconstructed card and a live
        one serialise identically rather than merely carrying the same score. */
-    results: recommended.map((s) => {
-      const job = s.job as Record<string, unknown>;
-      const entry: StoredRecommendation = {
-        jobId: String(job.id),
-        score: s.score,
-        reasons: Array.isArray(job.matchReasons) ? (job.matchReasons as string[]) : [],
-      };
-      if (typeof job.matchSummary === 'string') entry.summary = job.matchSummary;
-      if (Array.isArray(job.matchFactors)) entry.factors = job.matchFactors as StoredRecommendation['factors'];
-      if (Array.isArray(job.matchedSkills)) entry.matchedSkills = job.matchedSkills as string[];
-      if (Array.isArray(job.missingSkills)) entry.missingSkills = job.missingSkills as string[];
-      return entry;
-    }),
+    results: recommended.map(storedEntryOf),
     total,
   };
 }

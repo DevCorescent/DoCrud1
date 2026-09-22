@@ -12,7 +12,7 @@ import { coerceJobUrgency } from '@/lib/job-urgency';
 import { recommendedSet, rowScope, scoreRecommendations, toRecJob } from '@/lib/server/recommendation-compute';
 import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
 import { getProfileFields } from '@/lib/server/user-profiles';
-import { getPublishedHiringJobs } from '@/lib/server/hiring';
+import { getPublishedHiringJobs, peekPublishedHiringJobsAt, selectPublishedFeedJobsByIds } from '@/lib/server/hiring';
 import { getFeedConfig } from '@/lib/server/feed-config';
 import { buildRecProfile, hasProfileSignals, isRecommended, recommendMatch, type RecJob } from '@/lib/server/job-recommend';
 import { mergeResumeSignals } from '@/lib/server/recommend-profile';
@@ -22,6 +22,12 @@ import { readFreshRecommendationRecord, renderPrecomputed } from '@/lib/server/d
 import { selectPublishedJobsByIds, readHiringCorpusVersion } from '@/lib/server/db/hiring-jobs-collection';
 import { corpusVersionKey } from '@/lib/server/recommendation-refresh';
 import { recFeaturesFor } from '@/lib/server/recommendation-features';
+import {
+  SNAPSHOT_BUILD_BUDGET_MS, RETRY_AFTER_SECONDS,
+  answerMiss, classifySnapshot, persistSnapshots, readSnapshot, renderSnapshot, snapshotJobIds,
+  snapshotRecordsFromScored, viewerKeyOf, type SnapshotOutcome,
+} from '@/lib/server/recommendation-snapshots';
+import { startRecommendationKeepWarm } from '@/lib/server/recommendation-keep-warm';
 import { getHiringApplicationsStrict } from '@/lib/server/hiring';
 import { personalizedPage } from '@/lib/server/job-api/personalized';
 import { buildEligibilityProfile } from '@/lib/server/job-sources/eligibility';
@@ -63,6 +69,11 @@ const cache = new Map<string, CachedRecs>();
 /* Registered so a job write can clear it — see lib/server/recommendation-cache.ts. */
 registerRecommendationCache(cache);
 
+/* Keeps this worker's corpus and derived features resident between requests,
+   so the ~52 s cold reload never lands on a person's request again. Idempotent;
+   see lib/server/recommendation-keep-warm.ts. */
+startRecommendationKeepWarm();
+
 /* ═══ THE PERSONALIZED RANKING, CACHED SEPARATELY ═══
 
    `scope=personalized` returned before ever reaching the cache above, so every
@@ -100,7 +111,88 @@ interface PersonalizedRanking {
  * failed refresh removes its entry so the next request may retry, and never
  * poisons the cached value that is still being served.
  */
-const refreshing = new Map<string, Promise<void>>();
+const refreshing = new Map<string, Promise<RecsPayload>>();
+
+/**
+ * THE one ranking pass per cache key, shared by everyone who needs it.
+ *
+ * A stale-cache refresh and a cache-miss build used to be two different
+ * promises; now a miss that arrives while a refresh is running joins it rather
+ * than starting a second full pass. The pass always runs to completion — it
+ * sets the cache and persists the snapshot even when the caller that started
+ * it stopped waiting (see the budget in GET). A failed pass removes its entry
+ * so the next request may retry, and never poisons a cached value.
+ */
+function startBuild(cacheKey: string, meId: string | null, scope: 'row' | 'recommended'): Promise<RecsPayload> {
+  const pending = refreshing.get(cacheKey);
+  if (pending) return pending;
+  const run = computeRecommendations(meId, scope)
+    .finally(() => { refreshing.delete(cacheKey); });
+  refreshing.set(cacheKey, run);
+  /* Observed here once so a caller that stops waiting leaves no unhandled
+     rejection behind; callers still awaiting `run` see the rejection. */
+  run.catch((error) => { console.error('[recommendations/jobs] ranking pass failed', error); });
+  return run;
+}
+
+/**
+ * The durable snapshot for this viewer and scope, rendered — or why not.
+ *
+ * Reads the three things freshness depends on IN PARALLEL with the record
+ * itself (one round trip, not four) and renders from the corpus already in
+ * memory when it is provably the version just observed, else by fetching only
+ * the postings the snapshot names. Never loads the corpus.
+ *
+ *   fresh     the answer — cached and returned as the live pass would be.
+ *   stale     served only if the fresh build overruns its budget.
+ *   unusable  nothing to serve; the build decides.
+ *   disabled  the jobs feed is switched off — the live path's own answer.
+ */
+async function trySnapshot(
+  meId: string | null,
+  scope: 'row' | 'recommended',
+): Promise<SnapshotOutcome> {
+  try {
+    const viewerKey = viewerKeyOf(meId);
+    const [config, version, versionFields, record] = await Promise.all([
+      getFeedConfig(),
+      readHiringCorpusVersion().catch(() => null),
+      meId ? getProfileFields(meId, ['profileVersion']).catch(() => null) : Promise.resolve(null),
+      readSnapshot(viewerKey, scope),
+    ]);
+    if (!config.jobs.enabled) return { state: 'disabled' };
+    const corpusVersion = corpusVersionKey(version);
+    if (!corpusVersion || !record) return { state: 'unusable' };
+    const profileVersion = Number((versionFields as { profileVersion?: unknown } | null)?.profileVersion) || 0;
+
+    const state = classifySnapshot(record, { profileVersion, corpusVersion }, Date.now());
+    if (state === 'unusable') return { state };
+
+    const ids = snapshotJobIds(record, scope, config.jobs.maxCards);
+    let canonical: ReadonlyMap<string, Record<string, unknown>> | null = null;
+    const warm = peekPublishedHiringJobsAt(version);
+    if (warm) {
+      const wanted = new Set(ids);
+      const byId = new Map<string, Record<string, unknown>>();
+      for (const job of warm as unknown as Array<Record<string, unknown>>) {
+        const id = String(job.id ?? '');
+        if (wanted.has(id)) byId.set(id, job);
+      }
+      canonical = byId;
+    } else {
+      canonical = await selectPublishedFeedJobsByIds(ids) as ReadonlyMap<string, Record<string, unknown>> | null;
+    }
+
+    const payload = renderSnapshot(record, scope, config.jobs.maxCards, canonical);
+    if (!payload) return { state: 'unusable' };
+    return { state, payload };
+  } catch (error) {
+    /* A snapshot must never be able to fail the request — the build path
+       below is always available and always correct. */
+    console.error('[recommendations/snapshot] errored; building live', error);
+    return { state: 'unusable' };
+  }
+}
 
 /**
  * The ranking pass. Identical to what the route always did — extracted only so
@@ -177,7 +269,7 @@ async function computeRecommendations(
         /* resumeFiles joins the projection so an uploaded CV can fill in
            signals the member never typed — see lib/server/recommend-profile.ts.
            It is the same single read, one field wider. */
-        ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences']).catch(() => null)
+        ? getProfileFields(meId, ['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences', 'profileVersion']).catch(() => null)
         : Promise.resolve(null),
     ]);
     if (!Array.isArray(jobs) || jobs.length === 0) return { jobs: [], total: 0 };
@@ -193,8 +285,9 @@ async function computeRecommendations(
        is read AFTER the corpus, as the personalized path does, so a write
        landing mid-read shows as a new version rather than being absorbed.
        One version probe and one `recFeaturesFor` per pass — never per job. */
+    const corpusVersion = corpusVersionKey(await readHiringCorpusVersion().catch(() => null));
     const features = await recFeaturesFor(
-      corpusVersionKey(await readHiringCorpusVersion().catch(() => null)),
+      corpusVersion,
       jobs as unknown as Array<Record<string, unknown>>,
     ).catch(() => null);
 
@@ -243,6 +336,19 @@ async function computeRecommendations(
     /* Remembered so the homepage can render this number on the NEXT server
        render without re-running the ranking that produced it. */
     if (meId) rememberViewerCount(meId, 'jobs', total);
+
+    /* THE SNAPSHOT — this very pass, persisted for both scopes, so the next
+       cache miss for this viewer (on any worker) is a read rather than a
+       rebuild. Behind the response: the payload above is already final, and a
+       write that fails or loses to a newer record changes nothing served. Only
+       a pass whose corpus version is known is stored — a record that could
+       never be proven fresh is worse than none. */
+    if (corpusVersion) {
+      const profileVersion = Number((fields as { profileVersion?: unknown } | null)?.profileVersion) || 0;
+      void persistSnapshots(snapshotRecordsFromScored({
+        viewerKey: viewerKeyOf(meId), profileVersion, corpusVersion, scored, showMatch, now,
+      }));
+    }
     return payload;
 }
 
@@ -499,19 +605,48 @@ export async function GET(request: Request) {
        person waiting gets last minute's answer instead of this minute's delay.
        Single-flighted, so concurrent stale readers share one recompute. */
     if (hit && age < STALE_TTL) {
-      if (!refreshing.has(cacheKey)) {
-        const run = computeRecommendations(meId, scope)
-          .then(() => undefined)
-          .catch((error) => { console.error('[recommendations/jobs] background refresh failed', error); })
-          .finally(() => { refreshing.delete(cacheKey); });
-        refreshing.set(cacheKey, run);
-      }
+      startBuild(cacheKey, meId, scope).catch(() => undefined);
       return NextResponse.json(hit.payload, { headers: { 'Cache-Control': 'no-store' } });
     }
 
-    // Nothing usable cached — this caller has to wait for the real thing.
-    const payload = await computeRecommendations(meId, scope);
-    return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
+    /* Nothing in this worker's memory. Before this caller is made to wait for
+       a ranking pass — which on a cold worker meant the corpus reload and the
+       60 s nginx timeout — the durable snapshot is consulted (one round trip).
+       A fresh one IS the answer: the same pass, run earlier, rendered from the
+       current postings. */
+    const snapshot = await trySnapshot(meId, scope);
+
+    /* Otherwise build — but wait only the budget. The pass keeps running past
+       it (single-flighted, it sets the cache and persists its snapshot when it
+       lands), and this caller answers with the best honest thing available:
+       the fresh result if it made the budget, else the newest valid snapshot,
+       else a 503 that says to retry — never a fabricated empty success, and
+       never a 60 s wait. The decision itself is answerMiss(), tested apart. */
+    const answer = await answerMiss({
+      snapshot,
+      build: () => startBuild(cacheKey, meId, scope),
+      budgetMs: SNAPSHOT_BUILD_BUDGET_MS,
+    });
+    switch (answer.kind) {
+      case 'fresh-snapshot':
+        cache.set(cacheKey, { payload: answer.payload, ts: Date.now() });
+        if (meId) rememberViewerCount(meId, 'jobs', answer.payload.total);
+        return NextResponse.json(answer.payload, { headers: { 'Cache-Control': 'no-store' } });
+      case 'stale-snapshot':
+        /* Cached as ALREADY STALE: the next request serves it at once and joins
+           the refresh in flight, instead of each waiting out the budget again.
+           Same window the stale tier always had; a job write still clears it. */
+        cache.set(cacheKey, { payload: answer.payload, ts: Date.now() - CACHE_TTL });
+        return NextResponse.json(answer.payload, { headers: { 'Cache-Control': 'no-store' } });
+      case 'built':
+      case 'disabled':
+        return NextResponse.json(answer.payload, { headers: { 'Cache-Control': 'no-store' } });
+      case 'pending':
+        return NextResponse.json(
+          { jobs: [], total: 0, error: 'Recommendations are temporarily unavailable.' },
+          { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': String(RETRY_AFTER_SECONDS) } },
+        );
+    }
   } catch (error) {
     /* A 200 carrying an empty list was the last place a storage failure could
        still pass for an answer: the caller cannot tell "nothing matched you"

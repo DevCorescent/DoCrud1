@@ -133,7 +133,8 @@ check('the response shape is unchanged', /const payload: RecsPayload = \{ jobs: 
 check('the corpus read is still not swallowed', !/getPublishedHiringJobs\(\)\s*\.catch/.test(cr));
 check('the recommended-set rule is unchanged', /const \{ recommended, total \} = recommendedSet\(scored\);/.test(cr));
 check('the comparator is unchanged', /scored\.sort\(\(a, b\) => b\.score - a\.score \|\| Date\.parse\(String\(b\.job\.createdAt\)\) - Date\.parse\(String\(a\.job\.createdAt\)\)\);/.test(cr));
-check('the profile fields read are unchanged', /getProfileFields\(meId, \['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences'\]\)/.test(cr));
+check('the profile fields read are unchanged (profileVersion joins the same single read for the snapshot key)',
+  /getProfileFields\(meId, \['headline', 'skills', 'location', 'experience', 'interests', 'resumeFiles', 'matchPreferences', 'profileVersion'\]\)/.test(cr));
 
 cacheBehaviour().then(() => {
   console.log(`\n${failed === 0 ? '✅' : '❌'} ${passed}/${passed + failed} checks passed`);

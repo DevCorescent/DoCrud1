@@ -18,6 +18,7 @@ import { invalidateNamespaces } from '@/lib/server/cache';
 import {
   countPublishedJobs, mirrorPublishedJobs, readHiringCorpusVersion,
   selectPublishedCompanyNames, selectPublishedJobDocById, selectPublishedJobListDocs,
+  selectPublishedJobsByIds,
   type CorpusVersion,
 } from '@/lib/server/db/hiring-jobs-collection';
 
@@ -214,6 +215,52 @@ function peekPublishedHiringJobs(): HiringJobPosting[] | null {
   return publishedCache && Date.now() - publishedCache.ts < PUBLISHED_PROBE_INTERVAL
     ? publishedCache.value
     : null;
+}
+
+/**
+ * The cached corpus IF it is provably the version the caller just observed.
+ * Never reads storage.
+ *
+ * The recommendation snapshot path has already paid for a corpus-version probe
+ * (it needs the version to judge freshness). When that version equals the
+ * cached corpus's, the cache is exactly as current as `getPublishedHiringJobs`
+ * would have confirmed it to be — so rendering from it costs no I/O, and the
+ * probe interval is renewed as that function would have renewed it. Any other
+ * state returns null and the caller fetches the postings it needs by id.
+ */
+export function peekPublishedHiringJobsAt(version: CorpusVersion | null): HiringJobPosting[] | null {
+  if (!publishedCache) return null;
+  const age = Date.now() - publishedCache.ts;
+  if (age < PUBLISHED_PROBE_INTERVAL) return publishedCache.value;
+  if (age < PUBLISHED_MAX_AGE && sameVersion(version, publishedCache.version)) {
+    publishedCache = { ...publishedCache, ts: Date.now() };
+    return publishedCache.value;
+  }
+  return null;
+}
+
+/**
+ * The published FEED postings named by `ids` — hiring jobs by _id, and, only
+ * when an id is not a hiring job, the (few) business-page jobs the feed merges
+ * in. What `getPublishedHiringJobs` returns, restricted to the ids asked for,
+ * without loading the corpus. Null when storage could not answer.
+ */
+export async function selectPublishedFeedJobsByIds(
+  ids: ReadonlyArray<string>,
+): Promise<Map<string, HiringJobPosting> | null> {
+  const wanted = Array.from(new Set(ids.filter(Boolean)));
+  if (wanted.length === 0) return new Map();
+  const hiring = await selectPublishedJobsByIds(wanted);
+  if (!hiring) return null;
+  const missing = wanted.filter((id) => !hiring.has(id));
+  if (missing.length === 0) return hiring;
+  const business = await getPublishedBusinessFeedJobs();
+  const byId = new Map(business.map((job) => [job.id, job]));
+  for (const id of missing) {
+    const job = byId.get(id);
+    if (job) hiring.set(id, job);
+  }
+  return hiring;
 }
 
 async function readPublishedHiringJobs(): Promise<HiringJobPosting[]> {

@@ -68,7 +68,9 @@ const CORPUS_VERSION = '240:2026-08-28T00:00:00.000Z';
 
 /** The LIVE path, exactly as the route performs it. */
 function live(raw: Record<string, unknown>) {
-  const profile = buildRecProfile(raw as never);
+  /* Exactly the route's construction (app/api/recommendations/jobs/route.ts):
+     stated match preferences ride on `preferences`, not as a raw field. */
+  const profile = buildRecProfile({ ...raw, preferences: raw.matchPreferences } as never);
   const showMatch = hasProfileSignals(profile);
   const scored = scoreRecommendations({ profile, showMatch, jobs: corpus, now: NOW });
   return { ...recommendedSet(scored), scored, showMatch };

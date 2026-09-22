@@ -4,7 +4,7 @@ import { isValidEmail, normalizeEmail } from '@/lib/server/security';
 
 type BusinessSignupOtpSession = {
   id: string;
-  purpose: 'business_signup' | 'document_signing' | 'account_action';
+  purpose: 'business_signup' | 'document_signing' | 'account_action' | 'password_reset';
   email: string;
   historyId?: string;
   signerKey?: string;
@@ -362,4 +362,107 @@ export async function verifyAccountActionOtp(input: {
   store.sessions[idx] = session;
   await writeStore(store);
   return { verified: true, verifiedAt: session.verifiedAt };
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   Password reset OTP  (signed-out — proves control of the account email)
+───────────────────────────────────────────────────────────────────── */
+
+export const PASSWORD_RESET_RESEND_MS = 45_000;
+export const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+/**
+ * Start (or re-send) a password-reset code for an account.
+ *
+ * Inside the resend window the EXISTING session is returned with `otp: null`
+ * — no mail goes out and no error is thrown. The route answers identically
+ * either way, so a caller cannot learn from a throttle response whether the
+ * address has an account (the not-found branch of the route never gets here
+ * and answers the same shape).
+ */
+export async function createPasswordResetOtp(input: { email: string; userId: string }) {
+  const email = normalizeEmail(input.email || '');
+  if (!isValidEmail(email)) throw new Error('Invalid email address.');
+  const userId = String(input.userId || '');
+  if (!userId) throw new Error('Invalid account.');
+
+  const now = nowIso();
+  const store = pruneExpiredSessions(await readStore(), Date.now());
+
+  const recent = store.sessions
+    .filter((s) => s.purpose === 'password_reset' && s.userId === userId && !s.verifiedAt)
+    .sort((a, b) => +new Date(b.lastSentAt) - +new Date(a.lastSentAt))[0];
+  if (recent) {
+    const diffMs = Date.now() - new Date(recent.lastSentAt).getTime();
+    if (Number.isFinite(diffMs) && diffMs < PASSWORD_RESET_RESEND_MS) {
+      return { sessionId: recent.id, otp: null as string | null, expiresAt: recent.expiresAt, resent: false };
+    }
+  }
+
+  /* One live reset session per account: an older code stops working the
+     moment a new one is issued, so a code from a forgotten tab or an old mail
+     cannot be replayed later. */
+  store.sessions = store.sessions.filter((s) => !(s.purpose === 'password_reset' && s.userId === userId));
+
+  const otp = generateOtp();
+  const otpSalt = crypto.randomBytes(16).toString('hex');
+  const otpHash = sha256Hex(`${otpSalt}:${otp}`);
+  const session: BusinessSignupOtpSession = {
+    id: generateSessionId(),
+    purpose: 'password_reset',
+    email,
+    userId,
+    otpHash,
+    otpSalt,
+    createdAt: now,
+    lastSentAt: now,
+    expiresAt: addMinutes(now, 10),
+    attempts: 0,
+  };
+  store.sessions.unshift(session);
+  await writeStore(store);
+  return { sessionId: session.id, otp: otp as string | null, expiresAt: session.expiresAt, resent: true };
+}
+
+/**
+ * Check a reset code. Returns the account the session belongs to.
+ *
+ * Never reveals which of session / email / code was wrong beyond what the
+ * person needs to act on; every failure is a thrown Error the route turns into
+ * a 400. Attempts are counted BEFORE comparison so a wrong code always costs
+ * one, and the session is left in place so a retry can still succeed.
+ */
+export async function verifyPasswordResetOtp(input: { sessionId: string; email: string; otp: string }) {
+  const email = normalizeEmail(input.email || '');
+  const code = String(input.otp || '').trim();
+  if (!input.sessionId || input.sessionId.length < 10) throw new Error('This reset code has expired. Request a new one.');
+  if (!isValidEmail(email)) throw new Error('Enter the email address the code was sent to.');
+  if (!/^\d{6}$/.test(code)) throw new Error('Enter the 6-digit code from the email.');
+
+  const store = pruneExpiredSessions(await readStore(), Date.now());
+  const idx = store.sessions.findIndex((s) => s.id === input.sessionId && s.purpose === 'password_reset');
+  if (idx < 0) throw new Error('This reset code has expired. Request a new one.');
+  const session = store.sessions[idx];
+  if (session.email !== email) throw new Error('This code was sent to a different email address.');
+  if (session.attempts >= PASSWORD_RESET_MAX_ATTEMPTS) throw new Error('Too many incorrect attempts. Request a new code.');
+
+  const attemptHash = sha256Hex(`${session.otpSalt}:${code}`);
+  session.attempts += 1;
+  if (!safeEq(attemptHash, session.otpHash)) {
+    store.sessions[idx] = session;
+    await writeStore(store);
+    const left = PASSWORD_RESET_MAX_ATTEMPTS - session.attempts;
+    throw new Error(`Incorrect code. ${left > 0 ? `${left} attempt${left !== 1 ? 's' : ''} remaining.` : 'Request a new code.'}`);
+  }
+  session.verifiedAt = nowIso();
+  store.sessions[idx] = session;
+  await writeStore(store);
+  return { userId: String(session.userId || ''), email: session.email };
+}
+
+/** A code is single-use: once the password is changed the session is gone. */
+export async function consumePasswordResetOtp(sessionId: string) {
+  const store = await readStore();
+  const next = store.sessions.filter((s) => !(s.id === sessionId && s.purpose === 'password_reset'));
+  if (next.length !== store.sessions.length) await writeStore({ sessions: next });
 }

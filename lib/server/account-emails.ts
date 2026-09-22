@@ -364,3 +364,102 @@ return sendTrackedMail({
     sentBy: 'system',
   });
 }
+
+/* ─── Password reset code ───────────────────────────────────────────── */
+export async function sendPasswordResetOtpEmail(opts: {
+  to: string;
+  name: string;
+  otp: string;
+  expiresAt: string;
+}) {
+  const { to, name, otp, expiresAt } = opts;
+  const safeName = escapeHtmlLite(name || 'there');
+  const expireTime = new Date(expiresAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;color:#e2e8f0;line-height:1.6;">
+      Hi <strong style="color:#f8fafc;">${safeName}</strong>,
+    </p>
+    <p style="margin:0 0 20px;font-size:14px;color:#94a3b8;line-height:1.7;">
+      We received a request to <strong style="color:#f8fafc;">reset the password</strong> for your Docrud account.
+      Enter the code below on the reset page to choose a new password.
+    </p>
+
+    <div style="margin:28px 0;text-align:center;">
+      <div style="display:inline-block;background:#0f172a;border:2px solid #38bdf8;border-radius:16px;padding:24px 40px;">
+        <p style="margin:0 0 6px;font-size:11px;font-weight:600;color:#64748b;letter-spacing:0.12em;text-transform:uppercase;">
+          Password reset code
+        </p>
+        <p style="margin:0;font-size:38px;font-weight:900;letter-spacing:0.18em;color:#38bdf8;font-variant-numeric:tabular-nums;">
+          ${otp}
+        </p>
+        <p style="margin:8px 0 0;font-size:11px;color:#64748b;">
+          Expires at ${expireTime} · Valid for 10 minutes
+        </p>
+      </div>
+    </div>
+
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">
+      If you did not request this, you can ignore this email — your password will not change.
+    </p>
+    <p style="margin:0;font-size:12px;color:#475569;">
+      Never share this code. Docrud will never ask you for it.
+    </p>
+  `;
+
+  const subject = `${otp} — Your Docrud password reset code`;
+  const html = buildEmailChrome({
+    origin: origin(),
+    subject,
+    preheader: `Code: ${otp} — Use this to reset your Docrud password.`,
+    bodyHtml,
+  });
+
+  return sendTrackedMail({
+    policyKey: 'otp_verification',
+    typeLabel: 'system',
+    to,
+    subject,
+    preheader: `Code: ${otp} — Use this to reset your Docrud password.`,
+    text: `Your Docrud password reset code is: ${otp}\nValid until ${expireTime}.\nIf you did not request this, ignore this email.`,
+    html,
+    origin: origin(),
+    sentBy: 'system',
+    metadata: { action: 'password_reset' },
+  });
+}
+
+/* ─── Password changed confirmation ─────────────────────────────────── */
+export async function sendPasswordChangedEmail(opts: { to: string; name: string }) {
+  const { to, name } = opts;
+  const safeName = escapeHtmlLite(name || 'there');
+  const when = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;color:#e2e8f0;line-height:1.6;">
+      Hi <strong style="color:#f8fafc;">${safeName}</strong>,
+    </p>
+    <p style="margin:0 0 20px;font-size:14px;color:#94a3b8;line-height:1.7;">
+      The password for your Docrud account was changed on <strong style="color:#f8fafc;">${escapeHtmlLite(when)}</strong>.
+    </p>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">
+      If this was you, no action is needed. If it was not, reset your password again from the
+      <a href="${origin()}/forgot-password" style="color:#38bdf8;">login page</a> right away.
+    </p>
+  `;
+  const subject = 'Your Docrud password was changed';
+  const html = buildEmailChrome({ origin: origin(), subject, preheader: 'Your password was changed just now.', bodyHtml });
+
+  return sendTrackedMail({
+    policyKey: 'otp_verification',
+    typeLabel: 'system',
+    to,
+    subject,
+    preheader: 'Your password was changed just now.',
+    text: `The password for your Docrud account was changed on ${when}. If this was not you, reset it again from ${origin()}/forgot-password.`,
+    html,
+    origin: origin(),
+    sentBy: 'system',
+    metadata: { action: 'password_changed' },
+  });
+}

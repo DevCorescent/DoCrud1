@@ -689,6 +689,16 @@ export default function LoginPage() {
      revealed to the account owner), and on a mismatch drop the session and name
      the toggle to switch to. Only fires on a successful Google return
      (?oauth=return); a cancelled OAuth lands on the error page instead. */
+  /* Back from /forgot-password: say the reset worked, then drop the flag so a
+     refresh does not repeat it. */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('reset') !== 'done') return;
+    setNotice('Your password has been updated. Sign in with your new password.');
+    params.delete('reset');
+    window.history.replaceState(null, '', params.toString() ? `/login?${params.toString()}` : '/login');
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('oauth') !== 'return') return;
@@ -801,7 +811,7 @@ export default function LoginPage() {
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
                       <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-white/28 sm:text-[11px]">Password</label>
-                      <span className="text-[11px] text-white/22 hover:text-white/45 cursor-pointer transition-colors">Forgot?</span>
+                      <Link href="/forgot-password" className="text-[11px] text-white/22 transition-colors hover:text-white/45">Forgot?</Link>
                     </div>
                     <div className="relative">
                       <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20">

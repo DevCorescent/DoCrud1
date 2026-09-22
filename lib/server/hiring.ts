@@ -207,6 +207,7 @@ export function invalidatePublishedHiringJobs() {
   rawCache = null;
   rawInFlight = null;
   listCache = null;
+  listInFlight = null;
   namesCache = null;
 }
 
@@ -338,8 +339,12 @@ export async function getPublishedHiringJobs(): Promise<HiringJobPosting[]> {
    are merged in afterwards exactly as getPublishedHiringJobs() does. Order is
    preserved: hiring jobs first, then business jobs. */
 
-type ListCache = { value: PublicHiringJobListItem[]; ts: number };
+type ListCache = { value: PublicHiringJobListItem[]; ts: number; version: CorpusVersion | null };
 let listCache: ListCache | null = null;
+/* Concurrent cold callers share ONE projected read — the same coalescing the
+   full corpus has had all along. Without it, N simultaneous requests for the
+   list each pulled their own copy of every card across the region. */
+let listInFlight: Promise<PublicHiringJobListItem[]> | null = null;
 type NamesCache = { value: string[]; ts: number };
 let namesCache: NamesCache | null = null;
 
@@ -374,16 +379,58 @@ export async function getPublishedJobsForSitemap(
 }
 
 export async function getPublishedHiringJobList(): Promise<PublicHiringJobListItem[]> {
-  if (listCache && Date.now() - listCache.ts < PUBLISHED_PROBE_INTERVAL) return listCache.value;
+  const age = listCache ? Date.now() - listCache.ts : Infinity;
+  if (listCache && age < PUBLISHED_PROBE_INTERVAL) return listCache.value;
 
-  // If the full list is already in memory, projecting again would be wasted work.
-  const warm = peekPublishedHiringJobs();
+  /* ═══ WHY THIS PROBES INSTEAD OF RE-READING ═══
+     This list is EVERY published card — 12,659 rows, 6.15 MB of JSON — and
+     the cache above used to be a hard 30 s expiry with no version check. So a
+     process serving /api/public/hiring/jobs?view=list re-read all 6 MB across
+     the region every 30 s whether or not a single posting had changed, and
+     every concurrent caller during that read fired its own copy. Measured in
+     production that read did not finish inside nginx's 60 s.
+
+     The full corpus right above solved the same problem years ago: past the
+     probe interval a ~50-byte version query decides whether anything changed,
+     and only a changed corpus is re-read. The list now follows the SAME rule
+     with the SAME probe, so it is exactly as fresh as the feed it is a
+     projection of — no fresher, no staler — and a job write still clears it
+     outright (invalidatePublishedHiringJobs). */
+  const version = await readHiringCorpusVersion().catch(() => null);
+  /* Re-read the cache AFTER the await: a concurrent caller may have filled it
+     while this probe was in flight, and a second read for the same version
+     is exactly the waste this function exists to prevent. */
+  const hit = listCache;
+  if (hit && Date.now() - hit.ts < PUBLISHED_MAX_AGE && sameVersion(version, hit.version)) {
+    listCache = { ...hit, ts: Date.now() };
+    return hit.value;
+  }
+
+  /* If the full corpus is resident AND provably this same version, the list is
+     a projection of it — a few milliseconds of mapping, no read at all. This
+     was already the preferred path; it only used to apply inside the corpus's
+     own 30 s window, which with a version in hand is needlessly narrow. */
+  const warm = peekPublishedHiringJobsAt(version);
   if (warm) {
     const value = warm.map(toPublicHiringJobListItem);
-    listCache = { value, ts: Date.now() };
+    listCache = { value, ts: Date.now(), version };
     return value;
   }
 
+  if (listInFlight) return listInFlight;
+  listInFlight = readPublishedHiringJobList(version)
+    .then((value) => { listInFlight = null; return value; })
+    .catch((error) => { listInFlight = null; throw error; });
+  return listInFlight;
+}
+
+/**
+ * The cold read: the projected cards from the collection, with the existing
+ * fallback ladder below it. `version` is the probe taken BEFORE the read; a
+ * write landing during the read therefore shows as a difference at the next
+ * probe and triggers one re-read, rather than being absorbed as current.
+ */
+async function readPublishedHiringJobList(version: CorpusVersion | null): Promise<PublicHiringJobListItem[]> {
   const [docs, business] = await Promise.all([
     selectPublishedJobListDocs(),
     getPublishedBusinessFeedJobs(),
@@ -411,7 +458,7 @@ export async function getPublishedHiringJobList(): Promise<PublicHiringJobListIt
       : (await getPublishedHiringJobs()).map(toPublicHiringJobListItem);
   }
 
-  listCache = { value, ts: Date.now() };
+  listCache = { value, ts: Date.now(), version };
   return value;
 }
 

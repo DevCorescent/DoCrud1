@@ -27,6 +27,7 @@
     "test:jobs-page-migration": "tsx scripts/jobs-page-migration.selftest.ts",
     "test:public-jobs-card-view": "tsx scripts/public-jobs-card-view.selftest.ts",
     "test:recommendation-features-parity": "tsx scripts/recommendation-features-parity.selftest.ts",
+    "test:recommendation-snapshot-delivery": "tsx scripts/recommendation-snapshot-delivery.selftest.ts",
     "test:corpus-cache": "tsx scripts/corpus-cache.selftest.ts",
     "test:recommend-profile": "tsx scripts/recommend-profile.selftest.ts",
     "test:recommended-view": "tsx scripts/recommended-view.selftest.ts",

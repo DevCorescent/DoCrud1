@@ -181,7 +181,19 @@ export async function readRecommendationRecord(
  */
 export async function writeRecommendationRecord(
   record: RecommendationResultRecord,
-): Promise<{ written: boolean; reason?: 'stale' }> {
+  options: {
+    /**
+     * Skip the replace when the stored record already carries the SAME three
+     * versions. The live route persists after every ranking pass, and most
+     * passes are stale-tier refreshes whose versions have not moved — for a
+     * member's `recommended` scope that is ~1.5 MB (measured, 1,964 matches)
+     * re-sent across regions to store what is already there. Off by default:
+     * a batch retrying after a partial failure relies on the identical-version
+     * replace being allowed (see mayReplace).
+     */
+    skipIfUnchanged?: boolean;
+  } = {},
+): Promise<{ written: boolean; reason?: 'stale' | 'unchanged' }> {
   const db = await getMongoDb();
   if (!db) throw new Error('recommendation store unavailable: no database');
   const _id = recordId(record.userId, record.scope);
@@ -192,6 +204,12 @@ export async function writeRecommendationRecord(
   ) as Pick<RecommendationResultRecord, 'profileVersion' | 'corpusVersion' | 'scorerVersion'> | null;
 
   if (!mayReplace(existing, record)) return { written: false, reason: 'stale' };
+  if (options.skipIfUnchanged && existing
+    && existing.profileVersion === record.profileVersion
+    && existing.corpusVersion === record.corpusVersion
+    && existing.scorerVersion === record.scorerVersion) {
+    return { written: false, reason: 'unchanged' };
+  }
 
   /* One atomic replace. The guard above is advisory under concurrency, so the
      filter repeats it: a racing newer write cannot be clobbered between the

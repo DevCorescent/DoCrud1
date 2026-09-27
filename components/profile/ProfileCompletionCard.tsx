@@ -1,4 +1,5 @@
 'use client';
+import '@/components/profile/profile.css';
 
 /**
  * "Complete your profile" — the progress panel on a member's own profile.
@@ -93,8 +94,8 @@ export default function ProfileCompletionCard({
     return (
       <div className="mb-6 flex items-center gap-2.5 rounded-[16px] border border-emerald-400/[0.18] bg-emerald-400/[0.05] px-4 py-3">
         <span aria-hidden className="text-[13px] text-emerald-300/90">&#10003;</span>
-        <p className="text-[12.5px] text-white/60">
-          <span className="font-semibold text-white/85">Profile complete</span>
+        <p className="text-[12.5px] pf-ink-2">
+          <span className="font-semibold pf-ink">Profile complete</span>
           {' · '}Your profile is ready to help you build your presence and discover opportunities.
         </p>
       </div>
@@ -104,7 +105,7 @@ export default function ProfileCompletionCard({
   const accent = almost ? 'rgba(52,211,153,0.85)' : 'rgba(255,255,255,0.55)';
 
   return (
-    <section className="mb-6 overflow-hidden rounded-[18px] border border-white/[0.07] bg-gradient-to-b from-white/[0.045] to-white/[0.015]">
+    <section className="mb-6 overflow-hidden rounded-[18px] border pf-rim bg-gradient-to-b from-white/[0.045] to-white/[0.015]">
 
       {/* ── Summary. A button on a phone (it opens the panel), a plain header
              from `sm` up, where the panel is always open. ── */}
@@ -113,7 +114,7 @@ export default function ProfileCompletionCard({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls="profile-completion-detail"
-        className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-white/[0.02] sm:cursor-default sm:hover:bg-transparent"
+        className="flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors pf-s2-h sm:cursor-default sm:hover:bg-transparent"
       >
         {/* Score. A ring rather than a bar: it is one number about one thing,
             and it reads at a glance without needing a scale beside it. */}
@@ -128,17 +129,17 @@ export default function ProfileCompletionCard({
               style={{ transition: 'stroke-dashoffset 700ms cubic-bezier(0.22,1,0.36,1)' }}
             />
           </svg>
-          <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold tabular-nums tracking-tight text-white"
+          <span className="absolute inset-0 flex items-center justify-center text-[12px] font-bold tabular-nums tracking-tight pf-ink"
             role="status" aria-label={`Profile strength ${score} percent`}>
             {score}%
           </span>
         </span>
 
         <span className="min-w-0 flex-1">
-          <span className="block text-[13.5px] font-semibold tracking-[-0.01em] text-white/90">
+          <span className="block text-[13.5px] font-semibold tracking-[-0.01em] pf-ink">
             {almost ? "You're almost there" : 'Complete your profile'}
           </span>
-          <span className="mt-0.5 block truncate text-[12px] text-white/40">
+          <span className="mt-0.5 block truncate text-[12px] pf-ink-3">
             {stepsLeft === 0
               ? 'Everything here is done.'
               : `${stepsLeft} step${stepsLeft === 1 ? '' : 's'} left · worth ${available}% more`}
@@ -148,22 +149,22 @@ export default function ProfileCompletionCard({
         {/* The affordance exists only where the panel actually collapses. */}
         <ChevronDown
           aria-hidden
-          className={`h-4 w-4 shrink-0 text-white/35 transition-transform sm:hidden ${open ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 pf-ink-3 transition-transform sm:hidden ${open ? 'rotate-180' : ''}`}
         />
       </button>
 
       {/* ── Detail ── */}
       <div id="profile-completion-detail" className={`${open ? 'block' : 'hidden'} sm:block`}>
-        <div className="border-t border-white/[0.06] px-4 pb-4 pt-3.5">
+        <div className="border-t pf-rim px-4 pb-4 pt-3.5">
 
-          <p className="text-[12px] leading-[1.6] text-white/40">
+          <p className="text-[12px] leading-[1.6] pf-ink-3">
             A fuller profile is easier to find and matches more accurately. Profiles past
             80% carry noticeably more signal.
           </p>
 
           {missing.length > 0 && (
             <>
-              <p className="mb-1.5 mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/25">
+              <p className="mb-1.5 mt-4 text-[10px] font-semibold uppercase tracking-[0.16em] pf-ink-4">
                 Still to add
               </p>
               {/* Rows, not chips: one line each, weights right-aligned in a
@@ -179,16 +180,16 @@ export default function ProfileCompletionCard({
                     <button
                       type="button"
                       onClick={() => onComplete(EDIT_SECTION_FOR[sec.id] ?? null)}
-                      className="group flex w-full items-center gap-2.5 rounded-[10px] px-2 py-2 text-left transition-colors hover:bg-white/[0.04]"
+                      className="group flex w-full items-center gap-2.5 rounded-[10px] px-2 py-2 text-left transition-colors pf-s2-h"
                     >
-                      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/20 transition-colors group-hover:bg-white/45" />
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-white/60 transition-colors group-hover:text-white/90">
+                      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full pf-s4 transition-colors pf-s2-h" />
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] pf-ink-2 transition-colors pf-g-ink">
                         {ACTION_LABEL[sec.id] ?? `Add ${sec.label}`}
                       </span>
                       <span className="shrink-0 text-[11px] font-semibold tabular-nums text-emerald-300/60">
                         +{sec.weight}%
                       </span>
-                      <ChevronRight aria-hidden className="h-3.5 w-3.5 shrink-0 text-white/15 transition-colors group-hover:text-white/40" />
+                      <ChevronRight aria-hidden className="h-3.5 w-3.5 shrink-0 pf-deco transition-colors pf-g-ink" />
                     </button>
                   </li>
                 ))}
@@ -212,7 +213,7 @@ export default function ProfileCompletionCard({
           {done.length > 0 && (
             /* Quiet, and deliberately last. What is finished is reassurance,
                not a task; it should not compete with the list above it. */
-            <p className="mt-3.5 flex items-start gap-1.5 text-[11px] leading-relaxed text-white/22">
+            <p className="mt-3.5 flex items-start gap-1.5 text-[11px] leading-relaxed pf-ink-4">
               <Check aria-hidden className="mt-[1px] h-3 w-3 shrink-0 text-emerald-300/40" />
               <span className="min-w-0">{done.map((s) => s.label).join(' · ')}</span>
             </p>
@@ -221,7 +222,7 @@ export default function ProfileCompletionCard({
           <button
             type="button"
             onClick={() => onComplete(null)}
-            className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-[11px] border border-white/[0.12] bg-white/[0.06] px-4 py-2.5 text-[12.5px] font-semibold text-white/80 transition hover:bg-white/[0.11] hover:text-white active:scale-[0.99] sm:w-auto"
+            className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-[11px] border pf-rim-3 pf-s2 px-4 py-2.5 text-[12.5px] font-semibold pf-ink transition pf-s2-h pf-ink-h active:scale-[0.99] sm:w-auto"
           >
             Complete profile
             <ChevronRight aria-hidden className="h-3.5 w-3.5" />

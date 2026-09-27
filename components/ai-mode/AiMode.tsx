@@ -38,7 +38,7 @@ import AiPersonCard from '@/components/ai-mode/AiPersonCard';
 import ProfileReadiness from '@/components/ai-mode/ProfileReadiness';
 import TyraiMark from '@/components/ai-mode/TyraiMark';
 import TyraiBrief from '@/components/ai-mode/TyraiBrief';
-import FeedJobCard, { FeedJobCardStyles } from '@/components/feed/FeedJobCard';
+import FeedJobCard from '@/components/feed/FeedJobCard';
 import { FEED_CARD } from '@/components/feed/cardShell';
 import {
   narrow, nextQuestion, rank, refineQuery, summarise,
@@ -404,8 +404,6 @@ export default function AiMode({
 
   return createPortal(
     <div className="aim-root" role="dialog" aria-modal="true" aria-label="TYRAI">
-      {/* Once, for the job cards rendered below. */}
-      <FeedJobCardStyles />
       {/* The corner controls. Fixed rather than in the flow, so they do not
           move when the stage shifts from centred to top-aligned. */}
       {/* Back, on the left, where back goes. What it goes back TO depends on
@@ -460,10 +458,13 @@ export default function AiMode({
             <span className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.05] px-3 py-1 text-[10.5px] font-semibold uppercase tracking-[0.16em] text-white/70">
               <TyraiMark className="h-3.5 w-3.5" /> TYRAI
             </span>
-            <h1 className="mt-4 text-[26px] font-semibold tracking-[-0.02em] text-white sm:text-[32px]">
+            {/* Scales with the viewport instead of stepping once at `sm`, so it
+                is proportionate on a 13-inch laptop and a 27-inch display
+                alike. The clamp floor is the old phone size. */}
+            <h1 className="aim-h1 mt-4 font-semibold tracking-[-0.025em] text-white">
               Tell Your Requirements
             </h1>
-            <p className="mx-auto mt-2 max-w-[440px] text-[13px] leading-relaxed text-white/55">
+            <p className="aim-lede mx-auto mt-2.5 leading-relaxed text-white/55">
               Describe what you need in a sentence. You get the closest matches
               across people, businesses, jobs and work — with why each one fits.
             </p>
@@ -695,6 +696,10 @@ export default function AiMode({
                                   employmentType: r.meta?.employmentType,
                                   workMode: r.meta?.workMode,
                                   hiringUrgency: r.meta?.hiringUrgency,
+                                  /* The search already returns the role's
+                                     skills; the card lights the ones the
+                                     viewer has. */
+                                  preferredSkills: r.meta?.skills,
                                 }}
                               />
                             </div>

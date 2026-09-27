@@ -198,26 +198,76 @@ export default function GlobalBottomNav() {
   right: 0;
   transform: translateY(0);
   z-index: 9995;
-  height: calc(60px + env(safe-area-inset-bottom, 0px));
+  /* TALLER THAN IT LOOKS, on purpose. The bar's controls still occupy 62px at
+     the bottom; the extra 30px above them is a fade zone where the glass
+     dissolves into the page, so there is no edge anywhere.
+
+     It is part of the SAME element rather than a pseudo-element on top,
+     because backdrop-filter does not nest: a filtered child inside a filtered
+     parent renders as a grey rectangle in Chromium. One element means one
+     filter, and the blur then covers the fade zone too — which is what makes
+     the dissolve smoky rather than just transparent. */
+  /* 14px, not 30. At 30 the ramp was long enough to lie over a whole card row
+     — the dissolve stopped reading as the bar ending and started reading as
+     fog on the page. This is enough to kill the edge and short enough that
+     what is above the bar stays crisp. */
+  --gnb-fade: 14px;
+  /* 52px of controls, not 62.
+     The height came out of the ITEM, not out of the type: the icon box went
+     28px to 24px, the gaps and padding tightened, and the label stayed at
+     10.5px because the file already records why — 9px was too small to read
+     at arm's length and too small to pass AA, and it cost 2px of bar height to
+     fix. Shaving the label would undo that for the sake of two pixels.
+     52 + 14 = 66px total, against 92 before. The item is still 52px tall,
+     which clears the 44px tap target. */
+  height: calc(52px + var(--gnb-fade) + env(safe-area-inset-bottom, 0px));
+  padding-top: var(--gnb-fade);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 
   /* Thinner than the pill was: the pill sat on the page, this sits over the
      content scrolling beneath it and should show it. */
+  --gnb-ink: rgba(255, 255, 255, .58);
+  --gnb-hair: rgba(255, 255, 255, .09);
+
+  /* Nothing at the very top, full strength by the time the icons begin. The
+     stop at 34% is the fade zone's own height as a share of the box, so the
+     ramp finishes exactly where the controls start. */
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.012) 100%),
-    rgba(10, 10, 12, 0.62);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
+    linear-gradient(180deg,
+      rgba(10, 10, 12, 0) 0%,
+      rgba(10, 10, 12, .20) 11%,
+      rgba(10, 10, 12, .38) 21%,
+      rgba(10, 10, 12, .40) 100%),
+    linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0.015) 100%);
+  /* 40px, not 28. A thin material works by blurring enough that the content
+     behind it stops being legible as content and becomes a wash — which is what
+     lets the glass be transparent without the labels having to fight a card
+     scrolling underneath. See the light values below for the measurement that
+     decides how far the transparency can go. */
+  backdrop-filter: blur(40px) saturate(190%);
+  -webkit-backdrop-filter: blur(40px) saturate(190%);
 
-  border-top: 1px solid rgba(255,255,255,0.09);
+  /* NO BORDER AND NO SPECULAR LINE. Both were hard 1px edges across the full
+     width — the two things that made this read as a slab bolted to the bottom
+     of the screen. The fade above replaces them: the material simply stops
+     being there. The drop shadow goes too, since a shadow cast upward from an
+     edge that no longer exists just draws that edge back in. */
+  border-top: 0;
   border-radius: 0;
-
-  box-shadow:
-    0 -8px 32px rgba(0,0,0,0.45),
-    inset 0 1px 0 rgba(255,255,255,0.07);
 
   display: flex;
   align-items: stretch;
+  /* The controls belong in the 62px below the fade, not spread over the whole
+     taller box. */
+  box-sizing: border-box;
+
+  /* THE FADE ZONE MUST NOT SWALLOW TAPS. Growing the bar by 30px grew its hit
+     area by 30px too, and a probe found elementFromPoint returning the bar
+     across that whole band — a strip above the nav where the page could be
+     seen but not touched. So the bar itself takes no pointer events and its
+     items take them back; the items fill the lower 62px, which is exactly the
+     part that should be tappable. */
+  pointer-events: none;
 
   opacity: 1;
 
@@ -234,15 +284,162 @@ export default function GlobalBottomNav() {
   pointer-events: none;
 }
 
+/* ── LIGHT GLASS WHERE THE PAGE IS LIGHT ──
+   The bar was a dark glass slab on every route. On the five pages built around
+   DiscoverShell — home, jobs, talent, companies, feed — the ground is #f6f7fa,
+   so a 62%-black panel blurred over it painted a grey slab with grey labels:
+   the one piece of chrome on a phone that did not belong to the page under it.
+
+   KEYED ON THE SHELL, NOT ON data-ui-mode. The obvious discriminator turns out
+   to be the wrong one: the document runs with data-ui-mode="dark" while those
+   pages paint light, so theming off it made the bar dark exactly where the
+   problem was. ":root:has(.dh)" asks the question that actually matters — is
+   the page under this bar the light shell — and it leaves every route I have
+   not looked at exactly as it was.
+
+   THE WHITE IS HIGH ENOUGH TO BE READ OVER ANYTHING IN THAT SHELL. A bar at
+   74% white over a dark card composites to about #bdbdbd, and 10px text on
+   that misses AA; at .93 → .87 the worst backdrop still leaves the ink above
+   4.5:1, which is measured from real pixels in nav-bottom.js rather than
+   assumed. */
+:root:has(.dh) .gnb-bar {
+  --gnb-ink: #3f3f45;
+  --gnb-hair: rgba(20, 20, 28, .08);
+  /* MEASURED, not chosen. At .93 white this was barely glass; the blur above
+     now flattens the backdrop enough to come down to .78 → .66, and the real
+     painted pixels behind every label were sampled at that value to confirm the
+     10.5px text still clears 4.5:1 on each route the bar appears on
+     (nav-bottom.js). Any lower and the ink is what has to change, not the
+     assertion.
+
+     THE PASTEL SITS OVER THE WHITE, NOT UNDER IT. The page's ground is a smoky
+     white with a pastel wash drifting corner to corner, and the bar is the one
+     piece of chrome laid across the bottom of it — so it carries the same three
+     hues, in the same order left to right, and the page reads as continuing
+     underneath rather than stopping at a white strip.
+
+     Every centre is BELOW the bar (at 118%–140% of its height), for the same
+     reason the page's are outside the frame: a 62px-tall bar is shorter than
+     any gradient's centre needs, and a visible centre in it would read as a
+     glow behind one tab. What shows is the tail. */
+  background:
+    /* THE FADE. A white ramp above everything else, opaque nowhere at the top
+       and gone by the time the icons begin, so the whole stack below it is
+       revealed gradually rather than starting at an edge. The alpha stops are
+       what the labels depend on, so they are measured, not chosen: the ramp
+       reaches full strength at 34% — the fade zone's share of the taller box —
+       which is exactly where the controls start. */
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, .28) 10%,
+      rgba(255, 255, 255, .60) 21%,
+      rgba(255, 255, 255, .62) 46%,
+      rgba(255, 255, 255, .56) 100%),
+    radial-gradient(150% 320% at 6% 138%, rgba(206, 220, 255, .58) 0%, rgba(206, 220, 255, 0) 72%),
+    radial-gradient(140% 300% at 52% 142%, rgba(255, 216, 231, .40) 0%, rgba(255, 216, 231, 0) 70%),
+    radial-gradient(150% 320% at 97% 134%, rgba(201, 241, 227, .50) 0%, rgba(201, 241, 227, 0) 72%),
+    linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.3) 21%, rgba(255,255,255,0.26) 100%);
+  /* No shadow and no specular. Both drew the edge this change exists to
+     remove — an upward shadow is a hard line's own halo. */
+  box-shadow: none;
+}
+
+/* ── The cloud in the glass ──
+   The wash above gives the bar its hue; this gives it its TEXTURE. Without it
+   the bar is a clean gradient and the page behind it is weather, and the join
+   between the two is visible as a straight edge of smoothness.
+
+   The same three turbulence layers the page's ground uses, at the same
+   frequencies — one stretched instance each, never tiled, because
+   feTurbulence does not tile seamlessly and a 62px bar would show the wrap as
+   a vertical seam between two tabs.
+
+   NOT a nested backdrop-filter. The bar already has one, and a second one on
+   a child inside it renders as a grey rectangle in Chromium; this is a plain
+   background image over the bar's own surface, which composites normally.
+
+   The cloud is at z-index 0 and the items at 1, so it is under the labels
+   rather than over them. */
+:root:has(.dh) .gnb-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0019' numOctaves='5' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.56 0 0 0 0 0.6 0 0 0 -1.05 0.74'/%3E%3C/filter%3E%3Crect width='900' height='900' filter='url(%23a)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0031' numOctaves='5' seed='41'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -1.1 0.82'/%3E%3C/filter%3E%3Crect width='800' height='800' filter='url(%23c)'/%3E%3C/svg%3E");
+  /* Lower than the page's .62: the bar is 62px tall, so the same turbulence is
+     cropped to a sliver of itself and reads as noise rather than as cloud if
+     it is allowed to be as strong. */
+  /* .5, not .34. This is the layer the bar is supposed to read as — the flat
+     white above it only exists to carry the labels — and at .34 the texture
+     was faint enough that what showed was the white, which looks like milk
+     rather than cloud. */
+  opacity: .5;
+  mix-blend-mode: normal;
+  /* MASKED to match the fade. Without this the cloud kept its own straight top
+     edge inside the fade zone — the texture stopped in a hard line exactly
+     where the colour had been made to dissolve, which is worse than the border
+     that was removed, because it looks like a rendering fault rather than a
+     decision. */
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, .55) 12%, #000 22%);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, .55) 12%, #000 22%);
+}
+
+/* The items have to be told they are above it. */
+:root:has(.dh) .gnb-bar > * { position: relative; z-index: 1; }
+
+/* ── One tint per destination, in the stylesheet ──
+   These were five hardcoded hex values inside the component, set as an inline
+   style attribute — which is why the bar could not be themed at all: an inline
+   colour beats every rule a stylesheet can write. Now the item says WHICH tint
+   it is and the theme says what that tint looks like.
+
+   The light values are darker than the dark ones on purpose. #a78bfa on a
+   near-white bar is 2.3:1, so the pastel that reads as "active" on black is
+   illegible on white; each one is stepped down until it clears 4.5:1 against
+   the bar's own painted surface. */
+.gnb-item[data-key='home'],
+.gnb-item[data-key='tyrai']    { --gnb-tint: #a78bfa; --gnb-wash: rgba(167, 139, 250, .18); }
+.gnb-item[data-key='feed']     { --gnb-tint: #22d3ee; --gnb-wash: rgba(34, 211, 238, .16); }
+.gnb-item[data-key='people']   { --gnb-tint: #4ade80; --gnb-wash: rgba(74, 222, 128, .16); }
+.gnb-item[data-key='messages'] { --gnb-tint: #818cf8; --gnb-wash: rgba(129, 140, 248, .18); }
+
+/* The light values are darker than the dark ones on purpose. #a78bfa on a
+   near-white bar is 2.3:1, so the pastel that reads as "active" on black is
+   illegible on white; each one is stepped down until it clears 4.5:1 against
+   the bar's own painted surface.
+
+   RE-MEASURED when the pastel wash and the cloud went into the bar, against
+   the darkest pixel the bar now paints — rgb(208,210,228), sampled per route
+   with the items hidden. Three of the four survived it unchanged (violet 4.74,
+   green 4.76, indigo 5.28) and the cyan did not: #0e7490 came out at 3.58
+   there and 4.32 behind its own label on /published, where Feed is the active
+   item and sits in the periwinkle end of the wash. It is one step darker now,
+   at 5.19 against that same worst pixel — margin, because which hue a given
+   tab sits over depends on the width of the phone. */
+:root:has(.dh) .gnb-item[data-key='home'],
+:root:has(.dh) .gnb-item[data-key='tyrai']    { --gnb-tint: #6d28d9; --gnb-wash: rgba(109, 40, 217, .12); }
+:root:has(.dh) .gnb-item[data-key='feed']     { --gnb-tint: #0b5a6e; --gnb-wash: rgba(11, 90, 110, .12); }
+:root:has(.dh) .gnb-item[data-key='people']   { --gnb-tint: #166534; --gnb-wash: rgba(22, 101, 52, .12); }
+:root:has(.dh) .gnb-item[data-key='messages'] { --gnb-tint: #4338ca; --gnb-wash: rgba(67, 56, 202, .12); }
+
         .gnb-item {
+          /* Taken back from the bar, which disowns them so its fade zone does
+             not intercept the page underneath. */
+          pointer-events: auto;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 3px;
+          gap: 2px;
           flex: 1;
           height: 100%;
-          padding: 9px 4px 7px;
+          padding: 6px 4px 5px;
           cursor: pointer;
           text-decoration: none;
           -webkit-tap-highlight-color: transparent;
@@ -253,23 +450,34 @@ export default function GlobalBottomNav() {
           border-radius: 20px;
         }
         .gnb-item:active { transform: scale(0.84); opacity: 0.65; }
-        .gnb-item:focus-visible { outline: 2px solid #a78bfa; outline-offset: -2px; }
+        .gnb-item:focus-visible { outline: 2px solid var(--gnb-tint); outline-offset: -2px; }
+
+        /* The item owns its colour; the icon and the label inherit it. That is
+           what makes one rule per theme enough. */
+        .gnb-item { color: var(--gnb-ink); }
+        .gnb-item[data-on='1'] { color: var(--gnb-tint); }
 
         .gnb-icon {
           position: relative;
-          width: 26px; height: 26px;
+          width: 24px; height: 24px;
           display: flex; align-items: center; justify-content: center;
           border-radius: 10px;
+          color: inherit;
+          background: transparent;
           transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
         }
+        .gnb-item[data-on='1'] .gnb-icon { background: var(--gnb-wash); }
         .gnb-item:active .gnb-icon { transform: scale(0.88); }
 
         .gnb-label {
-          font-size: 9px;
-          font-weight: 600;
-          letter-spacing: 0.01em;
+          /* 9px was too small to be read at arm's length and too small to pass
+             AA comfortably. 10.5px costs 2px of bar height and buys both. */
+          font-size: 10.5px;
+          font-weight: 550;
+          letter-spacing: 0.005em;
           white-space: nowrap;
           line-height: 1;
+          color: inherit;
           transition: color 0.14s ease;
         }
 
@@ -292,12 +500,17 @@ export default function GlobalBottomNav() {
           text-align: center;
           pointer-events: none;
         }
+        /* The marker under the active item. A lozenge rather than a 3px dot:
+           at 3px it was indistinguishable from a rendering artefact. */
         .gnb-dot {
-          width: 3px; height: 3px;
-          border-radius: 50%;
-          margin-top: 1px;
-          transition: opacity 0.14s ease, background 0.14s ease;
+          width: 14px; height: 2px;
+          border-radius: 999px;
+          margin-top: 1.5px;
+          background: var(--gnb-tint);
+          opacity: 0;
+          transition: opacity 0.16s ease, width 0.16s ease;
         }
+        .gnb-item[data-on='1'] .gnb-dot { opacity: 1; }
 
         /* ── TYRAI ────────────────────────────────────────────────────
            The centre control is distinguished by SHAPE, not colour: the same
@@ -305,15 +518,18 @@ export default function GlobalBottomNav() {
            is the one item here that opens something rather than going
            somewhere, and the border is what says so. */
         .gnb-tyrai-icon {
-          border: 1px solid rgba(255,255,255,0.14);
-          background: rgba(255,255,255,0.05);
-          color: rgba(255,255,255,0.62);
+          border: 1px solid var(--gnb-hair);
+          background: rgba(255, 255, 255, .05);
+          color: inherit;
         }
         .gnb-tyrai:active .gnb-tyrai-icon,
         .gnb-tyrai[aria-expanded="true"] .gnb-tyrai-icon {
-          border-color: rgba(167,139,250,0.40);
-          background: rgba(167,139,250,0.16);
-          color: #a78bfa;
+          border-color: transparent;
+          background: var(--gnb-wash);
+          color: var(--gnb-tint);
+        }
+        :root:has(.dh) .gnb-tyrai-icon {
+          background: linear-gradient(150deg, rgba(109, 40, 217, .09), rgba(14, 116, 144, .07));
         }
         .gnb-tyrai-mark { width: 18px; height: 18px; }
 
@@ -332,14 +548,13 @@ export default function GlobalBottomNav() {
         {/* Home */}
         {(() => {
           const active = pathname === '/';
-          const color  = active ? '#a78bfa' : 'rgba(255,255,255,0.50)';
           return (
-            <a href="/" className="gnb-item" aria-label="Home" aria-current={active ? 'page' : undefined}>
-              <span className="gnb-icon" style={{ color, background: active ? 'rgba(167,139,250,0.18)' : 'transparent' }}>
+            <a href="/" className="gnb-item" data-key="home" data-on={active ? '1' : '0'} aria-label="Home" aria-current={active ? 'page' : undefined}>
+              <span className="gnb-icon">
                 <Home width={19} height={19} />
               </span>
-              <span className="gnb-label" style={{ color }}>Home</span>
-              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#a78bfa' }} />
+              <span className="gnb-label">Home</span>
+              <span className="gnb-dot" />
             </a>
           );
         })()}
@@ -347,14 +562,13 @@ export default function GlobalBottomNav() {
         {/* Feed */}
         {(() => {
           const active = pathname.startsWith('/published');
-          const color  = active ? '#22d3ee' : 'rgba(255,255,255,0.50)';
           return (
-            <a href="/published" className="gnb-item" aria-label="Feed" aria-current={active ? 'page' : undefined}>
-              <span className="gnb-icon" style={{ color, background: active ? 'rgba(34,211,238,0.16)' : 'transparent' }}>
+            <a href="/published" className="gnb-item" data-key="feed" data-on={active ? '1' : '0'} aria-label="Feed" aria-current={active ? 'page' : undefined}>
+              <span className="gnb-icon">
                 <Globe width={19} height={19} />
               </span>
-              <span className="gnb-label" style={{ color }}>Feed</span>
-              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#22d3ee' }} />
+              <span className="gnb-label">Feed</span>
+              <span className="gnb-dot" />
             </a>
           );
         })()}
@@ -365,6 +579,8 @@ export default function GlobalBottomNav() {
         <button
           type="button"
           className="gnb-item gnb-tyrai"
+          data-key="tyrai"
+          data-on={tyraiOpen ? '1' : '0'}
           onClick={() => setTyraiOpen(true)}
           aria-label="TYRAI — tell your requirements in a sentence"
           aria-expanded={tyraiOpen}
@@ -372,23 +588,20 @@ export default function GlobalBottomNav() {
           <span className={`gnb-icon gnb-tyrai-icon${tyraiOpen ? ' is-open' : ''}`}>
             <TyraiMark className="gnb-tyrai-mark" strokeWidth={1.8} />
           </span>
-          <span className="gnb-label" style={{ color: tyraiOpen ? '#a78bfa' : 'rgba(255,255,255,0.50)' }}>
-            TYRAI
-          </span>
-          <span className="gnb-dot" style={{ opacity: tyraiOpen ? 1 : 0, background: '#a78bfa' }} />
+          <span className="gnb-label">TYRAI</span>
+          <span className="gnb-dot" />
         </button>
 
         {/* People */}
         {(() => {
           const active = pathname.startsWith('/people');
-          const color  = active ? '#4ade80' : 'rgba(255,255,255,0.50)';
           return (
-            <a href="/people" className="gnb-item" aria-label="People" aria-current={active ? 'page' : undefined}>
-              <span className="gnb-icon" style={{ color, background: active ? 'rgba(74,222,128,0.16)' : 'transparent' }}>
+            <a href="/people" className="gnb-item" data-key="people" data-on={active ? '1' : '0'} aria-label="People" aria-current={active ? 'page' : undefined}>
+              <span className="gnb-icon">
                 <Users width={19} height={19} />
               </span>
-              <span className="gnb-label" style={{ color }}>People</span>
-              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#4ade80' }} />
+              <span className="gnb-label">People</span>
+              <span className="gnb-dot" />
             </a>
           );
         })()}
@@ -396,7 +609,6 @@ export default function GlobalBottomNav() {
         {/* Messages — the existing /messages chat list, with live unread count */}
         {(() => {
           const active = pathname.startsWith('/messages');
-          const color  = active ? '#818cf8' : 'rgba(255,255,255,0.50)';
           const label  = unread > 0
             ? `Messages, ${unread} unread`
             : 'Messages';
@@ -404,10 +616,12 @@ export default function GlobalBottomNav() {
             <a
               href="/messages"
               className="gnb-item"
+              data-key="messages"
+              data-on={active ? '1' : '0'}
               aria-label={label}
               aria-current={active ? 'page' : undefined}
             >
-              <span className="gnb-icon" style={{ color, background: active ? 'rgba(129,140,248,0.18)' : 'transparent' }}>
+              <span className="gnb-icon">
                 <MessageSquare width={19} height={19} />
                 {unread > 0 && (
                   <span className="gnb-badge" aria-hidden="true">
@@ -415,8 +629,8 @@ export default function GlobalBottomNav() {
                   </span>
                 )}
               </span>
-              <span className="gnb-label" style={{ color }}>Messages</span>
-              <span className="gnb-dot" style={{ opacity: active ? 1 : 0, background: '#818cf8' }} />
+              <span className="gnb-label">Messages</span>
+              <span className="gnb-dot" />
             </a>
           );
         })()}

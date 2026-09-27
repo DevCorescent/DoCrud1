@@ -1,6 +1,24 @@
 'use client';
 
+/**
+ * The boot loader.
+ *
+ * The look, and why it is the page's own ground rather than a panel over it,
+ * is documented in splash.css. What lives here is only the timing.
+ *
+ * ONE THING WORTH KNOWING ABOUT THAT TIMING: the hold is a fixed 1.7s and owes
+ * nothing to whether the page is ready. It was that way before this restyle and
+ * it is left alone — shortening it is a product decision, not a styling one —
+ * but it is the reason nothing here draws a progress bar that fills. A loader
+ * that cannot see the load has nothing to be a fraction of.
+ */
+
 import { useEffect, useState } from 'react';
+import './splash.css';
+
+const HOLD_MS = 1700;
+/** Must outlast the longest fade in splash.css (.sp-out is 780ms). */
+const FADE_MS = 850;
 
 export default function SplashScreen() {
   const [visible, setVisible] = useState(false);
@@ -9,10 +27,8 @@ export default function SplashScreen() {
   useEffect(() => {
     // next frame → fade in
     const raf = requestAnimationFrame(() => setVisible(true));
-    // start fade out after hold
-    const outTimer = setTimeout(() => setVisible(false), 1700);
-    // unmount after fade-out completes
-    const doneTimer = setTimeout(() => setGone(true), 2550);
+    const outTimer = setTimeout(() => setVisible(false), HOLD_MS);
+    const doneTimer = setTimeout(() => setGone(true), HOLD_MS + FADE_MS);
 
     return () => {
       cancelAnimationFrame(raf);
@@ -23,74 +39,33 @@ export default function SplashScreen() {
 
   if (gone) return null;
 
-  const iconSize = 88;
-  const ringInset = -3;
-  const borderRadius = Math.round(iconSize * 0.235);
-  const ringRadius = borderRadius + Math.abs(ringInset) + 1;
-
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 99999,
-        background: '#08090a',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        opacity: visible ? 1 : 0,
-        transition: visible
-          ? 'opacity 0.65s cubic-bezier(0.4,0,0.2,1)'
-          : 'opacity 0.85s cubic-bezier(0.4,0,0.2,1)',
-        pointerEvents: visible ? 'all' : 'none',
-      }}
-    >
-      {/* Subtle warm glow behind icon */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          width: 360,
-          height: 360,
-          borderRadius: '50%',
-          background:
-            'radial-gradient(circle, rgba(212,172,60,0.06) 0%, rgba(212,172,60,0.025) 45%, transparent 70%)',
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* Icon + spinning golden ring */}
-      <div style={{ position: 'relative', width: iconSize, height: iconSize }}>
-        {/* Spinning golden sweep arc */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            inset: ringInset,
-            borderRadius: ringRadius,
-            background:
-              'conic-gradient(from 0deg, transparent 0%, transparent 60%, rgba(140,105,22,0.42) 70%, rgba(210,172,78,0.88) 80%, rgba(242,212,128,1.0) 86%, rgba(210,172,78,0.82) 91%, rgba(140,105,22,0.38) 97%, transparent 100%)',
-            animation: 'goldenRingSpin 3.2s linear infinite',
-            pointerEvents: 'none',
-            zIndex: 0,
-          }}
-        />
-        {/* Docrud icon */}
-        <img
-          src="/icons/logo-192.png"
-          alt="Docrud"
-          width={iconSize}
-          height={iconSize}
-          style={{
-            borderRadius,
-            display: 'block',
-            position: 'relative',
-            zIndex: 1,
-            width: iconSize,
-            height: iconSize,
-            objectFit: 'cover',
-          }}
-        />
+    /* `aria-hidden`, deliberately. The page behind this is already rendered and
+       already readable; announcing a decorative splash would put 1.7s of noise
+       in front of a screen reader for nothing it can act on. */
+    <div className={`sp ${visible ? 'sp-in' : 'sp-out'}`} aria-hidden="true">
+      <div className="sp-in-box">
+        <div className="sp-mark">
+          <span className="sp-ring" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/icons/logo-192.png"
+            alt=""
+            width={76}
+            height={76}
+            /* Not lazy and not deferred: this is the one image on the first
+               frame of the load, and the whole loader is waiting for it. */
+            fetchPriority="high"
+            decoding="sync"
+          />
+        </div>
+        {/* The wordmark only. The tagline that was here reads well, but it
+            lives in `lib/server/seo-settings.ts` as a DEFAULT the SEO Manager
+            can override — hardcoding it into the loader would show a stale
+            line to any installation that edited it, and the loader cannot
+            fetch it: it paints before anything else runs. */}
+        <p className="sp-word">docrud</p>
+        <span className="sp-track" />
       </div>
     </div>
   );

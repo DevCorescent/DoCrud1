@@ -57,6 +57,9 @@ export const certificatesPath = path.join(dataDir, 'certificates.json');
 export const docwordDocumentsPath = path.join(dataDir, 'docword-documents.json');
 export const blogPostsPath = path.join(dataDir, 'blog-posts.json');
 export const adBannersPath = path.join(dataDir, 'ad-banners.json');
+/* Answers a member has given to application questions their profile could not
+   answer, so the same question is never asked twice. See lib/apply/question.ts. */
+export const applyMemoryPath = path.join(dataDir, 'apply-memory.json');
 /* Sponsored advertising: campaigns, their impression/click counters, and the
    persistent feed/recommendation configuration Superadmin edits. */
 export const sponsoredAdsPath = path.join(dataDir, 'sponsored-ads.json');

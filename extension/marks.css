@@ -1,0 +1,46 @@
+/**
+ * The marks on the EMPLOYER's own form controls.
+ *
+ * These are the only rules that belong in the page's stylesheet, because they
+ * style the page's own elements. Everything else — the whole sidebar — lives in
+ * a shadow root where the host page's CSS cannot reach it. See content.js.
+ *
+ * Outline, never border or padding: those change the layout of a form we do not
+ * own, and a form that jumps as it fills looks broken rather than helped.
+ * `!important` throughout, because a careers site restyling its own inputs must
+ * not be able to erase the only indication of what was filled.
+ */
+
+/* ── Marks on the employer's own controls ────────────────────────────
+   Outline, never border or padding: those change the layout of a form we do
+   not own, and a form that jumps as it fills looks broken rather than helped. */
+.docrud-filled { outline: 2px solid rgba(125, 224, 196, .55) !important; outline-offset: 1px !important; }
+.docrud-review { outline-color: rgba(255, 212, 121, .8) !important; }
+.docrud-flash  { outline: 3px solid rgba(157, 180, 255, .95) !important; outline-offset: 2px !important; }
+
+/* A brief wash as each value lands, so filling reads as something happening
+   rather than the page blinking. Transform and opacity only. */
+.docrud-pop { animation: docrud-pop 520ms cubic-bezier(.22, 1, .36, 1); }
+@keyframes docrud-pop {
+  0%   { box-shadow: 0 0 0 0 rgba(125, 224, 196, .45); }
+  100% { box-shadow: 0 0 0 9px rgba(125, 224, 196, 0); }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .docrud-pop { animation: none !important; }
+}
+
+/* The field currently being asked about in the chat, so the question and the
+   box it fills are visibly the same thing.
+
+   This belongs HERE and not in panel.css: the class goes on the employer's own
+   control, and a rule inside the shadow root cannot style a page element. It
+   was in the shadow sheet after the stylesheet split, which meant the highlight
+   silently did nothing — the sidebar asked about a field and never showed you
+   which one. */
+.docrud-asking {
+  outline: 3px solid rgba(157, 180, 255, .95) !important;
+  outline-offset: 2px !important;
+}
+

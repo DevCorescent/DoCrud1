@@ -1,12 +1,47 @@
 {
-  "superadmin:login:account:superadmin@company.com:1788945300000": {
-    "_id": "superadmin:login:account:superadmin@company.com:1788945300000",
+  "superadmin:login:account:superadmin@company.com:1789371000000": {
+    "_id": "superadmin:login:account:superadmin@company.com:1789371000000",
     "count": 0,
-    "expiresAt": "2026-09-09T09:30:00.000Z"
+    "expiresAt": "2026-09-14T07:45:00.000Z"
   },
-  "superadmin:login:ip:::1:1788945300000": {
-    "_id": "superadmin:login:ip:::1:1788945300000",
+  "superadmin:login:ip:::1:1789371000000": {
+    "_id": "superadmin:login:ip:::1:1789371000000",
     "count": 1,
-    "expiresAt": "2026-09-09T09:30:00.000Z"
+    "expiresAt": "2026-09-14T07:45:00.000Z"
+  },
+  "signup:onboarding:ip:::1:1789369200000": {
+    "_id": "signup:onboarding:ip:::1:1789369200000",
+    "count": 1,
+    "expiresAt": "2026-09-14T08:00:00.000Z"
+  },
+  "signup:onboarding:email:kush@yopmail.com:1789371000000": {
+    "_id": "signup:onboarding:email:kush@yopmail.com:1789371000000",
+    "count": 1,
+    "expiresAt": "2026-09-14T07:45:00.000Z"
+  },
+  "otp:send:signup:account:kush@yopmail.com:1789371000000": {
+    "_id": "otp:send:signup:account:kush@yopmail.com:1789371000000",
+    "count": 1,
+    "expiresAt": "2026-09-14T07:40:00.000Z"
+  },
+  "otp:send:signup:ip:::1:1789371000000": {
+    "_id": "otp:send:signup:ip:::1:1789371000000",
+    "count": 1,
+    "expiresAt": "2026-09-14T07:40:00.000Z"
+  },
+  "otp:verify:signup:account:kush@yopmail.com:1789371000000": {
+    "_id": "otp:verify:signup:account:kush@yopmail.com:1789371000000",
+    "count": 0,
+    "expiresAt": "2026-09-14T07:40:00.000Z"
+  },
+  "otp:verify:signup:ip:::1:1789371000000": {
+    "_id": "otp:verify:signup:ip:::1:1789371000000",
+    "count": 1,
+    "expiresAt": "2026-09-14T07:40:00.000Z"
+  },
+  "login:account:kush@yopmail.com:1789371000000": {
+    "_id": "login:account:kush@yopmail.com:1789371000000",
+    "count": 0,
+    "expiresAt": "2026-09-14T07:40:00.000Z"
   }
 }

@@ -1,4 +1,5 @@
 'use client';
+import '@/components/profile/profile.css';
 
 /**
  * The published half of a member's matching preferences, for the About section.
@@ -74,8 +75,8 @@ export default function PublicMatchPreferences({ preferences }: { preferences?: 
     <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
       {rows.map((row) => (
         <div key={row.label} className="min-w-0">
-          <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/30">{row.label}</dt>
-          <dd className="mt-1 break-words text-[14px] text-white/75">{row.value}</dd>
+          <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] pf-ink-4">{row.label}</dt>
+          <dd className="mt-1 break-words text-[14px] pf-ink-2">{row.value}</dd>
         </div>
       ))}
     </dl>

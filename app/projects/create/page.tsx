@@ -5,23 +5,52 @@
  *
  * Deliberately single-step: the brief asks for a straightforward form, not a
  * wizard. It posts once to /api/projects and sends the poster straight to the
- * published project. Visual language matches the Services/Projects pages.
+ * published project.
+ *
+ * ═══ THE JOB COMPOSER'S LANGUAGE, NOT A SECOND ONE ═══
+ *
+ * This was a dark form — `#0d0d10` panels, `text-white/32` labels, a violet
+ * gradient submit — sitting one menu row away from a light seven-step composer.
+ * Two posting forms in one product that share no ink, no field, no label and no
+ * button is two products.
+ *
+ * So the surfaces and controls are IMPORTED from the wizard rather than
+ * restyled to match it: `Field`, `SelectField`, `ChipGroup`, `GlassPanel` and
+ * the input classes are the same definitions the seven steps use. A field
+ * cannot drift between the two forms because there is only one of each field.
+ * What is NOT shared is the step rail and the footer — this form has one step,
+ * so it has one submit and no progress to show.
+ *
+ * ═══ NOTHING ABOUT THE POSTING CHANGED ═══
+ *
+ * Same state, same validation, same payload, same endpoint, same redirect. The
+ * budget still stores no figure when it is negotiable, and the project is still
+ * created active. This is a restyle; if it changed what gets posted it would be
+ * a rewrite wearing a restyle's description.
  */
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Loader2, Plus, X } from 'lucide-react';
-import { PROJECT_CATEGORIES, BUDGET_TYPE_LABELS, PROJECT_TYPE_LABELS, WORK_MODE_LABELS } from '@/lib/projects-ui';
+import { ArrowLeft, Loader2, Plus, X, AlertCircle } from 'lucide-react';
+import DiscoverShell from '@/components/home/discover/DiscoverShell';
+import {
+  ChipGroup, Field, GlassPanel, SelectField, fieldProps,
+  INPUT_CLASS, TEXTAREA_CLASS, MUTED,
+} from '@/components/jobs/post/ui';
+import { BTN_PRIMARY } from '@/components/jobs/post/WizardChrome';
+import {
+  PROJECT_CATEGORIES, BUDGET_TYPE_LABELS, PROJECT_TYPE_LABELS, WORK_MODE_LABELS,
+} from '@/lib/projects-ui';
 
-const LABEL = 'block text-[11px] font-bold uppercase tracking-[0.14em] text-white/32 mb-2';
-const FIELD = 'w-full rounded-[12px] border border-white/[0.08] bg-white/[0.04] text-white px-3.5 text-[13.5px] placeholder:text-white/20 focus:outline-none focus:border-white/25 transition-colors';
-const INPUT = `${FIELD} h-11`;
-const SECTION = 'rounded-[20px] border border-white/[0.07] bg-[#0d0d10] p-5';
 const CATEGORY_KEYS = Object.keys(PROJECT_CATEGORIES);
 const PROJECT_TYPES = ['one_time', 'ongoing', 'contract', 'collaboration'] as const;
 const BUDGET_TYPES = ['fixed', 'hourly', 'negotiable'] as const;
 const WORK_MODES = ['remote', 'onsite', 'hybrid'] as const;
+const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP'] as const;
+
+const chips = (keys: readonly string[], labels: Record<string, string>) =>
+  keys.map((v) => ({ value: v, label: labels[v] ?? v }));
 
 export default function CreateProjectPage() {
   const router = useRouter();
@@ -42,6 +71,9 @@ export default function CreateProjectPage() {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* Per-field, so a missing title says so at the title rather than only in a
+     banner at the bottom of the form. */
+  const [fieldErrors, setFieldErrors] = useState<{ title?: string; description?: string }>({});
 
   const addSkill = () => {
     const v = skillInput.trim();
@@ -54,8 +86,14 @@ export default function CreateProjectPage() {
     e.preventDefault();
     setError(null);
 
-    if (!title.trim()) { setError('Give the project a title.'); return; }
-    if (!description.trim()) { setError('Describe what needs to be done.'); return; }
+    const next: typeof fieldErrors = {};
+    if (!title.trim()) next.title = 'Give the project a title.';
+    if (!description.trim()) next.description = 'Describe what needs to be done.';
+    setFieldErrors(next);
+    if (Object.keys(next).length > 0) {
+      setError('Fill in the highlighted fields.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -88,158 +126,220 @@ export default function CreateProjectPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0C] text-white">
-      <header className="sticky top-0 z-30 border-b border-white/[0.06]"
-        style={{ height: 56, background: 'rgba(10,10,12,0.96)', backdropFilter: 'blur(20px) saturate(180%)' }}>
-        <div className="h-full px-3 sm:px-5 lg:px-8 flex items-center gap-3 max-w-3xl mx-auto">
-          <button type="button" onClick={() => router.back()} aria-label="Go back"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.04] text-white/48 hover:text-white hover:bg-white/[0.08] transition-all">
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <h1 className="text-[15px] font-bold tracking-[-0.01em]">Post a project</h1>
-          <Link href="/projects" className="ml-auto text-[12.5px] font-semibold text-white/40 hover:text-white/75 transition-colors">
-            Browse projects
-          </Link>
+    <DiscoverShell softwareName="Docrud" viewer={null} bare>
+      <div className="wz">
+        <div className="wz-in wz-solo">
+          <div className="wz-main">
+            <div className="wz-head">
+              <div className="wz-head-t">
+                <p className="wz-kick">
+                  Post opportunity
+                  <span className="wz-kick-k">Project</span>
+                </p>
+                <h1 className="wz-h1">Describe the project</h1>
+                <p className="wz-cap">
+                  One form. What needs doing, what it is worth, and when you need it by.
+                </p>
+              </div>
+              {/* Quiet, not primary. `wz-ai-open` is the composer's dark AI
+                  button; borrowing it made "Browse projects" the loudest thing
+                  on a page whose only real action is Publish. */}
+              <Link href="/projects" className="wz-back">
+                <ArrowLeft size={14} aria-hidden /> Browse projects
+              </Link>
+            </div>
+
+            <form onSubmit={submit} noValidate>
+              <GlassPanel className="wz-card">
+                <Field
+                  id="p-title"
+                  label="Project title"
+                  required
+                  error={fieldErrors.title}
+                  hint="What a freelancer would search for — “Build a booking website for my salon”."
+                >
+                  <input
+                    {...fieldProps('p-title', fieldErrors.title, 'hint')}
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="e.g. Build a booking website for my salon"
+                    className={INPUT_CLASS}
+                  />
+                </Field>
+
+                <Field
+                  id="p-desc"
+                  label="Description"
+                  required
+                  error={fieldErrors.description}
+                  hint="What needs to be done, what you already have, and what a good outcome looks like."
+                >
+                  <textarea
+                    {...fieldProps('p-desc', fieldErrors.description, 'hint')}
+                    rows={7}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="What needs to be done, what you already have, and what a good outcome looks like…"
+                    className={`${TEXTAREA_CLASS} resize-y`}
+                  />
+                </Field>
+
+                <SelectField
+                  id="p-cat"
+                  label="Category"
+                  value={category}
+                  onChange={setCategory}
+                  options={CATEGORY_KEYS.map((k) => ({
+                    value: k,
+                    label: `${PROJECT_CATEGORIES[k].icon} ${PROJECT_CATEGORIES[k].label}`,
+                  }))}
+                />
+              </GlassPanel>
+
+              <GlassPanel className="wz-card">
+                <Field
+                  id="p-skill"
+                  label="Skills required"
+                  hint="Type a skill and press Enter. These are what the project is matched on."
+                >
+                  <div className="wz-add">
+                    <input
+                      {...fieldProps('p-skill', undefined, 'hint')}
+                      value={skillInput}
+                      onChange={(e) => setSkillInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } }}
+                      placeholder="React, copywriting, CAD…"
+                      className={INPUT_CLASS}
+                    />
+                    <button type="button" onClick={addSkill} className="wz-btn" aria-label="Add skill">
+                      <Plus size={15} aria-hidden />
+                    </button>
+                  </div>
+                </Field>
+
+                {skills.length > 0 && (
+                  <div className="wz-tags">
+                    {skills.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        className="wz-tag"
+                        onClick={() => setSkills(skills.filter((x) => x !== s))}
+                        aria-label={`Remove ${s}`}
+                      >
+                        {s}
+                        <X size={11} aria-hidden />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </GlassPanel>
+
+              <GlassPanel className="wz-card">
+                <ChipGroup
+                  id="p-budget-type"
+                  label="Budget"
+                  value={budgetType}
+                  onChange={setBudgetType}
+                  options={chips(BUDGET_TYPES, BUDGET_TYPE_LABELS)}
+                />
+
+                {budgetType === 'negotiable' ? (
+                  <p className={`wz-hint ${MUTED}`}>
+                    No figure is stored for a negotiable budget, and the project is excluded from
+                    budget-range filters.
+                  </p>
+                ) : (
+                  <div className="wz-grid3">
+                    <SelectField
+                      id="p-cur"
+                      label="Currency"
+                      value={currency}
+                      onChange={setCurrency}
+                      options={CURRENCIES.map((c) => ({ value: c, label: c }))}
+                    />
+                    <Field id="p-bmin" label={budgetType === 'hourly' ? 'Rate' : 'Amount'}>
+                      <input
+                        {...fieldProps('p-bmin')}
+                        value={budgetMin}
+                        inputMode="numeric"
+                        onChange={(e) => setBudgetMin(e.target.value.replace(/[^\d]/g, ''))}
+                        placeholder="0"
+                        className={INPUT_CLASS}
+                      />
+                    </Field>
+                    <Field id="p-bmax" label="Up to">
+                      <input
+                        {...fieldProps('p-bmax')}
+                        value={budgetMax}
+                        inputMode="numeric"
+                        onChange={(e) => setBudgetMax(e.target.value.replace(/[^\d]/g, ''))}
+                        placeholder="—"
+                        className={INPUT_CLASS}
+                      />
+                    </Field>
+                  </div>
+                )}
+              </GlassPanel>
+
+              <GlassPanel className="wz-card">
+                <Field id="p-loc" label="Location" hint="A city or area, if the work is tied to one.">
+                  <input
+                    {...fieldProps('p-loc', undefined, 'hint')}
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="City or area"
+                    className={INPUT_CLASS}
+                  />
+                </Field>
+
+                <ChipGroup
+                  id="p-mode"
+                  label="Remote or on-site"
+                  value={workMode}
+                  onChange={setWorkMode}
+                  options={chips(WORK_MODES, WORK_MODE_LABELS)}
+                />
+
+                <ChipGroup
+                  id="p-type"
+                  label="Project type"
+                  value={projectType}
+                  onChange={setProjectType}
+                  options={chips(PROJECT_TYPES, PROJECT_TYPE_LABELS)}
+                />
+
+                <Field id="p-deadline" label="Deadline" hint="Leave empty if there is no fixed date.">
+                  <input
+                    {...fieldProps('p-deadline', undefined, 'hint')}
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className={INPUT_CLASS}
+                  />
+                </Field>
+              </GlassPanel>
+
+              {error && (
+                <p role="alert" className="wz-err">
+                  <AlertCircle size={14} aria-hidden />
+                  <span>{error}</span>
+                </p>
+              )}
+
+              {/* One step, so one button and no progress rail. `wz-go` is the
+                  composer's own primary, so the two forms end the same way. */}
+              <div className="wz-solo-foot">
+                <button type="submit" className={BTN_PRIMARY} disabled={saving}>
+                  {saving && <Loader2 size={15} className="animate-spin" aria-hidden />}
+                  {saving ? 'Publishing…' : 'Publish project'}
+                </button>
+                <p className={`wz-foot-n ${MUTED}`}>Nothing is posted until you press this.</p>
+              </div>
+            </form>
+          </div>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl px-4 py-6 pb-28">
-        <form onSubmit={submit} className="space-y-4">
-
-          <div className={SECTION}>
-            <label className={LABEL} htmlFor="p-title">Project title</label>
-            <input id="p-title" value={title} onChange={e => setTitle(e.target.value)} required
-              placeholder="e.g. Build a booking website for my salon" className={INPUT} />
-
-            <label className={`${LABEL} mt-5`} htmlFor="p-desc">Description</label>
-            <textarea id="p-desc" value={description} onChange={e => setDescription(e.target.value)} required rows={6}
-              placeholder="What needs to be done, what you already have, and what a good outcome looks like."
-              className={`${FIELD} py-3 resize-y leading-relaxed`} />
-
-            <label className={`${LABEL} mt-5`} htmlFor="p-cat">Category</label>
-            <select id="p-cat" value={category} onChange={e => setCategory(e.target.value)} className={INPUT}>
-              {CATEGORY_KEYS.map(k => (
-                <option key={k} value={k} className="bg-[#0d0d10]">
-                  {PROJECT_CATEGORIES[k].icon} {PROJECT_CATEGORIES[k].label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className={SECTION}>
-            <label className={LABEL} htmlFor="p-skill">Skills required</label>
-            <div className="flex gap-2">
-              <input id="p-skill" value={skillInput} onChange={e => setSkillInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } }}
-                placeholder="Type a skill and press Enter" className={INPUT} />
-              <button type="button" onClick={addSkill} aria-label="Add skill"
-                className="h-11 shrink-0 rounded-[12px] border border-white/[0.10] bg-white/[0.06] px-4 text-white/70 hover:bg-white/[0.10] hover:text-white transition-all">
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-            {skills.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {skills.map(s => (
-                  <button key={s} type="button" onClick={() => setSkills(skills.filter(x => x !== s))}
-                    aria-label={`Remove skill ${s}`}
-                    className="inline-flex items-center gap-1 h-[28px] px-3 rounded-full text-[11.5px] font-medium bg-white/[0.08] border border-white/[0.14] text-white/80 hover:bg-white/[0.13] transition-colors">
-                    {s} <X className="h-2.5 w-2.5" />
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className={SECTION}>
-            <label className={LABEL}>Budget</label>
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {BUDGET_TYPES.map(v => (
-                <button key={v} type="button" onClick={() => setBudgetType(v)} aria-pressed={budgetType === v}
-                  className={`h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-colors ${
-                    budgetType === v ? 'bg-white text-[#0D0D0F]' : 'border border-white/[0.08] text-white/40 hover:text-white/70'
-                  }`}>
-                  {BUDGET_TYPE_LABELS[v]}
-                </button>
-              ))}
-            </div>
-            {budgetType === 'negotiable' ? (
-              <p className="text-[12px] text-white/28 leading-relaxed">
-                No figure is stored for a negotiable budget, and the project is excluded from budget-range filters.
-              </p>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-[10.5px] text-white/28 mb-1 block" htmlFor="p-cur">Currency</label>
-                  <select id="p-cur" value={currency} onChange={e => setCurrency(e.target.value)} className={INPUT}>
-                    {['INR', 'USD', 'EUR', 'GBP'].map(c => <option key={c} value={c} className="bg-[#0d0d10]">{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10.5px] text-white/28 mb-1 block" htmlFor="p-bmin">
-                    {budgetType === 'hourly' ? 'Rate' : 'Amount'}
-                  </label>
-                  <input id="p-bmin" value={budgetMin} inputMode="numeric"
-                    onChange={e => setBudgetMin(e.target.value.replace(/[^\d]/g, ''))} placeholder="0" className={INPUT} />
-                </div>
-                <div>
-                  <label className="text-[10.5px] text-white/28 mb-1 block" htmlFor="p-bmax">Up to (optional)</label>
-                  <input id="p-bmax" value={budgetMax} inputMode="numeric"
-                    onChange={e => setBudgetMax(e.target.value.replace(/[^\d]/g, ''))} placeholder="—" className={INPUT} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className={SECTION}>
-            <label className={LABEL} htmlFor="p-loc">Location</label>
-            <input id="p-loc" value={location} onChange={e => setLocation(e.target.value)}
-              placeholder="City or area (optional)" className={INPUT} />
-
-            <p className={`${LABEL} mt-5`}>Remote / on-site</p>
-            <div className="flex flex-wrap gap-1.5">
-              {WORK_MODES.map(v => (
-                <button key={v} type="button" onClick={() => setWorkMode(v)} aria-pressed={workMode === v}
-                  className={`h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-colors ${
-                    workMode === v ? 'bg-white text-[#0D0D0F]' : 'border border-white/[0.08] text-white/40 hover:text-white/70'
-                  }`}>
-                  {WORK_MODE_LABELS[v]}
-                </button>
-              ))}
-            </div>
-
-            <p className={`${LABEL} mt-5`}>Project type</p>
-            <div className="flex flex-wrap gap-1.5">
-              {PROJECT_TYPES.map(v => (
-                <button key={v} type="button" onClick={() => setProjectType(v)} aria-pressed={projectType === v}
-                  className={`h-[30px] px-3.5 rounded-full text-[11.5px] font-semibold transition-colors ${
-                    projectType === v ? 'bg-white text-[#0D0D0F]' : 'border border-white/[0.08] text-white/40 hover:text-white/70'
-                  }`}>
-                  {PROJECT_TYPE_LABELS[v]}
-                </button>
-              ))}
-            </div>
-
-            <label className={`${LABEL} mt-5`} htmlFor="p-deadline">Deadline</label>
-            <input id="p-deadline" type="date" value={deadline} onChange={e => setDeadline(e.target.value)}
-              className={`${INPUT} [color-scheme:dark]`} />
-          </div>
-
-          {error && (
-            <p role="alert" className="rounded-[12px] border border-rose-500/25 bg-rose-500/[0.08] px-4 py-3 text-[12.5px] font-semibold text-rose-200/90">
-              {error}
-            </p>
-          )}
-
-          <div className="flex items-center gap-3 pt-1">
-            <button type="submit" disabled={saving}
-              className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-[14px] text-[14.5px] font-bold text-white transition-all disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg,#8b5cf6,#7c3aed)', boxShadow: '0 6px 24px rgba(139,92,246,0.28)' }}>
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saving ? 'Publishing…' : 'Publish Project'}
-            </button>
-          </div>
-        </form>
-      </main>
-    </div>
+      </div>
+    </DiscoverShell>
   );
 }

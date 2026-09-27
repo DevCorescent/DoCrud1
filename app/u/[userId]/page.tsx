@@ -1,6 +1,8 @@
 'use client';
 
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import '@/components/profile/profile.css';
+import DiscoverShell from '@/components/home/discover/DiscoverShell';
 import dynamic from 'next/dynamic';
 import Script from 'next/script';
 import { useParams, useRouter } from 'next/navigation';
@@ -122,7 +124,7 @@ function BusinessPagesTab({ userId, isOwnProfile }: { userId: string; isOwnProfi
   if (loading) {
     return (
       <div className="flex gap-4 flex-wrap mt-2">
-        {[1,2,3].map((i) => <div key={i} className="h-[130px] w-[280px] rounded-[16px] bg-white/[0.03] border border-white/[0.06] animate-pulse" />)}
+        {[1,2,3].map((i) => <div key={i} className="h-[130px] w-[280px] rounded-[16px] pf-s1 border pf-rim animate-pulse" />)}
       </div>
     );
   }
@@ -130,26 +132,26 @@ function BusinessPagesTab({ userId, isOwnProfile }: { userId: string; isOwnProfi
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <h3 className="text-[15px] font-bold text-white/80">
+        <h3 className="text-[15px] font-bold pf-ink">
           {isOwnProfile ? 'My Business Pages' : 'Business Pages'}
-          {pages.length > 0 && <span className="ml-2 text-[12px] font-normal text-white/30">{pages.length} page{pages.length !== 1 ? 's' : ''}</span>}
+          {pages.length > 0 && <span className="ml-2 text-[12px] font-normal pf-ink-4">{pages.length} page{pages.length !== 1 ? 's' : ''}</span>}
         </h3>
         {isOwnProfile && (
-          <Link href="/businesses/create" className="flex items-center gap-1.5 px-3 py-1.5 rounded-[9px] text-[12px] font-semibold text-white/60 border border-white/[0.09] bg-white/[0.04] hover:bg-white/[0.08] hover:text-white/80 transition-all">
+          <Link href="/businesses/create" className="flex items-center gap-1.5 px-3 py-1.5 rounded-[9px] text-[12px] font-semibold pf-ink-2 border pf-rim-2 pf-s2 pf-s2-h pf-ink-h transition-all">
             <Plus className="w-3 h-3" /> New Page
           </Link>
         )}
       </div>
 
       {pages.length === 0 ? (
-        <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-14 text-center">
-          <div className="w-14 h-14 rounded-[16px] bg-white/[0.04] border border-white/[0.07] flex items-center justify-center mx-auto mb-4">
-            <Building2 className="w-6 h-6 text-white/20" />
+        <div className="rounded-[20px] border pf-rim pf-s1 p-14 text-center">
+          <div className="w-14 h-14 rounded-[16px] pf-s2 border pf-rim flex items-center justify-center mx-auto mb-4">
+            <Building2 className="w-6 h-6 pf-ink-4" />
           </div>
-          <p className="text-[14px] font-semibold text-white/35 mb-2">{isOwnProfile ? 'No business pages yet' : 'No business pages'}</p>
+          <p className="text-[14px] font-semibold pf-ink-3 mb-2">{isOwnProfile ? 'No business pages yet' : 'No business pages'}</p>
           {isOwnProfile && (
             <>
-              <p className="text-[13px] text-white/22 mb-5">Create a page to showcase your company, post jobs, and share updates.</p>
+              <p className="text-[13px] pf-ink-4 mb-5">Create a page to showcase your company, post jobs, and share updates.</p>
               <Link href="/businesses/create" className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] text-[13px] font-bold text-white bg-gradient-to-r from-indigo-500 to-violet-500 hover:opacity-90 transition-opacity">
                 <Plus className="w-3.5 h-3.5" /> Create Business Page
               </Link>
@@ -161,14 +163,14 @@ function BusinessPagesTab({ userId, isOwnProfile }: { userId: string; isOwnProfi
           {pages.map((page) => {
             const accentColor = INDUSTRY_COLORS[page.industry] || 'rgba(255,255,255,0.4)';
             return (
-              <div key={page.id} className="group relative rounded-[16px] border border-white/[0.07] bg-white/[0.025] overflow-hidden hover:border-white/[0.12] hover:bg-white/[0.04] transition-all">
+              <div key={page.id} className="group relative rounded-[16px] border pf-rim pf-s1 overflow-hidden pf-rim-f pf-s2-h transition-all">
                 {/* Accent strip */}
                 <div className="h-[3px]" style={{ background: `linear-gradient(90deg,${accentColor}55,transparent)` }} />
 
                 <div className="p-4">
                   <div className="flex items-start gap-3">
                     {/* Logo */}
-                    <div className="w-11 h-11 rounded-[11px] border border-white/[0.08] flex-shrink-0 flex items-center justify-center text-[16px] font-bold text-white/60 overflow-hidden"
+                    <div className="w-11 h-11 rounded-[11px] border pf-rim-2 flex-shrink-0 flex items-center justify-center text-[16px] font-bold pf-ink-2 overflow-hidden"
                       style={{ background: page.logoUrl ? `url(${page.logoUrl}) center/cover` : `linear-gradient(135deg,${accentColor}28,${accentColor}15)` }}>
                       {!page.logoUrl && page.name.charAt(0).toUpperCase()}
                     </div>
@@ -176,10 +178,10 @@ function BusinessPagesTab({ userId, isOwnProfile }: { userId: string; isOwnProfi
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-[13.5px] font-bold text-white/88 truncate">{page.name}</p>
+                        <p className="text-[13.5px] font-bold pf-ink truncate">{page.name}</p>
                         {page.verified && <BadgeCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: accentColor }} />}
                       </div>
-                      {page.tagline && <p className="text-[11.5px] text-white/35 truncate mt-0.5">{page.tagline}</p>}
+                      {page.tagline && <p className="text-[11.5px] pf-ink-3 truncate mt-0.5">{page.tagline}</p>}
                       <span className="inline-block mt-1.5 text-[10px] font-700 px-2 py-0.5 rounded-full" style={{ color: accentColor, background: `${accentColor}15`, border: `1px solid ${accentColor}22` }}>
                         {page.industry.charAt(0).toUpperCase() + page.industry.slice(1)}
                       </span>
@@ -187,16 +189,16 @@ function BusinessPagesTab({ userId, isOwnProfile }: { userId: string; isOwnProfi
                   </div>
 
                   {/* Stats */}
-                  <div className="flex gap-3 mt-3 pt-3 border-t border-white/[0.05]">
-                    <div className="flex items-center gap-1.5 text-[11px] text-white/35">
+                  <div className="flex gap-3 mt-3 pt-3 border-t pf-rim">
+                    <div className="flex items-center gap-1.5 text-[11px] pf-ink-3">
                       <Users className="w-3 h-3" /> {page.followerCount.toLocaleString()}
                     </div>
                     {page.jobCount > 0 && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-white/35">
+                      <div className="flex items-center gap-1.5 text-[11px] pf-ink-3">
                         <Briefcase className="w-3 h-3" /> {page.jobCount} jobs
                       </div>
                     )}
-                    <div className="flex items-center gap-1.5 text-[11px] text-white/35">
+                    <div className="flex items-center gap-1.5 text-[11px] pf-ink-3">
                       <PenLine className="w-3 h-3" /> {page.postCount} posts
                     </div>
                   </div>
@@ -204,7 +206,7 @@ function BusinessPagesTab({ userId, isOwnProfile }: { userId: string; isOwnProfi
                   {/* Actions */}
                   <div className="flex gap-2 mt-3">
                     <Link href={`/businesses/${page.slug}`}
-                      className="flex-1 text-center py-1.5 rounded-[8px] text-[11.5px] font-semibold text-white/55 border border-white/[0.08] bg-white/[0.04] hover:bg-white/[0.08] hover:text-white/75 transition-all">
+                      className="flex-1 text-center py-1.5 rounded-[8px] text-[11.5px] font-semibold pf-ink-2 border pf-rim-2 pf-s2 pf-s2-h pf-ink-h transition-all">
                       View Page
                     </Link>
                     {isOwnProfile && (
@@ -351,15 +353,29 @@ interface ProfileResponse {
 }
 
 /* ─── gradient helpers ───────────────────────────────────────────────── */
+/* The default cover, one per user, picked from their id.
+ *
+ * These were eight near-black gradients — #0f0c29, #000000, #0a0a0a and so on
+ * — which worked when the page around them was #0D0D0F and does not now: the
+ * name and headline sit ON the cover, and on a light page they are dark ink.
+ *
+ * They are a PALETTE IN CODE, not a stored choice: no profile in this
+ * deployment has a `coverGradient` of its own, and the line below still
+ * prefers one if a user ever sets it. So the palette moves to the page's own
+ * hues — the same periwinkle, mint, blush, butter and lilac the ground is
+ * washed with — at a lightness that dark ink reads on. Verified rather than
+ * eyeballed: the identity text over every one of these is measured in
+ * profile.js against the composited cover.
+ */
 const COVER_GRADIENTS = [
-  'linear-gradient(135deg, #0f0c29, #302b63, #24243e)',
-  'linear-gradient(135deg, #0d0d0d, #1a1a2e, #16213e)',
-  'linear-gradient(135deg, #1a0533, #0d0d2b, #040d21)',
-  'linear-gradient(135deg, #0f2027, #203a43, #2c5364)',
-  'linear-gradient(135deg, #16001e, #2a0845, #160029)',
-  'linear-gradient(135deg, #000000, #0a0a0a, #1c1c1c)',
-  'linear-gradient(135deg, #0a0a0a, #1a0a00, #0f0500)',
-  'linear-gradient(135deg, #020024, #090979, #00d4ff22)',
+  'linear-gradient(135deg, #dfe7ff, #eef1ff, #e7f4ff)',
+  'linear-gradient(135deg, #e0f4ec, #eefaf4, #e6f1ff)',
+  'linear-gradient(135deg, #ffe9f0, #fff2f6, #f4ecff)',
+  'linear-gradient(135deg, #fff3dc, #fffaef, #ffeee2)',
+  'linear-gradient(135deg, #ece5ff, #f5f0ff, #e7ecff)',
+  'linear-gradient(135deg, #e3f0f7, #eff7fb, #e9eeff)',
+  'linear-gradient(135deg, #fdecea, #fff4f2, #fdf0e4)',
+  'linear-gradient(135deg, #e6f7f2, #f1fbf8, #eaf0ff)',
 ];
 
 function getGradient(userId: string) {
@@ -461,15 +477,15 @@ function PublisherTrackingPanel() {
   /* ── stat card helper ── */
   const StatCard = ({ label, value, sub, onClick }: { label: string; value: number; sub: string; onClick: () => void }) => (
     <button type="button" onClick={onClick}
-      className="group text-left rounded-[14px] border border-white/[0.07] bg-white/[0.025] p-4 hover:bg-white/[0.04] hover:border-white/[0.11] transition-all">
-      <p className="text-[28px] font-black tabular-nums text-white/90 leading-none mb-1.5" style={{ letterSpacing: '-0.04em' }}>{value}</p>
-      <p className="text-[12px] font-semibold text-white/55">{label}</p>
-      <p className="text-[10.5px] text-white/28 mt-0.5">{sub}</p>
+      className="group text-left rounded-[14px] border pf-rim pf-s1 p-4 pf-s2-h pf-rim-f transition-all">
+      <p className="text-[28px] font-black tabular-nums pf-ink leading-none mb-1.5" style={{ letterSpacing: '-0.04em' }}>{value}</p>
+      <p className="text-[12px] font-semibold pf-ink-2">{label}</p>
+      <p className="text-[10.5px] pf-ink-4 mt-0.5">{sub}</p>
       <div className="mt-3 flex items-center justify-between">
-        <div className="h-px flex-1 bg-white/[0.07] rounded-full overflow-hidden">
-          <div className="h-full bg-white/30 rounded-full transition-all" style={{ width: value > 0 ? '100%' : '0%' }} />
+        <div className="h-px flex-1 pf-s3 rounded-full overflow-hidden">
+          <div className="h-full pf-s4 rounded-full transition-all" style={{ width: value > 0 ? '100%' : '0%' }} />
         </div>
-        <ExternalLink className="ml-3 h-3 w-3 text-white/15 group-hover:text-white/35 transition shrink-0" />
+        <ExternalLink className="ml-3 h-3 w-3 pf-deco pf-g-ink transition shrink-0" />
       </div>
     </button>
   );
@@ -477,40 +493,40 @@ function PublisherTrackingPanel() {
   /* ── empty state helper ── */
   const EmptyState = ({ message, sub, href, cta }: { message: string; sub: string; href: string; cta: string }) => (
     <div className="py-14 text-center">
-      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.03]">
-        <TrendingUp className="h-5 w-5 text-white/15" />
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border pf-rim pf-s1">
+        <TrendingUp className="h-5 w-5 pf-deco" />
       </div>
-      <p className="text-[13.5px] font-semibold text-white/35">{message}</p>
-      <p className="text-[11.5px] text-white/20 mt-1.5 max-w-[240px] mx-auto leading-relaxed">{sub}</p>
+      <p className="text-[13.5px] font-semibold pf-ink-3">{message}</p>
+      <p className="text-[11.5px] pf-ink-4 mt-1.5 max-w-[240px] mx-auto leading-relaxed">{sub}</p>
       <a href={href}
-        className="mt-5 inline-flex items-center gap-1.5 h-8 px-4 rounded-[10px] text-[11.5px] font-semibold text-white/45 hover:text-white/75 transition border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06]">
+        className="mt-5 inline-flex items-center gap-1.5 h-8 px-4 rounded-[10px] text-[11.5px] font-semibold pf-ink-3 pf-ink-h transition border pf-rim-2 pf-s1 pf-s2-h">
         {cta} <ExternalLink className="h-3 w-3" />
       </a>
     </div>
   );
 
   return (
-    <div className="rounded-[20px] border border-white/[0.08] bg-[#0f0f11] overflow-hidden">
+    <div className="rounded-[20px] border pf-rim-2 pf-modal overflow-hidden">
 
       {/* ── Sub-nav ── */}
-      <div className="flex items-center border-b border-white/[0.06] px-1 overflow-x-auto [scrollbar-width:none]">
+      <div className="flex items-center border-b pf-rim px-1 overflow-x-auto [scrollbar-width:none]">
         {subTabs.map(t => (
           <button key={t.id} type="button" onClick={() => setSubTab(t.id)}
             className={`relative flex shrink-0 items-center gap-2 px-4 py-3.5 text-[12px] font-semibold whitespace-nowrap transition-colors ${
-              subTab === t.id ? 'text-white/90' : 'text-white/30 hover:text-white/55'
+              subTab === t.id ? 'pf-ink' : 'pf-ink-4 pf-ink-h'
             }`}>
             {t.label}
             {t.count !== undefined && t.count > 0 && (
               <span className={`rounded-full px-1.5 py-px text-[9px] font-bold tabular-nums ${
-                subTab === t.id ? 'bg-white/10 text-white/50' : 'bg-white/[0.05] text-white/22'
+                subTab === t.id ? 'pf-s4 pf-ink-3' : 'pf-s2 pf-ink-4'
               }`}>{t.count}</span>
             )}
-            {subTab === t.id && <span className="absolute bottom-0 inset-x-4 h-px rounded-full bg-white/40" />}
+            {subTab === t.id && <span className="absolute bottom-0 inset-x-4 h-px rounded-full pf-s4" />}
           </button>
         ))}
         <div className="flex-1" />
         <a href="/published" target="_blank" rel="noopener noreferrer"
-          className="mr-2 shrink-0 flex items-center gap-1.5 h-7 px-3 rounded-[8px] text-[11px] font-medium text-white/25 hover:text-white/55 hover:bg-white/[0.05] border border-white/[0.06] transition">
+          className="mr-2 shrink-0 flex items-center gap-1.5 h-7 px-3 rounded-[8px] text-[11px] font-medium pf-ink-4 pf-ink-h pf-s2-h border pf-rim transition">
           <ExternalLink className="h-3 w-3" /> Feed
         </a>
       </div>
@@ -539,8 +555,8 @@ function PublisherTrackingPanel() {
 
             {/* Application pipeline */}
             {applications.length > 0 && (
-              <div className="rounded-[14px] border border-white/[0.07] bg-white/[0.02] p-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/25 mb-4">Application Pipeline</p>
+              <div className="rounded-[14px] border pf-rim pf-s1 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] pf-ink-4 mb-4">Application Pipeline</p>
                 <div className="flex items-end gap-1">
                   {[...APP_STATUS_ORDER.filter(s => s !== 'rejected'), 'rejected'].map(s => {
                     const count = applications.filter(a => (appStatuses[a.itemId] || 'applied') === s).length;
@@ -556,7 +572,7 @@ function PublisherTrackingPanel() {
                           }}>
                           {count > 0 ? count : '—'}
                         </div>
-                        <p className="text-[8.5px] font-medium text-white/18 truncate">{isRej ? 'Declined' : meta.label.replace('! 🎉','')}</p>
+                        <p className="text-[8.5px] font-medium pf-deco truncate">{isRej ? 'Declined' : meta.label.replace('! 🎉','')}</p>
                       </div>
                     );
                   })}
@@ -577,21 +593,21 @@ function PublisherTrackingPanel() {
             {/* Recent */}
             {(registrations.length > 0 || applications.length > 0) && (
               <div className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/22 mb-2">Recent Activity</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] pf-ink-4 mb-2">Recent Activity</p>
                 {[
                   ...registrations.slice(0, 3).map(r => ({ type: 'reg' as const, title: r.title, cat: r.category, ms: r.registeredAt, id: r.itemId })),
                   ...applications.slice(0, 2).map(a => ({ type: 'app' as const, title: a.title, cat: 'job', ms: a.appliedAt, id: a.itemId })),
                 ].sort((a, b) => b.ms - a.ms).slice(0, 5).map((item, i) => (
                   <a key={i} href={`/published/${item.id}`}
-                    className="group flex items-center gap-3 rounded-[11px] border border-white/[0.04] bg-white/[0.015] px-3.5 py-2.5 hover:bg-white/[0.04] hover:border-white/[0.08] transition-all">
+                    className="group flex items-center gap-3 rounded-[11px] border pf-rim pf-s1 px-3.5 py-2.5 pf-s2-h pf-rim-f transition-all">
                     <span className="shrink-0 text-[14px]">{CAT_ICON[item.cat] || '📄'}</span>
-                    <p className="flex-1 min-w-0 text-[12px] font-medium text-white/60 truncate group-hover:text-white/85 transition-colors">{item.title}</p>
+                    <p className="flex-1 min-w-0 text-[12px] font-medium pf-ink-2 truncate pf-g-ink transition-colors">{item.title}</p>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold ${
                       item.type === 'reg'
-                        ? 'bg-white/[0.06] text-white/40'
-                        : 'bg-white/[0.06] text-white/40'
+                        ? 'pf-s2 pf-ink-3'
+                        : 'pf-s2 pf-ink-3'
                     }`}>{item.type === 'reg' ? 'Registered' : 'Applied'}</span>
-                    <span className="shrink-0 text-[10px] text-white/20 tabular-nums">{fmtRel(item.ms)}</span>
+                    <span className="shrink-0 text-[10px] pf-ink-4 tabular-nums">{fmtRel(item.ms)}</span>
                   </a>
                 ))}
               </div>
@@ -607,23 +623,23 @@ function PublisherTrackingPanel() {
               <div className="space-y-1.5">
                 <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-3 px-3 pb-2">
                   {['#', 'Event', 'Date', 'Status', ''].map((h, i) => (
-                    <span key={i} className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/20">{h}</span>
+                    <span key={i} className="text-[9px] font-semibold uppercase tracking-[0.18em] pf-ink-4">{h}</span>
                   ))}
                 </div>
                 {registrations.slice().reverse().map((r, i) => (
                   <a key={i} href={`/published/${r.itemId}`}
-                    className="group grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 rounded-[12px] border border-white/[0.05] bg-white/[0.02] px-3 py-2.5 hover:bg-white/[0.04] hover:border-white/[0.09] transition-all">
-                    <span className="text-[10px] font-medium tabular-nums text-white/20 w-4">{i + 1}</span>
+                    className="group grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-3 rounded-[12px] border pf-rim pf-s1 px-3 py-2.5 pf-s2-h pf-rim-f transition-all">
+                    <span className="text-[10px] font-medium tabular-nums pf-ink-4 w-4">{i + 1}</span>
                     <div className="min-w-0">
-                      <p className="text-[12.5px] font-medium text-white/75 truncate group-hover:text-white/90 transition-colors">{r.title}</p>
-                      <p className="text-[10px] text-white/28 mt-0.5 capitalize">{r.category}</p>
+                      <p className="text-[12.5px] font-medium pf-ink-2 truncate pf-g-ink transition-colors">{r.title}</p>
+                      <p className="text-[10px] pf-ink-4 mt-0.5 capitalize">{r.category}</p>
                     </div>
-                    <span className="text-[10px] text-white/25 whitespace-nowrap">{fmt(r.registeredAt)}</span>
-                    <span className="rounded-full px-2.5 py-0.5 text-[9.5px] font-semibold bg-white/[0.06] text-white/40 border border-white/[0.07] whitespace-nowrap">
+                    <span className="text-[10px] pf-ink-4 whitespace-nowrap">{fmt(r.registeredAt)}</span>
+                    <span className="rounded-full px-2.5 py-0.5 text-[9.5px] font-semibold pf-s2 pf-ink-3 border pf-rim whitespace-nowrap">
                       {r.registeredAt > Date.now() ? 'Upcoming' : 'Registered'}
                     </span>
                     <button type="button" onClick={e => { e.preventDefault(); e.stopPropagation(); removeRegistration(r.itemId); }}
-                      className="opacity-0 group-hover:opacity-100 flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.07] text-white/20 hover:text-white/60 hover:border-white/[0.15] transition-all">
+                      className="opacity-0 group-hover:opacity-100 flex h-6 w-6 items-center justify-center rounded-full border pf-rim pf-ink-4 pf-ink-h pf-rim-f transition-all">
                       <X className="h-3 w-3" />
                     </button>
                   </a>
@@ -646,13 +662,13 @@ function PublisherTrackingPanel() {
                   const order      = APP_STATUS_ORDER.filter(s => s !== 'rejected');
                   const curIdx     = order.indexOf(statusKey as typeof order[number]);
                   return (
-                    <div key={i} className="rounded-[14px] border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                    <div key={i} className="rounded-[14px] border pf-rim pf-s1 overflow-hidden">
                       {/* Main row */}
                       <div className="flex items-center gap-3 px-4 py-3">
-                        <span className="shrink-0 w-4 text-[10px] font-medium tabular-nums text-white/20">{i + 1}</span>
+                        <span className="shrink-0 w-4 text-[10px] font-medium tabular-nums pf-ink-4">{i + 1}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium text-white/80 truncate">{a.title}</p>
-                          <p className="text-[10px] text-white/28 mt-0.5">{fmtRel(a.appliedAt)} · {fmt(a.appliedAt)}</p>
+                          <p className="text-[13px] font-medium pf-ink truncate">{a.title}</p>
+                          <p className="text-[10px] pf-ink-4 mt-0.5">{fmtRel(a.appliedAt)} · {fmt(a.appliedAt)}</p>
                         </div>
                         {/* Status select */}
                         <select value={statusKey} onChange={e => updateAppStatus(a.itemId, e.target.value as AppStatus)}
@@ -667,16 +683,16 @@ function PublisherTrackingPanel() {
                         <div className="flex items-center gap-1 shrink-0">
                           {a.url && (
                             <a href={a.url} target="_blank" rel="noopener noreferrer"
-                              className="flex h-7 w-7 items-center justify-center rounded-[8px] border border-white/[0.06] text-white/20 hover:text-white/60 hover:bg-white/[0.05] transition">
+                              className="flex h-7 w-7 items-center justify-center rounded-[8px] border pf-rim pf-ink-4 pf-ink-h pf-s2-h transition">
                               <ExternalLink className="h-3 w-3" />
                             </a>
                           )}
                           <button type="button" onClick={() => setExpandedApp(isExpanded ? null : a.itemId)}
-                            className={`flex h-7 w-7 items-center justify-center rounded-[8px] border border-white/[0.06] transition ${isExpanded ? 'bg-white/[0.07] text-white/55' : 'text-white/20 hover:text-white/55 hover:bg-white/[0.04]'}`}>
+                            className={`flex h-7 w-7 items-center justify-center rounded-[8px] border pf-rim transition ${isExpanded ? 'pf-s3 pf-ink-2' : 'pf-ink-4 pf-ink-h pf-s2-h'}`}>
                             <svg className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/></svg>
                           </button>
                           <button type="button" onClick={() => removeApplication(a.itemId)}
-                            className="flex h-7 w-7 items-center justify-center rounded-[8px] border border-white/[0.06] text-white/15 hover:text-white/50 transition">
+                            className="flex h-7 w-7 items-center justify-center rounded-[8px] border pf-rim pf-deco pf-ink-h transition">
                             <X className="h-3 w-3" />
                           </button>
                         </div>
@@ -692,10 +708,10 @@ function PublisherTrackingPanel() {
                               return (
                                 <React.Fragment key={s}>
                                   <div className={`h-1 w-1 rounded-full transition-all ${
-                                    isActive ? 'bg-white/70 scale-125' : isPast ? 'bg-white/40' : 'bg-white/[0.10]'
+                                    isActive ? 'pf-solid scale-125' : isPast ? 'pf-s4' : 'pf-s4'
                                   }`} />
                                   {idx < order.length - 1 && (
-                                    <div className={`flex-1 h-px mx-1 rounded-full transition-all ${isPast ? 'bg-white/25' : 'bg-white/[0.07]'}`} />
+                                    <div className={`flex-1 h-px mx-1 rounded-full transition-all ${isPast ? 'pf-s4' : 'pf-s3'}`} />
                                   )}
                                 </React.Fragment>
                               );
@@ -703,7 +719,7 @@ function PublisherTrackingPanel() {
                           </div>
                           <div className="flex mt-1">
                             {order.map((s, idx) => (
-                              <div key={s} className={`flex-1 text-[8px] font-medium ${idx === 0 ? 'text-left' : idx === order.length-1 ? 'text-right' : 'text-center'} ${s === statusKey ? 'text-white/45' : 'text-white/18'}`}>
+                              <div key={s} className={`flex-1 text-[8px] font-medium ${idx === 0 ? 'text-left' : idx === order.length-1 ? 'text-right' : 'text-center'} ${s === statusKey ? 'pf-ink-3' : 'pf-deco'}`}>
                                 {STATUS_META[s].label.replace('! 🎉','')}
                               </div>
                             ))}
@@ -711,16 +727,16 @@ function PublisherTrackingPanel() {
                         </div>
                       )}
                       {statusKey === 'rejected' && (
-                        <p className="px-4 pb-3 text-[10.5px] text-white/25">Not selected for this role</p>
+                        <p className="px-4 pb-3 text-[10.5px] pf-ink-4">Not selected for this role</p>
                       )}
 
                       {/* Notes */}
                       {isExpanded && (
-                        <div className="border-t border-white/[0.05] px-4 py-3">
-                          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-white/22 mb-2">Notes</p>
+                        <div className="border-t pf-rim px-4 py-3">
+                          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] pf-ink-4 mb-2">Notes</p>
                           <textarea value={note} onChange={e => updateAppNote(a.itemId, e.target.value)} rows={2}
                             placeholder="Interview dates, contacts, next steps…"
-                            className="w-full rounded-[10px] border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-[12px] text-white/65 placeholder:text-white/18 outline-none focus:border-white/[0.15] transition resize-none" />
+                            className="w-full rounded-[10px] border pf-rim pf-s1 px-3 py-2 text-[12px] pf-ink-2 pf-deco outline-none pf-rim-f transition resize-none" />
                         </div>
                       )}
                     </div>
@@ -738,14 +754,14 @@ function PublisherTrackingPanel() {
               <div className="space-y-1.5">
                 {bookmarkList.map(([id, bm], i) => (
                   <a key={id} href={`/published/${id}`}
-                    className="group flex items-center gap-3 rounded-[12px] border border-white/[0.05] bg-white/[0.02] px-3.5 py-2.5 hover:bg-white/[0.04] hover:border-white/[0.09] transition-all">
-                    <span className="shrink-0 w-4 text-[10px] font-medium tabular-nums text-white/18">{i + 1}</span>
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] bg-white/[0.04] text-[13px]">{CAT_ICON[bm.category] || '📄'}</div>
+                    className="group flex items-center gap-3 rounded-[12px] border pf-rim pf-s1 px-3.5 py-2.5 pf-s2-h pf-rim-f transition-all">
+                    <span className="shrink-0 w-4 text-[10px] font-medium tabular-nums pf-deco">{i + 1}</span>
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[9px] pf-s2 text-[13px]">{CAT_ICON[bm.category] || '📄'}</div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12.5px] font-medium text-white/65 truncate group-hover:text-white/85 transition-colors">{(bm as any).title || `${id.slice(0, 12)}…`}</p>
-                      <p className="text-[10px] text-white/25 mt-0.5 capitalize">{bm.category} · {fmt(bm.savedAt)}</p>
+                      <p className="text-[12.5px] font-medium pf-ink-2 truncate pf-g-ink transition-colors">{(bm as any).title || `${id.slice(0, 12)}…`}</p>
+                      <p className="text-[10px] pf-ink-4 mt-0.5 capitalize">{bm.category} · {fmt(bm.savedAt)}</p>
                     </div>
-                    <ExternalLink className="shrink-0 h-3.5 w-3.5 text-white/12 group-hover:text-white/35 transition" />
+                    <ExternalLink className="shrink-0 h-3.5 w-3.5 pf-deco pf-g-ink transition" />
                   </a>
                 ))}
               </div>
@@ -765,9 +781,9 @@ function PublisherTrackingPanel() {
                     { label: 'Categories', value: Object.keys(ctaData).length },
                     { label: 'Action Types', value: Object.values(ctaData).flatMap(Object.keys).filter((v,i,a) => a.indexOf(v)===i).length },
                   ].map(s => (
-                    <div key={s.label} className="rounded-[12px] border border-white/[0.06] bg-white/[0.02] px-3.5 py-3">
-                      <p className="text-[22px] font-black tabular-nums text-white/80" style={{ letterSpacing: '-0.03em' }}>{s.value}</p>
-                      <p className="text-[10px] font-medium text-white/28 mt-0.5">{s.label}</p>
+                    <div key={s.label} className="rounded-[12px] border pf-rim pf-s1 px-3.5 py-3">
+                      <p className="text-[22px] font-black tabular-nums pf-ink" style={{ letterSpacing: '-0.03em' }}>{s.value}</p>
+                      <p className="text-[10px] font-medium pf-ink-4 mt-0.5">{s.label}</p>
                     </div>
                   ))}
                 </div>
@@ -781,22 +797,22 @@ function PublisherTrackingPanel() {
                       const catTotal = Object.values(actions).reduce((s, v) => s + v, 0);
                       const maxCount = Math.max(...Object.values(actions));
                       return (
-                        <div key={cat} className="rounded-[13px] border border-white/[0.05] bg-white/[0.02] px-4 py-3.5">
+                        <div key={cat} className="rounded-[13px] border pf-rim pf-s1 px-4 py-3.5">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                               <span className="text-[14px]">{CAT_ICON[cat] || '📄'}</span>
-                              <span className="text-[12px] font-semibold text-white/60 capitalize">{cat}</span>
+                              <span className="text-[12px] font-semibold pf-ink-2 capitalize">{cat}</span>
                             </div>
-                            <span className="text-[10px] tabular-nums text-white/25">{catTotal}</span>
+                            <span className="text-[10px] tabular-nums pf-ink-4">{catTotal}</span>
                           </div>
                           <div className="space-y-2">
                             {Object.entries(actions).sort((a, b) => b[1] - a[1]).map(([action, count]) => (
                               <div key={action} className="flex items-center gap-2.5">
-                                <span className="w-5 shrink-0 text-[10px] font-semibold tabular-nums text-right text-white/30">{count}</span>
-                                <div className="flex-1 h-1 rounded-full bg-white/[0.05] overflow-hidden">
-                                  <div className="h-full rounded-full bg-white/25 transition-all" style={{ width: `${(count / maxCount) * 100}%` }} />
+                                <span className="w-5 shrink-0 text-[10px] font-semibold tabular-nums text-right pf-ink-4">{count}</span>
+                                <div className="flex-1 h-1 rounded-full pf-s2 overflow-hidden">
+                                  <div className="h-full rounded-full pf-s4 transition-all" style={{ width: `${(count / maxCount) * 100}%` }} />
                                 </div>
-                                <span className="shrink-0 text-[10.5px] text-white/28 truncate max-w-[130px]">{CTA_LABELS[action] || action.replace(/_/g, ' ')}</span>
+                                <span className="shrink-0 text-[10.5px] pf-ink-4 truncate max-w-[130px]">{CTA_LABELS[action] || action.replace(/_/g, ' ')}</span>
                               </div>
                             ))}
                           </div>
@@ -816,9 +832,11 @@ function PublisherTrackingPanel() {
 /* ─── shimmer skeleton ───────────────────────────────────────────────── */
 function Shimmer({ className }: { className: string }) {
   return (
-    <div
-      className={`animate-pulse rounded-[10px] bg-white/[0.06] ${className}`}
-    />
+    /* `pf-sk`, not a white film. On the old near-black page a 4%-white block
+       was a visible placeholder; on a light ground it is white on white, which
+       is a skeleton that cannot be seen. `pf-sk` is the page's own sweeping
+       dark wash and carries its own animation, so `animate-pulse` goes too. */
+    <div className={`rounded-[10px] pf-sk ${className}`} />
   );
 }
 
@@ -863,22 +881,22 @@ const ConnectionRow = memo(function ConnectionRow({
   onToggleFollow: (id: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-white/[0.04] last:border-0">
+    <div className="flex items-center gap-3 py-3 border-b pf-rim last:border-0">
       <Link href={`/u/${u.id}`} prefetch className="flex-1 min-w-0 flex items-center gap-3">
-        <div className="h-9 w-9 shrink-0 rounded-full ring-1 ring-white/[0.10] overflow-hidden bg-white/[0.06] flex items-center justify-center">
+        <div className="h-9 w-9 shrink-0 rounded-full ring-1 ring-white/[0.10] overflow-hidden pf-s2 flex items-center justify-center">
           {u.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={u.avatarUrl} alt={u.name} className="h-full w-full object-cover" />
           ) : (
-            <span className="text-[13px] font-bold text-white/60 select-none">
+            <span className="text-[13px] font-bold pf-ink-2 select-none">
               {(u.name || '?').charAt(0).toUpperCase()}
             </span>
           )}
         </div>
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold text-white/85 truncate">{u.name}</p>
-          {u.headline && <p className="text-[11px] text-white/35 truncate mt-0.5">{u.headline}</p>}
-          {u.location && <p className="text-[10px] text-white/25 truncate">{u.location}</p>}
+          <p className="text-[13px] font-semibold pf-ink truncate">{u.name}</p>
+          {u.headline && <p className="text-[11px] pf-ink-3 truncate mt-0.5">{u.headline}</p>}
+          {u.location && <p className="text-[10px] pf-ink-4 truncate">{u.location}</p>}
         </div>
       </Link>
       {!isMe && canFollow && (
@@ -887,8 +905,8 @@ const ConnectionRow = memo(function ConnectionRow({
           onClick={() => onToggleFollow(u.id)}
           className={`shrink-0 h-7 px-3 rounded-[9px] text-[11px] font-semibold transition-all border ${
             following
-              ? 'bg-white/[0.06] border-white/[0.10] text-white/50 hover:bg-rose-500/[0.10] hover:border-rose-500/20 hover:text-rose-400'
-              : 'bg-white/[0.08] border-white/[0.12] text-white/70 hover:bg-white/[0.14] hover:text-white'
+              ? 'pf-s2 pf-rim-2 pf-ink-3 hover:bg-rose-500/[0.10] hover:border-rose-500/20 hover:text-rose-400'
+              : 'pf-s3 pf-rim-3 pf-ink-2 pf-s2-h pf-ink-h'
           }`}
         >
           {following ? 'Unfollow' : 'Follow'}
@@ -900,12 +918,13 @@ const ConnectionRow = memo(function ConnectionRow({
 
 function ProfileSkeleton() {
   return (
-    <div className="min-h-screen bg-[#0D0D0F] text-white">
-      <header className="sticky top-0 z-40 h-14 bg-[#0D0D0F]/80 backdrop-blur-xl border-b border-white/[0.05] flex items-center px-4 md:px-8 gap-4">
+    <DiscoverShell softwareName="Docrud" viewer={null} bare hideBar>
+    <div className="pf-page">
+      <header className="sticky top-0 z-40 h-14 pf-bar border-b pf-rim flex items-center px-4 md:px-8 gap-4">
         <Shimmer className="h-8 w-8 rounded-[10px]" />
         <Shimmer className="h-4 w-32" />
       </header>
-      <div className="h-52 md:h-64 w-full animate-pulse bg-white/[0.04]" />
+      <div className="h-52 md:h-64 w-full pf-sk" />
       <div className="-mt-16 px-4 md:px-8 lg:px-16 xl:px-24 max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end gap-4 mb-6">
           <Shimmer className="h-28 w-28 md:h-36 md:w-36 shrink-0 rounded-[28px]" />
@@ -928,6 +947,7 @@ function ProfileSkeleton() {
         </div>
       </div>
     </div>
+    </DiscoverShell>
   );
 }
 
@@ -996,20 +1016,20 @@ function PublishedCtaAnalytics() {
 
   if (categories.length === 0 && totalClicks === 0) {
     return (
-      <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-5">
+      <div className="rounded-[20px] border pf-rim pf-s1 p-5">
         <div className="flex items-center gap-2.5 mb-4">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] border border-white/[0.08]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] pf-s2 border pf-rim-2">
             <TrendingUp className="h-3.5 w-3.5 text-amber-400/70" />
           </div>
           <div>
-            <p className="text-[13px] font-semibold text-white/75">Published Page Engagement</p>
-            <p className="text-[10.5px] text-white/30">Your CTA activity across categories</p>
+            <p className="text-[13px] font-semibold pf-ink-2">Published Page Engagement</p>
+            <p className="text-[10.5px] pf-ink-4">Your CTA activity across categories</p>
           </div>
         </div>
         <div className="py-8 text-center">
-          <TrendingUp className="h-6 w-6 text-white/10 mx-auto mb-2" />
-          <p className="text-[12px] text-white/25">No CTA activity yet.</p>
-          <p className="text-[11px] text-white/15 mt-1">
+          <TrendingUp className="h-6 w-6 pf-deco mx-auto mb-2" />
+          <p className="text-[12px] pf-ink-4">No CTA activity yet.</p>
+          <p className="text-[11px] pf-deco mt-1">
             Interact with content on the{' '}
             <Link href="/published" className="text-amber-400/60 hover:text-amber-400 transition">published page</Link>
             {' '}to see your engagement stats here.
@@ -1020,15 +1040,15 @@ function PublishedCtaAnalytics() {
   }
 
   return (
-    <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-5">
+    <div className="rounded-[20px] border pf-rim pf-s1 p-5">
       {/* Header */}
       <div className="flex items-center gap-2.5 mb-4">
         <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-amber-500/10 border border-amber-500/20">
           <TrendingUp className="h-3.5 w-3.5 text-amber-400" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-white/80">Published Page Engagement</p>
-          <p className="text-[10.5px] text-white/30">
+          <p className="text-[13px] font-semibold pf-ink">Published Page Engagement</p>
+          <p className="text-[10.5px] pf-ink-4">
             {totalActions} interactions across {categories.length} categor{categories.length === 1 ? 'y' : 'ies'}
           </p>
         </div>
@@ -1036,7 +1056,7 @@ function PublishedCtaAnalytics() {
           <button
             type="button"
             onClick={() => setExpanded(e => !e)}
-            className="flex h-7 items-center gap-1.5 rounded-[10px] border border-white/[0.09] bg-white/[0.04] px-3 text-[11px] font-semibold text-white/40 hover:text-white/70 hover:bg-white/[0.08] transition"
+            className="flex h-7 items-center gap-1.5 rounded-[10px] border pf-rim-2 pf-s2 px-3 text-[11px] font-semibold pf-ink-3 pf-ink-h pf-s2-h transition"
           >
             {expanded ? 'Less' : 'Details'}
           </button>
@@ -1044,7 +1064,7 @@ function PublishedCtaAnalytics() {
             type="button"
             onClick={clearData}
             title="Clear all activity data"
-            className="flex h-7 w-7 items-center justify-center rounded-[10px] border border-white/[0.07] bg-white/[0.03] text-white/20 hover:text-rose-400/70 hover:border-rose-500/20 transition"
+            className="flex h-7 w-7 items-center justify-center rounded-[10px] border pf-rim pf-s1 pf-ink-4 hover:text-rose-400/70 hover:border-rose-500/20 transition"
           >
             <X className="h-3 w-3" />
           </button>
@@ -1061,10 +1081,10 @@ function PublishedCtaAnalytics() {
         ].map(({ key, label, emoji }) => {
           const count = categories.reduce((s, [, a]) => s + (a[key] ?? 0), 0);
           return (
-            <div key={key} className="rounded-[14px] border border-white/[0.06] bg-white/[0.03] p-3 text-center">
+            <div key={key} className="rounded-[14px] border pf-rim pf-s1 p-3 text-center">
               <p className="text-[18px] mb-0.5">{emoji}</p>
-              <p className="text-[16px] font-black text-white tabular-nums">{count}</p>
-              <p className="text-[10px] font-semibold text-white/30 uppercase tracking-[0.12em]">{label}</p>
+              <p className="text-[16px] font-black pf-ink tabular-nums">{count}</p>
+              <p className="text-[10px] font-semibold pf-ink-4 uppercase tracking-[0.12em]">{label}</p>
             </div>
           );
         })}
@@ -1081,29 +1101,29 @@ function PublishedCtaAnalytics() {
             const topActions = Object.entries(actions)
               .sort((a, b) => b[1] - a[1])
               .slice(0, expanded ? undefined : 3);
-            const barColor = CAT_COLORS[cat] ?? 'bg-white/30';
-            const textColor = CAT_TEXT[cat] ?? 'text-white/60';
+            const barColor = CAT_COLORS[cat] ?? 'pf-s4';
+            const textColor = CAT_TEXT[cat] ?? 'pf-ink-2';
 
             return (
-              <div key={cat} className="rounded-[14px] border border-white/[0.05] bg-white/[0.025] p-4">
+              <div key={cat} className="rounded-[14px] border pf-rim pf-s1 p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className={`h-2 w-2 rounded-full ${barColor}`} />
                     <span className={`text-[12px] font-bold capitalize ${textColor}`}>{cat}</span>
                   </div>
-                  <span className="text-[11px] font-bold tabular-nums text-white/50">{catTotal} interactions</span>
+                  <span className="text-[11px] font-bold tabular-nums pf-ink-3">{catTotal} interactions</span>
                 </div>
                 <div className="space-y-2">
                   {topActions.map(([actionId, count]) => (
                     <div key={actionId} className="flex items-center gap-3">
-                      <span className="w-32 shrink-0 text-[11px] text-white/35 truncate">{CTA_LABELS[actionId] ?? actionId}</span>
-                      <div className="flex-1 h-2 rounded-full bg-white/[0.05] overflow-hidden">
+                      <span className="w-32 shrink-0 text-[11px] pf-ink-3 truncate">{CTA_LABELS[actionId] ?? actionId}</span>
+                      <div className="flex-1 h-2 rounded-full pf-s2 overflow-hidden">
                         <div
                           className={`h-full rounded-full ${barColor} opacity-80`}
                           style={{ width: `${(count / maxInCat) * 100}%`, transition: 'width 0.4s ease' }}
                         />
                       </div>
-                      <span className="w-7 shrink-0 text-right text-[11px] font-bold tabular-nums text-white/50">{count}</span>
+                      <span className="w-7 shrink-0 text-right text-[11px] font-bold tabular-nums pf-ink-3">{count}</span>
                     </div>
                   ))}
                 </div>
@@ -1116,14 +1136,14 @@ function PublishedCtaAnalytics() {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="mt-3 w-full rounded-[12px] border border-white/[0.06] bg-white/[0.03] py-2 text-[11.5px] font-semibold text-white/35 hover:text-white/60 hover:bg-white/[0.06] transition"
+          className="mt-3 w-full rounded-[12px] border pf-rim pf-s1 py-2 text-[11.5px] font-semibold pf-ink-3 pf-ink-h pf-s2-h transition"
         >
           Show {categories.length - 5} more categories
         </button>
       )}
 
-      <div className="mt-4 flex items-center justify-between border-t border-white/[0.05] pt-3">
-        <p className="text-[10.5px] text-white/20">Tracked locally · not visible to others</p>
+      <div className="mt-4 flex items-center justify-between border-t pf-rim pt-3">
+        <p className="text-[10.5px] pf-ink-4">Tracked locally · not visible to others</p>
         <Link
           href="/published"
           className="text-[11px] font-semibold text-amber-400/60 hover:text-amber-400 transition"
@@ -1161,36 +1181,29 @@ function StatItem({
   value: number;
   onClick?: () => void;
 }) {
+  /* A PILL: the figure and its label on one line, intrinsically sized.
+     This was a column of a seven-column grid — a big number stacked over a
+     tiny uppercase caption — and the grid is what forced the compromises
+     recorded here before: at 360px "FOLLOWERS" and "FOLLOWING" both truncated
+     to "FOLLOW…" inside their 45px column, so the caption had to shrink to 8px
+     and drop its uppercase on phones to fit at all.
+
+     A pill has no column to fit inside, so the label is simply the word. The
+     short label is still used on a phone, but now to keep the ROW compact
+     rather than to avoid clipping. */
+  const interactive = typeof onClick === 'function';
   return (
     <button
+      type="button"
       onClick={onClick}
       title={label}
       aria-label={`${label}: ${value.toLocaleString()}`}
-      className={`group flex min-w-0 flex-col items-center gap-[3px] rounded-[10px] px-0.5 py-1.5 transition-colors ${
-        onClick ? 'cursor-pointer hover:bg-white/[0.04]' : 'cursor-default'
-      }`}
+      className={`pf-stat${interactive ? '' : ' is-static'}`}
     >
-      <span
-        className="w-full truncate tabular-nums text-center font-bold tracking-tight leading-none text-white"
-        style={{ fontSize: 'clamp(14px,4vw,20px)' }}
-      >
-        {value.toLocaleString()}
-      </span>
-      {/* Sentence case on a phone, uppercase from `sm` up.
-          Uppercase plus letter-spacing is what did not fit: at 45px on a 360px
-          screen "FOLLOWERS" and "FOLLOWING" both truncated to "FOLLOW…" and
-          "FOLLOWI…", which is worse than no label at all. Lowercase glyphs are
-          markedly narrower, so the same words fit whole — and the row reads
-          quieter for it. */}
-      <span
-        className="w-full truncate text-center font-semibold leading-none tracking-normal normal-case text-white/35 transition-colors group-hover:text-white/60 sm:uppercase sm:tracking-[0.06em] sm:text-white/30"
-        /* 2.3vw rather than 2.4: at 360px — the narrowest phone worth
-           supporting — the longest label, "Published", was a pixel or two over
-           its 45px column. */
-        style={{ fontSize: 'clamp(8px,2.3vw,10px)' }}
-      >
-        {/* Two spellings, one of which is always hidden — cheaper and more
-            reliable than measuring the container to decide. */}
+      <span className="pf-stat-n">{value.toLocaleString()}</span>
+      <span className="pf-stat-l">
+        {/* Two spellings, one always hidden — cheaper and more reliable than
+            measuring the container to decide. */}
         <span className="sm:hidden">{shortLabel ?? label}</span>
         <span className="hidden sm:inline">{label}</span>
       </span>
@@ -1201,7 +1214,7 @@ function StatItem({
 /* ─── skills chip ────────────────────────────────────────────────────── */
 function SkillChip({ label }: { label: string }) {
   return (
-    <span className="px-3 py-1.5 rounded-full border border-white/[0.09] bg-white/[0.04] text-[12.5px] font-medium text-white/65 hover:border-white/[0.15] hover:bg-white/[0.07] transition-colors">
+    <span className="px-3 py-1.5 rounded-full border pf-rim-2 pf-s2 text-[12.5px] font-medium pf-ink-2 pf-rim-f pf-s2-h transition-colors">
       {label}
     </span>
   );
@@ -1224,8 +1237,8 @@ function DocrudGoBadge({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 /* ─── section card ───────────────────────────────────────────────────── */
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[18px] sm:rounded-[22px] border border-white/[0.07] bg-white/[0.025] p-4 sm:p-5 md:p-6">
-      <h3 className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-white/30 mb-3.5 sm:mb-5">{title}</h3>
+    <div className="rounded-[18px] sm:rounded-[22px] border pf-rim pf-s1 p-4 sm:p-5 md:p-6">
+      <h3 className="text-[10.5px] font-bold uppercase tracking-[0.18em] pf-ink-4 mb-3.5 sm:mb-5">{title}</h3>
       {children}
     </div>
   );
@@ -1235,30 +1248,30 @@ function SectionCard({ title, children }: { title: string; children: React.React
 function GigListingCard({ gig }: { gig: GigCard }) {
   return (
     <Link href={`/gigs/${gig.slug}`} className="block group">
-      <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-5 hover:border-white/[0.12] hover:bg-white/[0.05] transition-all duration-200">
+      <div className="rounded-[20px] border pf-rim pf-s1 p-5 pf-rim-f pf-s2-h transition-all duration-200">
         <div className="flex items-start justify-between gap-3 mb-3">
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/[0.07] text-white/50 border border-white/[0.08]">
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full pf-s3 pf-ink-3 border pf-rim-2">
             {gig.category}
           </span>
-          <span className="text-xs text-white/35 shrink-0">{gig.budgetLabel}</span>
+          <span className="text-xs pf-ink-3 shrink-0">{gig.budgetLabel}</span>
         </div>
-        <h4 className="font-semibold text-white/90 leading-snug mb-2 group-hover:text-white transition-colors line-clamp-2">
+        <h4 className="font-semibold pf-ink leading-snug mb-2 pf-g-ink transition-colors line-clamp-2">
           {gig.title}
         </h4>
-        <p className="text-sm text-white/45 line-clamp-2 mb-3">{gig.summary}</p>
+        <p className="text-sm pf-ink-3 line-clamp-2 mb-3">{gig.summary}</p>
         {gig.skills.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {gig.skills.slice(0, 3).map((s) => (
               <span
                 key={s}
-                className="text-xs px-2 py-0.5 rounded-full border border-white/[0.07] bg-white/[0.04] text-white/50"
+                className="text-xs px-2 py-0.5 rounded-full border pf-rim pf-s2 pf-ink-3"
               >
                 {s}
               </span>
             ))}
           </div>
         )}
-        <div className="mt-3 flex items-center gap-3 text-xs text-white/30">
+        <div className="mt-3 flex items-center gap-3 text-xs pf-ink-4">
           <span>{gig.locationPreference}</span>
           {gig.timelineLabel && <span>{gig.timelineLabel}</span>}
           <span>{gig.connectCount} connects</span>
@@ -1335,24 +1348,24 @@ function ImageAdjustModal({
   return (
     <div className="fixed inset-0 z-[20000] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-md bg-[#111113] border border-white/[0.09] rounded-[24px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
+      <div className="relative z-10 w-full max-w-md pf-modal border pf-rim-2 rounded-[24px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
+        <div className="flex items-center justify-between px-5 py-4 border-b pf-rim">
           <div>
-            <h3 className="font-bold text-white text-[15px]">Adjust {isBanner ? 'Banner' : 'Profile Photo'}</h3>
-            <p className="text-[11px] text-white/35 mt-0.5">Drag or use sliders to reposition</p>
+            <h3 className="font-bold pf-ink text-[15px]">Adjust {isBanner ? 'Banner' : 'Profile Photo'}</h3>
+            <p className="text-[11px] pf-ink-3 mt-0.5">Drag or use sliders to reposition</p>
           </div>
-          <button onClick={onCancel} className="h-8 w-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.10] transition-colors">
-            <X className="h-4 w-4 text-white/60" />
+          <button onClick={onCancel} className="h-8 w-8 rounded-full pf-s2 flex items-center justify-center pf-s2-h transition-colors">
+            <X className="h-4 w-4 pf-ink-2" />
           </button>
         </div>
 
         <div className="px-5 py-5 space-y-5">
           {/* Preview */}
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold text-white/35 uppercase tracking-[0.12em]">Preview — drag to reposition</p>
+            <p className="text-[11px] font-semibold pf-ink-3 uppercase tracking-[0.12em]">Preview — drag to reposition</p>
             <div
               ref={previewRef}
-              className={`overflow-hidden border border-white/[0.10] select-none cursor-crosshair ${
+              className={`overflow-hidden border pf-rim-2 select-none cursor-crosshair ${
                 isBanner
                   ? 'w-full h-28 rounded-[14px]'
                   : 'w-28 h-28 rounded-[24px] mx-auto'
@@ -1376,7 +1389,7 @@ function ImageAdjustModal({
                   transform: 'translate(-50%,-50%)',
                 }}
               >
-                <Move className="h-5 w-5 text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]" />
+                <Move className="h-5 w-5 pf-ink drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]" />
               </div>
             </div>
           </div>
@@ -1385,8 +1398,8 @@ function ImageAdjustModal({
           <div className="space-y-4">
             <div>
               <div className="flex justify-between mb-1.5">
-                <label className="text-[11px] text-white/40">Horizontal</label>
-                <span className="text-[11px] text-white/25">{pos.x}%</span>
+                <label className="text-[11px] pf-ink-3">Horizontal</label>
+                <span className="text-[11px] pf-ink-4">{pos.x}%</span>
               </div>
               <input
                 type="range"
@@ -1399,8 +1412,8 @@ function ImageAdjustModal({
             </div>
             <div>
               <div className="flex justify-between mb-1.5">
-                <label className="text-[11px] text-white/40">Vertical</label>
-                <span className="text-[11px] text-white/25">{pos.y}%</span>
+                <label className="text-[11px] pf-ink-3">Vertical</label>
+                <span className="text-[11px] pf-ink-4">{pos.y}%</span>
               </div>
               <input
                 type="range"
@@ -1418,14 +1431,14 @@ function ImageAdjustModal({
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 h-10 rounded-[12px] border border-white/[0.08] text-white/55 text-sm hover:bg-white/[0.05] transition-colors"
+              className="flex-1 h-10 rounded-[12px] border pf-rim-2 pf-ink-2 text-sm pf-s2-h transition-colors"
             >
               Cancel
             </button>
             <button
               type="button"
               onClick={() => onSave(target.dataUrl, positionStr)}
-              className="flex-1 h-10 rounded-[12px] bg-white text-[#0D0D0F] font-bold text-sm hover:bg-white/90 transition-colors"
+              className="flex-1 h-10 rounded-[12px] pf-solid text-[#0D0D0F] font-bold text-sm pf-s2-h transition-colors"
             >
               Apply
             </button>
@@ -1854,12 +1867,12 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
       )}
     <div className="fixed inset-0 z-[10000] flex items-end md:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full md:max-w-2xl md:mx-4 bg-[#111113] border border-white/[0.08] rounded-t-[28px] md:rounded-[24px] flex flex-col max-h-[calc(92vh-62px)] md:max-h-[88vh]">
+      <div className="relative z-10 w-full md:max-w-2xl md:mx-4 pf-modal border pf-rim-2 rounded-t-[28px] md:rounded-[24px] flex flex-col max-h-[calc(92vh-62px)] md:max-h-[88vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07] shrink-0">
-          <h2 className="font-semibold text-white">Edit Profile</h2>
-          <button onClick={onClose} className="h-8 w-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.10] transition-colors">
-            <X className="h-4 w-4 text-white/60" />
+        <div className="flex items-center justify-between px-6 py-4 border-b pf-rim shrink-0">
+          <h2 className="font-semibold pf-ink">Edit Profile</h2>
+          <button onClick={onClose} className="h-8 w-8 rounded-full pf-s2 flex items-center justify-center pf-s2-h transition-colors">
+            <X className="h-4 w-4 pf-ink-2" />
           </button>
         </div>
 
@@ -1868,10 +1881,10 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
 
           {/* Photo uploads */}
           <section data-edit-section="photo">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Photos</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Photos</p>
             {/* Banner */}
             <div
-              className={`relative mb-1 h-24 w-full rounded-[14px] overflow-hidden border border-white/[0.08] ${imgUploading === 'banner' ? 'cursor-wait' : 'cursor-pointer group'}`}
+              className={`relative mb-1 h-24 w-full rounded-[14px] overflow-hidden border pf-rim-2 ${imgUploading === 'banner' ? 'cursor-wait' : 'cursor-pointer group'}`}
               onClick={() => !imgUploading && bannerInputRef.current?.click()}
             >
               {form.bannerUrl ? (
@@ -1883,11 +1896,11 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
               )}
               {imgUploading === 'banner' ? (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                  <div className="h-5 w-5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  <div className="h-5 w-5 rounded-full border-2 pf-on-dark-rim border-t-white animate-spin" />
                 </div>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="flex items-center gap-1.5 text-white text-xs font-semibold">
+                  <div className="pf-on-dark flex items-center gap-1.5 text-xs font-semibold">
                     <Plus className="h-3.5 w-3.5" /> Change banner
                   </div>
                 </div>
@@ -1900,7 +1913,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                   const src = form.bannerUrl || form.coverGradient!;
                   setAdjustTarget({ dataUrl: src, type: 'banner', initialPosition: form.coverPosition });
                 }}
-                className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/65 mb-3 transition-colors"
+                className="flex items-center gap-1 text-[11px] pf-ink-3 pf-ink-h mb-3 transition-colors"
               >
                 <Move className="h-3 w-3" /> Reposition banner
               </button>
@@ -1910,34 +1923,34 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
             {/* Avatar */}
             <div className="flex items-center gap-4">
               <div
-                className={`relative h-16 w-16 rounded-[18px] overflow-hidden border-2 border-white/[0.12] flex-shrink-0 ${imgUploading === 'avatar' ? 'cursor-wait' : 'cursor-pointer group'}`}
+                className={`relative h-16 w-16 rounded-[18px] overflow-hidden border-2 pf-rim-3 flex-shrink-0 ${imgUploading === 'avatar' ? 'cursor-wait' : 'cursor-pointer group'}`}
                 onClick={() => !imgUploading && avatarInputRef.current?.click()}
               >
                 {form.avatarUrl ? (
                   <img src={form.avatarUrl} alt="Avatar" className="h-full w-full object-cover" style={{ objectPosition: form.avatarPosition ?? '50% 50%' }} />
                 ) : (
-                  <div className="h-full w-full bg-white/[0.08] flex items-center justify-center text-white/50 font-bold text-xl">
+                  <div className="h-full w-full pf-s3 flex items-center justify-center pf-ink-3 font-bold text-xl">
                     {getInitials(userName)}
                   </div>
                 )}
                 {imgUploading === 'avatar' ? (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                    <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    <div className="h-4 w-4 rounded-full border-2 pf-on-dark-rim border-t-white animate-spin" />
                   </div>
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Plus className="h-4 w-4 text-white" />
+                    <Plus className="h-4 w-4 pf-on-dark" />
                   </div>
                 )}
               </div>
               <div>
-                <button type="button" onClick={() => !imgUploading && avatarInputRef.current?.click()} className="text-sm font-semibold text-white/70 hover:text-white transition-colors disabled:opacity-40">
+                <button type="button" onClick={() => !imgUploading && avatarInputRef.current?.click()} className="text-sm font-semibold pf-ink-2 pf-ink-h transition-colors disabled:opacity-40">
                   {imgUploading === 'avatar' ? 'Uploading…' : 'Upload profile photo'}
                 </button>
-                <p className="text-xs text-white/30 mt-0.5">JPG, PNG · Max 5 MB</p>
+                <p className="text-xs pf-ink-4 mt-0.5">JPG, PNG · Max 5 MB</p>
                 <div className="flex items-center gap-3 mt-1">
                   {form.avatarUrl && !imgUploading && (
-                    <button type="button" onClick={() => setAdjustTarget({ dataUrl: form.avatarUrl!, type: 'avatar', initialPosition: form.avatarPosition })} className="flex items-center gap-1 text-[11px] text-white/35 hover:text-white/65 transition-colors">
+                    <button type="button" onClick={() => setAdjustTarget({ dataUrl: form.avatarUrl!, type: 'avatar', initialPosition: form.avatarPosition })} className="flex items-center gap-1 text-[11px] pf-ink-3 pf-ink-h transition-colors">
                       <Move className="h-3 w-3" /> Reposition
                     </button>
                   )}
@@ -1953,9 +1966,9 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
           {/* Resume */}
           <section ref={resumeSectionRef}>
             <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Resume</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3">Resume</p>
               {form.resumeFiles && form.resumeFiles.length > 0 && (
-                <span className="text-[10px] text-white/25">{form.resumeFiles.length}/{5} saved</span>
+                <span className="text-[10px] pf-ink-4">{form.resumeFiles.length}/{5} saved</span>
               )}
             </div>
 
@@ -1968,31 +1981,31 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
               onDrop={handleResumeDrop}
               className={`relative flex items-center gap-4 rounded-[16px] border border-dashed px-4 py-4 cursor-pointer transition-all group ${
                 resumeUploading
-                  ? 'border-white/20 bg-white/[0.02] cursor-wait'
+                  ? 'pf-rim-3 pf-s1 cursor-wait'
                   : resumeDragging
                     ? 'border-indigo-400/60 bg-indigo-500/[0.07]'
-                    : 'border-white/[0.12] hover:border-white/30 hover:bg-white/[0.03]'
+                    : 'pf-rim-3 pf-rim-f pf-s2-h'
               }`}
             >
-              <div className={`h-10 w-10 rounded-[12px] flex items-center justify-center shrink-0 transition-colors ${resumeDragging && !resumeUploading ? 'bg-indigo-500/15' : 'bg-white/[0.06] group-hover:bg-white/[0.10]'}`}>
+              <div className={`h-10 w-10 rounded-[12px] flex items-center justify-center shrink-0 transition-colors ${resumeDragging && !resumeUploading ? 'bg-indigo-500/15' : 'pf-s2 pf-s2-h'}`}>
                 {resumeUploading
-                  ? <Loader2 className="h-4 w-4 text-white/50 animate-spin" />
-                  : <Upload className={`h-4 w-4 ${resumeDragging ? 'text-indigo-300' : 'text-white/50'}`} />}
+                  ? <Loader2 className="h-4 w-4 pf-ink-3 animate-spin" />
+                  : <Upload className={`h-4 w-4 ${resumeDragging ? 'text-indigo-300' : 'pf-ink-3'}`} />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white/80">
+                <p className="text-sm font-semibold pf-ink">
                   {resumeUploading ? 'Uploading resume…' : resumeDragging ? 'Drop your resume here' : 'Upload resume'}
                 </p>
-                <p className="text-[11px] text-white/35 mt-0.5">
+                <p className="text-[11px] pf-ink-3 mt-0.5">
                   {resumeUploading
                     ? 'Saving your file and extracting skills, experience, education — one moment'
                     : 'Click to browse or drag & drop · PDF, DOC or DOCX · up to 10 MB'}
                 </p>
               </div>
               {!resumeUploading && !resumeDragging && (
-                <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] bg-white/[0.07] group-hover:bg-white/[0.12] transition-colors">
-                  <Sparkles className="h-3 w-3 text-white/50" />
-                  <span className="text-[11px] font-semibold text-white/60">AI</span>
+                <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] pf-s3 pf-s2-h transition-colors">
+                  <Sparkles className="h-3 w-3 pf-ink-3" />
+                  <span className="text-[11px] font-semibold pf-ink-2">AI</span>
                 </div>
               )}
             </div>
@@ -2006,15 +2019,15 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
 
             {/* Selected file — name, size, icon, replace / remove */}
             {resumePicked && (
-              <div className="mt-3 flex items-center gap-3 rounded-[14px] border border-white/[0.08] bg-white/[0.03] px-3.5 py-3">
-                <div className="h-9 w-9 rounded-[11px] bg-white/[0.06] flex items-center justify-center shrink-0">
+              <div className="mt-3 flex items-center gap-3 rounded-[14px] border pf-rim-2 pf-s1 px-3.5 py-3">
+                <div className="h-9 w-9 rounded-[11px] pf-s2 flex items-center justify-center shrink-0">
                   {resumeUploading
-                    ? <Loader2 className="h-4 w-4 text-white/45 animate-spin" />
-                    : <FileText className="h-4 w-4 text-white/45" />}
+                    ? <Loader2 className="h-4 w-4 pf-ink-3 animate-spin" />
+                    : <FileText className="h-4 w-4 pf-ink-3" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12.5px] font-medium text-white/80 truncate">{resumePicked.name}</p>
-                  <p className="text-[10.5px] text-white/30 mt-0.5">
+                  <p className="text-[12.5px] font-medium pf-ink truncate">{resumePicked.name}</p>
+                  <p className="text-[10.5px] pf-ink-4 mt-0.5">
                     {resumePicked.ext.toUpperCase()} · {formatFileSize(resumePicked.size)}
                     {resumeUploading
                       ? ' · Uploading…'
@@ -2026,7 +2039,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                     type="button"
                     disabled={resumeUploading}
                     onClick={() => resumeInputRef.current?.click()}
-                    className="h-7 px-2.5 rounded-[8px] bg-white/[0.05] hover:bg-white/[0.10] transition-colors text-[10.5px] font-medium text-white/45 hover:text-white/70 disabled:opacity-40"
+                    className="h-7 px-2.5 rounded-[8px] pf-s2 pf-s2-h transition-colors text-[10.5px] font-medium pf-ink-3 pf-ink-h disabled:opacity-40"
                     title="Replace resume"
                   >
                     Replace
@@ -2035,10 +2048,10 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                     type="button"
                     disabled={resumeUploading}
                     onClick={() => { setResumePicked(null); setResumeErr(''); setResumeWarn(''); setResumeSuccess(null); }}
-                    className="h-7 w-7 rounded-[8px] bg-white/[0.05] hover:bg-rose-500/[0.14] flex items-center justify-center transition-colors disabled:opacity-40"
+                    className="h-7 w-7 rounded-[8px] pf-s2 hover:bg-rose-500/[0.14] flex items-center justify-center transition-colors disabled:opacity-40"
                     title="Remove"
                   >
-                    <X className="h-3 w-3 text-white/40" />
+                    <X className="h-3 w-3 pf-ink-3" />
                   </button>
                 </div>
               </div>
@@ -2049,13 +2062,13 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
               href="/api/profile/sample-resume"
               target="_blank"
               rel="noreferrer"
-              className="mt-2 flex items-center gap-1.5 text-[11px] text-white/35 hover:text-white/60 transition-colors w-fit"
+              className="mt-2 flex items-center gap-1.5 text-[11px] pf-ink-3 pf-ink-h transition-colors w-fit"
             >
               <FileText className="h-3 w-3" />
               Download resume template
               <ExternalLink className="h-2.5 w-2.5 opacity-60" />
             </a>
-            <p className="text-[10px] text-white/20 mt-0.5 ml-4">
+            <p className="text-[10px] pf-ink-4 mt-0.5 ml-4">
               Pre-filled with your profile data · optimised for AI parsing · open &amp; save as PDF
             </p>
 
@@ -2077,14 +2090,14 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
 
             {/* ATS + Success card */}
             {resumeSuccess && !resumeErr && (
-              <div className="mt-3 rounded-[16px] border border-white/[0.08] bg-white/[0.03] overflow-hidden">
+              <div className="mt-3 rounded-[16px] border pf-rim-2 pf-s1 overflow-hidden">
                 {/* Header bar */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                <div className="flex items-center justify-between px-4 py-3 border-b pf-rim">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-emerald-400" />
-                    <p className="text-sm font-semibold text-white/80">Profile updated from resume</p>
+                    <p className="text-sm font-semibold pf-ink">Profile updated from resume</p>
                   </div>
-                  <button onClick={() => setResumeSuccess(null)} className="text-white/30 hover:text-white/60 transition-colors">
+                  <button onClick={() => setResumeSuccess(null)} className="pf-ink-4 pf-ink-h transition-colors">
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
@@ -2093,7 +2106,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                 {resumeSuccess.atsScore && (
                   <div className="px-4 pt-4 pb-3">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">ATS Score</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] pf-ink-4">ATS Score</p>
                       <div className="flex items-center gap-2">
                         <span className={`text-xl font-black ${resumeSuccess.atsScore.score >= 75 ? 'text-emerald-400' : resumeSuccess.atsScore.score >= 55 ? 'text-amber-400' : 'text-rose-400'}`}>
                           {resumeSuccess.atsScore.score}
@@ -2104,7 +2117,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                       </div>
                     </div>
                     {/* Score bar */}
-                    <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden mb-3">
+                    <div className="h-1.5 w-full rounded-full pf-s2 overflow-hidden mb-3">
                       <div
                         className={`h-full rounded-full transition-all duration-700 ${resumeSuccess.atsScore.score >= 75 ? 'bg-emerald-400' : resumeSuccess.atsScore.score >= 55 ? 'bg-amber-400' : 'bg-rose-400'}`}
                         style={{ width: `${resumeSuccess.atsScore.score}%` }}
@@ -2113,9 +2126,9 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                     {/* Breakdown pills */}
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {Object.entries(resumeSuccess.atsScore.breakdown).map(([k, v]) => (
-                        <span key={k} className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.07] text-[10px] text-white/45">
+                        <span key={k} className="flex items-center gap-1 px-2 py-0.5 rounded-full pf-s2 border pf-rim text-[10px] pf-ink-3">
                           <span className="capitalize">{k}</span>
-                          <span className="text-white/25">·</span>
+                          <span className="pf-ink-4">·</span>
                           <span className={`font-semibold ${v >= 8 ? 'text-emerald-400/80' : v >= 5 ? 'text-amber-400/80' : 'text-rose-400/80'}`}>{v}</span>
                         </span>
                       ))}
@@ -2123,11 +2136,11 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                     {/* Tips */}
                     {resumeSuccess.atsScore.tips.length > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-white/25">How to improve</p>
+                        <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] pf-ink-4">How to improve</p>
                         {resumeSuccess.atsScore.tips.map((tip, i) => (
                           <div key={i} className="flex items-start gap-2">
-                            <div className="h-1 w-1 rounded-full bg-white/25 mt-1.5 shrink-0" />
-                            <p className="text-[11px] text-white/45 leading-relaxed">{tip}</p>
+                            <div className="h-1 w-1 rounded-full pf-s4 mt-1.5 shrink-0" />
+                            <p className="text-[11px] pf-ink-3 leading-relaxed">{tip}</p>
                           </div>
                         ))}
                       </div>
@@ -2138,8 +2151,8 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                 {/* Applied fields */}
                 {resumeSuccess.appliedFields.length > 0 && (
                   <div className="px-4 pb-4">
-                    {resumeSuccess.atsScore && <div className="border-t border-white/[0.06] mb-3" />}
-                    <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-white/25 mb-2">Auto-filled sections</p>
+                    {resumeSuccess.atsScore && <div className="border-t pf-rim mb-3" />}
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.18em] pf-ink-4 mb-2">Auto-filled sections</p>
                     <div className="flex flex-wrap gap-1.5">
                       {resumeSuccess.appliedFields.map(f => (
                         <span key={f} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-medium text-emerald-400">
@@ -2148,7 +2161,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                         </span>
                       ))}
                     </div>
-                    <p className="text-[10.5px] text-white/30 mt-2.5">Data saved automatically · scroll down to review and edit any field</p>
+                    <p className="text-[10.5px] pf-ink-4 mt-2.5">Data saved automatically · scroll down to review and edit any field</p>
                   </div>
                 )}
               </div>
@@ -2157,11 +2170,11 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
             {/* Resume history */}
             {form.resumeFiles && form.resumeFiles.length > 0 && (
               <div className="mt-4 space-y-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/25 mb-2">Saved versions</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] pf-ink-4 mb-2">Saved versions</p>
                 {form.resumeFiles.map((entry, idx) => (
-                  <div key={entry.id} className="flex items-center gap-3 rounded-[13px] border border-white/[0.07] bg-white/[0.03] px-3 py-2.5">
-                    <div className="h-8 w-8 rounded-[10px] bg-white/[0.06] flex items-center justify-center shrink-0 relative">
-                      <FileText className="h-3.5 w-3.5 text-white/40" />
+                  <div key={entry.id} className="flex items-center gap-3 rounded-[13px] border pf-rim pf-s1 px-3 py-2.5">
+                    <div className="h-8 w-8 rounded-[10px] pf-s2 flex items-center justify-center shrink-0 relative">
+                      <FileText className="h-3.5 w-3.5 pf-ink-3" />
                       {entry.atsScore && (
                         <span className={`absolute -top-1.5 -right-1.5 text-[8px] font-black px-1 rounded-[4px] ${entry.atsScore.score >= 75 ? 'bg-emerald-500/20 text-emerald-400' : entry.atsScore.score >= 55 ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400'}`}>
                           {entry.atsScore.score}
@@ -2169,8 +2182,8 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[12.5px] font-medium text-white/75 truncate">{entry.fileName}</p>
-                      <p className="text-[10.5px] text-white/30 mt-0.5">
+                      <p className="text-[12.5px] font-medium pf-ink-2 truncate">{entry.fileName}</p>
+                      <p className="text-[10.5px] pf-ink-4 mt-0.5">
                         {idx === 0 && <span className="text-emerald-400/70 font-medium">Latest · </span>}
                         {new Date(entry.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                         {entry.atsScore && <span className="ml-1.5">· Quality {entry.atsScore.grade}</span>}
@@ -2182,17 +2195,17 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                         target="_blank"
                         rel="noreferrer"
                         onClick={e => e.stopPropagation()}
-                        className="h-7 w-7 rounded-[8px] bg-white/[0.05] hover:bg-white/[0.10] flex items-center justify-center transition-colors"
+                        className="h-7 w-7 rounded-[8px] pf-s2 pf-s2-h flex items-center justify-center transition-colors"
                         title="View resume"
                       >
-                        <ExternalLink className="h-3 w-3 text-white/40" />
+                        <ExternalLink className="h-3 w-3 pf-ink-3" />
                       </a>
                       {idx > 0 && (
                         <button
                           type="button"
                           onClick={() => void handleResumeRollback(entry.id)}
                           disabled={rollingBack === entry.id}
-                          className="flex items-center gap-1 h-7 px-2.5 rounded-[8px] bg-white/[0.05] hover:bg-white/[0.10] transition-colors text-[10.5px] font-medium text-white/45 hover:text-white/70 disabled:opacity-50"
+                          className="flex items-center gap-1 h-7 px-2.5 rounded-[8px] pf-s2 pf-s2-h transition-colors text-[10.5px] font-medium pf-ink-3 pf-ink-h disabled:opacity-50"
                           title="Apply this version to profile"
                         >
                           {rollingBack === entry.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
@@ -2223,47 +2236,47 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
 
           {/* Basic */}
           <section data-edit-section="basic">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Basic</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Basic</p>
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-white/40 mb-1">Name</label>
+                <label className="block text-xs pf-ink-3 mb-1">Name</label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   maxLength={80}
                   placeholder="Your full name"
                   autoComplete="name"
-                  className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                  className="h-11 w-full rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                 />
               </div>
               <div>
-                <label className="block text-xs text-white/40 mb-1">Headline</label>
+                <label className="block text-xs pf-ink-3 mb-1">Headline</label>
                 <input
                   value={form.headline ?? ''}
                   onChange={(e) => set('headline', e.target.value)}
                   placeholder="e.g. Senior Product Designer at Razorpay"
-                  className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                  className="h-11 w-full rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                 />
               </div>
               <div>
-                <label className="block text-xs text-white/40 mb-1">
-                  Bio <span className="text-white/25">({(form.bio ?? '').length}/500)</span>
+                <label className="block text-xs pf-ink-3 mb-1">
+                  Bio <span className="pf-ink-4">({(form.bio ?? '').length}/500)</span>
                 </label>
                 <textarea
                   value={form.bio ?? ''}
                   onChange={(e) => set('bio', e.target.value.slice(0, 500))}
                   rows={4}
                   placeholder="Write a short bio about yourself..."
-                  className="w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 py-2.5 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18] resize-none"
+                  className="w-full rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 py-2.5 text-sm pf-ph focus:outline-none pf-rim-f resize-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-white/40 mb-1">Pronouns</label>
+                  <label className="block text-xs pf-ink-3 mb-1">Pronouns</label>
                   <select
                     value={form.pronouns ?? ''}
                     onChange={(e) => set('pronouns', e.target.value)}
-                    className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-[#0d0d14] text-white px-3 text-sm focus:outline-none focus:border-white/[0.18] appearance-none"
+                    className="h-11 w-full rounded-[13px] pf-input pf-select border px-3 text-sm focus:outline-none pf-rim-f appearance-none"
                   >
                     <option value="">Select pronouns</option>
                     <option value="He/Him">He/Him</option>
@@ -2273,66 +2286,66 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-white/40 mb-1">Location</label>
+                  <label className="block text-xs pf-ink-3 mb-1">Location</label>
                   <input
                     value={form.location ?? ''}
                     onChange={(e) => set('location', e.target.value)}
                     placeholder="e.g. Bengaluru, India"
-                    className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                    className="h-11 w-full rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-white/40 mb-1">Website</label>
+                <label className="block text-xs pf-ink-3 mb-1">Website</label>
                 <input
                   value={form.website ?? ''}
                   onChange={(e) => set('website', e.target.value)}
                   placeholder="https://yoursite.com"
-                  className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                  className="h-11 w-full rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                 />
               </div>
               <label className="flex items-center gap-3 cursor-pointer">
                 <div
                   onClick={() => set('openToWork', !form.openToWork)}
-                  className={`h-5 w-9 rounded-full transition-colors duration-200 flex items-center px-0.5 ${form.openToWork ? 'bg-white' : 'bg-white/[0.12]'}`}
+                  className={`h-5 w-9 rounded-full transition-colors duration-200 flex items-center px-0.5 ${form.openToWork ? 'pf-solid' : 'pf-s4'}`}
                 >
-                  <div className={`h-4 w-4 rounded-full transition-transform duration-200 ${form.openToWork ? 'translate-x-4 bg-[#0D0D0F]' : 'translate-x-0 bg-white/40'}`} />
+                  <div className={`h-4 w-4 rounded-full transition-transform duration-200 ${form.openToWork ? 'translate-x-4 pf-knob-on' : 'translate-x-0 pf-knob-off'}`} />
                 </div>
-                <span className="text-sm text-white/70">Open to work</span>
+                <span className="text-sm pf-ink-2">Open to work</span>
               </label>
             </div>
           </section>
 
           {/* Avatar */}
           <section>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Avatar</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Avatar</p>
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-[16px] bg-white/[0.07] border border-white/[0.08] flex items-center justify-center overflow-hidden shrink-0">
+              <div className="h-16 w-16 rounded-[16px] pf-s3 border pf-rim-2 flex items-center justify-center overflow-hidden shrink-0">
                 {form.avatarUrl ? (
                   <img src={form.avatarUrl} alt="avatar preview" className="h-full w-full object-cover" style={{ objectPosition: form.avatarPosition ?? '50% 50%' }} />
                 ) : (
-                  <span className="text-lg font-bold text-white/60">{getInitials(userName)}</span>
+                  <span className="text-lg font-bold pf-ink-2">{getInitials(userName)}</span>
                 )}
               </div>
               <input
                 value={form.avatarUrl ?? ''}
                 onChange={(e) => set('avatarUrl', e.target.value)}
                 placeholder="Paste image URL..."
-                className="h-11 flex-1 rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                className="h-11 flex-1 rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
               />
             </div>
           </section>
 
           {/* Cover */}
           <section>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Cover</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Cover</p>
             <div className="grid grid-cols-4 gap-2 mb-3">
               {GRADIENT_PRESETS.map((p) => (
                 <button
                   key={p.value}
                   onClick={() => set('coverGradient', p.value)}
                   title={p.label}
-                  className={`h-10 rounded-[10px] border-2 transition-all ${form.coverGradient === p.value ? 'border-white' : 'border-transparent hover:border-white/30'}`}
+                  className={`h-10 rounded-[10px] border-2 transition-all ${form.coverGradient === p.value ? 'pf-rim-2' : 'border-transparent pf-rim-f'}`}
                   style={{ background: p.value }}
                 />
               ))}
@@ -2341,24 +2354,24 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
               value={form.coverGradient ?? ''}
               onChange={(e) => set('coverGradient', e.target.value)}
               placeholder="Custom: linear-gradient(135deg, #000, #111)"
-              className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+              className="h-11 w-full rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
             />
           </section>
 
           {/* Skills */}
           <section data-edit-section="skills">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Skills</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Skills</p>
             <div className="flex gap-2 mb-3">
               <input
                 value={skillInput}
                 onChange={(e) => setSkillInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
                 placeholder="Type a skill and press Enter"
-                className="h-11 flex-1 rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                className="h-11 flex-1 rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
               />
               <button
                 onClick={addSkill}
-                className="h-11 px-4 rounded-[13px] bg-white/[0.08] hover:bg-white/[0.12] text-white text-sm transition-colors"
+                className="h-11 px-4 rounded-[13px] pf-s3 pf-s2-h pf-ink text-sm transition-colors"
               >
                 Add
               </button>
@@ -2368,10 +2381,10 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                 {(form.skills ?? []).map((s) => (
                   <span
                     key={s}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/[0.10] bg-white/[0.05] text-sm text-white/70"
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full border pf-rim-2 pf-s2 text-sm pf-ink-2"
                   >
                     {s}
-                    <button onClick={() => removeSkill(s)} className="hover:text-white transition-colors">
+                    <button onClick={() => removeSkill(s)} className="pf-ink-h transition-colors">
                       <X className="h-3 w-3" />
                     </button>
                   </span>
@@ -2383,18 +2396,18 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
           {/* Interests — same chip pattern as Skills, saved through the same
               PATCH (the handler accepts any UserProfileData field). */}
           <section data-edit-section="interests">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Interests</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Interests</p>
             <div className="flex gap-2 mb-3">
               <input
                 value={interestInput}
                 onChange={(e) => setInterestInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addInterest())}
                 placeholder="Type an interest and press Enter"
-                className="h-11 flex-1 min-w-0 rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                className="h-11 flex-1 min-w-0 rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
               />
               <button
                 onClick={addInterest}
-                className="h-11 shrink-0 px-4 rounded-[13px] bg-white/[0.08] hover:bg-white/[0.12] text-white text-sm transition-colors"
+                className="h-11 shrink-0 px-4 rounded-[13px] pf-s3 pf-s2-h pf-ink text-sm transition-colors"
               >
                 Add
               </button>
@@ -2402,9 +2415,9 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
             {(form.interests ?? []).length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {(form.interests ?? []).map((i) => (
-                  <span key={i} className="flex items-center gap-1.5 px-3 py-1 rounded-full border border-white/[0.10] bg-white/[0.05] text-sm text-white/70">
+                  <span key={i} className="flex items-center gap-1.5 px-3 py-1 rounded-full border pf-rim-2 pf-s2 text-sm pf-ink-2">
                     {i}
-                    <button onClick={() => removeInterest(i)} className="hover:text-white transition-colors">
+                    <button onClick={() => removeInterest(i)} className="pf-ink-h transition-colors">
                       <X className="h-3 w-3" />
                     </button>
                   </span>
@@ -2416,12 +2429,12 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
           {/* Experience */}
           <section data-edit-section="experience">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Experience</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3">Experience</p>
               <button
                 onClick={() => {
                   setExpEntries((prev) => [...prev, { title: '', company: '', period: '', desc: '', _key: nextExpKey.current++, startMonth: '', startYear: '', endMonth: '', endYear: '', isCurrent: false }]);
                 }}
-                className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
+                className="flex items-center gap-1.5 text-xs pf-ink-3 pf-ink-h transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" /> Add
               </button>
@@ -2436,13 +2449,13 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                     return next;
                   }));
                 };
-                const selCls = "h-10 rounded-[11px] border border-white/[0.08] bg-[#0d0d14] text-white px-2 text-sm focus:outline-none focus:border-white/[0.18] w-full appearance-none";
+                const selCls = "h-10 rounded-[11px] pf-input pf-select border px-2 text-sm focus:outline-none pf-rim-f w-full appearance-none";
                 return (
-                <div key={entry._key} className="rounded-[16px] border border-white/[0.07] bg-white/[0.03] p-4 space-y-3">
+                <div key={entry._key} className="rounded-[16px] border pf-rim pf-s1 p-4 space-y-3">
                   <div className="flex justify-end">
                     <button
                       onClick={() => setExpEntries((prev) => prev.filter((_, i) => i !== idx))}
-                      className="text-white/30 hover:text-white/60 transition-colors"
+                      className="pf-ink-4 pf-ink-h transition-colors"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -2452,19 +2465,19 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                       value={entry.title}
                       onChange={(e) => updateExp({ title: e.target.value })}
                       placeholder="Job title"
-                      className="h-10 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                      className="h-10 rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                     />
                     <input
                       value={entry.company}
                       onChange={(e) => updateExp({ company: e.target.value })}
                       placeholder="Company"
-                      className="h-10 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                      className="h-10 rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                     />
                   </div>
 
                   {/* Start date */}
                   <div>
-                    <p className="text-[10px] text-white/30 mb-1.5 uppercase tracking-wider">Start date</p>
+                    <p className="text-[10px] pf-ink-4 mb-1.5 uppercase tracking-wider">Start date</p>
                     <div className="grid grid-cols-2 gap-2">
                       <select value={entry.startMonth ?? ''} onChange={(e) => updateExp({ startMonth: e.target.value })} className={selCls}>
                         <option value="">Month</option>
@@ -2480,19 +2493,19 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                   {/* End date / currently working */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-[10px] text-white/30 uppercase tracking-wider">End date</p>
+                      <p className="text-[10px] pf-ink-4 uppercase tracking-wider">End date</p>
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
                         <div
                           onClick={() => updateExp({ isCurrent: !entry.isCurrent })}
-                          className={`relative h-4 w-7 rounded-full transition-colors ${entry.isCurrent ? 'bg-emerald-500/70' : 'bg-white/[0.1]'}`}
+                          className={`relative h-4 w-7 rounded-full transition-colors ${entry.isCurrent ? 'bg-emerald-500/70' : 'pf-s4'}`}
                         >
-                          <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white transition-all ${entry.isCurrent ? 'left-3.5' : 'left-0.5'}`} />
+                          <span className={`absolute top-0.5 h-3 w-3 rounded-full pf-solid transition-all ${entry.isCurrent ? 'left-3.5' : 'left-0.5'}`} />
                         </div>
-                        <span className="text-[11px] text-white/40">Currently working here</span>
+                        <span className="text-[11px] pf-ink-3">Currently working here</span>
                       </label>
                     </div>
                     {entry.isCurrent ? (
-                      <div className="h-10 rounded-[11px] border border-white/[0.06] bg-white/[0.02] flex items-center px-3">
+                      <div className="h-10 rounded-[11px] border pf-rim pf-s1 flex items-center px-3">
                         <span className="text-sm text-emerald-400/70 font-medium">Present</span>
                       </div>
                     ) : (
@@ -2513,7 +2526,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                     value={entry.desc ?? ''}
                     onChange={(e) => updateExp({ desc: e.target.value })}
                     placeholder="Short description (optional)"
-                    className="h-10 w-full rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                    className="h-10 w-full rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                   />
                 </div>
                 );
@@ -2524,23 +2537,23 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
           {/* Education */}
           <section data-edit-section="education">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Education</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3">Education</p>
               <button
                 onClick={() => {
                   setEduEntries((prev) => [...prev, { degree: '', school: '', year: '', _key: nextEduKey.current++ }]);
                 }}
-                className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 transition-colors"
+                className="flex items-center gap-1.5 text-xs pf-ink-3 pf-ink-h transition-colors"
               >
                 <Plus className="h-3.5 w-3.5" /> Add
               </button>
             </div>
             <div className="space-y-4">
               {eduEntries.map((entry, idx) => (
-                <div key={entry._key} className="rounded-[16px] border border-white/[0.07] bg-white/[0.03] p-4 space-y-3">
+                <div key={entry._key} className="rounded-[16px] border pf-rim pf-s1 p-4 space-y-3">
                   <div className="flex justify-end">
                     <button
                       onClick={() => setEduEntries((prev) => prev.filter((_, i) => i !== idx))}
-                      className="text-white/30 hover:text-white/60 transition-colors"
+                      className="pf-ink-4 pf-ink-h transition-colors"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -2550,20 +2563,20 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                       value={entry.degree}
                       onChange={(e) => setEduEntries((prev) => prev.map((x, i) => i === idx ? { ...x, degree: e.target.value } : x))}
                       placeholder="Degree / Certificate"
-                      className="h-10 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                      className="h-10 rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                     />
                     <input
                       value={entry.school}
                       onChange={(e) => setEduEntries((prev) => prev.map((x, i) => i === idx ? { ...x, school: e.target.value } : x))}
                       placeholder="School / University"
-                      className="h-10 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                      className="h-10 rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                     />
                   </div>
                   <input
                     value={entry.year ?? ''}
                     onChange={(e) => setEduEntries((prev) => prev.map((x, i) => i === idx ? { ...x, year: e.target.value } : x))}
                     placeholder="Year (e.g. 2020)"
-                    className="h-10 w-full rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                    className="h-10 w-full rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                   />
                 </div>
               ))}
@@ -2573,40 +2586,40 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
           {/* Portfolio — stored in the existing `achievements` field */}
           <section data-edit-section="portfolio">
             <div className="flex items-center justify-between mb-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35">Portfolio</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3">Portfolio</p>
               <button
                 onClick={addAchievement}
-                className="h-8 px-3 rounded-[10px] bg-white/[0.08] hover:bg-white/[0.12] text-white text-xs transition-colors"
+                className="h-8 px-3 rounded-[10px] pf-s3 pf-s2-h pf-ink text-xs transition-colors"
               >
                 Add item
               </button>
             </div>
             {(form.achievements ?? []).length === 0 && (
-              <p className="text-xs text-white/30">Add projects, work samples or achievements you want people to see.</p>
+              <p className="text-xs pf-ink-4">Add projects, work samples or achievements you want people to see.</p>
             )}
             <div className="space-y-3">
               {(form.achievements ?? []).map((entry, idx) => (
-                <div key={idx} className="rounded-[13px] border border-white/[0.07] bg-white/[0.02] p-3 space-y-2">
+                <div key={idx} className="rounded-[13px] border pf-rim pf-s1 p-3 space-y-2">
                   <div className="flex gap-2">
                     <input
                       value={entry.title ?? ''}
                       onChange={(e) => updateAchievement(idx, { title: e.target.value })}
                       placeholder="Title (e.g. Built an ecommerce platform)"
-                      className="h-10 flex-1 min-w-0 rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                      className="h-10 flex-1 min-w-0 rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                     />
                     <button
                       onClick={() => removeAchievement(idx)}
                       aria-label="Remove portfolio item"
-                      className="h-10 w-10 shrink-0 rounded-[11px] bg-white/[0.06] hover:bg-white/[0.10] flex items-center justify-center transition-colors"
+                      className="h-10 w-10 shrink-0 rounded-[11px] pf-s2 pf-s2-h flex items-center justify-center transition-colors"
                     >
-                      <X className="h-3.5 w-3.5 text-white/60" />
+                      <X className="h-3.5 w-3.5 pf-ink-2" />
                     </button>
                   </div>
                   <input
                     value={entry.desc ?? ''}
                     onChange={(e) => updateAchievement(idx, { desc: e.target.value })}
                     placeholder="Short description or link (optional)"
-                    className="h-10 w-full rounded-[11px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                    className="h-10 w-full rounded-[11px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                   />
                 </div>
               ))}
@@ -2615,7 +2628,7 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
 
           {/* Social links */}
           <section data-edit-section="links">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/35 mb-4">Social Links</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Social Links</p>
             <div className="space-y-3">
               {(
                 [
@@ -2627,14 +2640,14 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
                 ] as { key: keyof NonNullable<UserProfileData['socialLinks']>; label: string; placeholder: string }[]
               ).map(({ key, label, placeholder }) => (
                 <div key={key}>
-                  <label className="block text-xs text-white/40 mb-1">{label}</label>
+                  <label className="block text-xs pf-ink-3 mb-1">{label}</label>
                   <input
                     value={form.socialLinks?.[key] ?? ''}
                     onChange={(e) =>
                       set('socialLinks', { ...(form.socialLinks ?? {}), [key]: e.target.value })
                     }
                     placeholder={placeholder}
-                    className="h-11 w-full rounded-[13px] border border-white/[0.08] bg-white/[0.04] text-white px-3 text-sm placeholder:text-white/25 focus:outline-none focus:border-white/[0.18]"
+                    className="h-11 w-full rounded-[13px] border pf-rim-2 pf-s2 pf-ink px-3 text-sm pf-ph focus:outline-none pf-rim-f"
                   />
                 </div>
               ))}
@@ -2644,19 +2657,19 @@ function EditProfileModal({ profile, userName, onClose, onSaved, focusSection }:
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/[0.07] shrink-0 flex items-center gap-3">
+        <div className="px-6 py-4 border-t pf-rim shrink-0 flex items-center gap-3">
           {error && <p className="text-sm text-red-400 flex-1">{error}</p>}
           {!error && <div className="flex-1" />}
           <button
             onClick={onClose}
-            className="h-10 px-5 rounded-[13px] border border-white/[0.10] bg-transparent text-white/70 text-sm hover:bg-white/[0.05] transition-colors"
+            className="h-10 px-5 rounded-[13px] border pf-rim-2 bg-transparent pf-ink-2 text-sm pf-s2-h transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="h-10 px-6 rounded-[13px] bg-white text-[#0D0D0F] text-sm font-semibold hover:bg-white/90 transition-colors disabled:opacity-60"
+            className="h-10 px-6 rounded-[13px] pf-solid text-[#0D0D0F] text-sm font-semibold pf-s2-h transition-colors disabled:opacity-60"
           >
             {saving ? 'Saving...' : 'Save changes'}
           </button>
@@ -2704,15 +2717,15 @@ function AccordionSection({
       <button
         type="button"
         onClick={() => onToggle(id)}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-white/[0.02] focus:outline-none"
+        className="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors pf-s2-h focus:outline-none"
       >
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]"
           style={{ background: 'rgba(255,255,255,0.05)' }}>
           {icon}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold text-white/80 tracking-[-0.01em]">{title}</p>
-          <p className="text-[11px] text-white/28 mt-px truncate">{subtitle}</p>
+          <p className="text-[13px] font-semibold pf-ink tracking-[-0.01em]">{title}</p>
+          <p className="text-[11px] pf-ink-4 mt-px truncate">{subtitle}</p>
         </div>
         {!open && badge && (
           <span
@@ -2722,13 +2735,13 @@ function AccordionSection({
             {badge}
           </span>
         )}
-        <ChevronDown className={`h-4 w-4 shrink-0 text-white/22 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 shrink-0 pf-ink-4 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       <div
         className="overflow-hidden transition-all duration-300 ease-in-out"
         style={{ maxHeight: open ? '1600px' : '0px', opacity: open ? 1 : 0 }}
       >
-        <div className="border-t border-white/[0.05]">
+        <div className="border-t pf-rim">
           {children}
         </div>
       </div>
@@ -3435,21 +3448,23 @@ export default function UserProfilePage() {
 
   if (notFound || !data || !data.user || !data.profile || !data.stats) {
     return (
-      <div className="min-h-screen bg-[#0D0D0F] text-white flex flex-col items-center justify-center gap-6">
-        <div className="h-16 w-16 rounded-[20px] border border-white/[0.08] bg-white/[0.04] flex items-center justify-center">
-          <UserPlus className="h-7 w-7 text-white/30" />
+      <DiscoverShell softwareName="Docrud" viewer={session?.user ? { name: session.user.name ?? null, email: session.user.email ?? null } : null} bare hideBar>
+      <div className="pf-page flex flex-col items-center justify-center gap-6">
+        <div className="h-16 w-16 rounded-[20px] border pf-rim-2 pf-s2 flex items-center justify-center">
+          <UserPlus className="h-7 w-7 pf-ink-4" />
         </div>
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-2">Profile not found</h1>
-          <p className="text-white/40 text-sm">This user does not exist or their profile is unavailable.</p>
+          <p className="pf-ink-3 text-sm">This user does not exist or their profile is unavailable.</p>
         </div>
         <Link
           href="/"
-          className="flex items-center gap-2 text-sm text-white/50 hover:text-white/80 transition-colors"
+          className="flex items-center gap-2 text-sm pf-ink-3 pf-ink-h transition-colors"
         >
           <ArrowLeft className="h-4 w-4" /> Back to home
         </Link>
       </div>
+      </DiscoverShell>
     );
   }
 
@@ -3495,25 +3510,26 @@ export default function UserProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0D0D0F] text-white">
+    <DiscoverShell softwareName="Docrud" viewer={session?.user ? { name: session.user.name ?? null, email: session.user.email ?? null } : null} bare hideBar>
+    <div className="pf-page">
       {/* Razorpay — only loaded when this profile is own + not Go */}
       {isOwnProfile && !isEffectivelyGo && (
         <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       )}
       {/* ─── sticky header ─── */}
-      <header className="sticky top-0 z-40 bg-[#0D0D0F]/80 backdrop-blur-xl border-b border-white/[0.05] h-14 flex items-center px-4 sm:px-6 lg:px-8 gap-3">
+      <header className="sticky top-0 z-40 pf-bar border-b pf-rim h-14 flex items-center px-4 sm:px-6 lg:px-8 gap-3">
         <button
           type="button"
           onClick={handleProfileBack}
           aria-label={sessionStatus === 'unauthenticated' ? 'Back to Docrud' : 'Go back'}
-          className="h-8 w-8 rounded-full border border-white/[0.08] bg-white/[0.04] flex items-center justify-center hover:bg-white/[0.08] transition-colors shrink-0"
+          className="h-8 w-8 rounded-full border pf-rim-2 pf-s2 flex items-center justify-center pf-s2-h transition-colors shrink-0"
         >
-          <ArrowLeft className="h-4 w-4 text-white/70" />
+          <ArrowLeft className="h-4 w-4 pf-ink-2" />
         </button>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm text-white truncate">{user.name}</p>
+          <p className="font-semibold text-sm pf-ink truncate">{user.name}</p>
           {stats.gigsCount > 0 && (
-            <p className="text-xs text-white/35">{stats.gigsCount} gig{stats.gigsCount !== 1 ? 's' : ''}</p>
+            <p className="text-xs pf-ink-3">{stats.gigsCount} gig{stats.gigsCount !== 1 ? 's' : ''}</p>
           )}
         </div>
         <div className="shrink-0 flex items-center gap-2">
@@ -3534,7 +3550,7 @@ export default function UserProfilePage() {
                       .finally(() => setRefLinkLoading(false));
                   }
                 }}
-                className="hidden sm:flex items-center h-7 px-2.5 rounded-[8px] text-[11px] font-semibold transition-all hover:bg-white/[0.06] active:scale-[0.97]"
+                className="hidden sm:flex items-center h-7 px-2.5 rounded-[8px] text-[11px] font-semibold transition-all pf-s2-h active:scale-[0.97]"
                 style={{ color: 'rgba(165,180,252,0.70)', border: '1px solid rgba(99,102,241,0.20)' }}
               >
                 Earn Free
@@ -3574,7 +3590,7 @@ export default function UserProfilePage() {
                 {/* shimmer sweep */}
                 <span className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(105deg,transparent 30%,rgba(255,255,255,0.18) 50%,transparent 70%)', animation: 'goShimmer 2.8s ease-in-out infinite' }} />
                 {goUpgradePhase === 'paying'
-                  ? <><div className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" /><span className="relative">Processing…</span></>
+                  ? <><div className="h-3 w-3 rounded-full border-2 pf-rim-3 border-t-white animate-spin" /><span className="relative">Processing…</span></>
                   : <><span className="relative">∞ Infinity</span><span className="relative hidden sm:inline"> — ₹299/mo</span></>
                 }
               </button>
@@ -3588,8 +3604,8 @@ export default function UserProfilePage() {
                 disabled={followLoading}
                 className={`flex items-center gap-2 h-8 px-3 rounded-[10px] text-xs font-medium transition-colors disabled:opacity-60 ${
                   followingState
-                    ? 'border border-white/[0.10] bg-white/[0.04] text-white/70 hover:bg-white/[0.08]'
-                    : 'bg-white text-[#0D0D0F] hover:bg-white/90'
+                    ? 'border pf-rim-2 pf-s2 pf-ink-2 pf-s2-h'
+                    : 'pf-solid text-[#0D0D0F] pf-s2-h'
                 }`}
               >
                 {followingState ? <UserCheck className="h-3 w-3" /> : <UserPlus className="h-3 w-3" />}
@@ -3636,7 +3652,7 @@ export default function UserProfilePage() {
             style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.45),rgba(165,180,252,0.30),rgba(99,102,241,0.45))' }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="relative rounded-t-[22.5px] sm:rounded-[22.5px] bg-[#06060f] px-5 pt-5 pb-6">
+            <div className="relative rounded-t-[22.5px] sm:rounded-[22.5px] pf-modal px-5 pt-5 pb-6">
               {/* ambient */}
               <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 50% at 50% -5%,rgba(99,102,241,0.10) 0%,transparent 60%)' }} />
 
@@ -3644,16 +3660,16 @@ export default function UserProfilePage() {
               <div className="relative flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-[11px]" style={{ background: 'linear-gradient(135deg,#4f46e5,#818cf8)', boxShadow: '0 3px 14px rgba(99,102,241,0.45)' }}>
-                    <svg className="h-4.5 w-4.5 text-white" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                    <svg className="h-4.5 w-4.5 pf-ink" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                     </svg>
                   </div>
                   <div>
-                    <p className="text-[14px] font-black text-white leading-tight">Refer &amp; Earn Docrud Infinity Free</p>
-                    <p className="text-[11px] text-white/35 mt-0.5">One referral that activates = your Infinity badge, free</p>
+                    <p className="text-[14px] font-black pf-ink leading-tight">Refer &amp; Earn Docrud Infinity Free</p>
+                    <p className="text-[11px] pf-ink-3 mt-0.5">One referral that activates = your Infinity badge, free</p>
                   </div>
                 </div>
-                <button type="button" onClick={() => setGoUpgradePhase('idle')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.10] bg-white/[0.04] text-white/30 hover:text-white/70 transition-colors">
+                <button type="button" onClick={() => setGoUpgradePhase('idle')} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border pf-rim-2 pf-s2 pf-ink-4 pf-ink-h transition-colors">
                   <X className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -3663,19 +3679,19 @@ export default function UserProfilePage() {
                 {[{ n: '1', label: 'Share your link' }, { n: '2', label: 'Friend signs up' }, { n: '3', label: 'Infinity badge unlocks' }].map(({ n, label }) => (
                   <div key={n} className="flex flex-col items-center gap-1.5 rounded-[10px] py-3 px-2" style={{ background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.12)' }}>
                     <span className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-black" style={{ background: 'linear-gradient(135deg,#4f46e5,#818cf8)', color: '#fff' }}>{n}</span>
-                    <span className="text-[10px] font-semibold text-white/50 text-center leading-tight">{label}</span>
+                    <span className="text-[10px] font-semibold pf-ink-3 text-center leading-tight">{label}</span>
                   </div>
                 ))}
               </div>
 
               {/* Link copy */}
-              <div className="relative mb-4 rounded-[13px] border border-white/[0.08] bg-white/[0.03] p-3.5">
+              <div className="relative mb-4 rounded-[13px] border pf-rim-2 pf-s1 p-3.5">
                 <p className="mb-2 text-[9px] font-black uppercase tracking-[0.22em]" style={{ color: '#818cf8' }}>Your Referral Link</p>
                 {refLinkLoading ? (
-                  <div className="h-9 animate-pulse rounded-[10px] bg-white/[0.06]" />
+                  <div className="h-9 animate-pulse rounded-[10px] pf-s2" />
                 ) : (
                   <div className="flex gap-2">
-                    <div className="flex-1 truncate rounded-[10px] border border-white/[0.08] bg-white/[0.04] px-3 py-2 font-mono text-[11px] text-white/60">
+                    <div className="flex-1 truncate rounded-[10px] border pf-rim-2 pf-s2 px-3 py-2 font-mono text-[11px] pf-ink-2">
                       {refLink || '—'}
                     </div>
                     <button
@@ -3685,29 +3701,29 @@ export default function UserProfilePage() {
                         if (!refLink) return;
                         navigator.clipboard.writeText(refLink).then(() => { setRefCopied(true); setTimeout(() => setRefCopied(false), 2200); });
                       }}
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.12] bg-white/[0.06] transition hover:bg-white/[0.12] disabled:opacity-30"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] border pf-rim-3 pf-s2 transition pf-s2-h disabled:opacity-30"
                     >
                       {refCopied
                         ? <svg className="h-3.5 w-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        : <Copy className="h-3.5 w-3.5 text-white/50" />
+                        : <Copy className="h-3.5 w-3.5 pf-ink-3" />
                       }
                     </button>
                   </div>
                 )}
                 {refCopied && <p className="mt-1.5 text-[10.5px] font-semibold text-emerald-400">✓ Copied to clipboard!</p>}
-                {refCode && <p className="mt-1 text-[9px] text-white/22">Code: <span className="font-mono font-bold text-white/40">{refCode}</span></p>}
+                {refCode && <p className="mt-1 text-[9px] pf-ink-4">Code: <span className="font-mono font-bold pf-ink-3">{refCode}</span></p>}
               </div>
 
               {/* Email invite */}
               <div className="relative mb-4">
-                <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/28">Send a direct invite</p>
+                <p className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.18em] pf-ink-4">Send a direct invite</p>
                 <div className="flex gap-2">
                   <input
                     type="email"
                     value={refInviteEmail}
                     onChange={(e) => setRefInviteEmail(e.target.value)}
                     placeholder="colleague@company.com"
-                    className="h-9 flex-1 rounded-[11px] border border-white/[0.08] bg-white/[0.04] px-3 text-[12px] text-white placeholder:text-white/20 outline-none transition focus:border-indigo-500/25 focus:ring-1 focus:ring-indigo-500/[0.08]"
+                    className="h-9 flex-1 rounded-[11px] border pf-rim-2 pf-s2 px-3 text-[12px] pf-ink pf-ph outline-none transition focus:border-indigo-500/25 focus:ring-1 focus:ring-indigo-500/[0.08]"
                   />
                   <button
                     type="button"
@@ -3735,8 +3751,8 @@ export default function UserProfilePage() {
                 {refSendErr && <p className="mt-1.5 text-[10.5px] text-rose-400">{refSendErr}</p>}
               </div>
 
-              <p className="relative text-center text-[9px] text-white/18 leading-4">
-                Referrals can be sent to multiple people. Docrud Infinity activates <strong className="text-white/30">once per referrer</strong> the moment a referred profile is created.
+              <p className="relative text-center text-[9px] pf-deco leading-4">
+                Referrals can be sent to multiple people. Docrud Infinity activates <strong className="pf-ink-4">once per referrer</strong> the moment a referred profile is created.
               </p>
             </div>
           </div>
@@ -3796,22 +3812,25 @@ export default function UserProfilePage() {
         ) : (
           <div className="absolute inset-0" style={{ background: profile.coverGradient ? profile.coverGradient : getGradient(user.id) }} />
         )}
-        {/* Fade bottom into page bg */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0D0D0F] via-[#0D0D0F]/20 to-transparent" />
+        {/* The hand-off into the page. Was a fade to #0D0D0F, which over a light
+            ground paints a black bar across the bottom of the banner. */}
+        <div className="pf-cover-fade" />
+        {/* The specular sheen that stops a flat gradient reading as a swatch. */}
+        <div className="pf-cover-sheen" />
         {/* PF glow */}
         {profile.publicFace && (
           <div className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(180deg,rgba(180,140,55,0.06) 0%,transparent 60%)' }} />
         )}
         {/* Pattern overlay for gradient banners */}
         {!coverIsImage && (
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23ffffff%22%20fill-opacity%3D%220.02%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-25" />
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23181a2a%22%20fill-opacity%3D%220.05%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-25" />
         )}
         {isOwnProfile && (
           <button
             onClick={() => setEditOpen(true)}
             /* Top-right on a phone, where the hero cannot reach it; the old
                bottom-right corner is now under the person's own name. */
-            className="absolute top-3 right-3 sm:top-auto sm:bottom-3 flex items-center gap-1.5 h-7 px-2.5 rounded-[9px] bg-black/50 backdrop-blur-md border border-white/10 text-white/55 text-[11px] font-medium hover:bg-black/70 hover:text-white/80 transition-all"
+            className="pf-cover-btn absolute top-3 right-3 sm:top-auto sm:bottom-3"
           >
             <Edit2 className="h-3 w-3" />
             Edit banner
@@ -3838,7 +3857,7 @@ export default function UserProfilePage() {
             className="relative shrink-0 z-10 h-20 w-20 sm:h-28 sm:w-28 md:h-36 md:w-36 rounded-[18px] sm:rounded-[24px] md:rounded-[28px] overflow-visible"
           >
             <div
-              className="h-full w-full rounded-[18px] sm:rounded-[24px] md:rounded-[28px] overflow-hidden border-[3px] border-[#0D0D0F] bg-[#18181b] flex items-center justify-center text-2xl sm:text-3xl md:text-4xl font-bold text-white/70"
+              className="h-full w-full rounded-[18px] sm:rounded-[24px] md:rounded-[28px] overflow-hidden pf-avatar-frame flex items-center justify-center text-2xl sm:text-3xl md:text-4xl font-bold pf-ink-2"
               style={{
                 boxShadow: profile.publicFace
                   ? '0 0 0 2px rgba(180,140,55,0.50), 0 0 0 3.5px rgba(200,165,70,0.18), 0 8px 32px rgba(0,0,0,0.65)'
@@ -3869,14 +3888,14 @@ export default function UserProfilePage() {
           {/* Identity */}
           <div className="flex-1 min-w-0 relative z-10 flex flex-col justify-end sm:pb-1">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <h1 className="text-[19px] sm:text-[24px] md:text-[32px] font-extrabold tracking-tight leading-none text-white">{user.name}</h1>
+              <h1 className="text-[19px] sm:text-[24px] md:text-[32px] font-extrabold tracking-tight leading-none pf-ink">{user.name}</h1>
               {credits?.verified && <VerifiedBadge size="lg" />}
               {isEffectivelyGo && <DocrudGoBadge size="md" />}
               {profile.publicFace && (
                 <PublicFaceBadge category={profile.publicFace.category as import('@/types/document').PublicFaceCategory} size="md" />
               )}
               {profile.pronouns && (
-                <span className="text-xs text-white/30 font-normal">{profile.pronouns}</span>
+                <span className="text-xs pf-ink-4 font-normal">{profile.pronouns}</span>
               )}
             </div>
             {/* Presence status — below name, above headline */}
@@ -3886,9 +3905,9 @@ export default function UserProfilePage() {
             {profile.headline && (
               /* Two lines on a phone, in full from `sm` up. A headline is worth
                  showing; it is not worth four lines of a 390px screen. */
-              <p className="text-white/55 text-[13px] sm:text-[15px] md:text-[16px] leading-snug mb-2 sm:mb-3 max-w-2xl line-clamp-2 sm:line-clamp-none">{profile.headline}</p>
+              <p className="pf-ink-2 text-[13px] sm:text-[15px] md:text-[16px] leading-snug mb-2 sm:mb-3 max-w-2xl line-clamp-2 sm:line-clamp-none">{profile.headline}</p>
             )}
-            <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1.5 text-[12px] sm:text-sm text-white/35">
+            <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1.5 text-[12px] sm:text-sm pf-ink-3">
               {profile.location && (
                 <span className="flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5 shrink-0" />
@@ -3900,7 +3919,7 @@ export default function UserProfilePage() {
                   href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 hover:text-white/60 transition-colors"
+                  className="flex items-center gap-1.5 pf-ink-h transition-colors"
                 >
                   <Globe className="h-3.5 w-3.5 shrink-0" />
                   {profile.website.replace(/^https?:\/\//, '')}
@@ -3925,7 +3944,7 @@ export default function UserProfilePage() {
               <>
                 <button
                   onClick={() => setEditOpen(true)}
-                  className="flex items-center gap-2 h-9 px-4 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/80 text-sm hover:bg-white/[0.08] transition-colors"
+                  className="flex items-center gap-2 h-9 px-4 rounded-[12px] border pf-rim-2 pf-s2 pf-ink text-sm pf-s2-h transition-colors"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Edit profile</span>
@@ -3936,7 +3955,7 @@ export default function UserProfilePage() {
                   target="_blank"
                   rel="noreferrer"
                   title="Download resume template pre-filled with your profile data"
-                  className="flex items-center gap-1.5 h-9 px-3 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/60 text-sm hover:bg-white/[0.08] hover:text-white/80 transition-colors"
+                  className="flex items-center gap-1.5 h-9 px-3 rounded-[12px] border pf-rim-2 pf-s2 pf-ink-2 text-sm pf-s2-h pf-ink-h transition-colors"
                 >
                   <FileText className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline text-xs">Resume</span>
@@ -3963,7 +3982,7 @@ export default function UserProfilePage() {
                   className={`flex items-center gap-1.5 h-9 px-3 rounded-[12px] text-sm font-semibold transition-all disabled:opacity-60 ${
                     hasUpraised
                       ? 'border border-amber-500/40 bg-amber-500/10 text-amber-400'
-                      : 'border border-white/[0.10] bg-white/[0.04] text-white/50 hover:text-white/80 hover:border-amber-500/25'
+                      : 'border pf-rim-2 pf-s2 pf-ink-3 pf-ink-h hover:border-amber-500/25'
                   }`}
                 >
                   <TrendingUp className="h-3.5 w-3.5" />
@@ -3974,8 +3993,8 @@ export default function UserProfilePage() {
                   disabled={followLoading}
                   className={`flex items-center gap-2 h-9 px-4 rounded-[12px] text-sm font-medium transition-colors disabled:opacity-60 ${
                     followingState
-                      ? 'border border-white/[0.10] bg-white/[0.04] text-white/70 hover:bg-white/[0.08]'
-                      : 'bg-white text-[#0D0D0F] hover:bg-white/90'
+                      ? 'border pf-rim-2 pf-s2 pf-ink-2 pf-s2-h'
+                      : 'pf-solid text-[#0D0D0F] pf-s2-h'
                   }`}
                 >
                   {followingState ? <UserCheck className="h-3.5 w-3.5" /> : <UserPlus className="h-3.5 w-3.5" />}
@@ -3998,7 +4017,7 @@ export default function UserProfilePage() {
                   <button
                     onClick={() => void handleResumeDownload()}
                     disabled={resumeDlBusy}
-                    className="flex items-center gap-2 h-9 px-3.5 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/70 text-sm font-medium hover:bg-white/[0.08] hover:text-white/90 transition-colors active:scale-95 disabled:opacity-60"
+                    className="flex items-center gap-2 h-9 px-3.5 rounded-[12px] border pf-rim-2 pf-s2 pf-ink-2 text-sm font-medium pf-s2-h pf-ink-h transition-colors active:scale-95 disabled:opacity-60"
                     title="Download Resume"
                   >
                     {resumeDlBusy
@@ -4029,7 +4048,7 @@ export default function UserProfilePage() {
             )}
             {/* Resume download notice — e.g. "Upgrade to infinity plan." */}
             {resumeDlMsg && (
-              <p className="text-[11px] text-white/40 text-left sm:text-right">{resumeDlMsg}</p>
+              <p className="text-[11px] pf-ink-3 text-left sm:text-right">{resumeDlMsg}</p>
             )}
           </div>
         </div>
@@ -4041,12 +4060,11 @@ export default function UserProfilePage() {
             earlier attempts failed here — a scrolling line hid four of the seven
             off the right edge, and a four-column grid solved that by taking two
             rows. */}
-        <div className="relative pt-1 pb-3.5 sm:pb-5 md:pb-6 mb-4 sm:mb-5 md:mb-7 border-b border-white/[0.05]">
-          <div className="grid grid-cols-7 items-start gap-x-0.5 sm:gap-x-2">
+        <div className="relative pt-1 pb-3.5 sm:pb-5 md:pb-6 mb-4 sm:mb-5 md:mb-7 border-b pf-rim">
+          <div className="pf-stats">
             <StatItem label="Followers" value={followersCount} onClick={() => { setTab('connections'); loadConnections(); }} />
             <StatItem label="Following" value={liveStats?.following ?? stats.following} onClick={() => { setTab('connections'); loadConnections(); }} />
             <StatItem label="Upraised" value={upraiseCount} />
-            <StatItem label="Gigs" value={liveStats?.gigsCount ?? stats.gigsCount} onClick={() => setTab('gigs')} />
             <StatItem label="Published" value={liveStats?.publishedCount ?? stats.publishedCount} onClick={() => setTab('published')} />
             <StatItem label="Total views" shortLabel="Views" value={liveStats?.totalViews ?? stats.totalViews ?? 0} onClick={isOwnProfile ? () => setTab('insights') : undefined} />
             <StatItem label="Total likes" shortLabel="Likes" value={liveStats?.totalLikes ?? stats.totalLikes ?? 0} onClick={isOwnProfile ? () => setTab('published') : undefined} />
@@ -4071,20 +4089,32 @@ export default function UserProfilePage() {
             horizontally; what matters is that they stop disappearing upwards.
             Before this, reaching Gigs from the bottom of About meant scrolling
             the whole page back to the top. */}
-        <div className="sticky top-0 z-30 -mx-4 sm:mx-0 px-4 sm:px-0 relative flex gap-0 mb-5 sm:mb-7 md:mb-9 overflow-x-auto [scrollbar-width:none] border-b border-white/[0.06] bg-[#0D0D0F]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[#0D0D0F]/80">
-          {TABS.filter((t) => (t.id !== 'insights' && t.id !== 'billing' && t.id !== 'settings') || isOwnProfile).map((t) => (
-            <button
-              key={t.id}
-              onClick={() => { setTab(t.id); if (t.id === 'connections') loadConnections(); }}
-              className={`shrink-0 relative h-10 md:h-11 px-3.5 md:px-5 text-[13px] md:text-[13.5px] font-medium transition-all whitespace-nowrap ${
-                tab === t.id
-                  ? 'text-white after:absolute after:bottom-0 after:left-0 after:right-0 after:h-[2px] after:bg-white after:rounded-full'
-                  : 'text-white/35 hover:text-white/65 hover:bg-white/[0.03]'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        {/* Pills in a scrolling row, and a real tablist.
+            The active tab used to be marked by a 2px underline drawn with
+            `after:bg-white/...`; the dark-to-light pass turned that white into
+            a surface class and it landed on the BUTTON rather than on its
+            ::after, so the selected tab became a white block. It is a pill
+            now, which is the same language the rest of the app marks a current
+            filter with, and it needs no pseudo-element.
+
+            `role="tab"` and `aria-selected` were missing entirely: eleven
+            buttons that change the whole panel below them announced themselves
+            as eleven unrelated buttons. */}
+        <div className="pf-tabs-wrap" style={{ top: 0 }}>
+          <div className="pf-tabs" role="tablist" aria-label="Profile sections">
+            {TABS.filter((t) => (t.id !== 'insights' && t.id !== 'billing' && t.id !== 'settings') || isOwnProfile).map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.id}
+                className="pf-tab"
+                onClick={() => { setTab(t.id); if (t.id === 'connections') loadConnections(); }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ─── tab content ─── */}
@@ -4095,10 +4125,10 @@ export default function UserProfilePage() {
             {/* Header row */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div>
-                <h3 className="text-[15px] font-bold text-white/85">
+                <h3 className="text-[15px] font-bold pf-ink">
                   {isOwnProfile ? 'Your Published Posts' : `${user.name}'s Posts`}
                 </h3>
-                <p className="text-[11.5px] text-white/30 mt-0.5">
+                <p className="text-[11.5px] pf-ink-4 mt-0.5">
                   {publishedPosts.length > 0 ? `${publishedPosts.length} post${publishedPosts.length !== 1 ? 's' : ''} published` : 'Shared publicly with the community'}
                 </p>
               </div>
@@ -4109,8 +4139,8 @@ export default function UserProfilePage() {
                     onClick={() => setPublishedView(v => v === 'tracker' ? 'feed' : 'tracker')}
                     className={`flex items-center gap-1.5 h-9 px-3.5 rounded-[11px] text-[12px] font-semibold border transition-all ${
                       publishedView === 'tracker'
-                        ? 'border-white/[0.18] bg-white/[0.10] text-white/85'
-                        : 'border-white/[0.09] bg-white/[0.04] text-white/45 hover:text-white/70 hover:bg-white/[0.07]'
+                        ? 'pf-rim-3 pf-s4 pf-ink'
+                        : 'pf-rim-2 pf-s2 pf-ink-3 pf-ink-h pf-s2-h'
                     }`}
                   >
                     <TrendingUp className="h-3.5 w-3.5" />
@@ -4121,7 +4151,7 @@ export default function UserProfilePage() {
                   <button
                     type="button"
                     onClick={() => setPublishModalOpen(true)}
-                    className="flex items-center gap-1.5 h-9 px-4 rounded-[11px] text-[12.5px] font-semibold border border-white/[0.09] bg-white/[0.05] text-white/70 hover:bg-white/[0.09] hover:text-white/90 hover:border-white/[0.15] transition-all active:scale-[0.97]"
+                    className="flex items-center gap-1.5 h-9 px-4 rounded-[11px] text-[12.5px] font-semibold border pf-rim-2 pf-s2 pf-ink-2 pf-s2-h pf-ink-h pf-rim-f transition-all active:scale-[0.97]"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Publish
@@ -4147,7 +4177,7 @@ export default function UserProfilePage() {
           <div className="space-y-3.5 sm:space-y-5">
             {profile.bio && (
               <SectionCard title="About">
-                <p className="text-white/70 text-[15px] leading-relaxed whitespace-pre-line">{profile.bio}</p>
+                <p className="pf-ink-2 text-[15px] leading-relaxed whitespace-pre-line">{profile.bio}</p>
               </SectionCard>
             )}
 
@@ -4173,7 +4203,7 @@ export default function UserProfilePage() {
                   /* Said plainly, because the answer to "why is this here?" is
                      "because you published it" — and the way to change that is
                      one control away. */
-                  <p className="mt-3 text-[11.5px] text-white/30">
+                  <p className="mt-3 text-[11.5px] pf-ink-4">
                     This is what visitors see. Everything else you answered is used for
                     matching only.
                   </p>
@@ -4196,14 +4226,14 @@ export default function UserProfilePage() {
                 <div className="space-y-6">
                   {(profile.experience ?? []).map((e, i) => (
                     <div key={i} className="flex gap-4">
-                      <div className="mt-1 h-8 w-8 rounded-[10px] bg-white/[0.07] border border-white/[0.08] flex items-center justify-center shrink-0">
-                        <Briefcase className="h-4 w-4 text-white/40" />
+                      <div className="mt-1 h-8 w-8 rounded-[10px] pf-s3 border pf-rim-2 flex items-center justify-center shrink-0">
+                        <Briefcase className="h-4 w-4 pf-ink-3" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white/90">{e.title}</p>
-                        <p className="text-sm text-white/50 mt-0.5">{e.company}</p>
-                        <p className="text-xs text-white/30 mt-0.5">{e.period}</p>
-                        {e.desc && <p className="text-sm text-white/55 mt-2 leading-relaxed">{e.desc}</p>}
+                        <p className="font-semibold pf-ink">{e.title}</p>
+                        <p className="text-sm pf-ink-3 mt-0.5">{e.company}</p>
+                        <p className="text-xs pf-ink-4 mt-0.5">{e.period}</p>
+                        {e.desc && <p className="text-sm pf-ink-2 mt-2 leading-relaxed">{e.desc}</p>}
                       </div>
                     </div>
                   ))}
@@ -4216,13 +4246,13 @@ export default function UserProfilePage() {
                 <div className="space-y-5">
                   {(profile.education ?? []).map((e, i) => (
                     <div key={i} className="flex gap-4">
-                      <div className="mt-1 h-8 w-8 rounded-[10px] bg-white/[0.07] border border-white/[0.08] flex items-center justify-center shrink-0">
-                        <GraduationCap className="h-4 w-4 text-white/40" />
+                      <div className="mt-1 h-8 w-8 rounded-[10px] pf-s3 border pf-rim-2 flex items-center justify-center shrink-0">
+                        <GraduationCap className="h-4 w-4 pf-ink-3" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white/90">{e.degree}</p>
-                        <p className="text-sm text-white/50 mt-0.5">{e.school}</p>
-                        {e.year && <p className="text-xs text-white/30 mt-0.5">{e.year}</p>}
+                        <p className="font-semibold pf-ink">{e.degree}</p>
+                        <p className="text-sm pf-ink-3 mt-0.5">{e.school}</p>
+                        {e.year && <p className="text-xs pf-ink-4 mt-0.5">{e.year}</p>}
                       </div>
                     </div>
                   ))}
@@ -4235,12 +4265,12 @@ export default function UserProfilePage() {
                 <div className="space-y-5">
                   {(profile.achievements ?? []).map((a, i) => (
                     <div key={i} className="flex gap-4">
-                      <div className="mt-1 h-8 w-8 rounded-[10px] bg-white/[0.07] border border-white/[0.08] flex items-center justify-center shrink-0">
-                        <Trophy className="h-4 w-4 text-white/40" />
+                      <div className="mt-1 h-8 w-8 rounded-[10px] pf-s3 border pf-rim-2 flex items-center justify-center shrink-0">
+                        <Trophy className="h-4 w-4 pf-ink-3" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-white/90">{a.title}</p>
-                        {a.desc && <p className="text-sm text-white/55 mt-1 leading-relaxed">{a.desc}</p>}
+                        <p className="font-semibold pf-ink">{a.title}</p>
+                        {a.desc && <p className="text-sm pf-ink-2 mt-1 leading-relaxed">{a.desc}</p>}
                       </div>
                     </div>
                   ))}
@@ -4257,7 +4287,7 @@ export default function UserProfilePage() {
                       href={url.startsWith('http') ? url : `https://${url}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 h-9 px-4 rounded-[12px] border border-white/[0.08] bg-white/[0.04] text-white/60 text-sm hover:text-white/90 hover:border-white/[0.15] transition-all"
+                      className="flex items-center gap-2 h-9 px-4 rounded-[12px] border pf-rim-2 pf-s2 pf-ink-2 text-sm pf-ink-h pf-rim-f transition-all"
                     >
                       {socialIcon[platform] ?? <Globe className="h-4 w-4" />}
                       <span className="capitalize">{platform}</span>
@@ -4268,8 +4298,8 @@ export default function UserProfilePage() {
             )}
 
             {!profile.bio && !profile.headline && (profile.skills ?? []).length === 0 && (
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-12 text-center">
-                <p className="text-white/30 text-sm">
+              <div className="rounded-[20px] border pf-rim pf-s1 p-12 text-center">
+                <p className="pf-ink-4 text-sm">
                   {isOwnProfile ? 'Your profile is empty. Click Edit Profile to add information.' : 'This user has not added any profile information yet.'}
                 </p>
               </div>
@@ -4287,8 +4317,8 @@ export default function UserProfilePage() {
                 </div>
               </SectionCard>
             ) : (
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-12 text-center">
-                <p className="text-white/30 text-sm">No skills added yet.</p>
+              <div className="rounded-[20px] border pf-rim pf-s1 p-12 text-center">
+                <p className="pf-ink-4 text-sm">No skills added yet.</p>
               </div>
             )}
 
@@ -4297,14 +4327,14 @@ export default function UserProfilePage() {
                 <div className="space-y-6">
                   {(profile.experience ?? []).map((e, i) => (
                     <div key={i} className="flex gap-4">
-                      <div className="mt-1 h-9 w-9 rounded-[12px] bg-white/[0.07] border border-white/[0.08] flex items-center justify-center shrink-0">
-                        <Briefcase className="h-4 w-4 text-white/40" />
+                      <div className="mt-1 h-9 w-9 rounded-[12px] pf-s3 border pf-rim-2 flex items-center justify-center shrink-0">
+                        <Briefcase className="h-4 w-4 pf-ink-3" />
                       </div>
-                      <div className="flex-1 min-w-0 border-b border-white/[0.05] pb-5 last:border-0 last:pb-0">
-                        <p className="font-semibold text-white/90 text-[15px]">{e.title}</p>
-                        <p className="text-sm text-white/55 mt-0.5">{e.company}</p>
-                        <p className="text-xs text-white/30 mt-0.5">{e.period}</p>
-                        {e.desc && <p className="text-sm text-white/55 mt-2 leading-relaxed">{e.desc}</p>}
+                      <div className="flex-1 min-w-0 border-b pf-rim pb-5 last:border-0 last:pb-0">
+                        <p className="font-semibold pf-ink text-[15px]">{e.title}</p>
+                        <p className="text-sm pf-ink-2 mt-0.5">{e.company}</p>
+                        <p className="text-xs pf-ink-4 mt-0.5">{e.period}</p>
+                        {e.desc && <p className="text-sm pf-ink-2 mt-2 leading-relaxed">{e.desc}</p>}
                       </div>
                     </div>
                   ))}
@@ -4317,13 +4347,13 @@ export default function UserProfilePage() {
                 <div className="space-y-5">
                   {(profile.education ?? []).map((e, i) => (
                     <div key={i} className="flex gap-4">
-                      <div className="mt-1 h-9 w-9 rounded-[12px] bg-white/[0.07] border border-white/[0.08] flex items-center justify-center shrink-0">
-                        <GraduationCap className="h-4 w-4 text-white/40" />
+                      <div className="mt-1 h-9 w-9 rounded-[12px] pf-s3 border pf-rim-2 flex items-center justify-center shrink-0">
+                        <GraduationCap className="h-4 w-4 pf-ink-3" />
                       </div>
-                      <div className="flex-1 min-w-0 border-b border-white/[0.05] pb-5 last:border-0 last:pb-0">
-                        <p className="font-semibold text-white/90 text-[15px]">{e.degree}</p>
-                        <p className="text-sm text-white/55 mt-0.5">{e.school}</p>
-                        {e.year && <p className="text-xs text-white/30 mt-0.5">{e.year}</p>}
+                      <div className="flex-1 min-w-0 border-b pf-rim pb-5 last:border-0 last:pb-0">
+                        <p className="font-semibold pf-ink text-[15px]">{e.degree}</p>
+                        <p className="text-sm pf-ink-2 mt-0.5">{e.school}</p>
+                        {e.year && <p className="text-xs pf-ink-4 mt-0.5">{e.year}</p>}
                       </div>
                     </div>
                   ))}
@@ -4343,15 +4373,15 @@ export default function UserProfilePage() {
                 ))}
               </div>
             ) : (
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-16 text-center">
-                <div className="h-12 w-12 rounded-[14px] border border-white/[0.08] bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
-                  <Zap className="h-5 w-5 text-white/30" />
+              <div className="rounded-[20px] border pf-rim pf-s1 p-16 text-center">
+                <div className="h-12 w-12 rounded-[14px] border pf-rim-2 pf-s2 flex items-center justify-center mx-auto mb-4">
+                  <Zap className="h-5 w-5 pf-ink-4" />
                 </div>
-                <p className="text-white/40 text-sm">No gigs posted yet.</p>
+                <p className="pf-ink-3 text-sm">No gigs posted yet.</p>
                 {isOwnProfile && (
                   <Link
                     href="/gigs"
-                    className="inline-flex items-center gap-2 mt-4 text-sm text-white/50 hover:text-white/80 transition-colors"
+                    className="inline-flex items-center gap-2 mt-4 text-sm pf-ink-3 pf-ink-h transition-colors"
                   >
                     Post your first gig
                     <ExternalLink className="h-3.5 w-3.5" />
@@ -4379,7 +4409,7 @@ export default function UserProfilePage() {
             coaching: { label: 'Coaching', color: 'text-sky-400 bg-sky-500/10 border-sky-500/20', icon: '🏆' },
             education: { label: 'Education', color: 'text-lime-400 bg-lime-500/10 border-lime-500/20', icon: '🎓' },
             health: { label: 'Health', color: 'text-rose-400 bg-rose-500/10 border-rose-500/20', icon: '❤️' },
-            other: { label: 'Other', color: 'text-white/50 bg-white/[0.06] border-white/[0.10]', icon: '⭐' },
+            other: { label: 'Other', color: 'pf-ink-3 pf-s2 pf-rim-2', icon: '⭐' },
           };
 
           function formatPrice(service: ServiceItem) {
@@ -4395,7 +4425,7 @@ export default function UserProfilePage() {
             return (
               <div className="flex items-center gap-0.5">
                 {[1,2,3,4,5].map(n => (
-                  <Star key={n} className={`${dim} ${n <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'text-white/15'}`} />
+                  <Star key={n} className={`${dim} ${n <= Math.round(rating) ? 'text-amber-400 fill-amber-400' : 'pf-deco'}`} />
                 ))}
               </div>
             );
@@ -4468,16 +4498,16 @@ export default function UserProfilePage() {
                     <div className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full px-2.5 py-[3px]"
                       style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.10)' }}>
                       <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400" />
-                      <span className="text-[9.5px] font-bold text-white/80">{svc.rating}</span>
-                      <span className="text-[9px] text-white/35">({svc.reviewCount})</span>
+                      <span className="text-[9.5px] font-bold pf-ink">{svc.rating}</span>
+                      <span className="text-[9px] pf-ink-3">({svc.reviewCount})</span>
                     </div>
                   )}
                 </div>
 
                 {/* ── Card body ── */}
                 <div className="p-4">
-                  <h3 className="font-bold text-[14.5px] leading-snug text-white/90 mb-1 line-clamp-2 group-hover:text-white transition-colors">{svc.title}</h3>
-                  {svc.tagline && <p className="text-[11.5px] text-white/42 mb-3 line-clamp-2 leading-relaxed">{svc.tagline}</p>}
+                  <h3 className="font-bold text-[14.5px] leading-snug pf-ink mb-1 line-clamp-2 pf-g-ink transition-colors">{svc.title}</h3>
+                  {svc.tagline && <p className="text-[11.5px] pf-ink-3 mb-3 line-clamp-2 leading-relaxed">{svc.tagline}</p>}
 
                   {/* Tags */}
                   {svc.tags.length > 0 && (
@@ -4486,7 +4516,7 @@ export default function UserProfilePage() {
                         <span key={t} className="rounded-full px-2 py-[2px] text-[9.5px] font-medium"
                           style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.38)' }}>{t}</span>
                       ))}
-                      {svc.tags.length > 3 && <span className="text-[9.5px] text-white/25">+{svc.tags.length - 3}</span>}
+                      {svc.tags.length > 3 && <span className="text-[9.5px] pf-ink-4">+{svc.tags.length - 3}</span>}
                     </div>
                   )}
 
@@ -4495,7 +4525,7 @@ export default function UserProfilePage() {
                     <div className="mb-3 rounded-[10px] px-3 py-2.5"
                       style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.12)' }}>
                       <p className="text-[10.5px] text-amber-200/65 italic line-clamp-2">"{reviews.find(r => r.testimonial)!.testimonial}"</p>
-                      <p className="text-[9.5px] text-white/28 mt-1">— {reviews.find(r => r.testimonial)!.reviewerName}</p>
+                      <p className="text-[9.5px] pf-ink-4 mt-1">— {reviews.find(r => r.testimonial)!.reviewerName}</p>
                     </div>
                   )}
 
@@ -4503,15 +4533,15 @@ export default function UserProfilePage() {
                   <div className="flex items-end justify-between pt-3 gap-3"
                     style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
                     <div className="min-w-0">
-                      <p className="text-[15px] font-extrabold text-white leading-none">{formatPrice(svc)}</p>
+                      <p className="text-[15px] font-extrabold pf-ink leading-none">{formatPrice(svc)}</p>
                       <div className="flex items-center gap-1.5 mt-1">
                         {svc.deliveryTime && (
-                          <span className="flex items-center gap-1 text-[10px] text-white/32">
+                          <span className="flex items-center gap-1 text-[10px] pf-ink-4">
                             <Clock className="h-2.5 w-2.5" />{svc.deliveryTime} {svc.deliveryUnit ?? 'days'}
                           </span>
                         )}
                         {svc.bookingCount > 0 && (
-                          <span className="text-[10px] text-white/25">{svc.deliveryTime ? '·' : ''} {svc.bookingCount} booked</span>
+                          <span className="text-[10px] pf-ink-4">{svc.deliveryTime ? '·' : ''} {svc.bookingCount} booked</span>
                         )}
                       </div>
                     </div>
@@ -4531,10 +4561,10 @@ export default function UserProfilePage() {
 
                   {/* Reviews expand row */}
                   {(reviews.length > 0 || canReview) && (
-                    <div className="mt-3 pt-3 border-t border-white/[0.05] flex items-center gap-2 flex-wrap">
+                    <div className="mt-3 pt-3 border-t pf-rim flex items-center gap-2 flex-wrap">
                       {reviews.length > 0 && (
                         <button type="button" onClick={() => setShowReviews(v => !v)}
-                          className="text-[11px] font-semibold text-white/40 hover:text-white/70 transition flex items-center gap-1">
+                          className="text-[11px] font-semibold pf-ink-3 pf-ink-h transition flex items-center gap-1">
                           {showReviews ? '▲ Hide' : '▼ Show'} {reviews.length} review{reviews.length !== 1 ? 's' : ''}
                         </button>
                       )}
@@ -4551,24 +4581,24 @@ export default function UserProfilePage() {
                   {showReviews && reviews.length > 0 && (
                     <div className="mt-3 space-y-3 max-h-72 overflow-y-auto [scrollbar-width:none]">
                       {reviews.map(rev => (
-                        <div key={rev.id} className="rounded-[14px] border border-white/[0.06] bg-white/[0.02] p-3.5">
+                        <div key={rev.id} className="rounded-[14px] border pf-rim pf-s1 p-3.5">
                           <div className="flex items-start gap-2.5 mb-2">
-                            <div className="h-7 w-7 shrink-0 rounded-full overflow-hidden bg-white/[0.08] flex items-center justify-center ring-1 ring-white/[0.08]">
+                            <div className="h-7 w-7 shrink-0 rounded-full overflow-hidden pf-s3 flex items-center justify-center ring-1 ring-white/[0.08]">
                               {rev.reviewerAvatar ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={rev.reviewerAvatar} alt={rev.reviewerName} className="h-full w-full object-cover" />
                               ) : (
-                                <span className="text-[10px] font-bold text-white/50">{rev.reviewerName.charAt(0).toUpperCase()}</span>
+                                <span className="text-[10px] font-bold pf-ink-3">{rev.reviewerName.charAt(0).toUpperCase()}</span>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-[11.5px] font-bold text-white/75">{rev.reviewerName}</p>
+                              <p className="text-[11.5px] font-bold pf-ink-2">{rev.reviewerName}</p>
                               <StarRow rating={rev.rating} />
                             </div>
-                            <span className="text-[9.5px] text-white/25 shrink-0">{new Date(rev.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                            <span className="text-[9.5px] pf-ink-4 shrink-0">{new Date(rev.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                           </div>
-                          <p className="text-[12px] font-semibold text-white/70 mb-1">{rev.headline}</p>
-                          <p className="text-[11px] text-white/45 leading-relaxed">{rev.body}</p>
+                          <p className="text-[12px] font-semibold pf-ink-2 mb-1">{rev.headline}</p>
+                          <p className="text-[11px] pf-ink-3 leading-relaxed">{rev.body}</p>
                           {rev.testimonial && (
                             <div className="mt-2 rounded-[10px] border border-amber-500/15 bg-amber-500/[0.06] px-2.5 py-2">
                               <p className="text-[10.5px] text-amber-200/65 italic">"{rev.testimonial}"</p>
@@ -4592,10 +4622,10 @@ export default function UserProfilePage() {
                 {/* Title row */}
                 <div className="flex items-start justify-between gap-3 mb-4">
                   <div>
-                    <h2 className="text-[18px] font-bold text-white tracking-tight">
+                    <h2 className="text-[18px] font-bold pf-ink tracking-tight">
                       {isOwnProfile ? 'My Services' : `Services by ${data?.user.name?.split(' ')[0]}`}
                     </h2>
-                    <p className="text-[12px] text-white/35 mt-0.5">
+                    <p className="text-[12px] pf-ink-3 mt-0.5">
                       {profileServices.length > 0
                         ? `${profileServices.length} service${profileServices.length !== 1 ? 's' : ''} · available for booking`
                         : isOwnProfile ? 'Publish services clients can book directly' : 'No services listed yet'}
@@ -4681,15 +4711,15 @@ export default function UserProfilePage() {
                 <div>
                   {bookingsLoading ? (
                     <div className="space-y-3">
-                      {[1,2,3].map(i => <div key={i} className="h-20 rounded-[18px] animate-pulse bg-white/[0.04]" />)}
+                      {[1,2,3].map(i => <div key={i} className="h-20 rounded-[18px] pf-sk" />)}
                     </div>
                   ) : serviceBookings.length === 0 ? (
-                    <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-16 text-center">
-                      <div className="h-12 w-12 rounded-[14px] border border-white/[0.08] bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
-                        <Briefcase className="h-5 w-5 text-white/30" />
+                    <div className="rounded-[20px] border pf-rim pf-s1 p-16 text-center">
+                      <div className="h-12 w-12 rounded-[14px] border pf-rim-2 pf-s2 flex items-center justify-center mx-auto mb-4">
+                        <Briefcase className="h-5 w-5 pf-ink-4" />
                       </div>
-                      <p className="text-white/40 text-sm">No bookings yet.</p>
-                      <p className="text-[11px] text-white/25 mt-1">Bookings will appear here once clients book your services.</p>
+                      <p className="pf-ink-3 text-sm">No bookings yet.</p>
+                      <p className="text-[11px] pf-ink-4 mt-1">Bookings will appear here once clients book your services.</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -4701,27 +4731,27 @@ export default function UserProfilePage() {
                           cancelled: 'bg-red-500/10 text-red-400 border-red-500/20',
                         };
                         return (
-                          <div key={bkg.id} className="rounded-[18px] border border-white/[0.06] bg-white/[0.02] p-4 flex flex-col gap-3">
+                          <div key={bkg.id} className="rounded-[18px] border pf-rim pf-s1 p-4 flex flex-col gap-3">
                             {/* Top row: service + status */}
                             <div className="flex items-start justify-between gap-3 flex-wrap">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                                  <p className="text-[13.5px] font-bold text-white/85 truncate">{bkg.serviceTitle}</p>
-                                  {bkg.packageName && <span className="rounded-full bg-white/[0.07] border border-white/[0.09] px-2 py-0.5 text-[9.5px] font-semibold text-white/40">{bkg.packageName}</span>}
+                                  <p className="text-[13.5px] font-bold pf-ink truncate">{bkg.serviceTitle}</p>
+                                  {bkg.packageName && <span className="rounded-full pf-s3 border pf-rim-2 px-2 py-0.5 text-[9.5px] font-semibold pf-ink-3">{bkg.packageName}</span>}
                                 </div>
-                                <p className="text-[12px] font-semibold text-white/65">{bkg.clientName}</p>
-                                {bkg.clientMessage && <p className="text-[11px] text-white/30 mt-1 line-clamp-2">{bkg.clientMessage}</p>}
-                                <p className="text-[10px] text-white/25 mt-1">{new Date(bkg.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{bkg.scheduledDate && ` · Preferred: ${new Date(bkg.scheduledDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}</p>
+                                <p className="text-[12px] font-semibold pf-ink-2">{bkg.clientName}</p>
+                                {bkg.clientMessage && <p className="text-[11px] pf-ink-4 mt-1 line-clamp-2">{bkg.clientMessage}</p>}
+                                <p className="text-[10px] pf-ink-4 mt-1">{new Date(bkg.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{bkg.scheduledDate && ` · Preferred: ${new Date(bkg.scheduledDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`}</p>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 {bkg.price != null && (
-                                  <span className="text-[13px] font-black text-white/70">{bkg.currency === 'INR' ? '₹' : '$'}{bkg.price.toLocaleString()}</span>
+                                  <span className="text-[13px] font-black pf-ink-2">{bkg.currency === 'INR' ? '₹' : '$'}{bkg.price.toLocaleString()}</span>
                                 )}
                                 <span className={`rounded-full border px-2.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide ${statusColors[bkg.status] ?? statusColors.pending}`}>{bkg.status}</span>
                               </div>
                             </div>
                             {/* Contact row */}
-                            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-white/[0.04]">
+                            <div className="flex items-center gap-2 flex-wrap pt-2 border-t pf-rim">
                               <a href={`mailto:${bkg.clientEmail}`}
                                 className="flex items-center gap-1.5 rounded-[9px] border border-blue-500/25 bg-blue-500/10 px-3 py-1.5 text-[11px] font-semibold text-blue-400 hover:bg-blue-500/20 transition-all">
                                 <MessageSquare className="h-3 w-3" /> Email
@@ -4732,7 +4762,7 @@ export default function UserProfilePage() {
                                   <Zap className="h-3 w-3" /> Call {bkg.clientPhone}
                                 </a>
                               )}
-                              <span className="text-[10.5px] text-white/30 ml-1">{bkg.clientEmail}</span>
+                              <span className="text-[10.5px] pf-ink-4 ml-1">{bkg.clientEmail}</span>
                               <div className="ml-auto flex items-center gap-2">
                                 {bkg.status === 'pending' && (
                                   <button type="button" onClick={() => {
@@ -4764,16 +4794,16 @@ export default function UserProfilePage() {
               {isOwnProfile && servicesSubTab === 'analytics' && (() => {
                 if (analyticsLoading) return (
                   <div className="space-y-4">
-                    {[1,2,3].map(i => <div key={i} className="h-24 rounded-[18px] animate-pulse bg-white/[0.04]" />)}
+                    {[1,2,3].map(i => <div key={i} className="h-24 rounded-[18px] pf-sk" />)}
                   </div>
                 );
                 if (!analyticsData) return (
-                  <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-16 text-center">
-                    <div className="h-12 w-12 rounded-[14px] border border-white/[0.08] bg-white/[0.04] flex items-center justify-center mx-auto mb-4">
-                      <BarChart3 className="h-5 w-5 text-white/30" />
+                  <div className="rounded-[20px] border pf-rim pf-s1 p-16 text-center">
+                    <div className="h-12 w-12 rounded-[14px] border pf-rim-2 pf-s2 flex items-center justify-center mx-auto mb-4">
+                      <BarChart3 className="h-5 w-5 pf-ink-4" />
                     </div>
-                    <p className="text-white/40 text-sm">No analytics data yet.</p>
-                    <p className="text-[11px] text-white/25 mt-1">Analytics will appear once your services start getting views.</p>
+                    <p className="pf-ink-3 text-sm">No analytics data yet.</p>
+                    <p className="text-[11px] pf-ink-4 mt-1">Analytics will appear once your services start getting views.</p>
                   </div>
                 );
                 const a = analyticsData;
@@ -4790,7 +4820,7 @@ export default function UserProfilePage() {
                           <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                         </span>
                         <span className="text-[11px] font-semibold text-emerald-400">Live</span>
-                        {analyticsLastUpdated && <span className="text-[10.5px] text-white/25">· Updated <SecondsAgo since={analyticsLastUpdated} /></span>}
+                        {analyticsLastUpdated && <span className="text-[10.5px] pf-ink-4">· Updated <SecondsAgo since={analyticsLastUpdated} /></span>}
                       </div>
                       <button type="button" onClick={() => {
                         setAnalyticsLoading(true);
@@ -4801,7 +4831,7 @@ export default function UserProfilePage() {
                           })
                           .catch(() => {})
                           .finally(() => setAnalyticsLoading(false));
-                      }} className="flex items-center gap-1.5 text-[11px] font-semibold text-white/30 hover:text-white/60 transition">
+                      }} className="flex items-center gap-1.5 text-[11px] font-semibold pf-ink-4 pf-ink-h transition">
                         <RefreshCw className="h-3 w-3" /> Refresh now
                       </button>
                     </div>
@@ -4814,23 +4844,23 @@ export default function UserProfilePage() {
                         { label: 'Bookings', value: fmtN(a.totalBookings), sub: `${fmtN(a.totalCompleted)} completed`, icon: '📋', color: 'from-emerald-500/10 to-emerald-600/5' },
                         { label: 'Revenue', value: `₹${fmtN(a.totalRevenue)}`, sub: `${a.totalReviews} reviews · ⭐ ${a.avgRating.toFixed(1)}`, icon: '💰', color: 'from-amber-500/10 to-amber-600/5' },
                       ].map(kpi => (
-                        <div key={kpi.label} className={`rounded-[18px] border border-white/[0.07] bg-gradient-to-br ${kpi.color} p-4`}>
+                        <div key={kpi.label} className={`rounded-[18px] border pf-rim bg-gradient-to-br ${kpi.color} p-4`}>
                           <div className="text-xl mb-2">{kpi.icon}</div>
-                          <div className="text-[20px] font-black text-white leading-none">{kpi.value}</div>
-                          <div className="text-[11px] text-white/40 mt-1 font-medium">{kpi.label}</div>
-                          <div className="text-[10px] text-white/25 mt-0.5">{kpi.sub}</div>
+                          <div className="text-[20px] font-black pf-ink leading-none">{kpi.value}</div>
+                          <div className="text-[11px] pf-ink-3 mt-1 font-medium">{kpi.label}</div>
+                          <div className="text-[10px] pf-ink-4 mt-0.5">{kpi.sub}</div>
                         </div>
                       ))}
                     </div>
 
                     {/* 30-day Trend Chart */}
-                    <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.02] p-5">
+                    <div className="rounded-[18px] border pf-rim pf-s1 p-5">
                       <div className="flex items-center justify-between mb-4">
                         <div>
-                          <p className="text-[13px] font-bold text-white/80">30-Day Views Trend</p>
-                          <p className="text-[11px] text-white/30 mt-0.5">Daily view count over the past month</p>
+                          <p className="text-[13px] font-bold pf-ink">30-Day Views Trend</p>
+                          <p className="text-[11px] pf-ink-4 mt-0.5">Daily view count over the past month</p>
                         </div>
-                        <span className="text-[11px] font-semibold text-white/40 bg-white/[0.05] rounded-[8px] px-2.5 py-1">{fmtN(a.totalViews)} total</span>
+                        <span className="text-[11px] font-semibold pf-ink-3 pf-s2 rounded-[8px] px-2.5 py-1">{fmtN(a.totalViews)} total</span>
                       </div>
                       <div className="flex items-end gap-1 h-20">
                         {a.trend30d.map((v, i) => (
@@ -4844,16 +4874,16 @@ export default function UserProfilePage() {
                         ))}
                       </div>
                       <div className="flex justify-between mt-2">
-                        <span className="text-[9.5px] text-white/20">30 days ago</span>
-                        <span className="text-[9.5px] text-white/20">Today</span>
+                        <span className="text-[9.5px] pf-ink-4">30 days ago</span>
+                        <span className="text-[9.5px] pf-ink-4">Today</span>
                       </div>
                     </div>
 
                     {/* Conversion Funnel + Source Breakdown */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Funnel */}
-                      <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.02] p-5">
-                        <p className="text-[13px] font-bold text-white/80 mb-4">Conversion Funnel</p>
+                      <div className="rounded-[18px] border pf-rim pf-s1 p-5">
+                        <p className="text-[13px] font-bold pf-ink mb-4">Conversion Funnel</p>
                         {[
                           { label: 'Views', value: a.totalViews, color: 'bg-blue-500/50', pct: 100 },
                           { label: 'Detail Opens', value: a.services.reduce((s,sv) => s + sv.detailOpens, 0), color: 'bg-indigo-500/50', pct: a.totalViews > 0 ? (a.services.reduce((s,sv) => s + sv.detailOpens, 0) / a.totalViews) * 100 : 0 },
@@ -4863,10 +4893,10 @@ export default function UserProfilePage() {
                         ].map(step => (
                           <div key={step.label} className="mb-2.5">
                             <div className="flex items-center justify-between mb-1">
-                              <span className="text-[11px] text-white/50 font-medium">{step.label}</span>
-                              <span className="text-[11px] font-bold text-white/70">{fmtN(step.value)} <span className="text-white/30 font-normal">({step.pct.toFixed(1)}%)</span></span>
+                              <span className="text-[11px] pf-ink-3 font-medium">{step.label}</span>
+                              <span className="text-[11px] font-bold pf-ink-2">{fmtN(step.value)} <span className="pf-ink-4 font-normal">({step.pct.toFixed(1)}%)</span></span>
                             </div>
-                            <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                            <div className="h-1.5 rounded-full pf-s2 overflow-hidden">
                               <div className={`h-full rounded-full ${step.color} transition-all`} style={{ width: `${Math.max(1, step.pct)}%` }} />
                             </div>
                           </div>
@@ -4875,8 +4905,8 @@ export default function UserProfilePage() {
 
                       {/* Source Breakdown + Peak Hour */}
                       <div className="space-y-4">
-                        <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.02] p-5">
-                          <p className="text-[13px] font-bold text-white/80 mb-4">Traffic Sources</p>
+                        <div className="rounded-[18px] border pf-rim pf-s1 p-5">
+                          <p className="text-[13px] font-bold pf-ink mb-4">Traffic Sources</p>
                           {[
                             { label: 'Profile Page', value: a.sourceBreakdown.profile, icon: '👤', color: 'bg-blue-500/50' },
                             { label: 'Catalogue', value: a.sourceBreakdown.catalogue, icon: '📂', color: 'bg-violet-500/50' },
@@ -4886,24 +4916,24 @@ export default function UserProfilePage() {
                             return (
                               <div key={src.label} className="mb-3">
                                 <div className="flex items-center justify-between mb-1">
-                                  <span className="text-[11px] text-white/50">{src.icon} {src.label}</span>
-                                  <span className="text-[11px] font-bold text-white/70">{fmtN(src.value)} <span className="text-white/30">({pct.toFixed(0)}%)</span></span>
+                                  <span className="text-[11px] pf-ink-3">{src.icon} {src.label}</span>
+                                  <span className="text-[11px] font-bold pf-ink-2">{fmtN(src.value)} <span className="pf-ink-4">({pct.toFixed(0)}%)</span></span>
                                 </div>
-                                <div className="h-1.5 rounded-full bg-white/[0.06]">
+                                <div className="h-1.5 rounded-full pf-s2">
                                   <div className={`h-full rounded-full ${src.color}`} style={{ width: `${pct}%` }} />
                                 </div>
                               </div>
                             );
                           })}
                         </div>
-                        <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.02] p-5 flex items-center gap-4">
+                        <div className="rounded-[18px] border pf-rim pf-s1 p-5 flex items-center gap-4">
                           <div className="h-12 w-12 rounded-[14px] bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xl shrink-0">⏰</div>
                           <div>
-                            <p className="text-[11px] text-white/40 font-medium uppercase tracking-wide">Peak Hour</p>
-                            <p className="text-[18px] font-black text-white/85 leading-tight">
+                            <p className="text-[11px] pf-ink-3 font-medium uppercase tracking-wide">Peak Hour</p>
+                            <p className="text-[18px] font-black pf-ink leading-tight">
                               {a.peakHour === 0 ? '12 AM' : a.peakHour < 12 ? `${a.peakHour} AM` : a.peakHour === 12 ? '12 PM' : `${a.peakHour - 12} PM`}
                             </p>
-                            <p className="text-[10px] text-white/25 mt-0.5">Most views arrive around this time</p>
+                            <p className="text-[10px] pf-ink-4 mt-0.5">Most views arrive around this time</p>
                           </div>
                         </div>
                       </div>
@@ -4918,10 +4948,10 @@ export default function UserProfilePage() {
                         </div>
                         <div className="flex items-start justify-between gap-4 flex-wrap">
                           <div>
-                            <p className="text-[15px] font-bold text-white/85">{a.topService.serviceTitle}</p>
+                            <p className="text-[15px] font-bold pf-ink">{a.topService.serviceTitle}</p>
                             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                              <span className="text-[11px] text-white/40">{fmtN(a.topService.views)} views</span>
-                              <span className="text-[11px] text-white/40">{fmtN(a.topService.bookingsSubmitted)} bookings</span>
+                              <span className="text-[11px] pf-ink-3">{fmtN(a.topService.views)} views</span>
+                              <span className="text-[11px] pf-ink-3">{fmtN(a.topService.bookingsSubmitted)} bookings</span>
                               {a.topService.avgRating > 0 && <span className="text-[11px] text-amber-400/70">⭐ {a.topService.avgRating.toFixed(1)}</span>}
                               {a.topService.estimatedRevenue > 0 && <span className="text-[11px] text-emerald-400/70">₹{fmtN(a.topService.estimatedRevenue)} revenue</span>}
                             </div>
@@ -4938,21 +4968,21 @@ export default function UserProfilePage() {
 
                     {/* Per-service breakdown table */}
                     {a.services.length > 0 && (
-                      <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.02] overflow-hidden">
-                        <div className="px-5 py-4 border-b border-white/[0.05]">
-                          <p className="text-[13px] font-bold text-white/80">Per-Service Breakdown</p>
+                      <div className="rounded-[18px] border pf-rim pf-s1 overflow-hidden">
+                        <div className="px-5 py-4 border-b pf-rim">
+                          <p className="text-[13px] font-bold pf-ink">Per-Service Breakdown</p>
                         </div>
                         <div className="divide-y divide-white/[0.04]">
                           {a.services.map(sv => {
                             const mx7 = Math.max(...sv.trend7d, 1);
                             return (
-                              <div key={sv.serviceId} className="px-5 py-4 flex items-center gap-4 hover:bg-white/[0.02] transition-colors">
+                              <div key={sv.serviceId} className="px-5 py-4 flex items-center gap-4 pf-s2-h transition-colors">
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-[12.5px] font-semibold text-white/80 truncate">{sv.serviceTitle}</p>
+                                  <p className="text-[12.5px] font-semibold pf-ink truncate">{sv.serviceTitle}</p>
                                   <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                    <span className="text-[10.5px] text-white/35">{fmtN(sv.views)} views</span>
-                                    <span className="text-[10.5px] text-white/35">{fmtN(sv.bookingsSubmitted)} bookings</span>
-                                    <span className="text-[10.5px] text-white/35">{sv.conversionRate.toFixed(1)}% conv.</span>
+                                    <span className="text-[10.5px] pf-ink-3">{fmtN(sv.views)} views</span>
+                                    <span className="text-[10.5px] pf-ink-3">{fmtN(sv.bookingsSubmitted)} bookings</span>
+                                    <span className="text-[10.5px] pf-ink-3">{sv.conversionRate.toFixed(1)}% conv.</span>
                                     {sv.avgRating > 0 && <span className="text-[10.5px] text-amber-400/60">⭐ {sv.avgRating.toFixed(1)}</span>}
                                   </div>
                                 </div>
@@ -4964,7 +4994,7 @@ export default function UserProfilePage() {
                                 </div>
                                 <div className="text-right shrink-0 min-w-[64px]">
                                   {sv.estimatedRevenue > 0 && <p className="text-[12px] font-bold text-emerald-400/70">₹{fmtN(sv.estimatedRevenue)}</p>}
-                                  <p className="text-[10px] text-white/25">{sv.reviews} reviews</p>
+                                  <p className="text-[10px] pf-ink-4">{sv.reviews} reviews</p>
                                 </div>
                               </div>
                             );
@@ -4974,7 +5004,7 @@ export default function UserProfilePage() {
                     )}
 
                     {/* Auto-refresh note */}
-                    <p className="text-center text-[10px] text-white/15">Analytics refresh automatically every 30 seconds while this tab is open.</p>
+                    <p className="text-center text-[10px] pf-deco">Analytics refresh automatically every 30 seconds while this tab is open.</p>
                   </div>
                 );
               })()}
@@ -4984,7 +5014,7 @@ export default function UserProfilePage() {
                 <>
                   {servicesLoading ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {[1,2,3].map(i => <div key={i} className="h-64 rounded-[22px] animate-pulse bg-white/[0.04]" />)}
+                      {[1,2,3].map(i => <div key={i} className="h-64 rounded-[22px] pf-sk" />)}
                     </div>
                   ) : profileServices.length === 0 ? (
                     /* ── Premium empty state ── */
@@ -4994,19 +5024,19 @@ export default function UserProfilePage() {
                       <div className="relative mb-5">
                         <div className="h-16 w-16 rounded-[20px] flex items-center justify-center mx-auto"
                           style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06)' }}>
-                          <Briefcase className="h-7 w-7 text-white/25" />
+                          <Briefcase className="h-7 w-7 pf-ink-4" />
                         </div>
                         {isOwnProfile && (
                           <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full flex items-center justify-center"
                             style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}>
-                            <Plus className="h-3.5 w-3.5 text-white/55" />
+                            <Plus className="h-3.5 w-3.5 pf-ink-2" />
                           </div>
                         )}
                       </div>
-                      <p className="text-[15px] font-bold text-white/55 mb-1.5">
+                      <p className="text-[15px] font-bold pf-ink-2 mb-1.5">
                         {isOwnProfile ? 'No services yet' : 'No services available'}
                       </p>
-                      <p className="text-[12.5px] text-white/28 max-w-xs leading-relaxed mb-5">
+                      <p className="text-[12.5px] pf-ink-4 max-w-xs leading-relaxed mb-5">
                         {isOwnProfile
                           ? 'Publish your first service and let clients book you directly from your profile.'
                           : 'This professional hasn\'t listed any services yet.'}
@@ -5065,25 +5095,25 @@ export default function UserProfilePage() {
               {bookingTarget && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
                   <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setBookingServiceId(null)} />
-                  <div className="relative z-10 w-full max-w-lg bg-[#111113] border border-white/[0.09] rounded-[24px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
-                    <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07]">
+                  <div className="relative z-10 w-full max-w-lg pf-modal border pf-rim-2 rounded-[24px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
+                    <div className="flex items-center justify-between px-5 py-4 border-b pf-rim">
                       <div>
-                        <h3 className="font-bold text-white text-[15px]">Book: {bookingTarget.title}</h3>
-                        <p className="text-[11px] text-white/35 mt-0.5">Fill in your details and we'll get back to you</p>
+                        <h3 className="font-bold pf-ink text-[15px]">Book: {bookingTarget.title}</h3>
+                        <p className="text-[11px] pf-ink-3 mt-0.5">Fill in your details and we'll get back to you</p>
                       </div>
-                      <button onClick={() => setBookingServiceId(null)} className="h-8 w-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.10] transition-colors">
-                        <X className="h-4 w-4 text-white/60" />
+                      <button onClick={() => setBookingServiceId(null)} className="h-8 w-8 rounded-full pf-s2 flex items-center justify-center pf-s2-h transition-colors">
+                        <X className="h-4 w-4 pf-ink-2" />
                       </button>
                     </div>
                     <div className="px-5 py-5 space-y-4 max-h-[70vh] overflow-y-auto [scrollbar-width:none]">
                       {bookingSuccess ? (
                         <div className="py-10 text-center">
                           <div className="h-14 w-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg,#10b981,#059669)' }}>
-                            <Check className="h-7 w-7 text-white" />
+                            <Check className="h-7 w-7 pf-ink" />
                           </div>
-                          <p className="font-bold text-white text-[16px]">Booking Sent!</p>
-                          <p className="text-[12px] text-white/40 mt-1">The service provider will reach out to you shortly.</p>
-                          <button type="button" onClick={() => setBookingServiceId(null)} className="mt-5 rounded-[12px] bg-white/[0.08] border border-white/[0.10] px-5 py-2 text-[13px] font-semibold text-white/70 hover:text-white transition">Done</button>
+                          <p className="font-bold pf-ink text-[16px]">Booking Sent!</p>
+                          <p className="text-[12px] pf-ink-3 mt-1">The service provider will reach out to you shortly.</p>
+                          <button type="button" onClick={() => setBookingServiceId(null)} className="mt-5 rounded-[12px] pf-s3 border pf-rim-2 px-5 py-2 text-[13px] font-semibold pf-ink-2 pf-ink-h transition">Done</button>
                         </div>
                       ) : (
                         <form onSubmit={async (e) => {
@@ -5101,51 +5131,51 @@ export default function UserProfilePage() {
                         }} className="space-y-4">
                           {bookingTarget.packages && bookingTarget.packages.length > 0 && (
                             <div>
-                              <label className="block text-[11.5px] font-semibold text-white/50 mb-2 uppercase tracking-[0.10em]">Select Package</label>
+                              <label className="block text-[11.5px] font-semibold pf-ink-3 mb-2 uppercase tracking-[0.10em]">Select Package</label>
                               <div className="grid grid-cols-1 gap-2">
                                 {bookingTarget.packages.map(pkg => (
                                   <button key={pkg.name} type="button" onClick={() => setBookingForm(f => ({ ...f, packageName: pkg.name }))}
-                                    className={`text-left rounded-[14px] border px-4 py-3 transition-all ${bookingForm.packageName === pkg.name ? 'border-violet-500/50 bg-violet-500/10' : 'border-white/[0.07] bg-white/[0.03] hover:border-white/[0.12]'}`}>
+                                    className={`text-left rounded-[14px] border px-4 py-3 transition-all ${bookingForm.packageName === pkg.name ? 'border-violet-500/50 bg-violet-500/10' : 'pf-rim pf-s1 pf-rim-f'}`}>
                                     <div className="flex items-center justify-between mb-1">
-                                      <span className="text-[13px] font-bold text-white/85">{pkg.name}</span>
-                                      <span className="text-[13px] font-black text-white/80">{bookingTarget.currency === 'INR' ? '₹' : '$'}{pkg.price.toLocaleString()}</span>
+                                      <span className="text-[13px] font-bold pf-ink">{pkg.name}</span>
+                                      <span className="text-[13px] font-black pf-ink">{bookingTarget.currency === 'INR' ? '₹' : '$'}{pkg.price.toLocaleString()}</span>
                                     </div>
-                                    <p className="text-[11px] text-white/40 line-clamp-2">{pkg.description}</p>
-                                    <p className="text-[10px] text-white/25 mt-1">{pkg.deliveryTime} {pkg.deliveryUnit} delivery</p>
+                                    <p className="text-[11px] pf-ink-3 line-clamp-2">{pkg.description}</p>
+                                    <p className="text-[10px] pf-ink-4 mt-1">{pkg.deliveryTime} {pkg.deliveryUnit} delivery</p>
                                   </button>
                                 ))}
                               </div>
                             </div>
                           )}
                           <div>
-                            <label className="block text-[11.5px] font-semibold text-white/50 mb-1.5 uppercase tracking-[0.10em]">Your Name *</label>
+                            <label className="block text-[11.5px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.10em]">Your Name *</label>
                             <input value={bookingForm.clientName} onChange={e => setBookingForm(f => ({ ...f, clientName: e.target.value }))} required placeholder="Full name"
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 focus:bg-violet-500/5 transition-all" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 focus:bg-violet-500/5 transition-all" />
                           </div>
                           <div>
-                            <label className="block text-[11.5px] font-semibold text-white/50 mb-1.5 uppercase tracking-[0.10em]">Email *</label>
+                            <label className="block text-[11.5px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.10em]">Email *</label>
                             <input type="email" value={bookingForm.clientEmail} onChange={e => setBookingForm(f => ({ ...f, clientEmail: e.target.value }))} required placeholder="you@example.com"
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 focus:bg-violet-500/5 transition-all" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 focus:bg-violet-500/5 transition-all" />
                           </div>
                           <div>
-                            <label className="block text-[11.5px] font-semibold text-white/50 mb-1.5 uppercase tracking-[0.10em]">Phone Number</label>
+                            <label className="block text-[11.5px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.10em]">Phone Number</label>
                             <input type="tel" value={bookingForm.clientPhone} onChange={e => setBookingForm(f => ({ ...f, clientPhone: e.target.value }))} placeholder="+91 98765 43210"
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 focus:bg-violet-500/5 transition-all" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 focus:bg-violet-500/5 transition-all" />
                           </div>
                           <div>
-                            <label className="block text-[11.5px] font-semibold text-white/50 mb-1.5 uppercase tracking-[0.10em]">Preferred Date</label>
+                            <label className="block text-[11.5px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.10em]">Preferred Date</label>
                             <input type="date" value={bookingForm.scheduledDate} onChange={e => setBookingForm(f => ({ ...f, scheduledDate: e.target.value }))}
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white/70 outline-none focus:border-violet-500/50 transition-all" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink-2 outline-none focus:border-violet-500/50 transition-all" />
                           </div>
                           <div>
-                            <label className="block text-[11.5px] font-semibold text-white/50 mb-1.5 uppercase tracking-[0.10em]">Message</label>
+                            <label className="block text-[11.5px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.10em]">Message</label>
                             <textarea rows={3} value={bookingForm.clientMessage} onChange={e => setBookingForm(f => ({ ...f, clientMessage: e.target.value }))} placeholder="Describe what you need…"
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 transition-all resize-none" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 transition-all resize-none" />
                           </div>
                           {bookingError && <p className="text-[12px] text-rose-400">{bookingError}</p>}
                           <div className="flex gap-3 pt-1">
-                            <button type="button" onClick={() => setBookingServiceId(null)} className="flex-1 h-10 rounded-[12px] border border-white/[0.08] text-white/55 text-sm hover:bg-white/[0.05] transition-colors">Cancel</button>
-                            <button type="submit" disabled={bookingSubmitting} className="flex-1 h-10 rounded-[12px] font-bold text-sm text-white transition-all active:scale-[0.98] disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 3px 16px rgba(99,102,241,0.4)' }}>
+                            <button type="button" onClick={() => setBookingServiceId(null)} className="flex-1 h-10 rounded-[12px] border pf-rim-2 pf-ink-2 text-sm pf-s2-h transition-colors">Cancel</button>
+                            <button type="submit" disabled={bookingSubmitting} className="flex-1 h-10 rounded-[12px] font-bold text-sm pf-ink transition-all active:scale-[0.98] disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 3px 16px rgba(99,102,241,0.4)' }}>
                               {bookingSubmitting ? 'Sending…' : 'Send Booking Request'}
                             </button>
                           </div>
@@ -5162,18 +5192,18 @@ export default function UserProfilePage() {
                 return (
                   <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={() => setReviewServiceId(null)} />
-                    <div className="relative z-10 w-full max-w-lg bg-[#0E0E10] border border-white/[0.09] rounded-[28px] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.95)]">
+                    <div className="relative z-10 w-full max-w-lg pf-modal border pf-rim-2 rounded-[28px] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.95)]">
                       {/* Header */}
-                      <div className="relative overflow-hidden px-6 py-5 border-b border-white/[0.07]" style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(217,119,6,0.06) 100%)' }}>
+                      <div className="relative overflow-hidden px-6 py-5 border-b pf-rim" style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(217,119,6,0.06) 100%)' }}>
                         <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(245,158,11,0.15) 0%, transparent 70%)' }} />
                         <div className="relative flex items-start justify-between gap-3">
                           <div>
                             <p className="text-[10.5px] font-bold uppercase tracking-[0.18em] text-amber-400/70 mb-1">Leave a Review</p>
-                            <h2 className="font-bold text-white text-[16px] leading-tight">{targetSvc?.title ?? 'Service Review'}</h2>
-                            <p className="text-[11px] text-white/35 mt-0.5">Share your experience to help others make informed decisions</p>
+                            <h2 className="font-bold pf-ink text-[16px] leading-tight">{targetSvc?.title ?? 'Service Review'}</h2>
+                            <p className="text-[11px] pf-ink-3 mt-0.5">Share your experience to help others make informed decisions</p>
                           </div>
-                          <button onClick={() => setReviewServiceId(null)} className="shrink-0 h-8 w-8 rounded-full border border-white/[0.10] bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.12] transition-colors">
-                            <X className="h-4 w-4 text-white/60" />
+                          <button onClick={() => setReviewServiceId(null)} className="shrink-0 h-8 w-8 rounded-full border pf-rim-2 pf-s2 flex items-center justify-center pf-s2-h transition-colors">
+                            <X className="h-4 w-4 pf-ink-2" />
                           </button>
                         </div>
                       </div>
@@ -5182,11 +5212,11 @@ export default function UserProfilePage() {
                         {reviewSuccess ? (
                           <div className="py-12 text-center">
                             <div className="h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-5 shadow-[0_0_30px_rgba(245,158,11,0.4)]" style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)' }}>
-                              <Star className="h-8 w-8 text-white fill-white" />
+                              <Star className="h-8 w-8 pf-ink fill-white" />
                             </div>
-                            <p className="font-black text-white text-[18px] mb-2">Review Submitted!</p>
-                            <p className="text-[13px] text-white/40 leading-relaxed">Thank you for your feedback. It helps others choose the right service.</p>
-                            <button onClick={() => setReviewServiceId(null)} className="mt-6 rounded-[14px] border border-white/[0.10] bg-white/[0.06] px-6 py-2.5 text-[13px] font-semibold text-white/70 hover:text-white hover:bg-white/[0.10] transition-all">Close</button>
+                            <p className="font-black pf-ink text-[18px] mb-2">Review Submitted!</p>
+                            <p className="text-[13px] pf-ink-3 leading-relaxed">Thank you for your feedback. It helps others choose the right service.</p>
+                            <button onClick={() => setReviewServiceId(null)} className="mt-6 rounded-[14px] border pf-rim-2 pf-s2 px-6 py-2.5 text-[13px] font-semibold pf-ink-2 pf-ink-h pf-s2-h transition-all">Close</button>
                           </div>
                         ) : (
                           /* §28 — the shared review form: rating, written review,
@@ -5233,39 +5263,39 @@ export default function UserProfilePage() {
                 return (
                   <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setServiceForm(null)} />
-                    <div className="relative z-10 w-full max-w-2xl bg-[#111113] border border-white/[0.09] rounded-[24px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
-                      <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07]">
+                    <div className="relative z-10 w-full max-w-2xl pf-modal border pf-rim-2 rounded-[24px] overflow-hidden shadow-[0_32px_80px_rgba(0,0,0,0.9)]">
+                      <div className="flex items-center justify-between px-6 py-4 border-b pf-rim">
                         <div>
-                          <h3 className="font-bold text-white text-[15px]">{isEdit ? 'Edit Service' : 'Add New Service'}</h3>
-                          <p className="text-[11px] text-white/35 mt-0.5">Build your service listing</p>
+                          <h3 className="font-bold pf-ink text-[15px]">{isEdit ? 'Edit Service' : 'Add New Service'}</h3>
+                          <p className="text-[11px] pf-ink-3 mt-0.5">Build your service listing</p>
                         </div>
-                        <button onClick={() => setServiceForm(null)} className="h-8 w-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.10] transition-colors">
-                          <X className="h-4 w-4 text-white/60" />
+                        <button onClick={() => setServiceForm(null)} className="h-8 w-8 rounded-full pf-s2 flex items-center justify-center pf-s2-h transition-colors">
+                          <X className="h-4 w-4 pf-ink-2" />
                         </button>
                       </div>
                       <div className="px-6 py-5 space-y-5 max-h-[75vh] overflow-y-auto [scrollbar-width:none]">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Title *</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Title *</label>
                             <input value={serviceForm.title ?? ''} onChange={e => setServiceForm(f => ({ ...f!, title: e.target.value }))} placeholder="e.g. Professional Logo Design"
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 transition-all" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 transition-all" />
                           </div>
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Tagline</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Tagline</label>
                             <input value={serviceForm.tagline ?? ''} onChange={e => setServiceForm(f => ({ ...f!, tagline: e.target.value }))} placeholder="A short punchy one-liner"
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 transition-all" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 transition-all" />
                           </div>
                           <div>
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Category *</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Category *</label>
                             <select value={serviceForm.category ?? 'design'} onChange={e => setServiceForm(f => ({ ...f!, category: e.target.value as ServiceItem['category'] }))}
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-[#111113] px-4 py-2.5 text-[13px] text-white outline-none focus:border-violet-500/50 transition-all">
+                              className="w-full rounded-[12px] pf-input border transition-all">
                               {categories.map(c => <option key={c} value={c}>{SERVICE_CATEGORIES[c]?.label ?? c}</option>)}
                             </select>
                           </div>
                           <div>
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Pricing Model</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Pricing Model</label>
                             <select value={serviceForm.pricingModel ?? 'fixed'} onChange={e => setServiceForm(f => ({ ...f!, pricingModel: e.target.value as ServiceItem['pricingModel'] }))}
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-[#111113] px-4 py-2.5 text-[13px] text-white outline-none focus:border-violet-500/50 transition-all">
+                              className="w-full rounded-[12px] pf-input border transition-all">
                               <option value="fixed">Fixed Price</option>
                               <option value="hourly">Hourly Rate</option>
                               <option value="starting_from">Starting From</option>
@@ -5274,15 +5304,15 @@ export default function UserProfilePage() {
                           </div>
                           {serviceForm.pricingModel !== 'contact' && (
                             <div>
-                              <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Base Price</label>
+                              <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Base Price</label>
                               <input type="number" min={0} value={serviceForm.basePrice ?? 0} onChange={e => setServiceForm(f => ({ ...f!, basePrice: +e.target.value }))}
-                                className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white outline-none focus:border-violet-500/50 transition-all" />
+                                className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink outline-none focus:border-violet-500/50 transition-all" />
                             </div>
                           )}
                           <div>
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Currency</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Currency</label>
                             <select value={serviceForm.currency ?? 'USD'} onChange={e => setServiceForm(f => ({ ...f!, currency: e.target.value }))}
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-[#111113] px-4 py-2.5 text-[13px] text-white outline-none focus:border-violet-500/50 transition-all">
+                              className="w-full rounded-[12px] pf-input border transition-all">
                               <option value="USD">USD ($)</option>
                               <option value="INR">INR (₹)</option>
                               <option value="EUR">EUR (€)</option>
@@ -5290,14 +5320,14 @@ export default function UserProfilePage() {
                             </select>
                           </div>
                           <div>
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Delivery Time</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Delivery Time</label>
                             <input type="number" min={1} value={serviceForm.deliveryTime ?? 3} onChange={e => setServiceForm(f => ({ ...f!, deliveryTime: +e.target.value }))}
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white outline-none focus:border-violet-500/50 transition-all" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink outline-none focus:border-violet-500/50 transition-all" />
                           </div>
                           <div>
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Delivery Unit</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Delivery Unit</label>
                             <select value={serviceForm.deliveryUnit ?? 'days'} onChange={e => setServiceForm(f => ({ ...f!, deliveryUnit: e.target.value as ServiceItem['deliveryUnit'] }))}
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-[#111113] px-4 py-2.5 text-[13px] text-white outline-none focus:border-violet-500/50 transition-all">
+                              className="w-full rounded-[12px] pf-input border transition-all">
                               <option value="hours">Hours</option>
                               <option value="days">Days</option>
                               <option value="weeks">Weeks</option>
@@ -5305,12 +5335,12 @@ export default function UserProfilePage() {
                             </select>
                           </div>
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Description *</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Description *</label>
                             <textarea rows={4} value={serviceForm.description ?? ''} onChange={e => setServiceForm(f => ({ ...f!, description: e.target.value }))} placeholder="Describe what you offer, your process, and what clients get…"
-                              className="w-full rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 transition-all resize-none" />
+                              className="w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 transition-all resize-none" />
                           </div>
                           <div className="sm:col-span-2">
-                            <label className="block text-[11px] font-semibold text-white/45 mb-1.5 uppercase tracking-[0.12em]">Tags</label>
+                            <label className="block text-[11px] font-semibold pf-ink-3 mb-1.5 uppercase tracking-[0.12em]">Tags</label>
                             <div className="flex flex-wrap gap-1.5 mb-2">
                               {(serviceForm.tags ?? []).map(t => (
                                 <span key={t} className="flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-0.5 text-[11px] text-violet-300">
@@ -5322,29 +5352,29 @@ export default function UserProfilePage() {
                             <div className="flex gap-2">
                               <input value={tagInput} onChange={e => setTagInput(e.target.value)} onKeyDown={e => { if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) { e.preventDefault(); const t = tagInput.trim().replace(/,$/, ''); if (!(serviceForm.tags ?? []).includes(t)) setServiceForm(f => ({ ...f!, tags: [...(f!.tags ?? []), t] })); setTagInput(''); } }}
                                 placeholder="Type a tag and press Enter"
-                                className="flex-1 rounded-[12px] border border-white/[0.09] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder-white/25 outline-none focus:border-violet-500/50 transition-all" />
+                                className="flex-1 rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink placeholder-white/25 outline-none focus:border-violet-500/50 transition-all" />
                               <button type="button" onClick={() => { if (tagInput.trim()) { const t = tagInput.trim(); if (!(serviceForm.tags ?? []).includes(t)) setServiceForm(f => ({ ...f!, tags: [...(f!.tags ?? []), t] })); setTagInput(''); } }}
-                                className="rounded-[12px] border border-white/[0.09] bg-white/[0.06] px-3 text-[12px] font-semibold text-white/50 hover:text-white transition">Add</button>
+                                className="rounded-[12px] border pf-rim-2 pf-s2 px-3 text-[12px] font-semibold pf-ink-3 pf-ink-h transition">Add</button>
                             </div>
                           </div>
                           <div className="sm:col-span-2 flex items-center gap-3">
                             <label className="flex items-center gap-2.5 cursor-pointer">
-                              <div onClick={() => setServiceForm(f => ({ ...f!, isActive: !f!.isActive }))} className={`relative h-5 w-9 rounded-full transition-colors ${serviceForm.isActive ? 'bg-violet-500' : 'bg-white/[0.10]'}`}>
-                                <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${serviceForm.isActive ? 'left-4' : 'left-0.5'}`} />
+                              <div onClick={() => setServiceForm(f => ({ ...f!, isActive: !f!.isActive }))} className={`relative h-5 w-9 rounded-full transition-colors ${serviceForm.isActive ? 'bg-violet-500' : 'pf-s4'}`}>
+                                <div className={`absolute top-0.5 h-4 w-4 rounded-full pf-solid transition-all ${serviceForm.isActive ? 'left-4' : 'left-0.5'}`} />
                               </div>
-                              <span className="text-[12px] text-white/60">{serviceForm.isActive ? 'Visible' : 'Hidden'}</span>
+                              <span className="text-[12px] pf-ink-2">{serviceForm.isActive ? 'Visible' : 'Hidden'}</span>
                             </label>
                             <label className="flex items-center gap-2.5 cursor-pointer">
-                              <div onClick={() => setServiceForm(f => ({ ...f!, featured: !f!.featured }))} className={`relative h-5 w-9 rounded-full transition-colors ${serviceForm.featured ? 'bg-amber-500' : 'bg-white/[0.10]'}`}>
-                                <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${serviceForm.featured ? 'left-4' : 'left-0.5'}`} />
+                              <div onClick={() => setServiceForm(f => ({ ...f!, featured: !f!.featured }))} className={`relative h-5 w-9 rounded-full transition-colors ${serviceForm.featured ? 'bg-amber-500' : 'pf-s4'}`}>
+                                <div className={`absolute top-0.5 h-4 w-4 rounded-full pf-solid transition-all ${serviceForm.featured ? 'left-4' : 'left-0.5'}`} />
                               </div>
-                              <span className="text-[12px] text-white/60">Featured</span>
+                              <span className="text-[12px] pf-ink-2">Featured</span>
                             </label>
                           </div>
                         </div>
                         {serviceFormError && <p className="text-[12px] text-rose-400">{serviceFormError}</p>}
-                        <div className="flex gap-3 pt-1 border-t border-white/[0.06]">
-                          <button type="button" onClick={() => setServiceForm(null)} className="flex-1 h-10 rounded-[12px] border border-white/[0.08] text-white/55 text-sm hover:bg-white/[0.05] transition-colors">Cancel</button>
+                        <div className="flex gap-3 pt-1 border-t pf-rim">
+                          <button type="button" onClick={() => setServiceForm(null)} className="flex-1 h-10 rounded-[12px] border pf-rim-2 pf-ink-2 text-sm pf-s2-h transition-colors">Cancel</button>
                           <button type="button" disabled={serviceFormSaving} onClick={async () => {
                             if (!serviceForm.title?.trim()) { setServiceFormError('Title is required.'); return; }
                             if (!serviceForm.description?.trim()) { setServiceFormError('Description is required.'); return; }
@@ -5361,7 +5391,7 @@ export default function UserProfilePage() {
                               setServiceForm(null);
                             } catch { setServiceFormError('Network error.'); }
                             finally { setServiceFormSaving(false); }
-                          }} className="flex-1 h-10 rounded-[12px] font-bold text-sm text-white transition-all active:scale-[0.98] disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 3px 16px rgba(99,102,241,0.4)' }}>
+                          }} className="flex-1 h-10 rounded-[12px] font-bold text-sm pf-ink transition-all active:scale-[0.98] disabled:opacity-60" style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', boxShadow: '0 3px 16px rgba(99,102,241,0.4)' }}>
                             {serviceFormSaving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Service'}
                           </button>
                         </div>
@@ -5381,8 +5411,8 @@ export default function UserProfilePage() {
         {tab === 'activity' && (
           <div className="space-y-4">
             {isOwnProfile && publishedPosts.length === 0 && (
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-16 text-center">
-                <p className="text-white/30 text-sm">No published activity yet. Start publishing to see your posts here.</p>
+              <div className="rounded-[20px] border pf-rim pf-s1 p-16 text-center">
+                <p className="pf-ink-4 text-sm">No published activity yet. Start publishing to see your posts here.</p>
               </div>
             )}
             {isOwnProfile && publishedPosts.length > 0 && (
@@ -5390,7 +5420,7 @@ export default function UserProfilePage() {
                 {publishedPosts.map((post) => {
                   const isActive = post.featured && post.featuredUntil && new Date(post.featuredUntil) > new Date();
                   return (
-                    <div key={post.id} className="group rounded-[20px] border border-white/[0.07] bg-white/[0.03] p-5 transition hover:bg-white/[0.05]">
+                    <div key={post.id} className="group rounded-[20px] border pf-rim pf-s1 p-5 transition pf-s2-h">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 mb-1">
@@ -5404,15 +5434,15 @@ export default function UserProfilePage() {
                               </span>
                             )}
                           </div>
-                          <h4 className="text-[13.5px] font-semibold text-white/80 truncate">{post.title || post.fileName}</h4>
-                          <p className="text-[11px] text-white/30 mt-0.5">{new Date(post.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                          <h4 className="text-[13.5px] font-semibold pf-ink truncate">{post.title || post.fileName}</h4>
+                          <p className="text-[11px] pf-ink-4 mt-0.5">{new Date(post.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <a
                             href={`/transfer/${post.shareId}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/40 transition hover:text-white/80"
+                            className="flex h-8 w-8 items-center justify-center rounded-full border pf-rim-2 pf-s2 pf-ink-3 transition pf-ink-h"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
@@ -5422,7 +5452,7 @@ export default function UserProfilePage() {
                             className={`flex items-center gap-1.5 rounded-[10px] border px-3 py-1.5 text-[11.5px] font-semibold transition ${
                               isActive
                                 ? 'border-amber-500/20 bg-amber-500/[0.08] text-amber-400 hover:bg-amber-500/[0.14]'
-                                : 'border-white/[0.10] bg-white/[0.04] text-white/50 hover:bg-white/[0.09] hover:text-white/80'
+                                : 'pf-rim-2 pf-s2 pf-ink-3 pf-s2-h pf-ink-h'
                             }`}
                           >
                             <Rocket className="h-3 w-3" />
@@ -5431,11 +5461,11 @@ export default function UserProfilePage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-5">
-                        <span className="flex items-center gap-1.5 text-[11px] text-white/30">
+                        <span className="flex items-center gap-1.5 text-[11px] pf-ink-4">
                           <Heart className="h-3.5 w-3.5" />
                           {post.likesCount} likes
                         </span>
-                        <span className="flex items-center gap-1.5 text-[11px] text-white/30">
+                        <span className="flex items-center gap-1.5 text-[11px] pf-ink-4">
                           <Eye className="h-3.5 w-3.5" />
                           {post.viewCount} views
                         </span>
@@ -5446,8 +5476,8 @@ export default function UserProfilePage() {
               </div>
             )}
             {!isOwnProfile && (
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-16 text-center">
-                <p className="text-white/30 text-sm">No recent published activity.</p>
+              <div className="rounded-[20px] border pf-rim pf-s1 p-16 text-center">
+                <p className="pf-ink-4 text-sm">No recent published activity.</p>
               </div>
             )}
 
@@ -5459,23 +5489,23 @@ export default function UserProfilePage() {
 
             {/* Shared document links tracking */}
             {isOwnProfile && (
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-5">
+              <div className="rounded-[20px] border pf-rim pf-s1 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] border border-white/[0.08]">
-                      <Share2 className="h-3.5 w-3.5 text-white/50" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-[10px] pf-s2 border pf-rim-2">
+                      <Share2 className="h-3.5 w-3.5 pf-ink-3" />
                     </div>
                     <div>
-                      <p className="text-[13px] font-semibold text-white/75">Shared document links</p>
-                      <p className="text-[10.5px] text-white/30">{sharedLinks.length} link{sharedLinks.length !== 1 ? 's' : ''} tracked</p>
+                      <p className="text-[13px] font-semibold pf-ink-2">Shared document links</p>
+                      <p className="text-[10.5px] pf-ink-4">{sharedLinks.length} link{sharedLinks.length !== 1 ? 's' : ''} tracked</p>
                     </div>
                   </div>
                 </div>
                 {sharedLinks.length === 0 ? (
                   <div className="py-8 text-center">
-                    <FileText className="h-6 w-6 text-white/10 mx-auto mb-2" />
-                    <p className="text-[12px] text-white/25">No secure document links yet.</p>
-                    <p className="text-[11px] text-white/15 mt-1">Share a document from the workspace to see tracking here.</p>
+                    <FileText className="h-6 w-6 pf-deco mx-auto mb-2" />
+                    <p className="text-[12px] pf-ink-4">No secure document links yet.</p>
+                    <p className="text-[11px] pf-deco mt-1">Share a document from the workspace to see tracking here.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -5486,19 +5516,19 @@ export default function UserProfilePage() {
                       const signed = Boolean(link.recipientSignedAt);
                       const shareUrl = link.shareId ? `/documents/${link.shareId}` : null;
                       return (
-                        <div key={link.id} className="flex items-center gap-3 rounded-[14px] border border-white/[0.05] bg-white/[0.02] px-3.5 py-3 hover:bg-white/[0.04] transition group">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.05]">
-                            <FileText className="h-3.5 w-3.5 text-white/30" />
+                        <div key={link.id} className="flex items-center gap-3 rounded-[14px] border pf-rim pf-s1 px-3.5 py-3 pf-s2-h transition group">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] pf-s2">
+                            <FileText className="h-3.5 w-3.5 pf-ink-4" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[12px] font-semibold text-white/70 truncate">{link.uploadedPdfFileName || link.templateName}</p>
+                            <p className="text-[12px] font-semibold pf-ink-2 truncate">{link.uploadedPdfFileName || link.templateName}</p>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <Eye className="h-2.5 w-2.5 text-white/20" />
-                              <span className="text-[10px] text-white/25">{link.openCount ?? 0} opens</span>
+                              <Eye className="h-2.5 w-2.5 pf-ink-4" />
+                              <span className="text-[10px] pf-ink-4">{link.openCount ?? 0} opens</span>
                               {link.sharePassword && (
                                 <>
-                                  <KeyRound className="h-2.5 w-2.5 text-white/15 ml-1" />
-                                  <span className="text-[10px] font-mono text-white/20">{link.sharePassword}</span>
+                                  <KeyRound className="h-2.5 w-2.5 pf-deco ml-1" />
+                                  <span className="text-[10px] font-mono pf-ink-4">{link.sharePassword}</span>
                                 </>
                               )}
                             </div>
@@ -5520,7 +5550,7 @@ export default function UserProfilePage() {
                                   setSharedLinksCopied(link.id);
                                   setTimeout(() => setSharedLinksCopied(null), 2000);
                                 }}
-                                className="flex h-7 w-7 items-center justify-center rounded-[8px] border border-white/[0.07] bg-white/[0.03] text-white/30 hover:text-white/70 hover:bg-white/[0.08] transition"
+                                className="flex h-7 w-7 items-center justify-center rounded-[8px] border pf-rim pf-s1 pf-ink-4 pf-ink-h pf-s2-h transition"
                               >
                                 {sharedLinksCopied === link.id
                                   ? <Check className="h-3 w-3 text-emerald-400" />
@@ -5533,7 +5563,7 @@ export default function UserProfilePage() {
                                 href={shareUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex h-7 w-7 items-center justify-center rounded-[8px] border border-white/[0.07] bg-white/[0.03] text-white/30 hover:text-white/70 hover:bg-white/[0.08] transition"
+                                className="flex h-7 w-7 items-center justify-center rounded-[8px] border pf-rim pf-s1 pf-ink-4 pf-ink-h pf-s2-h transition"
                               >
                                 <Link2 className="h-3 w-3" />
                               </a>
@@ -5543,7 +5573,7 @@ export default function UserProfilePage() {
                       );
                     })}
                     {sharedLinks.length > 10 && (
-                      <p className="text-center text-[11px] text-white/20 pt-1">+{sharedLinks.length - 10} more in workspace history</p>
+                      <p className="text-center text-[11px] pf-ink-4 pt-1">+{sharedLinks.length - 10} more in workspace history</p>
                     )}
                   </div>
                 )}
@@ -5565,18 +5595,18 @@ export default function UserProfilePage() {
           return (
             <div className="space-y-5">
               {/* Profile strength card */}
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6">
+              <div className="rounded-[20px] border pf-rim pf-s1 p-6">
                 <div className="flex items-center gap-3 mb-5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.05]">
-                    <Shield className="h-4 w-4 text-white/50" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border pf-rim-2 pf-s2">
+                    <Shield className="h-4 w-4 pf-ink-3" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-semibold text-white/80">Profile Strength</h3>
-                    <p className="text-xs text-white/35">Complete your profile to attract more connections</p>
+                    <h3 className="text-sm font-semibold pf-ink">Profile Strength</h3>
+                    <p className="text-xs pf-ink-3">Complete your profile to attract more connections</p>
                   </div>
-                  <span className="ml-auto text-2xl font-black text-white">{strength}%</span>
+                  <span className="ml-auto text-2xl font-black pf-ink">{strength}%</span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-white/[0.06] overflow-hidden">
+                <div className="h-2 w-full rounded-full pf-s2 overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{
@@ -5603,11 +5633,11 @@ export default function UserProfilePage() {
                       key={label}
                       className={`flex items-center gap-2 rounded-[12px] border px-3 py-2.5 ${
                         done
-                          ? 'border-white/[0.10] bg-white/[0.05] text-white/70'
-                          : 'border-white/[0.05] bg-transparent text-white/25'
+                          ? 'pf-rim-2 pf-s2 pf-ink-2'
+                          : 'pf-rim bg-transparent pf-ink-4'
                       }`}
                     >
-                      <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${done ? 'bg-white/60' : 'bg-white/15'}`} />
+                      <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${done ? 'pf-solid' : 'pf-s4'}`} />
                       <span className="text-xs font-medium">{label}</span>
                     </div>
                   ))}
@@ -5615,7 +5645,7 @@ export default function UserProfilePage() {
                 {strength < 100 && (
                   <button
                     onClick={() => setEditOpen(true)}
-                    className="mt-4 flex items-center gap-2 rounded-[12px] border border-white/[0.08] bg-white/[0.05] px-4 py-2.5 text-xs font-semibold text-white/60 transition hover:bg-white/[0.09] hover:text-white/85"
+                    className="mt-4 flex items-center gap-2 rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-xs font-semibold pf-ink-2 transition pf-s2-h pf-ink-h"
                   >
                     <Edit2 className="h-3.5 w-3.5" />
                     Complete your profile
@@ -5631,10 +5661,10 @@ export default function UserProfilePage() {
                   { label: 'Total comments', value: (analytics?.totalComments ?? 0).toLocaleString(), icon: BarChart3, sub: 'Across all posts', trend: false },
                   { label: 'Content pieces', value: (analytics?.publishCount ?? stats.publishedCount).toLocaleString(), icon: Share2, sub: `${analytics?.featuredCount ?? 0} featured`, trend: false },
                 ].map(({ label, value, icon: Icon, sub, trend }) => (
-                  <div key={label} className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-5">
+                  <div key={label} className="rounded-[20px] border pf-rim pf-s1 p-5">
                     <div className="flex items-start justify-between mb-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.05]">
-                        <Icon className="h-3.5 w-3.5 text-white/45" />
+                      <div className="flex h-8 w-8 items-center justify-center rounded-[10px] border pf-rim-2 pf-s2">
+                        <Icon className="h-3.5 w-3.5 pf-ink-3" />
                       </div>
                       {trend && (
                         <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">
@@ -5642,16 +5672,16 @@ export default function UserProfilePage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-2xl font-black text-white tracking-tight">{value}</p>
-                    <p className="text-[11px] text-white/40 mt-0.5">{label}</p>
-                    <p className="text-[10px] text-white/25 mt-2">{sub}</p>
+                    <p className="text-2xl font-black pf-ink tracking-tight">{value}</p>
+                    <p className="text-[11px] pf-ink-3 mt-0.5">{label}</p>
+                    <p className="text-[10px] pf-ink-4 mt-2">{sub}</p>
                   </div>
                 ))}
               </div>
 
               {/* Network breakdown */}
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/40 mb-5">Network breakdown</h3>
+              <div className="rounded-[20px] border pf-rim pf-s1 p-6">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-5">Network breakdown</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   {[
                     { label: 'Followers', value: followersCount, pct: Math.min(100, followersCount * 2) },
@@ -5660,10 +5690,10 @@ export default function UserProfilePage() {
                   ].map(({ label, value, pct }) => (
                     <div key={label}>
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-white/50">{label}</span>
-                        <span className="text-sm font-bold text-white">{value.toLocaleString()}</span>
+                        <span className="text-xs pf-ink-3">{label}</span>
+                        <span className="text-sm font-bold pf-ink">{value.toLocaleString()}</span>
                       </div>
-                      <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+                      <div className="h-1.5 w-full rounded-full pf-s2 overflow-hidden">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-white/40 to-white/70 transition-all duration-700"
                           style={{ width: `${pct}%` }}
@@ -5679,27 +5709,27 @@ export default function UserProfilePage() {
                 <>
                   {/* Balance + streak hero */}
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-5 relative overflow-hidden">
+                    <div className="rounded-[20px] border pf-rim pf-s1 p-5 relative overflow-hidden">
                       <div className="absolute inset-0 opacity-5" style={{ background: 'radial-gradient(circle at 80% 20%, #6366f1, transparent 60%)' }} />
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Credits balance</p>
-                      <p className="text-3xl font-black text-white tracking-tight" style={{ backgroundImage: 'linear-gradient(90deg,#a5b4fc,#6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{credits.balance.toLocaleString()}</p>
-                      <p className="text-[11px] text-white/30 mt-1">{credits.totalEarned} earned · virtual currency</p>
-                      <div className="mt-3 text-[10px] text-white/20">Spend on premium features at checkout</div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] pf-ink-4 mb-2">Credits balance</p>
+                      <p className="text-3xl font-black pf-ink tracking-tight" style={{ backgroundImage: 'linear-gradient(90deg,#a5b4fc,#6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{credits.balance.toLocaleString()}</p>
+                      <p className="text-[11px] pf-ink-4 mt-1">{credits.totalEarned} earned · virtual currency</p>
+                      <div className="mt-3 text-[10px] pf-ink-4">Spend on premium features at checkout</div>
                     </div>
-                    <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-5 relative overflow-hidden">
+                    <div className="rounded-[20px] border pf-rim pf-s1 p-5 relative overflow-hidden">
                       <div className="absolute inset-0 opacity-5" style={{ background: 'radial-gradient(circle at 80% 20%, #FF6B35, transparent 60%)' }} />
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/30 mb-2">Posting streak</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] pf-ink-4 mb-2">Posting streak</p>
                       <div className="flex items-end gap-2">
-                        <p className="text-3xl font-black text-white tracking-tight">{credits.streak.current}</p>
-                        <p className="text-sm text-white/40 mb-1">days</p>
+                        <p className="text-3xl font-black pf-ink tracking-tight">{credits.streak.current}</p>
+                        <p className="text-sm pf-ink-3 mb-1">days</p>
                       </div>
-                      <p className="text-[11px] text-white/30 mt-1">Longest: {credits.streak.longest} days</p>
+                      <p className="text-[11px] pf-ink-4 mt-1">Longest: {credits.streak.longest} days</p>
                       <div className="mt-2 flex gap-1">
                         {Array.from({ length: 10 }).map((_, i) => (
-                          <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${i < Math.min(credits.streak.current, 10) ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-white/[0.08]'}`} />
+                          <div key={i} className={`h-1.5 flex-1 rounded-full transition-all ${i < Math.min(credits.streak.current, 10) ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'pf-s3'}`} />
                         ))}
                       </div>
-                      <p className="text-[10px] text-white/20 mt-1.5">{credits.streak.current >= 10 ? '∞ Verified badge earned!' : `${10 - Math.min(credits.streak.current, 10)} more days to verified badge`}</p>
+                      <p className="text-[10px] pf-ink-4 mt-1.5">{credits.streak.current >= 10 ? '∞ Verified badge earned!' : `${10 - Math.min(credits.streak.current, 10)} more days to verified badge`}</p>
                     </div>
                   </div>
 
@@ -5717,21 +5747,21 @@ export default function UserProfilePage() {
                       { id: 'publish_10', title: 'Content Creator', desc: 'Publish 10 content pieces', icon: '🎨', credits: 40 },
                     ];
                     return (
-                      <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6">
-                        <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/40 mb-5">Milestones</h3>
+                      <div className="rounded-[20px] border pf-rim pf-s1 p-6">
+                        <h3 className="text-sm font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-5">Milestones</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {ALL_MILESTONES.map((m) => {
                             const done = credits.milestones.includes(m.id);
                             return (
-                              <div key={m.id} className={`relative flex items-start gap-3 rounded-[14px] border p-4 transition-all ${done ? 'border-white/[0.12] bg-white/[0.05]' : 'border-white/[0.05] bg-transparent opacity-50'}`}>
+                              <div key={m.id} className={`relative flex items-start gap-3 rounded-[14px] border p-4 transition-all ${done ? 'pf-rim-3 pf-s2' : 'pf-rim bg-transparent opacity-50'}`}>
                                 {'grantsVerified' in m && m.grantsVerified && done && (
                                   <div className="absolute top-2 right-2"><VerifiedBadge size="sm" /></div>
                                 )}
                                 <span className="text-xl shrink-0">{m.icon}</span>
                                 <div className="min-w-0">
-                                  <p className={`text-[12.5px] font-semibold ${done ? 'text-white/85' : 'text-white/40'}`}>{m.title}</p>
-                                  <p className="text-[11px] text-white/30 mt-0.5">{m.desc}</p>
-                                  <p className={`text-[10px] mt-1.5 font-bold ${done ? 'text-amber-400/70' : 'text-white/20'}`}>+{m.credits} credits</p>
+                                  <p className={`text-[12.5px] font-semibold ${done ? 'pf-ink' : 'pf-ink-3'}`}>{m.title}</p>
+                                  <p className="text-[11px] pf-ink-4 mt-0.5">{m.desc}</p>
+                                  <p className={`text-[10px] mt-1.5 font-bold ${done ? 'text-amber-400/70' : 'pf-ink-4'}`}>+{m.credits} credits</p>
                                 </div>
                                 {done && <div className="absolute right-3 bottom-3 h-1.5 w-1.5 rounded-full bg-emerald-400" />}
                               </div>
@@ -5744,14 +5774,14 @@ export default function UserProfilePage() {
 
                   {/* Credit transactions */}
                   {credits.transactions.length > 0 && (
-                    <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6">
-                      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/40 mb-4">Recent credit activity</h3>
+                    <div className="rounded-[20px] border pf-rim pf-s1 p-6">
+                      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Recent credit activity</h3>
                       <div className="space-y-2">
                         {credits.transactions.slice(0, 8).map((t) => (
-                          <div key={t.id} className="flex items-center justify-between gap-3 py-2 border-b border-white/[0.04] last:border-0">
+                          <div key={t.id} className="flex items-center justify-between gap-3 py-2 border-b pf-rim last:border-0">
                             <div className="min-w-0">
-                              <p className="text-[12.5px] text-white/70 truncate">{t.description || t.reason}</p>
-                              <p className="text-[10px] text-white/25 mt-0.5">{new Date(t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
+                              <p className="text-[12.5px] pf-ink-2 truncate">{t.description || t.reason}</p>
+                              <p className="text-[10px] pf-ink-4 mt-0.5">{new Date(t.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</p>
                             </div>
                             <span className={`text-sm font-bold shrink-0 ${t.type === 'earn' ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {t.type === 'earn' ? '+' : '-'}{t.amount}
@@ -5765,8 +5795,8 @@ export default function UserProfilePage() {
               )}
 
               {/* Account info */}
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/40 mb-4">Account info</h3>
+              <div className="rounded-[20px] border pf-rim pf-s1 p-6">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Account info</h3>
                 <div className="space-y-3">
                   {[
                     { label: 'Account type', value: user.accountType ?? user.role ?? 'Standard' },
@@ -5774,9 +5804,9 @@ export default function UserProfilePage() {
                     { label: 'User ID', value: user.id },
                     { label: 'Email', value: user.email },
                   ].map(({ label, value }) => (
-                    <div key={label} className="flex items-center justify-between gap-4 py-2 border-b border-white/[0.04] last:border-0">
-                      <span className="text-xs text-white/35">{label}</span>
-                      <span className="text-xs text-white/65 font-medium text-right truncate max-w-[220px]">{value}</span>
+                    <div key={label} className="flex items-center justify-between gap-4 py-2 border-b pf-rim last:border-0">
+                      <span className="text-xs pf-ink-3">{label}</span>
+                      <span className="text-xs pf-ink-2 font-medium text-right truncate max-w-[220px]">{value}</span>
                     </div>
                   ))}
                 </div>
@@ -5881,7 +5911,7 @@ export default function UserProfilePage() {
                       <div className="flex items-start justify-between gap-3 mb-4">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[18px] font-black tracking-[-0.03em] text-white">Infinity <span style={{ color: '#a5b4fc' }}>∞</span></span>
+                            <span className="text-[18px] font-black tracking-[-0.03em] pf-ink">Infinity <span style={{ color: '#a5b4fc' }}>∞</span></span>
                             <span className="rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ background: 'rgba(99,102,241,0.18)', color: '#a5b4fc' }}>
                               {({ monthly: '1 month', '3m': '3 months', '6m': '6 months', annual: 'Annual' } as Record<string, string>)[infinityStatus!.period || 'monthly'] || 'Monthly'}
                             </span>
@@ -5971,7 +6001,7 @@ export default function UserProfilePage() {
                         <span className="text-[18px] font-black" style={{ color: '#818cf8' }}>∞</span>
                       </div>
                       <div>
-                        <h3 className="text-[14px] font-black text-white leading-tight">Docrud Infinity</h3>
+                        <h3 className="text-[14px] font-black pf-ink leading-tight">Docrud Infinity</h3>
                         <p className="text-[10.5px] mt-0.5" style={{ color: isExpired ? '#f43f5e' : 'rgba(255,255,255,0.32)' }}>
                           {isExpired ? 'Your plan has expired' : 'No active plan'}
                         </p>
@@ -6040,8 +6070,8 @@ export default function UserProfilePage() {
                   <Rocket className="h-5 w-5 text-violet-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-[14px] font-bold text-white mb-1">Feature your posts</h3>
-                  <p className="text-[12.5px] text-white/40 leading-relaxed">Pin your content at the top of the feed, attract more views, and grow your audience. Plans from ₹199.</p>
+                  <h3 className="text-[14px] font-bold pf-ink mb-1">Feature your posts</h3>
+                  <p className="text-[12.5px] pf-ink-3 leading-relaxed">Pin your content at the top of the feed, attract more views, and grow your audience. Plans from ₹199.</p>
                 </div>
               </div>
               <div className="mt-4 flex items-center gap-3">
@@ -6049,26 +6079,26 @@ export default function UserProfilePage() {
                   <button
                     type="button"
                     onClick={() => setFeaturePanelPost({ id: publishedPosts[0].id, title: publishedPosts[0].title || publishedPosts[0].fileName })}
-                    className="flex items-center gap-2 rounded-[12px] bg-violet-600 px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-violet-500"
+                    className="flex items-center gap-2 rounded-[12px] bg-violet-600 px-4 py-2 text-[13px] font-semibold pf-ink transition hover:bg-violet-500"
                   >
                     <Rocket className="h-3.5 w-3.5" />
                     Feature a post
                   </button>
                 ) : (
-                  <p className="text-[12px] text-white/30">Publish content first to feature it.</p>
+                  <p className="text-[12px] pf-ink-4">Publish content first to feature it.</p>
                 )}
               </div>
             </div>
 
             {/* Billing history */}
-            <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6">
+            <div className="rounded-[20px] border pf-rim pf-s1 p-6">
               <div className="flex items-center justify-between mb-5">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/40">Payment history</h3>
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] pf-ink-3">Payment history</h3>
                 <a
                   href="/api/billing/overview"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-[11px] text-white/30 hover:text-white/60 transition"
+                  className="flex items-center gap-1.5 text-[11px] pf-ink-4 pf-ink-h transition"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   Full billing
@@ -6077,9 +6107,9 @@ export default function UserProfilePage() {
 
               {billingHistory.length === 0 ? (
                 <div className="py-10 text-center">
-                  <CreditCard className="h-8 w-8 text-white/15 mx-auto mb-3" />
-                  <p className="text-[13px] text-white/30">No payment history yet.</p>
-                  <p className="text-[11px] text-white/20 mt-1">Feature a post or upgrade your plan to see transactions here.</p>
+                  <CreditCard className="h-8 w-8 pf-deco mx-auto mb-3" />
+                  <p className="text-[13px] pf-ink-4">No payment history yet.</p>
+                  <p className="text-[11px] pf-ink-4 mt-1">Feature a post or upgrade your plan to see transactions here.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -6089,27 +6119,27 @@ export default function UserProfilePage() {
                     const label = tx.productLabel || tx.planName || 'Purchase';
                     const invoiceUrl = `/api/billing/invoice/${encodeURIComponent(tx.id)}`;
                     return (
-                      <div key={tx.id} className="group flex items-center justify-between gap-4 rounded-[14px] border border-white/[0.06] bg-white/[0.02] px-4 py-3 transition hover:bg-white/[0.05]">
+                      <div key={tx.id} className="group flex items-center justify-between gap-4 rounded-[14px] border pf-rim pf-s1 px-4 py-3 transition pf-s2-h">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${isFeaturePost ? 'bg-violet-500/10 text-violet-400' : 'bg-white/[0.06] text-white/40'}`}>
+                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] ${isFeaturePost ? 'bg-violet-500/10 text-violet-400' : 'pf-s2 pf-ink-3'}`}>
                             {isFeaturePost ? <Rocket className="h-3.5 w-3.5" /> : <CreditCard className="h-3.5 w-3.5" />}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-[12.5px] font-medium text-white/75 truncate">{label}</p>
-                            <p className="text-[10.5px] text-white/30 mt-0.5">
+                            <p className="text-[12.5px] font-medium pf-ink-2 truncate">{label}</p>
+                            <p className="text-[10.5px] pf-ink-4 mt-0.5">
                               {tx.paidAt ? new Date(tx.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Pending'}
                               {tx.invoiceNumber && ` · ${tx.invoiceNumber}`}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
-                          <span className="text-[13px] font-bold text-white/80">{amountFormatted}</span>
+                          <span className="text-[13px] font-bold pf-ink">{amountFormatted}</span>
                           <a
                             href={invoiceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Download invoice"
-                            className="flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] text-white/35 transition hover:bg-white/[0.10] hover:text-white/70"
+                            className="flex h-7 w-7 items-center justify-center rounded-full border pf-rim-2 pf-s2 pf-ink-3 transition pf-s2-h pf-ink-h"
                           >
                             <Receipt className="h-3 w-3" />
                           </a>
@@ -6123,16 +6153,16 @@ export default function UserProfilePage() {
 
             {/* Credits balance */}
             {credits && (
-              <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.03] p-6">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/40 mb-4">Docrud Credits</h3>
+              <div className="rounded-[20px] border pf-rim pf-s1 p-6">
+                <h3 className="text-sm font-semibold uppercase tracking-[0.14em] pf-ink-3 mb-4">Docrud Credits</h3>
                 <div className="flex items-center gap-4">
                   <div>
                     <p className="text-3xl font-black" style={{ backgroundImage: 'linear-gradient(90deg,#a5b4fc,#6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{credits.balance.toLocaleString()}</p>
-                    <p className="text-[11px] text-white/30 mt-1">{credits.totalEarned} credits earned · usable at checkout</p>
+                    <p className="text-[11px] pf-ink-4 mt-1">{credits.totalEarned} credits earned · usable at checkout</p>
                   </div>
                   <div className="ml-auto text-right">
-                    <p className="text-[11px] text-white/25">1 credit ≈ ₹0.10</p>
-                    <p className="text-[11px] text-white/25">Min. 100 credits to redeem</p>
+                    <p className="text-[11px] pf-ink-4">1 credit ≈ ₹0.10</p>
+                    <p className="text-[11px] pf-ink-4">Min. 100 credits to redeem</p>
                   </div>
                 </div>
               </div>
@@ -6167,7 +6197,7 @@ export default function UserProfilePage() {
               {/* ── Account ── */}
               <Section id="account" title="Account" subtitle="Profile and login details"
                 badge={user.name || '—'} badgeColor="rgba(255,255,255,0.50)"
-                icon={<Settings2 className="h-3.5 w-3.5 text-white/40" />}>
+                icon={<Settings2 className="h-3.5 w-3.5 pf-ink-3" />}>
                 <div className="divide-y divide-white/[0.04]">
                   {[
                     { label: 'Name',         value: user.name || session?.user?.name || '—' },
@@ -6177,15 +6207,15 @@ export default function UserProfilePage() {
                     { label: 'Profile ID',   value: `@${userId}` },
                   ].map(({ label, value }) => (
                     <div key={label} className="flex items-center justify-between gap-4 px-5 py-3">
-                      <span className="text-[11.5px] text-white/30 font-medium shrink-0">{label}</span>
-                      <span className="text-[12px] text-white/60 font-medium text-right truncate max-w-[200px] sm:max-w-none">{value}</span>
+                      <span className="text-[11.5px] pf-ink-4 font-medium shrink-0">{label}</span>
+                      <span className="text-[12px] pf-ink-2 font-medium text-right truncate max-w-[200px] sm:max-w-none">{value}</span>
                     </div>
                   ))}
                   <div className="px-5 py-4">
                     <button
                       type="button"
                       onClick={() => setEditOpen(true)}
-                      className="flex items-center gap-2 h-9 px-4 rounded-[11px] text-[12.5px] font-semibold text-white/70 hover:text-white/90 transition-colors"
+                      className="flex items-center gap-2 h-9 px-4 rounded-[11px] text-[12.5px] font-semibold pf-ink-2 pf-ink-h transition-colors"
                       style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
                     >
                       <Edit2 className="h-3.5 w-3.5" />
@@ -6198,12 +6228,12 @@ export default function UserProfilePage() {
               {/* ── Appearance ── */}
               <Section id="appearance" title="Appearance" subtitle="Display and theme preferences"
                 badge={colorMode === 'dark' ? 'Dark' : 'Light'} badgeColor={colorMode === 'dark' ? 'rgba(129,140,248,0.75)' : 'rgba(251,191,36,0.80)'}
-                icon={colorMode === 'dark' ? <Moon className="h-3.5 w-3.5 text-white/40" /> : <Sun className="h-3.5 w-3.5 text-amber-400/60" />}>
+                icon={colorMode === 'dark' ? <Moon className="h-3.5 w-3.5 pf-ink-3" /> : <Sun className="h-3.5 w-3.5 text-amber-400/60" />}>
                 <div className="px-5 py-4">
                   <div className="flex items-center justify-between gap-4">
                     <div className="min-w-0">
-                      <p className="text-[12.5px] font-semibold text-white/70">Night Mode</p>
-                      <p className="text-[11px] text-white/28 mt-0.5">Toggle between dark and light interface</p>
+                      <p className="text-[12.5px] font-semibold pf-ink-2">Night Mode</p>
+                      <p className="text-[11px] pf-ink-4 mt-0.5">Toggle between dark and light interface</p>
                     </div>
                     <button
                       type="button"
@@ -6211,7 +6241,7 @@ export default function UserProfilePage() {
                       className={`relative shrink-0 flex h-6 w-11 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${colorMode === 'dark' ? 'bg-indigo-500/70' : 'bg-amber-400/70'}`}
                       role="switch" aria-checked={colorMode === 'dark'} aria-label="Toggle night mode"
                     >
-                      <span className={`absolute top-0.5 h-5 w-5 rounded-full shadow transition-transform duration-200 flex items-center justify-center ${colorMode === 'dark' ? 'translate-x-5 bg-white' : 'translate-x-0.5 bg-white'}`}>
+                      <span className={`absolute top-0.5 h-5 w-5 rounded-full shadow transition-transform duration-200 flex items-center justify-center ${colorMode === 'dark' ? 'translate-x-5 pf-solid' : 'translate-x-0.5 pf-solid'}`}>
                         {colorMode === 'dark'
                           ? <Moon className="h-3 w-3 text-indigo-500" />
                           : <Sun className="h-3 w-3 text-amber-500" />}
@@ -6224,7 +6254,7 @@ export default function UserProfilePage() {
               {/* ── Privacy ── */}
               <Section id="privacy" title="Privacy" subtitle="Visibility and profile data"
                 badge={(profile as { openToWork?: boolean }).openToWork ? 'Open to Work · Public' : 'Public'}
-                icon={<Shield className="h-3.5 w-3.5 text-white/40" />}>
+                icon={<Shield className="h-3.5 w-3.5 pf-ink-3" />}>
                 <div className="divide-y divide-white/[0.04]">
                   {[
                     { label: 'Profile visibility', value: 'Public',    note: 'Visible to everyone on Docrud' },
@@ -6233,8 +6263,8 @@ export default function UserProfilePage() {
                   ].map(({ label, value, note }) => (
                     <div key={label} className="flex items-start justify-between gap-4 px-5 py-3">
                       <div className="min-w-0">
-                        <p className="text-[12px] text-white/60 font-medium">{label}</p>
-                        <p className="text-[10.5px] text-white/25 mt-0.5 truncate">{note}</p>
+                        <p className="text-[12px] pf-ink-2 font-medium">{label}</p>
+                        <p className="text-[10.5px] pf-ink-4 mt-0.5 truncate">{note}</p>
                       </div>
                       <span className="shrink-0 text-[11px] font-semibold px-2.5 py-1 rounded-full"
                         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.40)' }}>
@@ -6248,12 +6278,12 @@ export default function UserProfilePage() {
               {/* ── Email Notifications ── */}
               <Section id="notifications" title="Email Notifications" subtitle="Choose which alerts to receive"
                 badge={`${enabledNotifCount} / 8 on`}
-                icon={<Mail className="h-3.5 w-3.5 text-white/40" />}>
+                icon={<Mail className="h-3.5 w-3.5 pf-ink-3" />}>
                 <div className="divide-y divide-white/[0.04]">
                   {emailPrefsSaving && (
                     <div className="px-5 py-2 flex items-center gap-2">
                       <span className="h-1.5 w-1.5 rounded-full bg-indigo-400/60 animate-pulse" />
-                      <span className="text-[10px] text-white/22">Saving…</span>
+                      <span className="text-[10px] pf-ink-4">Saving…</span>
                     </div>
                   )}
                   {([
@@ -6270,16 +6300,16 @@ export default function UserProfilePage() {
                     return (
                       <div key={key} className="flex items-center justify-between gap-4 px-5 py-3">
                         <div className="min-w-0">
-                          <p className="text-[12px] text-white/60 font-medium">{label}</p>
-                          <p className="text-[10.5px] text-white/25 mt-0.5">{desc}</p>
+                          <p className="text-[12px] pf-ink-2 font-medium">{label}</p>
+                          <p className="text-[10.5px] pf-ink-4 mt-0.5">{desc}</p>
                         </div>
                         <button
                           type="button"
                           onClick={() => toggleEmailPref(key, !enabled)}
-                          className={`relative shrink-0 flex h-5 w-9 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${enabled ? 'bg-emerald-500/75' : 'bg-white/[0.08]'}`}
+                          className={`relative shrink-0 flex h-5 w-9 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${enabled ? 'bg-emerald-500/75' : 'pf-s3'}`}
                           role="switch" aria-checked={enabled} aria-label={label}
                         >
-                          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          <span className={`absolute top-0.5 h-4 w-4 rounded-full pf-solid shadow transition-transform duration-200 ${enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
                         </button>
                       </div>
                     );
@@ -6290,7 +6320,7 @@ export default function UserProfilePage() {
               {/* ── Linked profiles ── */}
               <Section id="linked" title="Linked Profiles" subtitle="Connected social accounts"
                 badge={linkedCount > 0 ? `${linkedCount} linked` : 'None linked'}
-                icon={<Link2 className="h-3.5 w-3.5 text-white/40" />}>
+                icon={<Link2 className="h-3.5 w-3.5 pf-ink-3" />}>
                 <div className="px-5 py-4 flex flex-wrap gap-2">
                   {[
                     { key: 'linkedinUrl', Icon: Linkedin, label: 'LinkedIn', color: '#0a66c2' },
@@ -6306,7 +6336,7 @@ export default function UserProfilePage() {
                         <span className="text-[11.5px] font-medium" style={{ color: url ? 'rgba(255,255,255,0.60)' : 'rgba(255,255,255,0.20)' }}>{label}</span>
                         {url
                           ? <CheckCircle className="h-3 w-3 text-emerald-400/70" />
-                          : <span className="text-[9.5px] text-white/18">Not linked</span>}
+                          : <span className="text-[9.5px] pf-deco">Not linked</span>}
                       </div>
                     );
                   })}
@@ -6323,15 +6353,15 @@ export default function UserProfilePage() {
               {/* ── Session ── */}
               <Section id="session" title="Session" subtitle="Active login management"
                 badge="Signed in" badgeColor="rgba(52,211,153,0.75)"
-                icon={<LogOut className="h-3.5 w-3.5 text-white/40" />}>
+                icon={<LogOut className="h-3.5 w-3.5 pf-ink-3" />}>
                 <div className="px-5 py-4 flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-[12.5px] text-white/60 font-medium">Sign out of Docrud</p>
-                    <p className="text-[11px] text-white/25 mt-0.5">You&apos;ll be redirected to the login page</p>
+                    <p className="text-[12.5px] pf-ink-2 font-medium">Sign out of Docrud</p>
+                    <p className="text-[11px] pf-ink-4 mt-0.5">You&apos;ll be redirected to the login page</p>
                   </div>
                   <button
                     onClick={() => void signOut({ callbackUrl: '/onboarding' })}
-                    className="shrink-0 flex items-center gap-2 h-8 px-3.5 rounded-[10px] border border-white/[0.07] bg-white/[0.03] text-white/45 text-[12px] font-medium hover:bg-white/[0.07] hover:text-white/70 transition-colors"
+                    className="shrink-0 flex items-center gap-2 h-8 px-3.5 rounded-[10px] border pf-rim pf-s1 pf-ink-3 text-[12px] font-medium pf-s2-h pf-ink-h transition-colors"
                   >
                     <LogOut className="h-3.5 w-3.5" />
                     Sign out
@@ -6359,8 +6389,8 @@ export default function UserProfilePage() {
                 <div className="px-5 py-5">
                   {pfLoading ? (
                     <div className="flex items-center gap-2">
-                      <div className="h-1.5 w-1.5 rounded-full bg-white/20 animate-pulse" />
-                      <span className="text-[11.5px] text-white/25">Checking status…</span>
+                      <div className="h-1.5 w-1.5 rounded-full pf-s4 animate-pulse" />
+                      <span className="text-[11.5px] pf-ink-4">Checking status…</span>
                     </div>
                   ) : profile.publicFace ? (
                     <div className="space-y-3">
@@ -6370,7 +6400,7 @@ export default function UserProfilePage() {
                         <span className="text-[11px] font-semibold" style={{ color: 'rgba(215,175,90,0.85)' }}>{PUBLIC_FACE_CATEGORY_LABELS[profile.publicFace.category as import('@/types/document').PublicFaceCategory] || 'Public Figure'}</span>
                         <span className="text-[10px] font-semibold text-emerald-400/80 ml-0.5">✓ Verified</span>
                       </div>
-                      <p className="text-[12px] text-white/35 leading-relaxed">
+                      <p className="text-[12px] pf-ink-3 leading-relaxed">
                         Your profile carries the verified Public Face badge and is listed in the{' '}
                         <a href="/public-faces" className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 transition">Public Faces directory</a>.
                         Your inbox is protected — you can still initiate conversations with anyone.
@@ -6384,7 +6414,7 @@ export default function UserProfilePage() {
                           {pfApplication.status === 'under_review' ? 'Under Review' : 'Application Pending'}
                         </span>
                       </div>
-                      <p className="text-[12px] text-white/30 leading-relaxed">
+                      <p className="text-[12px] pf-ink-4 leading-relaxed">
                         Submitted on {pfApplication.submittedAt ? new Date(pfApplication.submittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}.
                         Our team reviews within 3–5 business days.
                       </p>
@@ -6393,20 +6423,20 @@ export default function UserProfilePage() {
                     <div className="space-y-3">
                       <span className="text-[12px] font-semibold text-rose-400/75">Application Not Approved</span>
                       {pfApplication.adminNote && (
-                        <p className="text-[11.5px] text-white/30 italic leading-relaxed">&ldquo;{pfApplication.adminNote}&rdquo;</p>
+                        <p className="text-[11.5px] pf-ink-4 italic leading-relaxed">&ldquo;{pfApplication.adminNote}&rdquo;</p>
                       )}
-                      <p className="text-[11.5px] text-white/28">You may strengthen your application and reapply.</p>
+                      <p className="text-[11.5px] pf-ink-4">You may strengthen your application and reapply.</p>
                       <button type="button" onClick={() => setShowPFForm(true)}
-                        className="inline-flex items-center gap-2 rounded-[10px] px-4 py-2 text-[12px] font-semibold text-white/70 transition hover:bg-white/[0.07]"
+                        className="inline-flex items-center gap-2 rounded-[10px] px-4 py-2 text-[12px] font-semibold pf-ink-2 transition pf-s2-h"
                         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)' }}>
                         Reapply for Public Face
                       </button>
                     </div>
                   ) : (
                     <div>
-                      <p className="text-[12px] text-white/35 leading-relaxed mb-4">
+                      <p className="text-[12px] pf-ink-3 leading-relaxed mb-4">
                         A programme for recognised personalities. Apply to receive the verified{' '}
-                        <span className="text-white/60 font-medium">Public Face</span> badge and exclusive platform privileges.
+                        <span className="pf-ink-2 font-medium">Public Face</span> badge and exclusive platform privileges.
                       </p>
                       <div className="space-y-1.5 mb-4">
                         {[
@@ -6419,8 +6449,8 @@ export default function UserProfilePage() {
                             style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
                             <span className="text-indigo-400/50 text-[7px] mt-[4px] shrink-0">◆</span>
                             <div className="min-w-0">
-                              <p className="text-[11.5px] font-medium text-white/58">{b.label}</p>
-                              <p className="text-[10.5px] text-white/22 mt-px">{b.sub}</p>
+                              <p className="text-[11.5px] font-medium pf-ink-2">{b.label}</p>
+                              <p className="text-[10.5px] pf-ink-4 mt-px">{b.sub}</p>
                             </div>
                           </div>
                         ))}
@@ -6428,7 +6458,7 @@ export default function UserProfilePage() {
                       <button
                         type="button"
                         onClick={() => setShowPFForm(true)}
-                        className="w-full flex items-center justify-center gap-2 rounded-[10px] py-2.5 text-[12.5px] font-semibold text-white transition-all hover:opacity-90 active:scale-[0.99]"
+                        className="w-full flex items-center justify-center gap-2 rounded-[10px] py-2.5 text-[12.5px] font-semibold pf-ink transition-all hover:opacity-90 active:scale-[0.99]"
                         style={{ background: 'linear-gradient(135deg,#4f46e5,#6366f1)', boxShadow: '0 3px 12px rgba(79,70,229,0.28)' }}
                       >
                         <svg width="12" height="12" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="white" fillOpacity="0.18"/><path d="M10 4.5l1.4 3.1 3.4.3-2.5 2.2.8 3.3L10 11.8l-3.1 1.6.8-3.3-2.5-2.2 3.4-.3z" fill="white" opacity="0.95"/></svg>
@@ -6449,9 +6479,9 @@ export default function UserProfilePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <PauseCircle className="h-3.5 w-3.5 text-amber-400/65 shrink-0" />
-                        <p className="text-[12.5px] text-white/65 font-semibold">Deactivate account</p>
+                        <p className="text-[12.5px] pf-ink-2 font-semibold">Deactivate account</p>
                       </div>
-                      <p className="text-[11px] text-white/28 leading-relaxed">Temporarily hide your profile. All data is preserved — log in anytime to restore.</p>
+                      <p className="text-[11px] pf-ink-4 leading-relaxed">Temporarily hide your profile. All data is preserved — log in anytime to restore.</p>
                     </div>
                     <button
                       type="button"
@@ -6467,7 +6497,7 @@ export default function UserProfilePage() {
                         <Trash2 className="h-3.5 w-3.5 text-rose-400/65 shrink-0" />
                         <p className="text-[12.5px] text-rose-400/80 font-semibold">Delete account permanently</p>
                       </div>
-                      <p className="text-[11px] text-white/28 leading-relaxed">Permanently erase your profile, posts, gigs, and all data. This cannot be undone.</p>
+                      <p className="text-[11px] pf-ink-4 leading-relaxed">Permanently erase your profile, posts, gigs, and all data. This cannot be undone.</p>
                     </div>
                     <button
                       type="button"
@@ -6492,7 +6522,7 @@ export default function UserProfilePage() {
             onClick={() => { if (!acctSending && acctStep !== 'done') setAccountModal(false); }}
           >
             <div
-              className="relative w-full max-w-md rounded-[24px] border border-white/[0.08] bg-[#0d0e11] shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md rounded-[24px] border pf-rim-2 pf-modal shadow-2xl overflow-hidden"
               style={{ maxHeight: '90dvh', overflowY: 'auto' }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -6517,10 +6547,10 @@ export default function UserProfilePage() {
                         : <PauseCircle className="h-5 w-5 text-amber-400" />}
                     </div>
                     <div>
-                      <h2 className="text-[15px] font-bold text-white">
+                      <h2 className="text-[15px] font-bold pf-ink">
                         {acctAction === 'delete' ? 'Delete Account' : 'Deactivate Account'}
                       </h2>
-                      <p className="text-[11.5px] text-white/35 mt-0.5">
+                      <p className="text-[11.5px] pf-ink-3 mt-0.5">
                         {acctStep === 'otp' ? 'Enter the OTP sent to your email'
                           : acctStep === 'done' ? 'All done — signing you out'
                           : 'Verify your identity to continue'}
@@ -6529,7 +6559,7 @@ export default function UserProfilePage() {
                   </div>
                   {acctStep !== 'done' && (
                     <button type="button" onClick={() => setAccountModal(false)} disabled={acctSending}
-                      className="flex h-8 w-8 items-center justify-center rounded-full text-white/25 hover:text-white/60 hover:bg-white/[0.06] transition-colors">
+                      className="flex h-8 w-8 items-center justify-center rounded-full pf-ink-4 pf-ink-h pf-s2-h transition-colors">
                       <X className="h-4 w-4" />
                     </button>
                   )}
@@ -6541,22 +6571,22 @@ export default function UserProfilePage() {
                     {acctAction === 'delete' ? (
                       <div className="rounded-[14px] border border-rose-500/[0.22] bg-rose-500/[0.06] p-4">
                         <p className="text-[13px] font-semibold text-rose-300 mb-1.5">⚠️ This cannot be undone</p>
-                        <p className="text-[12.5px] text-white/45 leading-relaxed">
+                        <p className="text-[12.5px] pf-ink-3 leading-relaxed">
                           All your data — profile, posts, gigs, connections, documents — will be
-                          <strong className="text-white/70"> permanently and irreversibly deleted</strong>.
+                          <strong className="pf-ink-2"> permanently and irreversibly deleted</strong>.
                         </p>
                       </div>
                     ) : (
                       <>
                         <div className="rounded-[14px] border border-amber-500/[0.20] bg-amber-500/[0.06] p-4">
                           <p className="text-[13px] font-semibold text-amber-300 mb-1.5">⏸ Temporary deactivation</p>
-                          <p className="text-[12.5px] text-white/45 leading-relaxed">
+                          <p className="text-[12.5px] pf-ink-3 leading-relaxed">
                             Your profile will be hidden. All data stays safe.
-                            <strong className="text-white/70"> Log back in anytime</strong> to instantly restore your account.
+                            <strong className="pf-ink-2"> Log back in anytime</strong> to instantly restore your account.
                           </p>
                         </div>
                         <div>
-                          <p className="text-[12px] text-white/45 font-medium mb-2.5">How long do you want to be away?</p>
+                          <p className="text-[12px] pf-ink-3 font-medium mb-2.5">How long do you want to be away?</p>
                           <div className="grid grid-cols-2 gap-2">
                             {([
                               { v: 30,   l: '30 days' },
@@ -6583,7 +6613,7 @@ export default function UserProfilePage() {
                             placeholder="Or enter custom days (7–365)"
                             value={acctCustomDays}
                             onChange={(e) => { setAcctCustomDays(e.target.value); setAcctDuration(null); }}
-                            className="mt-2 w-full rounded-[12px] border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-[13px] text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/40 focus:bg-white/[0.07] transition"
+                            className="mt-2 w-full rounded-[12px] border pf-rim-2 pf-s2 px-4 py-2.5 text-[13px] pf-ink pf-ph focus:outline-none focus:border-amber-500/40 pf-s2-h transition"
                           />
                         </div>
                       </>
@@ -6595,7 +6625,7 @@ export default function UserProfilePage() {
 
                     <div className="flex gap-2.5 pt-1">
                       <button type="button" onClick={() => setAccountModal(false)}
-                        className="flex-1 h-11 rounded-[14px] border border-white/[0.08] bg-white/[0.04] text-[13px] font-medium text-white/45 hover:bg-white/[0.08] hover:text-white/75 transition">
+                        className="flex-1 h-11 rounded-[14px] border pf-rim-2 pf-s2 text-[13px] font-medium pf-ink-3 pf-s2-h pf-ink-h transition">
                         Cancel
                       </button>
                       <button type="button" onClick={acctSendOtp}
@@ -6604,7 +6634,7 @@ export default function UserProfilePage() {
                         style={{ background: acctAction === 'delete' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff' }}
                       >
                         {acctSending
-                          ? <><span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />Sending…</>
+                          ? <><span className="h-4 w-4 rounded-full border-2 pf-rim-3 border-t-white animate-spin" />Sending…</>
                           : 'Send OTP to my email'}
                       </button>
                     </div>
@@ -6614,24 +6644,24 @@ export default function UserProfilePage() {
                 {/* Step: OTP */}
                 {acctStep === 'otp' && (
                   <div className="space-y-5">
-                    <div className="rounded-[14px] border border-white/[0.07] bg-white/[0.03] px-4 py-3.5">
-                      <p className="text-[12.5px] text-white/50 leading-relaxed">
+                    <div className="rounded-[14px] border pf-rim pf-s1 px-4 py-3.5">
+                      <p className="text-[12.5px] pf-ink-3 leading-relaxed">
                         A 6-digit code was sent to{' '}
-                        <strong className="text-white/75">{session?.user?.email}</strong>.
+                        <strong className="pf-ink-2">{session?.user?.email}</strong>.
                         {acctOtpExpiry && (
-                          <> Expires at <strong className="text-white/65">{new Date(acctOtpExpiry).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</strong>.</>
+                          <> Expires at <strong className="pf-ink-2">{new Date(acctOtpExpiry).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</strong>.</>
                         )}
                       </p>
                     </div>
 
                     <div>
-                      <label className="block text-[10.5px] font-semibold text-white/35 uppercase tracking-[0.14em] mb-2.5">One-Time Password</label>
+                      <label className="block text-[10.5px] font-semibold pf-ink-3 uppercase tracking-[0.14em] mb-2.5">One-Time Password</label>
                       <input
                         type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} autoFocus
                         value={acctOtp}
                         onChange={(e) => { setAcctOtp(e.target.value.replace(/\D/g, '').slice(0, 6)); setAcctError(''); }}
                         placeholder="000000"
-                        className="w-full text-center rounded-[16px] border border-white/[0.08] bg-white/[0.04] px-4 py-4 text-white placeholder:text-white/12 focus:outline-none focus:border-indigo-500/40 focus:bg-white/[0.07] transition"
+                        className="w-full text-center rounded-[16px] border pf-rim-2 pf-s2 px-4 py-4 pf-ink pf-deco focus:outline-none focus:border-indigo-500/40 pf-s2-h transition"
                         style={{ fontSize: 32, fontWeight: 900, letterSpacing: '0.28em', fontVariantNumeric: 'tabular-nums' }}
                       />
                     </div>
@@ -6643,7 +6673,7 @@ export default function UserProfilePage() {
                     <div className="flex gap-2.5">
                       <button type="button"
                         onClick={() => { setAcctStep('choose'); setAcctOtp(''); setAcctError(''); }}
-                        className="h-11 px-4 rounded-[14px] border border-white/[0.08] bg-white/[0.04] text-[13px] text-white/45 hover:bg-white/[0.08] hover:text-white/75 transition">
+                        className="h-11 px-4 rounded-[14px] border pf-rim-2 pf-s2 text-[13px] pf-ink-3 pf-s2-h pf-ink-h transition">
                         ← Back
                       </button>
                       <button type="button"
@@ -6653,14 +6683,14 @@ export default function UserProfilePage() {
                         style={{ background: acctAction === 'delete' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff' }}
                       >
                         {acctSending
-                          ? <><span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />{acctAction === 'delete' ? 'Deleting…' : 'Deactivating…'}</>
+                          ? <><span className="h-4 w-4 rounded-full border-2 pf-rim-3 border-t-white animate-spin" />{acctAction === 'delete' ? 'Deleting…' : 'Deactivating…'}</>
                           : acctAction === 'delete' ? '🗑 Permanently Delete' : '⏸ Deactivate Account'}
                       </button>
                     </div>
 
                     <p className="text-center">
                       <button type="button" disabled={acctResendCooldown > 0 || acctSending} onClick={acctSendOtp}
-                        className="text-[12px] text-white/28 hover:text-white/55 disabled:opacity-35 transition">
+                        className="text-[12px] pf-ink-4 pf-ink-h disabled:opacity-35 transition">
                         {acctResendCooldown > 0 ? `Resend in ${acctResendCooldown}s` : 'Didn\'t receive it? Resend OTP'}
                       </button>
                     </p>
@@ -6677,19 +6707,19 @@ export default function UserProfilePage() {
                           ? <Trash2 className="h-7 w-7 text-rose-400" />
                           : <CheckCircle className="h-7 w-7 text-amber-400" />}
                       </div>
-                      <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[10px]">✓</span>
+                      <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 pf-ink text-[10px]">✓</span>
                     </div>
                     <div>
-                      <p className="text-[15px] font-bold text-white">
+                      <p className="text-[15px] font-bold pf-ink">
                         {acctAction === 'delete' ? 'Account Deleted' : 'Account Deactivated'}
                       </p>
-                      <p className="text-[12.5px] text-white/38 mt-2 leading-relaxed max-w-[280px] mx-auto">
+                      <p className="text-[12.5px] pf-ink-3 mt-2 leading-relaxed max-w-[280px] mx-auto">
                         {acctAction === 'delete'
                           ? 'All your data has been permanently erased. Redirecting you now…'
                           : 'Your account is hidden. Log back in anytime to reactivate. Redirecting…'}
                       </p>
                     </div>
-                    <div className="h-1 w-full max-w-[160px] mx-auto rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-1 w-full max-w-[160px] mx-auto rounded-full pf-s2 overflow-hidden">
                       <div className="h-full rounded-full animate-[progress_2.5s_linear_forwards]"
                         style={{ background: acctAction === 'delete' ? '#ef4444' : '#f59e0b', width: '100%' }} />
                     </div>
@@ -6729,13 +6759,13 @@ export default function UserProfilePage() {
                 {panelStyle}
                 {['followers', 'following'].map((side) => (
                   <div key={side} className="conn-panel rounded-[20px] p-5">
-                    <div className="h-3 w-24 rounded bg-white/[0.06] mb-4" />
+                    <div className="h-3 w-24 rounded pf-s2 mb-4" />
                     {[0, 1, 2, 3].map((i) => (
                       <div key={i} className="flex items-center gap-3 py-3">
-                        <div className="h-9 w-9 shrink-0 rounded-full bg-white/[0.06]" />
+                        <div className="h-9 w-9 shrink-0 rounded-full pf-s2" />
                         <div className="min-w-0 flex-1">
-                          <div className="h-3 w-32 rounded bg-white/[0.06]" />
-                          <div className="mt-1.5 h-2.5 w-20 rounded bg-white/[0.04]" />
+                          <div className="h-3 w-32 rounded pf-s2" />
+                          <div className="mt-1.5 h-2.5 w-20 rounded pf-s2" />
                         </div>
                       </div>
                     ))}
@@ -6748,12 +6778,12 @@ export default function UserProfilePage() {
           if (!connectionsData) {
             return (
               <div className="py-16 text-center">
-                <UserPlus className="h-8 w-8 text-white/15 mx-auto mb-3" />
-                <p className="text-[13px] text-white/30">No connections loaded</p>
+                <UserPlus className="h-8 w-8 pf-deco mx-auto mb-3" />
+                <p className="text-[13px] pf-ink-4">No connections loaded</p>
                 <button
                   type="button"
                   onClick={loadConnections}
-                  className="mt-4 h-8 px-4 rounded-[10px] border border-white/[0.10] bg-white/[0.04] text-[12px] text-white/50 hover:text-white transition"
+                  className="mt-4 h-8 px-4 rounded-[10px] border pf-rim-2 pf-s2 text-[12px] pf-ink-3 pf-ink-h transition"
                 >
                   Load connections
                 </button>
@@ -6768,13 +6798,13 @@ export default function UserProfilePage() {
               {panelStyle}
               {/* Followers */}
               <div className="conn-panel rounded-[20px] p-5">
-                <h3 className="text-[11px] font-semibold uppercase tracking-widest text-white/30 mb-4">
+                <h3 className="text-[11px] font-semibold uppercase tracking-widest pf-ink-4 mb-4">
                   Followers · {followers.length}
                 </h3>
                 {followers.length === 0 ? (
                   <div className="py-8 text-center">
-                    <UserPlus className="h-6 w-6 text-white/10 mx-auto mb-2" />
-                    <p className="text-[12px] text-white/25">No followers yet</p>
+                    <UserPlus className="h-6 w-6 pf-deco mx-auto mb-2" />
+                    <p className="text-[12px] pf-ink-4">No followers yet</p>
                   </div>
                 ) : (
                   <div className="divide-y-0">
@@ -6794,13 +6824,13 @@ export default function UserProfilePage() {
 
               {/* Following */}
               <div className="conn-panel rounded-[20px] p-5">
-                <h3 className="text-[11px] font-semibold uppercase tracking-widest text-white/30 mb-4">
+                <h3 className="text-[11px] font-semibold uppercase tracking-widest pf-ink-4 mb-4">
                   Following · {following.length}
                 </h3>
                 {following.length === 0 ? (
                   <div className="py-8 text-center">
-                    <UserPlus className="h-6 w-6 text-white/10 mx-auto mb-2" />
-                    <p className="text-[12px] text-white/25">You&apos;re not following anyone yet</p>
+                    <UserPlus className="h-6 w-6 pf-deco mx-auto mb-2" />
+                    <p className="text-[12px] pf-ink-4">You&apos;re not following anyone yet</p>
                   </div>
                 ) : (
                   <div className="divide-y-0">
@@ -6826,7 +6856,7 @@ export default function UserProfilePage() {
       {/* ── Catalogue Page Editor ── */}
       {showCatalogueEditor && isOwnProfile && (() => {
         const grad = `linear-gradient(135deg,${catalogueDraft.accentColor ?? '#6366f1'},${catalogueDraft.accentColorSecondary ?? '#8b5cf6'})`;
-        const inp = 'w-full rounded-[10px] border border-white/[0.09] bg-white/[0.05] px-3 py-2 text-[12.5px] text-white placeholder-white/20 outline-none focus:border-violet-500/40 focus:bg-violet-500/[0.03] transition-all';
+        const inp = 'w-full rounded-[10px] border pf-rim-2 pf-s2 px-3 py-2 text-[12.5px] pf-ink placeholder-white/20 outline-none focus:border-violet-500/40 focus:bg-violet-500/[0.03] transition-all';
         async function saveCatalogueSettings() {
           setCatalogueSaving(true);
           try {
@@ -6836,41 +6866,41 @@ export default function UserProfilePage() {
           finally { setCatalogueSaving(false); }
         }
         return (
-          <div className="fixed inset-0 z-[80] flex flex-col bg-[#0a0a0b]">
+          <div className="fixed inset-0 z-[80] flex flex-col pf-sheet">
             {/* Top bar */}
-            <div className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.07] bg-[#111113] shrink-0">
+            <div className="flex items-center gap-3 px-4 py-3 border-b pf-rim pf-modal shrink-0">
               <div className="flex items-center gap-2">
                 <Palette className="h-4 w-4 text-violet-400" />
-                <span className="font-bold text-white text-[14px]">Edit Catalogue Page</span>
+                <span className="font-bold pf-ink text-[14px]">Edit Catalogue Page</span>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 {/* Device toggle */}
-                <div className="flex rounded-[9px] border border-white/[0.09] bg-white/[0.04] overflow-hidden">
+                <div className="flex rounded-[9px] border pf-rim-2 pf-s2 overflow-hidden">
                   <button type="button" onClick={() => setPreviewDevice('desktop')} title="Desktop preview"
-                    className={`flex items-center justify-center px-2.5 py-1.5 transition-all ${previewDevice === 'desktop' ? 'bg-white/[0.12] text-white' : 'text-white/35 hover:text-white/60'}`}>
+                    className={`flex items-center justify-center px-2.5 py-1.5 transition-all ${previewDevice === 'desktop' ? 'pf-s4 pf-ink' : 'pf-ink-3 pf-ink-h'}`}>
                     <Laptop className="h-3.5 w-3.5" />
                   </button>
                   <button type="button" onClick={() => setPreviewDevice('mobile')} title="Mobile preview"
-                    className={`flex items-center justify-center px-2.5 py-1.5 transition-all ${previewDevice === 'mobile' ? 'bg-white/[0.12] text-white' : 'text-white/35 hover:text-white/60'}`}>
+                    className={`flex items-center justify-center px-2.5 py-1.5 transition-all ${previewDevice === 'mobile' ? 'pf-s4 pf-ink' : 'pf-ink-3 pf-ink-h'}`}>
                     <Smartphone className="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <button type="button" onClick={() => setPreviewKey(k => k + 1)}
-                  className="flex items-center gap-1 rounded-[9px] border border-white/[0.09] bg-white/[0.04] px-2.5 py-1.5 text-[11px] font-semibold text-white/40 hover:text-white/70 transition">
+                  className="flex items-center gap-1 rounded-[9px] border pf-rim-2 pf-s2 px-2.5 py-1.5 text-[11px] font-semibold pf-ink-3 pf-ink-h transition">
                   <RefreshCw className="h-3 w-3" /> Refresh preview
                 </button>
                 <button type="button" onClick={() => setCatalogueDraft(catalogueSettings)}
-                  className="rounded-[9px] border border-white/[0.09] bg-white/[0.04] px-3 py-1.5 text-[11.5px] font-semibold text-white/45 hover:text-white/80 transition">
+                  className="rounded-[9px] border pf-rim-2 pf-s2 px-3 py-1.5 text-[11.5px] font-semibold pf-ink-3 pf-ink-h transition">
                   Reset
                 </button>
                 <button type="button" onClick={saveCatalogueSettings} disabled={catalogueSaving}
-                  className="flex items-center gap-1.5 rounded-[9px] px-4 py-1.5 text-[12px] font-bold text-white transition active:scale-[0.98] disabled:opacity-60"
+                  className="flex items-center gap-1.5 rounded-[9px] px-4 py-1.5 text-[12px] font-bold pf-ink transition active:scale-[0.98] disabled:opacity-60"
                   style={{ background: grad }}>
                   <Save className="h-3.5 w-3.5" /> {catalogueSaving ? 'Saving…' : 'Save & Apply'}
                 </button>
                 <button type="button" onClick={() => setShowCatalogueEditor(false)}
-                  className="h-8 w-8 rounded-full bg-white/[0.07] flex items-center justify-center hover:bg-white/[0.12] transition ml-1">
-                  <X className="h-4 w-4 text-white/60" />
+                  className="h-8 w-8 rounded-full pf-s3 flex items-center justify-center pf-s2-h transition ml-1">
+                  <X className="h-4 w-4 pf-ink-2" />
                 </button>
               </div>
             </div>
@@ -6879,28 +6909,28 @@ export default function UserProfilePage() {
             <div className="flex flex-1 overflow-hidden">
 
               {/* ── Left: Settings Panel ── */}
-              <div className="w-72 shrink-0 border-r border-white/[0.07] bg-[#111113] overflow-y-auto [scrollbar-width:none] flex flex-col">
+              <div className="w-72 shrink-0 border-r pf-rim pf-modal overflow-y-auto [scrollbar-width:none] flex flex-col">
                 <div className="px-4 py-4 space-y-6 flex-1">
 
                   {/* Banner & Avatar */}
                   <div>
-                    <p className="text-[9.5px] font-bold text-white/30 uppercase tracking-widest mb-3">Catalogue Banner & Avatar</p>
-                    <p className="text-[10px] text-white/20 mb-3 leading-relaxed">These only apply to your catalogue page — your main profile is not affected.</p>
+                    <p className="text-[9.5px] font-bold pf-ink-4 uppercase tracking-widest mb-3">Catalogue Banner & Avatar</p>
+                    <p className="text-[10px] pf-ink-4 mb-3 leading-relaxed">These only apply to your catalogue page — your main profile is not affected.</p>
                     <div className="space-y-3">
                       {/* Banner preview + URL */}
                       <div>
-                        <label className="block text-[10.5px] text-white/40 mb-1.5">Banner image URL</label>
-                        <div className="mb-2 h-20 w-full rounded-[10px] overflow-hidden border border-white/[0.09] bg-white/[0.03] flex items-center justify-center relative">
+                        <label className="block text-[10.5px] pf-ink-3 mb-1.5">Banner image URL</label>
+                        <div className="mb-2 h-20 w-full rounded-[10px] overflow-hidden border pf-rim-2 pf-s1 flex items-center justify-center relative">
                           {catalogueDraft.catalogueBannerUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={catalogueDraft.catalogueBannerUrl} alt="Banner preview" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           ) : (
-                            <span className="text-[10px] text-white/20">No custom banner — uses profile banner</span>
+                            <span className="text-[10px] pf-ink-4">No custom banner — uses profile banner</span>
                           )}
                           {catalogueDraft.catalogueBannerUrl && (
                             <button type="button" onClick={() => setCatalogueDraft(d => ({ ...d, catalogueBannerUrl: undefined }))}
                               className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-black/70 flex items-center justify-center hover:bg-red-500/80 transition">
-                              <X className="h-2.5 w-2.5 text-white" />
+                              <X className="h-2.5 w-2.5 pf-on-dark" />
                             </button>
                           )}
                         </div>
@@ -6909,17 +6939,17 @@ export default function UserProfilePage() {
                       </div>
                       {/* Avatar preview + URL */}
                       <div>
-                        <label className="block text-[10.5px] text-white/40 mb-1.5">Avatar / Profile photo URL</label>
+                        <label className="block text-[10.5px] pf-ink-3 mb-1.5">Avatar / Profile photo URL</label>
                         <div className="flex items-center gap-3 mb-2">
-                          <div className="h-14 w-14 rounded-[14px] overflow-hidden border border-white/[0.09] bg-white/[0.05] flex items-center justify-center shrink-0">
+                          <div className="h-14 w-14 rounded-[14px] overflow-hidden border pf-rim-2 pf-s2 flex items-center justify-center shrink-0">
                             {catalogueDraft.catalogueAvatarUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={catalogueDraft.catalogueAvatarUrl} alt="Avatar preview" className="w-full h-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                             ) : (
-                              <span className="text-[9px] text-white/20 text-center px-1">Profile photo</span>
+                              <span className="text-[9px] pf-ink-4 text-center px-1">Profile photo</span>
                             )}
                           </div>
-                          <p className="text-[10px] text-white/25 leading-relaxed">Uses your profile photo by default. Set a different one for the catalogue.</p>
+                          <p className="text-[10px] pf-ink-4 leading-relaxed">Uses your profile photo by default. Set a different one for the catalogue.</p>
                         </div>
                         <div className="flex gap-2">
                           <input value={catalogueDraft.catalogueAvatarUrl ?? ''} onChange={e => setCatalogueDraft(d => ({ ...d, catalogueAvatarUrl: e.target.value || undefined }))}
@@ -6937,24 +6967,24 @@ export default function UserProfilePage() {
 
                   {/* Page Identity */}
                   <div>
-                    <p className="text-[9.5px] font-bold text-white/30 uppercase tracking-widest mb-3">Page Identity</p>
+                    <p className="text-[9.5px] font-bold pf-ink-4 uppercase tracking-widest mb-3">Page Identity</p>
                     <div className="space-y-2.5">
                       <div>
-                        <label className="block text-[10.5px] text-white/40 mb-1">Page headline</label>
+                        <label className="block text-[10.5px] pf-ink-3 mb-1">Page headline</label>
                         <input value={catalogueDraft.headline ?? ''} onChange={e => setCatalogueDraft(d => ({ ...d, headline: e.target.value || undefined }))}
                           placeholder={data?.user.name ? `${data.user.name}'s Services` : 'My Services'} className={inp} />
                       </div>
                       <div>
-                        <label className="block text-[10.5px] text-white/40 mb-1">Subheadline / tagline</label>
+                        <label className="block text-[10.5px] pf-ink-3 mb-1">Subheadline / tagline</label>
                         <input value={catalogueDraft.subheadline ?? ''} onChange={e => setCatalogueDraft(d => ({ ...d, subheadline: e.target.value || undefined }))}
                           placeholder={data?.profile.headline ?? 'What you do'} className={inp} />
                       </div>
                       <div>
-                        <label className="block text-[10.5px] text-white/40 mb-1">Book button text</label>
+                        <label className="block text-[10.5px] pf-ink-3 mb-1">Book button text</label>
                         <input value={catalogueDraft.ctaText ?? ''} onChange={e => setCatalogueDraft(d => ({ ...d, ctaText: e.target.value || undefined }))}
                           placeholder="Book" className={inp} />
                         {/* Live button preview */}
-                        <div className="mt-2 h-7 rounded-[8px] flex items-center justify-center text-[11px] font-bold text-white" style={{ background: grad }}>
+                        <div className="mt-2 h-7 rounded-[8px] flex items-center justify-center text-[11px] font-bold pf-ink" style={{ background: grad }}>
                           {catalogueDraft.ctaText || 'Book'}
                         </div>
                       </div>
@@ -6963,26 +6993,26 @@ export default function UserProfilePage() {
 
                   {/* Accent Color */}
                   <div>
-                    <p className="text-[9.5px] font-bold text-white/30 uppercase tracking-widest mb-3">Accent Color</p>
+                    <p className="text-[9.5px] font-bold pf-ink-4 uppercase tracking-widest mb-3">Accent Color</p>
                     <div className="grid grid-cols-4 gap-1.5 mb-3">
                       {ACCENT_PRESETS_LOCAL.map(p => (
                         <button key={p.label} type="button" onClick={() => setCatalogueDraft(d => ({ ...d, accentColor: p.a, accentColorSecondary: p.b }))}
                           className={`h-8 rounded-[9px] relative transition-all ${catalogueDraft.accentColor === p.a ? 'ring-2 ring-white/70 ring-offset-1 ring-offset-[#111113] scale-105' : 'hover:scale-105'}`}
                           style={{ background: `linear-gradient(135deg,${p.a},${p.b})` }} title={p.label}>
-                          {catalogueDraft.accentColor === p.a && <Check className="h-3 w-3 text-white absolute inset-0 m-auto drop-shadow" />}
+                          {catalogueDraft.accentColor === p.a && <Check className="h-3 w-3 pf-ink absolute inset-0 m-auto drop-shadow" />}
                         </button>
                       ))}
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-[10px] text-white/30 mb-1">Primary</label>
+                        <label className="block text-[10px] pf-ink-4 mb-1">Primary</label>
                         <input type="color" value={catalogueDraft.accentColor ?? '#6366f1'} onChange={e => setCatalogueDraft(d => ({ ...d, accentColor: e.target.value }))}
-                          className="w-full h-8 rounded-[8px] border border-white/[0.09] bg-white/[0.04] px-1 cursor-pointer" />
+                          className="w-full h-8 rounded-[8px] border pf-rim-2 pf-s2 px-1 cursor-pointer" />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-white/30 mb-1">Secondary</label>
+                        <label className="block text-[10px] pf-ink-4 mb-1">Secondary</label>
                         <input type="color" value={catalogueDraft.accentColorSecondary ?? '#8b5cf6'} onChange={e => setCatalogueDraft(d => ({ ...d, accentColorSecondary: e.target.value }))}
-                          className="w-full h-8 rounded-[8px] border border-white/[0.09] bg-white/[0.04] px-1 cursor-pointer" />
+                          className="w-full h-8 rounded-[8px] border pf-rim-2 pf-s2 px-1 cursor-pointer" />
                       </div>
                     </div>
                     {/* Gradient bar preview */}
@@ -6991,13 +7021,13 @@ export default function UserProfilePage() {
 
                   {/* Layout */}
                   <div>
-                    <p className="text-[9.5px] font-bold text-white/30 uppercase tracking-widest mb-3">Layout</p>
+                    <p className="text-[9.5px] font-bold pf-ink-4 uppercase tracking-widest mb-3">Layout</p>
                     <div>
-                      <label className="block text-[10.5px] text-white/40 mb-2">Grid columns</label>
+                      <label className="block text-[10.5px] pf-ink-3 mb-2">Grid columns</label>
                       <div className="grid grid-cols-3 gap-1.5">
                         {([2, 3, 4] as const).map(n => (
                           <button key={n} type="button" onClick={() => setCatalogueDraft(d => ({ ...d, gridColumns: n }))}
-                            className={`py-2 rounded-[9px] border text-[12px] font-semibold transition-all ${(catalogueDraft.gridColumns ?? 3) === n ? 'border-violet-500/50 bg-violet-500/15 text-violet-300' : 'border-white/[0.09] bg-white/[0.04] text-white/40 hover:text-white/70'}`}>
+                            className={`py-2 rounded-[9px] border text-[12px] font-semibold transition-all ${(catalogueDraft.gridColumns ?? 3) === n ? 'border-violet-500/50 bg-violet-500/15 text-violet-300' : 'pf-rim-2 pf-s2 pf-ink-3 pf-ink-h'}`}>
                             {n} cols
                           </button>
                         ))}
@@ -7007,7 +7037,7 @@ export default function UserProfilePage() {
 
                   {/* Sections visibility */}
                   <div>
-                    <p className="text-[9.5px] font-bold text-white/30 uppercase tracking-widest mb-3">Sections</p>
+                    <p className="text-[9.5px] font-bold pf-ink-4 uppercase tracking-widest mb-3">Sections</p>
                     <div className="space-y-3">
                       {[
                         { key: 'showStats' as const, label: 'Stats bar', desc: 'Reviews, bookings, avg price' },
@@ -7018,12 +7048,12 @@ export default function UserProfilePage() {
                         return (
                           <div key={key} className="flex items-center justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="text-[12px] font-medium text-white/65 truncate">{label}</p>
-                              <p className="text-[10px] text-white/25">{desc}</p>
+                              <p className="text-[12px] font-medium pf-ink-2 truncate">{label}</p>
+                              <p className="text-[10px] pf-ink-4">{desc}</p>
                             </div>
                             <button type="button" onClick={() => setCatalogueDraft(d => ({ ...d, [key]: !on }))}
-                              className={`relative h-5 w-9 rounded-full shrink-0 transition-colors ${on ? 'bg-violet-500/70' : 'bg-white/[0.10]'}`}>
-                              <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
+                              className={`relative h-5 w-9 rounded-full shrink-0 transition-colors ${on ? 'bg-violet-500/70' : 'pf-s4'}`}>
+                              <div className={`absolute top-0.5 h-4 w-4 rounded-full pf-solid shadow-sm transition-all ${on ? 'left-[18px]' : 'left-0.5'}`} />
                             </button>
                           </div>
                         );
@@ -7033,22 +7063,22 @@ export default function UserProfilePage() {
                 </div>
 
                 {/* Settings panel footer note */}
-                <div className="px-4 py-3 border-t border-white/[0.06] shrink-0">
-                  <p className="text-[10px] text-white/20 text-center">Click <span className="text-white/40 font-semibold">Save & Apply</span> to publish your changes</p>
+                <div className="px-4 py-3 border-t pf-rim shrink-0">
+                  <p className="text-[10px] pf-ink-4 text-center">Click <span className="pf-ink-3 font-semibold">Save & Apply</span> to publish your changes</p>
                 </div>
               </div>
 
               {/* ── Right: Live Preview iframe ── */}
-              <div className="flex-1 flex flex-col bg-[#0a0a0b] overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2 border-b border-white/[0.05] shrink-0">
-                  <div className="flex-1 flex items-center gap-2 rounded-[8px] border border-white/[0.07] bg-white/[0.03] px-3 py-1.5">
-                    <span className="text-[10px] text-white/25">Preview:</span>
-                    <span className="text-[11px] text-white/45 font-mono truncate">/services/{userId}</span>
+              <div className="flex-1 flex flex-col pf-sheet overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2 border-b pf-rim shrink-0">
+                  <div className="flex-1 flex items-center gap-2 rounded-[8px] border pf-rim pf-s1 px-3 py-1.5">
+                    <span className="text-[10px] pf-ink-4">Preview:</span>
+                    <span className="text-[11px] pf-ink-3 font-mono truncate">/services/{userId}</span>
                   </div>
-                  <span className="text-[10px] text-white/20 shrink-0">{previewDevice === 'mobile' ? '390px' : '100%'}</span>
+                  <span className="text-[10px] pf-ink-4 shrink-0">{previewDevice === 'mobile' ? '390px' : '100%'}</span>
                 </div>
                 <div className="flex-1 overflow-hidden flex items-start justify-center p-4">
-                  <div className={`h-full bg-white rounded-[12px] overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.7)] transition-all duration-300 ${previewDevice === 'mobile' ? 'w-[390px]' : 'w-full'}`}
+                  <div className={`h-full pf-solid rounded-[12px] overflow-hidden shadow-[0_8px_40px_rgba(0,0,0,0.7)] transition-all duration-300 ${previewDevice === 'mobile' ? 'w-[390px]' : 'w-full'}`}
                     style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
                     <iframe
                       key={previewKey}
@@ -7060,8 +7090,8 @@ export default function UserProfilePage() {
                   </div>
                 </div>
                 {/* Preview note */}
-                <div className="px-4 py-2 border-t border-white/[0.05] shrink-0">
-                  <p className="text-[10px] text-white/20 text-center">Preview shows the saved version — hit <span className="text-white/35 font-semibold">Save & Apply</span> then <span className="text-white/35 font-semibold">Refresh preview</span> to see changes</p>
+                <div className="px-4 py-2 border-t pf-rim shrink-0">
+                  <p className="text-[10px] pf-ink-4 text-center">Preview shows the saved version — hit <span className="pf-ink-3 font-semibold">Save & Apply</span> then <span className="pf-ink-3 font-semibold">Refresh preview</span> to see changes</p>
                 </div>
               </div>
             </div>
@@ -7138,5 +7168,6 @@ export default function UserProfilePage() {
         />
       )}
     </div>
+    </DiscoverShell>
   );
 }

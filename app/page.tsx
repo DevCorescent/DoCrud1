@@ -4,21 +4,22 @@ import { cookies, headers } from 'next/headers';
 import NextDynamic from 'next/dynamic';
 import { buildPageMetadata } from '@/lib/seo';
 import { getThemeSettings } from '@/lib/server/settings';
-import { getAuthSession, resolveSessionUserId } from '@/lib/server/auth';
+import { getAuthSession } from '@/lib/server/auth';
 import { isSearchCrawlerUserAgent } from '@/lib/search-crawler';
 import { getSeoSettings, resolveSeo, DEFAULT_SEO_SETTINGS } from '@/lib/server/seo-settings';
-import { getHomepageConfig } from '@/lib/server/homepage-config';
-import { peekHiringCompanies } from '@/lib/server/hiring-companies';
 import { getPublishedHiringJobs } from '@/lib/server/hiring';
-import { seedViewerCounts } from '@/lib/server/recommendation-cache';
 import { getHeroBanners, heroPreloads } from '@/lib/server/hero-banners';
 
 export const dynamic = 'force-dynamic';
 
-// Client-only: avoids SSR/hydration mismatches from auth-conditional rendering
-const PublicHomepage = NextDynamic(() => import('@/components/PublicHomepage'), {
+/* Client-only: avoids SSR/hydration mismatches from auth-conditional rendering.
+
+   The loading shim matches the page's own ground colour rather than the old
+   dark one — a dark flash before a light page is more jarring than no
+   placeholder at all. */
+const DiscoverHome = NextDynamic(() => import('@/components/home/discover/DiscoverHome'), {
   ssr: false,
-  loading: () => <div className="h-screen w-full bg-[#0D0D0F]" />,
+  loading: () => <div className="h-screen w-full" style={{ background: '#eaf0fa' }} />,
 });
 
 /**
@@ -77,10 +78,9 @@ export default async function Home() {
      component had downloaded, parsed and mounted, and by then it was
      twenty-first in a queue of twenty-five. It is a sub-kilobyte cached read
      here. */
-  const [session, themeSettings, hpConfig, hero] = await Promise.all([
+  const [session, themeSettings, hero] = await Promise.all([
     getAuthSession().catch(() => null),
     getThemeSettings().catch(() => ({ softwareName: 'Docrud', accentLabel: 'Platform' })),
-    getHomepageConfig().catch(() => null),
     getHeroBanners().catch(() => ({ banners: [], heading: '' })),
   ]);
 
@@ -105,10 +105,6 @@ export default async function Home() {
      `interests`. Nothing writes `onboardingDone` from the homepage now; it is
      simply no longer consulted here. */
 
-  /* Warm cache only — deliberately NOT awaited into existence. Deriving this
-     cold means reading the whole 2.7 MB job store, which must never sit on the
-     path to first byte; null simply lets the browser fetch it as before. */
-  const initialCompanies = peekHiringCompanies();
 
   /* Start the job corpus loading, but DO NOT await it.
      On a cold process the corpus is a multi-megabyte read, and the browser's
@@ -127,23 +123,6 @@ export default async function Home() {
     ? { name: session.user.name ?? null, email: session.user.email ?? null }
     : null;
 
-  /* The two headline counts, seeded from the LAST computed values for this
-     viewer — never recomputed here. Producing them means running the
-     personalised ranking, which is tens of seconds on a cold job cache and must
-     never sit in front of a server render; `seedViewerCounts` only ever reads
-     what a recommendation route already worked out.
-
-     A null simply means "not known cheaply yet", and the card fetches as it
-     always did. Keyed by this session's user id, so one viewer's numbers can
-     never seed another's page. */
-  /* Keyed with the SAME resolver the recommendation routes use. Keying on
-     `session.user.id` alone would silently miss for any session where that
-     field is absent — the routes fall back to a stored-user lookup, and a
-     mismatched key means the seed never hits. */
-  const viewerId = session?.user ? await resolveSessionUserId(session).catch(() => null) : null;
-  const seededCounts = viewerId
-    ? await seedViewerCounts(viewerId).catch(() => ({ jobs: null, people: null }))
-    : { jobs: null, people: null };
 
   return (
     <>
@@ -165,16 +144,11 @@ export default async function Home() {
         <link key={p.href + p.media} rel="preload" as="image" href={p.href} media={p.media} fetchPriority="high" />
       ))}
 
-      <PublicHomepage
+      <DiscoverHome
         softwareName={themeSettings.softwareName}
-        accentLabel={themeSettings.accentLabel}
         guestMode={!session && isGuest}
-        initialHpConfig={hpConfig}
-        initialCompanies={initialCompanies}
-        initialViewer={initialViewer}
-        initialJobCount={seededCounts.jobs}
-        initialPeopleCount={seededCounts.people}
-        initialBanners={hero.banners}
+        viewer={initialViewer}
+        banners={hero.banners}
       />
     </>
   );

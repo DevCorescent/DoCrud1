@@ -1,0 +1,693 @@
+/**
+ * The sidebar, inside a shadow root.
+ *
+ * ═══ WHY A SHADOW ROOT ═══
+ *
+ * This used to be a plain <div> styled through the page's own cascade, and the
+ * page kept winning. A careers site with `div { border-radius: 999px }` or any
+ * `!important` on a structural property reshaped the sidebar — on some pages it
+ * rendered as a long pill. A shadow root ends that argument: nothing the
+ * employer's stylesheet says can reach in, and nothing here leaks out.
+ *
+ * `all: initial` is therefore gone. It was defending against inheritance that
+ * can no longer happen, and it made every rule here fight a reset it did not
+ * need.
+ *
+ * ═══ GLASS NEEDS SOMETHING BEHIND IT ═══
+ *
+ * `backdrop-filter` still reads through the shadow boundary to the page below,
+ * which is what makes this a material rather than a dark rectangle: the form
+ * you are filling is visible, softly, through the thing filling it.
+ */
+
+:host { all: initial; }
+
+/**
+ * The extension's own surface, on somebody else's page.
+ *
+ * ═══ EVERY RULE IS DEFENSIVE ═══
+ *
+ * This renders inside a careers site we do not control, whose stylesheet may
+ * set `* { box-sizing }`, restyle every `button`, or animate anything with a
+ * class. `all: initial` on the two roots cuts that inheritance off, every value
+ * below is stated outright rather than inherited, and the z-index clears a
+ * sticky application header.
+ *
+ * ═══ GLASS NEEDS SOMETHING BEHIND IT ═══
+ *
+ * `backdrop-filter` only reads as a material when there is content passing
+ * under it. Floating over a form there always is, which is why the panel is
+ * translucent rather than a dark rectangle: the field you are being told about
+ * is visible through the thing telling you.
+ *
+ * The tint is layered over the blur, not instead of it — a gradient at ~6% for
+ * the top edge light, then a dark ground at 62% so text stays legible over a
+ * white form. A flat `rgba(0,0,0,.8)` would be opaque enough to read on and
+ * would not be glass at all.
+ */
+
+/* ── The panel ──────────────────────────────────────────────────────── */
+
+.docrud-panel {
+  all: initial;
+  /* A sticky sidebar rather than a floating card. A long form produces a long
+     list, and a card in the corner either grows until it covers the page or
+     scrolls inside a box smaller than the thing it is describing. Anchored to
+     the full height of the window it has room, it never moves as the page
+     scrolls, and the form stays readable beside it. */
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2147483000;
+  width: 380px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+
+  border-left: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 22px 0 0 22px;
+
+  /* The glass, in four layers.
+     1. a radial light in the top-left corner, where a window would catch it
+     2. a vertical sheen so the surface is not one flat tint
+     3. a hairline of brightness along the leading edge
+     4. the dark ground it all sits on, thin enough that the page shows through
+     Painted over a 40px blur — the blur is what makes it a material, the tint
+     is only what makes text legible on top of it. */
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(160, 190, 255, .10) 0%, transparent 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, .07) 0%, rgba(255, 255, 255, .015) 44%, rgba(255, 255, 255, .035) 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, .07) 0px, transparent 2px),
+    /* Thick enough to read on, tuned for the page this actually runs over.
+       Careers pages are overwhelmingly white, so the blur samples white and the
+       panel lightens — at .58 the page's own words came through and competed
+       with ours, and even at .74 pale text on the resulting light grey was hard
+       to read. At .84 the blur and the saturation still carry the page's shapes
+       and colour through, which is what makes it glass, and white text has real
+       contrast on it whatever is underneath. */
+    rgba(11, 13, 18, .84);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, .18),
+    inset 0 1px 0 rgba(255, 255, 255, .10),
+    -34px 0 90px rgba(0, 0, 0, .5);
+
+  color: #edeef2;
+  font: 400 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  animation: docrud-slide 480ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.docrud-panel * { font-family: inherit; color: inherit; box-sizing: border-box; }
+
+@keyframes docrud-slide {
+  from { opacity: 0; transform: translate3d(26px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes docrud-rise {
+  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Head ───────────────────────────────────────────────────────────── */
+
+.docrud-head {
+  display: flex; align-items: center; gap: 9px;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, .09);
+  flex: 0 0 auto;
+}
+/* The brand mark. It was in the markup with no rule behind it, so the head
+   rendered with an invisible 0×0 span where the dot should be. */
+.docrud-spark {
+  width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto;
+  background: linear-gradient(140deg, #a9c0ff 0%, #7de0c4 100%);
+  box-shadow: 0 0 10px rgba(169, 192, 255, .55);
+}
+.docrud-brand { font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; }
+.docrud-sub-brand { font-size: 11px; color: rgba(237, 238, 242, .5); font-weight: 400; }
+.docrud-x {
+  all: unset; cursor: pointer;
+  width: 22px; height: 22px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; color: rgba(237, 238, 242, .5);
+}
+.docrud-x:hover { background: rgba(255, 255, 255, .09); color: #fff; }
+
+/* ── Body ───────────────────────────────────────────────────────────── */
+
+.docrud-body { padding: 16px 18px 18px; overflow-y: auto; flex: 1 1 auto; }
+.docrud-body::-webkit-scrollbar { width: 7px; }
+.docrud-body::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .13); border-radius: 99px; }
+
+/* ── The loader ──────────────────────────────────────────────────────
+   Named stages rather than a spinner. A spinner says "wait"; this says what is
+   being done and how far along it is, which is the difference between a pause
+   and a progress report. */
+.docrud-steps { display: flex; flex-direction: column; gap: 2px; }
+.docrud-step {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 2px;
+  font-size: 12.5px;
+  color: rgba(237, 238, 242, .38);
+  transition: color 260ms ease;
+}
+.docrud-step[data-state="doing"] { color: #fff; }
+.docrud-step[data-state="done"]  { color: rgba(237, 238, 242, .62); }
+
+.docrud-bullet {
+  width: 15px; height: 15px; flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, .18);
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.docrud-step[data-state="doing"] .docrud-bullet {
+  border-color: transparent;
+  /* Two cones of a conic gradient spun about the centre: one element, one
+     transform, no image and no layout work per frame. */
+  background: conic-gradient(from 0deg, rgba(143, 176, 255, 0) 0deg, #8fb0ff 300deg, rgba(143, 176, 255, 0) 360deg);
+  animation: docrud-spin 850ms linear infinite;
+}
+.docrud-step[data-state="doing"] .docrud-bullet::after {
+  content: ""; position: absolute; inset: 2.5px; border-radius: 50%;
+  background: rgba(20, 22, 30, .94);
+}
+.docrud-step[data-state="done"] .docrud-bullet {
+  border-color: rgba(125, 224, 196, .5);
+  background: rgba(125, 224, 196, .16);
+}
+.docrud-step[data-state="done"] .docrud-bullet::after {
+  content: ""; width: 7px; height: 4px;
+  border-left: 1.5px solid #7de0c4; border-bottom: 1.5px solid #7de0c4;
+  transform: rotate(-45deg) translate(.5px, -1px);
+}
+.docrud-step-n { margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums; opacity: .7; }
+
+@keyframes docrud-spin { to { transform: rotate(360deg); } }
+
+/* ── The result ─────────────────────────────────────────────────────── */
+
+/* How each answer was arrived at — rules, reading the page, or drafted. */
+.docrud-how { display: flex; flex-wrap: wrap; gap: 5px; margin: 9px 0 3px; }
+.docrud-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .05);
+  font-size: 10.5px; font-weight: 600;
+  color: rgba(237, 238, 242, .74);
+}
+.docrud-chip i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .85; }
+.docrud-chip[data-k="rules"]   { color: #7de0c4; border-color: rgba(125, 224, 196, .26); background: rgba(125, 224, 196, .10); }
+.docrud-chip[data-k="read"]    { color: #9db4ff; border-color: rgba(157, 180, 255, .26); background: rgba(157, 180, 255, .10); }
+.docrud-chip[data-k="drafted"] { color: #e3b7ff; border-color: rgba(227, 183, 255, .26); background: rgba(227, 183, 255, .10); }
+
+.docrud-sub {
+  margin: 15px 0 7px;
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: rgba(237, 238, 242, .4);
+}
+
+.docrud-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.docrud-row {
+  all: unset;
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 8px 9px; border-radius: 11px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 160ms ease, border-color 160ms ease;
+  animation: docrud-row-in 340ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.docrud-row:hover { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .11); }
+@keyframes docrud-row-in { from { opacity: 0; transform: translate3d(0, 5px, 0); } to { opacity: 1; transform: none; } }
+
+.docrud-dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; margin-top: 6px; }
+.docrud-dot[data-k="ok"]     { background: #7de0c4; }
+.docrud-dot[data-k="review"] { background: #ffd479; box-shadow: 0 0 8px rgba(255, 212, 121, .4); }
+.docrud-dot[data-k="miss"]   { background: rgba(255, 255, 255, .3); }
+
+/* A column, and the three spans inside it are blocks. They are `<span>`s
+   because a `<button>` may not contain block-level elements, and left inline
+   they ran together — "CityBengaluruplaceholder" on one line. */
+.docrud-cell { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.docrud-q, .docrud-a, .docrud-why { display: block; }
+.docrud-q {
+  font-size: 12px; font-weight: 600; color: rgba(237, 238, 242, .94);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.docrud-a {
+  font-size: 11.5px; color: rgba(237, 238, 242, .55); margin-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.docrud-why { font-size: 10.5px; color: rgba(237, 238, 242, .36); margin-top: 2px; }
+
+.docrud-hint {
+  margin: 13px 0 0; padding: 9px 11px; border-radius: 11px;
+  border: 1px solid rgba(255, 212, 121, .2);
+  background: rgba(255, 212, 121, .07);
+  font-size: 11.5px; line-height: 1.45; color: rgba(255, 226, 170, .9);
+}
+.docrud-err { margin: 0; font-size: 12.5px; line-height: 1.5; color: #ffb9b9; }
+
+/* ── Foot ───────────────────────────────────────────────────────────── */
+
+.docrud-foot {
+  flex: 0 0 auto;
+  padding: 13px 18px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .015) 0%, rgba(255, 255, 255, .045) 100%);
+  font-size: 11px; line-height: 1.45; color: rgba(237, 238, 242, .5);
+}
+.docrud-foot b { color: rgba(237, 238, 242, .78); font-weight: 650; }
+
+@media (prefers-reduced-motion: reduce) {
+  .docrud-panel, .docrud-row { animation: none; }
+  .docrud-step[data-state="doing"] .docrud-bullet { animation: none; }
+  .docrud-pop { animation: none; }
+}
+
+/* ── The chat ────────────────────────────────────────────────────────
+   The panel becomes a conversation for the fields nothing could answer. One
+   question at a time: a list of eight questions is a form, which is the thing
+   the person was trying to avoid. */
+.docrud-chat { display: flex; flex-direction: column; gap: 10px; }
+
+.docrud-ask-n {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: rgba(237, 238, 242, .4);
+}
+.docrud-ask-q {
+  font-size: 16.5px; font-weight: 650; line-height: 1.35; letter-spacing: -.015em;
+  color: #fff;
+}
+.docrud-ask-src { font-size: 11px; color: rgba(237, 238, 242, .42); margin-top: -4px; }
+
+/* What they said last time, offered rather than assumed — it is pre-filled in
+   a text box and shown here for a choice, but never submitted unread. */
+.docrud-recall {
+  padding: 8px 10px; border-radius: 10px;
+  border: 1px solid rgba(157, 180, 255, .22);
+  background: rgba(157, 180, 255, .09);
+  font-size: 11.5px; color: rgba(207, 219, 255, .92);
+}
+.docrud-recall b { font-weight: 650; }
+
+.docrud-ask-in { display: flex; flex-direction: column; gap: 8px; }
+.docrud-opts { display: flex; flex-wrap: wrap; gap: 7px; }
+.docrud-opt {
+  all: unset; cursor: pointer;
+  padding: 9px 14px; border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .09) 0%, rgba(255, 255, 255, .03) 100%);
+  font-size: 13px; font-weight: 600; color: #fff;
+  transition: border-color 150ms ease, background 150ms ease, transform 110ms ease;
+}
+.docrud-opt:hover { border-color: rgba(255, 255, 255, .34); background: rgba(255, 255, 255, .13); }
+.docrud-opt:active { transform: scale(.97); }
+
+.docrud-in {
+  all: unset; box-sizing: border-box; width: 100%;
+  padding: 10px 12px; border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .15);
+  background: rgba(0, 0, 0, .3);
+  font-size: 13px; color: #fff;
+}
+.docrud-in:focus { border-color: rgba(157, 180, 255, .55); background: rgba(0, 0, 0, .42); }
+.docrud-in::placeholder { color: rgba(237, 238, 242, .32); }
+
+.docrud-send {
+  all: unset; cursor: pointer; text-align: center;
+  padding: 10px; border-radius: 11px;
+  background: linear-gradient(180deg, #f6f7fa 0%, #e4e6ec 100%);
+  color: #0e1016; font-size: 13px; font-weight: 650;
+}
+.docrud-send:hover { background: #fff; }
+
+.docrud-skip {
+  all: unset; cursor: pointer; align-self: flex-start;
+  font-size: 11.5px; color: rgba(237, 238, 242, .45);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.docrud-skip:hover { color: rgba(237, 238, 242, .75); }
+
+.docrud-cta {
+  all: unset; cursor: pointer; display: block; text-align: center;
+  margin-top: 13px; padding: 12px; border-radius: 12px;
+  /* Solid rather than tinted glass. A translucent button on a translucent
+     panel has nothing to stand out against, and this is the one thing on the
+     screen the person is meant to press. */
+  background: linear-gradient(180deg, #a9c0ff 0%, #8ea8f5 100%);
+  color: #0d1020;
+  font-size: 13.5px; font-weight: 700; letter-spacing: -.005em;
+  box-shadow: 0 6px 18px rgba(120, 150, 240, .28), inset 0 1px 0 rgba(255, 255, 255, .4);
+  transition: filter 150ms ease, transform 110ms ease;
+}
+.docrud-cta:hover { filter: brightness(1.07); }
+.docrud-cta:active { transform: scale(.985); }
+
+
+/* ── At rest ─────────────────────────────────────────────────────────
+   What the sidebar shows before anything has been filled. It replaces the
+   corner badge: one surface, one shape, and it says what it found rather than
+   asking to be clicked blind. */
+.docrud-idle { display: flex; flex-direction: column; gap: 10px; }
+.docrud-idle-h {
+  font-size: 16.5px; font-weight: 650; letter-spacing: -.015em; color: #fff;
+}
+.docrud-idle-p {
+  margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(237, 238, 242, .6);
+}
+.docrud-idle .docrud-cta { margin-top: 4px; }
+
+/* ── The recommended option ──────────────────────────────────────────
+   Marked and pre-selected, never submitted on its own. The member still
+   presses it — a suggestion that answers for you is not a suggestion. */
+.docrud-opt-on {
+  border-color: rgba(169, 192, 255, .7);
+  background: linear-gradient(180deg, rgba(169, 192, 255, .26) 0%, rgba(169, 192, 255, .12) 100%);
+  box-shadow: 0 0 0 1px rgba(169, 192, 255, .25), 0 4px 14px rgba(120, 150, 240, .18);
+}
+.docrud-rec {
+  margin-left: 8px;
+  font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: rgba(206, 220, 255, .85);
+}
+
+/* A real dropdown once the list is longer than a handful. The options are the
+   form's own, so whatever is chosen here is guaranteed to be a value the
+   employer's field will accept. */
+.docrud-sel {
+  all: unset; box-sizing: border-box; width: 100%; cursor: pointer;
+  padding: 11px 12px; border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  background: rgba(0, 0, 0, .34);
+  font-size: 13.5px; color: #fff;
+  /* The native arrow disappears with `all: unset`, so it is drawn back on. */
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, .55) 50%),
+    linear-gradient(135deg, rgba(255, 255, 255, .55) 50%, transparent 50%);
+  background-position: calc(100% - 17px) calc(50% + 1px), calc(100% - 12px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 34px;
+}
+.docrud-sel:focus { border-color: rgba(169, 192, 255, .6); background-color: rgba(0, 0, 0, .46); }
+/* The popup list is drawn by the OS and inherits nothing from the shadow, so
+   its own colours have to be set or it renders white-on-white in dark mode. */
+.docrud-sel option { background: #11131a; color: #edeef2; }
+
+
+/* ══ Added with the confidence score, editing, submitting and languages ══ */
+
+/* ── The language picker ─────────────────────────────────────────────
+   In the head, because changing language is a thing you do once and then
+   never look at again. The list is written in each language's own script —
+   somebody looking for Malayalam should not have to recognise the word
+   "Malayalam" in English first. */
+.docrud-lang {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  margin-left: auto;
+  max-width: 108px;
+  padding: 4px 20px 4px 8px; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  background: rgba(255, 255, 255, .05);
+  font-size: 11px; font-weight: 600; color: rgba(237, 238, 242, .72);
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(255, 255, 255, .45) 50%),
+    linear-gradient(135deg, rgba(255, 255, 255, .45) 50%, transparent 50%);
+  background-position: calc(100% - 11px) calc(50% + 1px), calc(100% - 7px) calc(50% + 1px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.docrud-lang:hover { border-color: rgba(255, 255, 255, .26); color: #fff; }
+.docrud-lang option { background: #11131a; color: #edeef2; }
+
+.docrud-back {
+  all: unset; cursor: pointer;
+  width: 22px; height: 22px; border-radius: 7px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; line-height: 1; color: rgba(237, 238, 242, .6);
+}
+.docrud-back:hover { background: rgba(255, 255, 255, .09); color: #fff; }
+
+/* ── The confidence ring ─────────────────────────────────────────────
+   ═══ WHY A RING AND NOT A NUMBER ═══
+
+   "11 of 12 filled" counts boxes. This answers the only question the member
+   actually has — is this safe to send — and it has to be legible at a glance
+   from across the desk, which a sentence is not.
+
+   It MOVES. The stroke is rendered at the previous score and transitioned to
+   the current one on the next frame, so answering a question or checking an
+   answer visibly pushes the ring round instead of the number having silently
+   changed while you were looking elsewhere. That motion is the feedback; the
+   number is the record of it. */
+.docrud-conf {
+  position: relative;
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 14px; margin-bottom: 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, .11);
+  background:
+    radial-gradient(90% 140% at 0% 0%, rgba(255, 255, 255, .07) 0%, transparent 70%),
+    rgba(255, 255, 255, .035);
+  animation: docrud-rise 420ms cubic-bezier(.22, 1, .36, 1) both;
+}
+
+.docrud-ring { width: 64px; height: 64px; flex: 0 0 auto; transform: rotate(-90deg); }
+.docrud-ring-bg {
+  fill: none; stroke: rgba(255, 255, 255, .10); stroke-width: 6;
+}
+.docrud-ring-fg {
+  fill: none; stroke-width: 6; stroke-linecap: round;
+  stroke: var(--docrud-band, #9db4ff);
+  /* The whole point: the score arrives by moving to it. */
+  transition: stroke-dashoffset 760ms cubic-bezier(.22, 1, .36, 1), stroke 400ms ease;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--docrud-band, #9db4ff) 55%, transparent));
+}
+
+/* One variable, set by the band, drives the stroke, its glow and the number. */
+.docrud-conf[data-band="low"]    { --docrud-band: #ff9b9b; }
+.docrud-conf[data-band="fair"]   { --docrud-band: #ffd479; }
+.docrud-conf[data-band="good"]   { --docrud-band: #9db4ff; }
+.docrud-conf[data-band="strong"] { --docrud-band: #7de0c4; }
+
+.docrud-conf-n {
+  position: absolute; left: 14px; top: 13px;
+  width: 64px; height: 64px;
+  display: flex; align-items: center; justify-content: center;
+  gap: 1px; pointer-events: none;
+}
+.docrud-conf-n b {
+  font-size: 20px; font-weight: 700; letter-spacing: -.04em;
+  font-variant-numeric: tabular-nums; color: #fff;
+}
+.docrud-conf-n i { font-style: normal; font-size: 10px; color: rgba(237, 238, 242, .5); margin-top: 5px; }
+
+.docrud-conf-t { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.docrud-conf-h {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: rgba(237, 238, 242, .42);
+}
+.docrud-conf-v {
+  font-size: 13px; font-weight: 650; line-height: 1.3; color: var(--docrud-band, #fff);
+}
+.docrud-conf-c { font-size: 11px; color: rgba(237, 238, 242, .5); font-variant-numeric: tabular-nums; }
+
+.docrud-chip[data-k="frame"] { color: #b9c0d0; border-color: rgba(185, 192, 208, .24); background: rgba(185, 192, 208, .09); }
+
+/* ── Row actions ─────────────────────────────────────────────────────
+   Edit, and "looks right". The second is not decoration: an answer that was
+   flagged holds the score down and blocks the submit button until somebody
+   has actually looked at it, so pressing this is a real act with a visible
+   consequence rather than a box to tick. */
+.docrud-acts {
+  display: flex; align-items: center; gap: 4px; flex: 0 0 auto;
+  opacity: 0; transition: opacity 160ms ease;
+}
+.docrud-row:hover .docrud-acts, .docrud-row:focus-within .docrud-acts { opacity: 1; }
+/* On a touch screen there is no hover, so they are simply always there. */
+@media (hover: none) { .docrud-acts { opacity: 1; } }
+
+.docrud-mini {
+  all: unset; cursor: pointer;
+  padding: 4px 9px; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .15);
+  background: rgba(255, 255, 255, .06);
+  font-size: 10.5px; font-weight: 650; color: rgba(237, 238, 242, .82);
+  white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+.docrud-mini:hover { background: rgba(255, 255, 255, .15); border-color: rgba(255, 255, 255, .3); color: #fff; }
+.docrud-mini-on {
+  border-color: rgba(125, 224, 196, .45);
+  background: rgba(125, 224, 196, .14);
+  color: #7de0c4;
+}
+/* An acknowledged row keeps its amber dot but stops shouting. */
+.docrud-row[data-k="review"] .docrud-mini-on ~ * { opacity: .7; }
+
+/* ── The editor ──────────────────────────────────────────────────────
+   The form's own dropdown, in a place it can be used, plus the options the
+   matcher nearly chose. Changing a country on a Workday page means finding it
+   in a list of two hundred; here it is one press of a shortlist that was
+   already computed. */
+.docrud-two { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.docrud-two .docrud-cta { margin-top: 0; flex: 1; }
+.docrud-two .docrud-skip { align-self: center; }
+
+/* ── Submitting ──────────────────────────────────────────────────────
+   The button that presses the employer's button. It is disabled, visibly and
+   with a reason given above it, until every required field has an answer and
+   every flagged answer has been read — which is not a score threshold, because
+   a form can be 94% confident and still be missing something an employer
+   requires. */
+.docrud-cta-go {
+  background: linear-gradient(180deg, #8ae0bd 0%, #62cba3 100%);
+  color: #06201a;
+  box-shadow: 0 6px 18px rgba(98, 203, 163, .26), inset 0 1px 0 rgba(255, 255, 255, .4);
+}
+.docrud-cta[disabled] {
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, .07);
+  color: rgba(237, 238, 242, .34);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, .1);
+}
+.docrud-cta[disabled]:hover { filter: none; }
+
+.docrud-ready {
+  margin: 12px 0 0; font-size: 12.5px; line-height: 1.5;
+  color: rgba(237, 238, 242, .72);
+}
+
+/* Three dots, while the employer's page is doing whatever it does after the
+   button is pressed. Deliberately not a progress bar: we do not know how long
+   their server takes and a bar that lies is worse than a pulse that does not. */
+.docrud-sending { display: flex; gap: 6px; justify-content: center; padding: 26px 0 6px; }
+.docrud-sending span {
+  width: 8px; height: 8px; border-radius: 50%; background: #9db4ff;
+  animation: docrud-bounce 1s ease-in-out infinite;
+}
+.docrud-sending span:nth-child(2) { animation-delay: .14s; }
+.docrud-sending span:nth-child(3) { animation-delay: .28s; }
+@keyframes docrud-bounce {
+  0%, 80%, 100% { transform: scale(.6); opacity: .45; }
+  40%           { transform: scale(1);  opacity: 1; }
+}
+
+.docrud-sent {
+  width: 54px; height: 54px; margin: 18px auto 0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; color: #06201a;
+  background: linear-gradient(180deg, #8ae0bd 0%, #62cba3 100%);
+  box-shadow: 0 8px 26px rgba(98, 203, 163, .3);
+  animation: docrud-pop-in 520ms cubic-bezier(.22, 1.6, .4, 1) both;
+}
+@keyframes docrud-pop-in {
+  from { transform: scale(.3); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docrud-conf, .docrud-sent { animation: none; }
+  .docrud-ring-fg { transition: none; }
+  .docrud-sending span { animation: none; opacity: .8; transform: none; }
+}
+
+
+/* ══ Simpler, faster, smoother ══════════════════════════════════════════ */
+
+/* ── Views change without blinking ───────────────────────────────────
+   The panel replaces its whole contents on every state change. Unanimated
+   that reads as a flash — the eye registers a different screen rather than
+   the same screen having moved on. A short rise on the body, and the head and
+   foot never move at all, so the frame stays put and only the contents
+   change. */
+.docrud-body {
+  animation: docrud-view-in 300ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes docrud-view-in {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── The row, open ───────────────────────────────────────────────────
+   In place, in the list, at the width of the row it replaced. Editing used to
+   be a screen of its own; the list you were reading is now still there above
+   and below it. */
+.docrud-edit {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 12px; margin: 2px 0;
+  border-radius: 13px;
+  border: 1px solid rgba(169, 192, 255, .34);
+  background:
+    radial-gradient(120% 100% at 0% 0%, rgba(169, 192, 255, .13) 0%, transparent 70%),
+    rgba(255, 255, 255, .05);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .09);
+  animation: docrud-edit-in 280ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes docrud-edit-in {
+  from { opacity: 0; transform: translate3d(0, -4px, 0) scaleY(.96); transform-origin: top; }
+  to   { opacity: 1; transform: none; }
+}
+.docrud-edit-q {
+  font-size: 13.5px; font-weight: 650; line-height: 1.35; color: #fff;
+  letter-spacing: -.01em;
+}
+.docrud-edit-why { font-size: 10.5px; color: rgba(237, 238, 242, .45); margin-top: -5px; }
+
+.docrud-edit-alts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.docrud-edit-alts > span {
+  width: 100%;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: rgba(237, 238, 242, .38);
+}
+.docrud-opt-sm { padding: 6px 11px; font-size: 12px; border-radius: 9px; }
+
+.docrud-cta-sm { padding: 9px 14px; font-size: 12.5px; border-radius: 10px; }
+.docrud-edit .docrud-two { margin-top: 1px; }
+.docrud-edit .docrud-in, .docrud-edit .docrud-sel { font-size: 12.5px; padding: 9px 11px; }
+.docrud-edit .docrud-sel { padding-right: 32px; }
+
+/* ── The send, at the bottom of the list it is gated on ──────────────
+   Not a separate screen that re-describes what the list above already shows.
+   The reason it is disabled sits directly above the disabled button, and every
+   item in that reason is a row you can see and fix without going anywhere. */
+.docrud-gate {
+  margin-top: 18px; padding-top: 15px;
+  border-top: 1px solid rgba(255, 255, 255, .09);
+}
+.docrud-gate-why {
+  margin: 0 0 10px; font-size: 11.5px; line-height: 1.45;
+  color: rgba(255, 212, 121, .92);
+}
+.docrud-gate .docrud-cta { margin-top: 0; }
+.docrud-gate-warn {
+  margin: 9px 0 0; font-size: 10.5px; line-height: 1.45;
+  color: rgba(237, 238, 242, .42); text-align: center;
+}
+
+/* ── Motion, tightened ───────────────────────────────────────────────
+   One curve for everything that moves, and rows arrive slightly faster than
+   they used to so a long list settles rather than trickling. */
+.docrud-row {
+  animation: docrud-row-in 300ms cubic-bezier(.22, 1, .36, 1) both;
+  transition: background 150ms ease, border-color 150ms ease, transform 110ms ease;
+}
+.docrud-row:active { transform: scale(.995); }
+.docrud-mini:active { transform: scale(.94); }
+.docrud-opt, .docrud-mini, .docrud-cta, .docrud-send {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docrud-body, .docrud-edit { animation: none; }
+}

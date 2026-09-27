@@ -1,0 +1,69 @@
+{
+  "runs": [
+    {
+      "runId": "run-mu1c7p37-gt1ksl",
+      "startedAt": "2026-09-14T14:27:40.867Z",
+      "status": "completed",
+      "sourcesAttempted": 3,
+      "sourcesSucceeded": 2,
+      "sourcesFailed": 1,
+      "jobsFound": 9,
+      "sources": [
+        {
+          "sourceId": "test:alpha",
+          "ok": true,
+          "jobsFound": 7,
+          "latencyMs": 120,
+          "attempts": 1
+        },
+        {
+          "sourceId": "test:beta",
+          "ok": false,
+          "jobsFound": 0,
+          "latencyMs": 90,
+          "attempts": 3,
+          "error": "HTTP 503"
+        },
+        {
+          "sourceId": "test:gamma",
+          "ok": false,
+          "jobsFound": 0,
+          "latencyMs": 0,
+          "attempts": 0,
+          "skipped": true,
+          "skipReason": "disabled"
+        },
+        {
+          "sourceId": "test:beta",
+          "ok": true,
+          "jobsFound": 2,
+          "latencyMs": 50,
+          "attempts": 1
+        }
+      ],
+      "finishedAt": "2026-09-14T14:27:40.881Z"
+    }
+  ],
+  "health": {
+    "test:alpha": {
+      "sourceId": "test:alpha",
+      "consecutiveFailures": 0,
+      "lastSuccessAt": "2026-09-14T14:27:40.875Z",
+      "lastLatencyMs": 120,
+      "lastJobCount": 7,
+      "cursor": null
+    },
+    "test:beta": {
+      "sourceId": "test:beta",
+      "consecutiveFailures": 0,
+      "lastFailureAt": "2026-09-14T14:27:40.877Z",
+      "lastLatencyMs": 50,
+      "lastSuccessAt": "2026-09-14T14:27:40.878Z",
+      "lastJobCount": 2
+    },
+    "test:gamma": {
+      "sourceId": "test:gamma",
+      "consecutiveFailures": 0
+    }
+  }
+}

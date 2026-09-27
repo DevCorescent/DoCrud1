@@ -1,0 +1,301 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   THE FILTER SHEET
+   ══════════════════════════════════════════════════════════════════════════
+   Shared by every board. See the note on the component for why it is a portal,
+   why it carries its own copy of the tokens, and why its z-index is what it is.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ══ The filter sheet ════════════════════════════════════════════════════
+   On document.body, not inside the panel — see the note on FilterSheet. Being
+   outside `.dh-panel` is also what lets it blur: it is the one surface on this
+   page that is not already sitting on a blurred ancestor. */
+
+.bd-sheet-root {
+  position: fixed;
+  inset: 0;
+  /* Above GlobalBottomNav, which is 9995. At 200 the nav painted straight over
+     this sheet's footer on every phone, hiding "Clear all" and the confirm
+     button — the sheet opened and there was no way to act on it. That component
+     documents the same trap biting a "Continue" button before now. Below the
+     splash screen at 99999, which must stay on top of everything. */
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+
+  /* ── THE TOKENS, AGAIN, AND WHY ──
+     Every `--dh-*` is declared on `.dh`. This subtree is portalled onto
+     document.body, which is OUTSIDE `.dh`, so inside here every one of them
+     resolved to nothing: `color: var(--dh-ink)` fell through to whatever body
+     inherits, and this app's root carries a dark theme — the entire sheet
+     rendered white text on a white sheet. Every label, count and heading was
+     drawn and none of it was readable.
+
+     Portalling to `.dh` instead would inherit these for free, but `.dh` is
+     `z-index: 1` and the app's bottom navigation is its sibling at a higher
+     layer, so the sheet would be painted over on exactly the phones where it
+     matters most. Escaping to body is right; carrying the tokens is the cost.
+
+     These mirror discover.css. jobs.js asserts that the sheet's computed ink
+     matches the board's, so drift fails a test instead of shipping — which is
+     exactly what it did when the ground changed and `--dh-ink-3` moved from
+     #6e6e73 to #6b6b70. */
+  --dh-ink: #1d1d1f;
+  --dh-ink-2: #565659;
+  --dh-ink-3: #636368;
+  /* Kept for icons and the dot separators. It measures 3.41:1 on this
+     surface, so it is never used for text that carries information — see the
+     contrast assertion in the jobs harness. */
+  --dh-ink-4: #86868b;
+  --dh-line: rgba(0, 0, 0, .09);
+  --dh-line-2: rgba(0, 0, 0, .055);
+  --dh-glass: rgba(255, 255, 255, .58);
+  --dh-glass-2: rgba(255, 255, 255, .74);
+  --dh-glass-3: rgba(255, 255, 255, .88);
+  --dh-rim: rgba(255, 255, 255, .72);
+  --dh-ease: cubic-bezier(.22, 1, .36, 1);
+  --dh-fast: 200ms;
+  --dh-mid: 340ms;
+
+  /* The app's dark root sets a light `color` on body; this subtree is a light
+     surface and states its own. */
+  color: var(--dh-ink);
+  font-family: inherit;
+}
+.bd-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(18, 18, 22, .32);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: jb-fade 200ms var(--dh-ease) both;
+}
+@keyframes jb-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.bd-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(520px, 100%);
+  max-height: min(78vh, 720px);
+  border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 22px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .96) 0%, rgba(250, 250, 253, .94) 100%);
+  backdrop-filter: saturate(180%) blur(30px);
+  -webkit-backdrop-filter: saturate(180%) blur(30px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .1), 0 40px 90px rgba(0, 0, 0, .24);
+  overflow: hidden;
+  animation: bd-sheet-in 260ms var(--dh-ease) both;
+}
+@keyframes bd-sheet-in {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.bd-sheet-head {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 17px 16px 14px 19px;
+  border-bottom: 1px solid var(--dh-line-2);
+}
+.bd-sheet-t {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15.5px;
+  font-weight: 450;
+  letter-spacing: -.028em;
+  color: var(--dh-ink);
+}
+/* The drag handle of a bottom sheet. Only drawn where it is one. */
+.bd-sheet-grip { display: none; }
+.bd-sheet-x {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 10px;
+  background: var(--dh-glass-2);
+  color: var(--dh-ink-3);
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.bd-sheet-x:hover { background: rgba(0, 0, 0, .05); color: var(--dh-ink); }
+
+.bd-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 13px 14px;
+  overscroll-behavior: contain;
+}
+
+.bd-group { padding-top: 12px; }
+.bd-group + .bd-group { border-top: 1px solid var(--dh-line-2); margin-top: 10px; }
+.bd-group-t {
+  margin: 0 0 4px;
+  padding-inline: 6px;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  /* Not `--dh-ink-4`. Measured on the sheet's own surface that token gives
+     3.53:1, and this is 10.5px text — the only thing naming the group. `-3` is
+     the same grey one step darker and measures 4.85:1. */
+  color: var(--dh-ink-3);
+}
+/* Two columns where there is room: five employment types in one column is a
+   lot of scrolling for a short list. */
+.bd-group-b {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
+  gap: 1px 6px;
+}
+
+.bd-sheet-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--dh-line-2);
+  background: rgba(255, 255, 255, .6);
+}
+.bd-sheet-clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+  transition: color var(--dh-fast) var(--dh-ease);
+}
+.bd-sheet-clear:hover:not(:disabled) { color: var(--dh-ink); text-decoration: underline; }
+.bd-sheet-clear:disabled { opacity: .4; cursor: default; }
+.bd-sheet-go {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2), 0 8px 22px rgba(0, 0, 0, .14);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.012em;
+  color: #fff;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--dh-fast) var(--dh-ease);
+}
+.bd-sheet-go:hover { transform: translateY(-1px); }
+
+/* ── A row inside the sheet ── */
+.bd-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 36px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.bd-opt:hover { background: rgba(0, 0, 0, .045); color: var(--dh-ink); }
+.bd-opt[data-on="1"] { color: var(--dh-ink); }
+.bd-opt-box {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid rgba(0, 0, 0, .18);
+  border-radius: 5px;
+  color: transparent;
+  transition: background var(--dh-fast) var(--dh-ease), border-color var(--dh-fast) var(--dh-ease);
+}
+.bd-opt[data-on="1"] .bd-opt-box {
+  background: #1d1d1f;
+  border-color: #1d1d1f;
+  color: #fff;
+}
+.bd-opt-n {
+  margin-left: auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  /* Same reason as the group label above: it is a number somebody reads. */
+  color: var(--dh-ink-3);
+}
+
+/* The count beside the sheet's own heading. Each board styles its own filter
+   BUTTON; this badge belongs to the sheet. */
+.bd-sheet-n {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #2c2c2f;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 620px) {
+  .bd-sheet-root { padding: 0; align-items: flex-end; }
+  .bd-sheet {
+    width: 100%;
+    max-height: 86dvh;
+    border-radius: 22px 22px 0 0;
+    border-bottom: 0;
+    animation: bd-sheet-up 300ms var(--dh-ease) both;
+  }
+  @keyframes bd-sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: none; }
+  }
+  .bd-sheet-head { padding-top: 22px; justify-content: center; }
+  .bd-sheet-grip {
+    display: block;
+    position: absolute;
+    top: 9px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, .14);
+  }
+  /* Clear of the home indicator and of the app's own bottom nav. */
+  .bd-sheet-foot { padding-bottom: max(13px, env(safe-area-inset-bottom)); }
+  .bd-sheet-go { flex: 1 1 auto; justify-content: center; height: 44px; }
+
+  .jb-bar { gap: 9px; padding-top: 13px; padding-bottom: 12px; }
+  /* The word goes; the icon and the count stay. A funnel with a badge is the
+     phone convention, and it buys the chips about 50px. */
+  .jb-fbtn-l { display: none; }
+  .jb-fbtn { padding: 0 10px; gap: 6px; }
+  .jb-cat { height: 32px; font-size: 12px; }
+}

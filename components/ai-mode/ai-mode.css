@@ -23,12 +23,32 @@
   background:rgba(8,8,10,0.86);
   backdrop-filter:blur(28px) saturate(140%);
   -webkit-backdrop-filter:blur(28px) saturate(140%);
-  animation:aim-in 260ms cubic-bezier(0.22,1,0.36,1) both;
+  animation:aim-in 420ms cubic-bezier(0.22,1,0.36,1) both;
 }
 
+/* ── Coming up ──
+   The blur used to arrive at full strength on the first frame and only the
+   opacity was animated, so the page behind did not recede — it was simply
+   replaced by an already-blurred sheet. Animating the backdrop takes the page
+   out of focus as the overlay comes forward, which is the whole effect.
+
+   `backdrop-filter` is an animatable property, and this is a one-shot on a
+   single full-screen layer — not a loop, and not per-scroll — so the cost is
+   paid once on open. The ground darkens over the same curve so the two read as
+   one movement rather than as a fade over a blur. */
 @keyframes aim-in{
-  from{ opacity:0; }
-  to{ opacity:1; }
+  from{
+    opacity:0;
+    background:rgba(8,8,10,0);
+    backdrop-filter:blur(0px) saturate(100%);
+    -webkit-backdrop-filter:blur(0px) saturate(100%);
+  }
+  to{
+    opacity:1;
+    background:rgba(8,8,10,0.86);
+    backdrop-filter:blur(28px) saturate(140%);
+    -webkit-backdrop-filter:blur(28px) saturate(140%);
+  }
 }
 
 /* The ambient wash. Two soft fields, static — a moving gradient behind a
@@ -66,7 +86,11 @@
 .aim-head{
   position:relative;
   width:100%;
-  max-width:720px;
+  /* A command surface, not a page: the field wants a readable measure rather
+     than the width of the display. 720 holds a long sentence without the eye
+     having to travel, and the cap grows a little on very wide screens so a
+     1920 monitor does not look like a 1280 one with margins. */
+  max-width:clamp(680px, 46vw, 860px);
   flex:0 0 auto;
   /* --aim-center is the measured distance from the top of the stage to the
      middle (see AiMode.tsx). The calc is the fallback for the first frame:
@@ -80,6 +104,21 @@
 /* Above the field and below it, out of the flow: with these in the flow the
    head is the whole block, and centring the block leaves the FIELD sitting
    below the middle. Out of the flow the head is exactly the field. */
+/* The headline and its lede, sized against the viewport rather than at one
+   breakpoint. Both stay inside the measure `.aim-head` sets. */
+.aim-h1{
+  /* A pure vw factor is too steep across the range this runs on: at 2.5vw the
+     headline was 25px on a 1024 laptop and 36px at 1440, which reads as two
+     different designs. An offset flattens the curve so the middle sizes land
+     where they should. */
+  font-size:clamp(26px, 1.6vw + 12px, 38px);
+  line-height:1.12;
+}
+.aim-lede{
+  max-width:46ch;
+  font-size:clamp(12.5px, 1.05vw, 14.5px);
+}
+
 .aim-title{
   position:absolute;
   left:0;
@@ -166,6 +205,11 @@
     0 22px 60px rgba(0,0,0,0.46),
     inset 0 1px 0 rgba(255,255,255,0.10);
 }
+/* Scales with the viewport rather than stepping at one breakpoint — the field
+   is the primary object on the screen and should feel proportionate on a
+   13-inch laptop and a 27-inch display alike. */
+.aim-field{ height:clamp(54px, 4.6vh, 66px); }
+
 @media (max-width:640px){
   .aim-field{ height:54px; border-radius:16px; padding-left:14px; }
   /* ── The field gets the whole width ──
@@ -181,6 +225,103 @@
   .aim-stage[data-phase="answer"] .aim-head{
     padding-right:0;
     margin-top:42px;
+  }
+
+  /* ── The header has to be a surface, not a gap ──
+     Once results are up, the field and the "reading this as" row are pinned
+     and the results scroll UNDER them. Neither had a background: only the
+     field itself was frosted, so a job card sliding up met the reading row
+     with nothing in between — two sets of text on top of each other, and a
+     hard edge where the card disappeared.
+
+     One frosted layer behind the whole band gives the results something to
+     blur into. It is a pseudo-element rather than a background on `.aim-head`
+     because it has to bleed out to the screen edges (the head is inset by the
+     gutter) and fade out at the bottom, and a background can do neither.
+
+     `z-index` on the head puts the band above the scroller; `-1` on the layer
+     puts it behind the field and the row it is backing. */
+  .aim-stage[data-phase="answer"] .aim-head{
+    z-index:2;
+  }
+  .aim-stage[data-phase="answer"] .aim-head::before{
+    content:"";
+    position:absolute;
+    z-index:-1;
+    /* Out to the gutters, up past the corner controls, and far enough below
+       the row that the fade has somewhere to happen. */
+    inset:-64px -16px -28px -16px;
+    pointer-events:none;
+    backdrop-filter:blur(18px) saturate(135%);
+    -webkit-backdrop-filter:blur(18px) saturate(135%);
+    background:linear-gradient(180deg,
+      rgba(8,8,10,0.9) 0%,
+      rgba(8,8,10,0.86) 58%,
+      rgba(8,8,10,0.55) 84%,
+      rgba(8,8,10,0) 100%);
+    /* The mask is what stops this reading as a bar with an edge across the
+       column: the blur itself fades out, so a card scrolling up goes gradually
+       out of focus instead of vanishing at a line. */
+    -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 70%,transparent 100%);
+            mask-image:linear-gradient(180deg,#000 0%,#000 70%,transparent 100%);
+  }
+}
+
+/* ══ The answer phase on a pointer device ═════════════════════════════════
+   The phone gets this inside the 640 block, for the same reason and with the
+   same recipe. Desktop needs it too, but the geometry differs: there the
+   results box starts exactly at the header's bottom edge and CLIPS, so a card
+   did not collide with the header — it vanished at a hard line across the
+   column. Either way the fix is the same idea, a frosted band the content goes
+   out of focus into. */
+@media (min-width:641px){
+  /* ── The header must clear the corner controls ──
+     The field is centred and grows to 860px, while Back is pinned at the far
+     left. Between about 640 and 1000 they met: at 820 the button sat directly
+     on top of the field and "react developer" read as "act developer".
+
+     Capping the measure against the viewport rather than pushing the header
+     down keeps the whole bar on one line, which is what it should be on a
+     pointer device. 264px is the two controls plus a real gap. */
+  .aim-stage[data-phase="answer"] .aim-head{
+    max-width:min(clamp(680px, 46vw, 860px), calc(100vw - 264px));
+    z-index:2;
+  }
+
+  /* The band spans the STAGE, not the head: results here are nearly the full
+     width of the window while the header is a centred column, so a layer sized
+     to the header would leave the outer thirds unblurred. */
+  .aim-stage[data-phase="answer"]::before{
+    content:"";
+    position:absolute;
+    left:0;
+    right:0;
+    top:0;
+    /* Deep enough to cover the field, the reading row and a fade below them at
+       any field height the clamp produces. The mask makes the exact number
+       forgiving. */
+    height:clamp(152px, 15vh, 184px);
+    z-index:1;
+    pointer-events:none;
+    backdrop-filter:blur(18px) saturate(135%);
+    -webkit-backdrop-filter:blur(18px) saturate(135%);
+    background:linear-gradient(180deg,
+      rgba(8,8,10,0.9) 0%,
+      rgba(8,8,10,0.86) 54%,
+      rgba(8,8,10,0.5) 82%,
+      rgba(8,8,10,0) 100%);
+    -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 64%,transparent 100%);
+            mask-image:linear-gradient(180deg,#000 0%,#000 64%,transparent 100%);
+  }
+
+  /* Without this the results box still starts at the header's bottom edge and
+     clips there, so nothing ever enters the band and the blur has nothing to
+     act on. Pulling the box up opens a strip that content scrolls through and
+     goes out of focus in; the padding puts the first card back where it was,
+     so nothing moves on arrival. */
+  .aim-stage[data-phase="answer"] .aim-results{
+    margin-top:-40px;
+    padding-top:58px;
   }
 }
 
@@ -1185,9 +1326,28 @@
 .aim-p,
 .aim-in,
 .feed-job{
-  max-width:100%;
   min-width:0;
   box-sizing:border-box;
+}
+
+/* `.aim-head` is deliberately NOT in the list below.
+   It carries the overlay's MEASURE — the width the title, the field and the
+   examples all inherit — and it was in this list with `max-width:100%`. Same
+   specificity as the measure declared further up the file, and later, so it
+   won: on a 1920 monitor the head became 1888px wide and the field stretched
+   edge to edge, with the placeholder at one end and the search icon seventeen
+   hundred pixels away at the other. It cannot overflow its container anyway,
+   because it is `width:100%` with a max in px. */
+.aim-stage,
+.aim-field,
+.aim-below,
+.aim-examples,
+.aim-results,
+.aim-grid,
+.aim-p,
+.aim-in,
+.feed-job{
+  max-width:100%;
 }
 
 /* Flex and grid children floor at their min-content width unless told
@@ -1344,6 +1504,33 @@
   color:#fff;
 }
 .aim-recs:active{ background:rgba(255,255,255,0.14); }
+
+/* ── The corner controls on a phone ──
+   At 390px these two pills were 80px and 163px of a 390px bar — together
+   almost two thirds of the width, for a Back button and a mode switch. They
+   are chrome, not content, so they shrink to fit the device rather than
+   holding a desktop size on a screen a fifth the width. */
+@media (max-width:640px){
+  .aim-back,
+  .aim-recs{
+    height:36px;
+    font-size:12px;
+    gap:6px;
+  }
+  .aim-back{ padding:0 13px 0 10px; }
+  .aim-recs{ padding:0 10px 0 13px; max-width:46vw; }
+  /* The label is the part that can go; the chevron still says it opens. */
+  .aim-recs-t{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+}
+@media (max-width:400px){
+  /* "Back" is what the arrow already means. */
+  .aim-back-t{ display:none; }
+  .aim-back{ padding:0 10px; }
+}
 .aim-recs:focus-visible{
   outline:2px solid rgba(255,255,255,0.55);
   outline-offset:2px;

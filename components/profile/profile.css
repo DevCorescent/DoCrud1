@@ -1,0 +1,724 @@
+/**
+ * The profile page, on the light theme.
+ *
+ * WHY THIS FILE EXISTS. The page was authored dark-native: 1,001 bare and 197
+ * variant-prefixed Tailwind utilities built out of `text-white/30`,
+ * `bg-white/[0.04]` and `border-white/[0.08]`, plus 83 amber tokens. None of
+ * them can simply be re-tinted, for two separate reasons:
+ *
+ *   1. The app's global dark scope in app/globals.css rewrites Tailwind's LIGHT
+ *      utilities with `!important` while the document carries
+ *      data-ui-mode="dark" — which it does at runtime even on pages that paint
+ *      light. That is what made the job detail page stay dark after its `dark:`
+ *      variants were stripped. Class names of our own are the only ones that
+ *      scope cannot match.
+ *   2. On a dark page, opacity IS the hierarchy: white at 80% is a heading and
+ *      white at 25% is a caption, and both are legible because the ground is
+ *      near-black. Inverting that literally gives black at 25% on a near-white
+ *      ground, which is 2.1:1 — illegible. So the opacity ladder is replaced
+ *      by an INK LADDER of four steps that each clear their contrast bar
+ *      outright, and the faint end of the old ladder collapses into it rather
+ *      than mapping one-to-one.
+ *
+ * Every ink here is measured against the composited surface it actually sits
+ * on, not against white. The page sits in DiscoverShell, whose ground is a
+ * smoky white with a pastel wash whose darkest patch samples to rgb(221,222,233).
+ */
+
+/* ══ The frame ═════════════════════════════════════════════════════════════ */
+
+/* THE TOKENS ARE ON :root, NOT ON `.pf`.
+
+   Eleven of this page's dialogs are portalled to document.body, which puts
+   them OUTSIDE any wrapper the page could put the tokens on — a custom
+   property inherits down the DOM tree, not down the React tree, so a modal
+   styled with `.pf-ink` would have resolved it to nothing. The names are all
+   `--pf-*` and cannot collide with anything else, so there is no cost to
+   declaring them where every portal can see them. */
+:root {
+  /* ── Ink ──
+     Four steps, and the faintest still carries 11px text. These are the
+     discover theme's own inks, so a profile and the pages around it are set in
+     the same greys rather than in two families that nearly match. */
+  --pf-ink: #1d1d1f;
+  --pf-ink-2: #3f3f45;
+  --pf-ink-3: #565659;
+  --pf-ink-4: #5e5e63;
+  /* Decoration only — icons, separators, rules. 3:1 is the bar and these
+     shapes are large. NEVER used for text that carries meaning. */
+  --pf-deco: #7a7a80;
+
+  /* ── Glass ──
+     Four surfaces, replacing twenty-four white-opacity values. A page with
+     twenty-four nearly identical surfaces on it does not read as depth, it
+     reads as a mistake. */
+  --pf-s1: rgba(255, 255, 255, .44);
+  --pf-s2: rgba(255, 255, 255, .60);
+  --pf-s3: rgba(255, 255, 255, .74);
+  --pf-s4: rgba(255, 255, 255, .88);
+
+  /* ── Rims ──
+     Three, replacing fifteen. Dark hairlines, because a light glass panel is
+     defined by its edge against the ground, not by a white edge against black. */
+  --pf-rim-1: rgba(20, 22, 40, .07);
+  --pf-rim-2: rgba(20, 22, 40, .11);
+  --pf-rim-3: rgba(20, 22, 40, .16);
+
+  /* The accent. The page's amber was a dark-mode gold (#fbbf24 on near-black);
+     on a light ground the same hue is 1.8:1 and unreadable, so the accent
+     splits: a deep amber for text and a pale amber for washes. */
+  --pf-gold: #8a5a10;
+  --pf-gold-2: #a8700f;
+  --pf-gold-wash: rgba(180, 140, 55, .12);
+  --pf-gold-rim: rgba(180, 140, 55, .28);
+
+  --pf-r-sm: 12px;
+  --pf-r-md: 18px;
+  --pf-r-lg: 24px;
+
+  --pf-sh-1: 0 1px 2px rgba(20, 22, 40, .04), 0 10px 28px rgba(20, 22, 40, .06);
+  --pf-sh-2: 0 2px 4px rgba(20, 22, 40, .05), 0 18px 44px rgba(20, 22, 40, .09);
+
+  --pf-ease: cubic-bezier(.22, 1, .36, 1);
+  --pf-fast: 140ms;
+  --pf-mid: 240ms;
+}
+
+/* The page itself, inside the shell's `bare` panel. */
+.pf {
+  min-height: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--pf-ink);
+}
+
+.pf *,
+.pf *::before,
+.pf *::after { box-sizing: border-box; }
+
+/* The scrolling region. The shell's `bare` mode hands over the whole panel, so
+   the page owns the scrolling from here down. */
+.pf-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  /* Room for the phone's tab bar, which is fixed over this. */
+  padding-bottom: 88px;
+  scroll-behavior: smooth;
+}
+
+/* ══ Ink ══════════════════════════════════════════════════════════════════
+   The four steps, plus the decoration grey. `text-white` through
+   `text-white/80` all became one heading ink, because on a light ground the
+   difference between 100% and 80% black is not hierarchy, it is noise. */
+
+.pf-ink { color: var(--pf-ink); }
+.pf-ink-2 { color: var(--pf-ink-2); }
+.pf-ink-3 { color: var(--pf-ink-3); }
+.pf-ink-4 { color: var(--pf-ink-4); }
+.pf-deco { color: var(--pf-deco); }
+.pf-ink-h:hover { color: var(--pf-ink); }
+.pf-ink2-h:hover { color: var(--pf-ink-2); }
+.pf-gh:hover .pf-g-ink,
+.group:hover .pf-g-ink { color: var(--pf-ink); }
+.pf-ph::placeholder { color: var(--pf-deco); }
+
+.pf-gold { color: var(--pf-gold); }
+.pf-gold-2 { color: var(--pf-gold-2); }
+.pf-gold-h:hover { color: var(--pf-gold); }
+
+/* ══ Surfaces ═════════════════════════════════════════════════════════════ */
+
+.pf-s1 { background: var(--pf-s1); }
+.pf-s2 { background: var(--pf-s2); }
+.pf-s3 { background: var(--pf-s3); }
+.pf-s4 { background: var(--pf-s4); }
+.pf-solid { background: #fff; }
+.pf-s1-h:hover { background: var(--pf-s2); }
+.pf-s2-h:hover { background: var(--pf-s3); }
+.pf-s3-h:hover { background: var(--pf-s4); }
+.pf-s4-h:hover { background: #fff; }
+.pf-gold-s { background: var(--pf-gold-wash); }
+
+.pf-rim { border-color: var(--pf-rim-1); }
+.pf-rim-2 { border-color: var(--pf-rim-2); }
+.pf-rim-3 { border-color: var(--pf-rim-3); }
+.pf-rim-h:hover { border-color: var(--pf-rim-3); }
+.pf-rim-f:focus { border-color: rgba(90, 104, 214, .55); }
+.pf-gold-r { border-color: var(--pf-gold-rim); }
+
+/* The page's one card. Everything that was a `bg-white/[0.04]` box with a
+   `border-white/[0.08]` edge is this instead — one surface, so the page has a
+   single material rather than a gradient of near-identical ones. */
+.pf-card {
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: var(--pf-r-md);
+  background: linear-gradient(168deg, rgba(255, 255, 255, .84) 0%, rgba(255, 255, 255, .56) 100%);
+  box-shadow: var(--pf-sh-1);
+}
+
+/* An inset within a card — a row, a field, a quiet block. It has to be
+   LIGHTER than the card it sits in, not darker, which is the opposite of the
+   dark original where an inset was a brighter white film. */
+.pf-inset {
+  border: 1px solid var(--pf-rim-1);
+  border-radius: var(--pf-r-sm);
+  background: rgba(255, 255, 255, .62);
+}
+
+/* ══ The cover ════════════════════════════════════════════════════════════
+   The banner was a saturated gradient with a 2%-white cross-hatch over it and
+   a hard `#0D0D0F` fade at the bottom — a dark-page device: the fade existed
+   to hand the banner off to a near-black page. Over a light page that fade is
+   a black bar.
+
+   So the banner keeps the user's own gradient (it is their choice and it is
+   stored on the profile) and hands off UPWARDS into the page's own ground
+   instead, with the pastel wash showing through the tail. */
+.pf-cover {
+  position: relative;
+  overflow: hidden;
+  border-bottom-left-radius: var(--pf-r-lg);
+  border-bottom-right-radius: var(--pf-r-lg);
+}
+.pf-cover-art { position: absolute; inset: 0; }
+/* The hand-off. Light, not dark, and it stops well short of opaque so the
+   banner is never cut in half by it. */
+.pf-cover-fade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(246, 247, 250, 0) 0%,
+    rgba(246, 247, 250, .10) 46%,
+    rgba(246, 247, 250, .62) 82%,
+    rgba(246, 247, 250, .92) 100%);
+}
+/* A specular sheen across the top, which is what stops a flat gradient from
+   looking like a swatch. */
+.pf-cover-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(168deg, rgba(255, 255, 255, .26) 0%, rgba(255, 255, 255, 0) 52%);
+}
+
+/* ══ Identity ═════════════════════════════════════════════════════════════ */
+
+.pf-name {
+  margin: 0;
+  font-size: clamp(21px, 4.4vw, 31px);
+  font-weight: 600;
+  letter-spacing: -.035em;
+  line-height: 1.04;
+  color: var(--pf-ink);
+}
+.pf-handle {
+  font-size: 13px;
+  color: var(--pf-ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.pf-headline {
+  margin: 0;
+  font-size: clamp(13px, 2.6vw, 15.5px);
+  line-height: 1.5;
+  letter-spacing: -.012em;
+  color: var(--pf-ink-2);
+}
+.pf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: 12.5px;
+  color: var(--pf-ink-4);
+}
+.pf-meta a { color: inherit; text-decoration: none; }
+.pf-meta a:hover { color: var(--pf-ink); }
+.pf-meta svg { color: var(--pf-deco); }
+
+/* The avatar ring. Two layers: a white rim so it reads as lifted off the
+   banner, and a soft shadow so it reads as above it. */
+.pf-avatar {
+  position: relative;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, .92),
+    0 2px 6px rgba(20, 22, 40, .12),
+    0 14px 38px rgba(20, 22, 40, .16);
+}
+
+/* ══ Stats ═════════════════════════════════════════════════════════════════
+   Pills, not a column grid.
+
+   The grid this replaces was `grid-cols-7` — and after the Gigs stat was
+   removed there were six of them, so the row carried an empty seventh column
+   and the whole set sat off-centre. A pill is intrinsically sized, so the row
+   cannot fall out of step with how many stats there are.
+
+   THEY WRAP; they do not scroll. The file's own history is the argument: a
+   scrolling line was tried here before and hid four of the seven off the right
+   edge, and a four-column grid fixed that by taking two rows of tall tiles.
+   Pills are short enough that wrapping costs almost nothing — six of them come
+   to about 110px of height on a 390px screen, less than the two-line tiles
+   did — and nothing is ever hidden or truncated.
+
+   The figures are the profile's own counts, and a zero shows as a zero: a stat
+   with nothing behind it is still the truth about the profile. */
+
+.pf-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.pf-stat {
+  display: inline-flex;
+  /* BASELINE, so the figure and its word sit on one line the way they would in
+     running text — the number is 13.5px and the label 11.5px, and centring two
+     different sizes leaves the digit riding above the word.
+
+     And NO FIXED HEIGHT: with `height: 32px` the baseline-aligned pair was
+     positioned by the flex box rather than by the padding, so the text sat
+     high in the pill with the slack all underneath. Symmetric vertical padding
+     lets the line box define the height, which centres it by construction. */
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  /* 7.5px at the bottom, not 9px. Symmetric padding does NOT centre the ink:
+     the line box's top is the digit's cap height and its bottom carries the
+     descenders of "Following" and "Published" plus the round overshoot of the
+     zero, so equal padding measured 8px of space above the glyphs and 9.5px
+     below. This is the difference, taken off the bottom. */
+  padding: 9px 13px 7.5px;
+  border: 1px solid rgba(255, 255, 255, .9);
+  border-radius: 999px;
+  /* A pastel wash under the glass — the ground's own hues, periwinkle into
+     mint, at an alpha low enough to read as tinted glass rather than as a
+     coloured chip. The white gradient stays UNDER the tint so the pill is
+     still a light surface first and a colour second; that ordering is what
+     keeps the 11.5px label above its contrast bar. */
+  background:
+    linear-gradient(135deg, rgba(206, 220, 255, .38) 0%, rgba(214, 245, 236, .26) 62%, rgba(255, 243, 216, .22) 100%),
+    linear-gradient(168deg, rgba(255, 255, 255, .88) 0%, rgba(255, 255, 255, .7) 100%);
+  box-shadow: var(--pf-sh-1);
+  font: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--pf-fast) var(--pf-ease), border-color var(--pf-fast) var(--pf-ease),
+              transform var(--pf-fast) var(--pf-ease), box-shadow var(--pf-mid) var(--pf-ease);
+}
+/* Only the ones that go somewhere invite a click. */
+.pf-stat:not(.is-static) { cursor: pointer; }
+.pf-stat:not(.is-static):hover {
+  /* The tint lifts and the white comes forward, so hover reads as the pill
+     brightening rather than as the colour changing. */
+  background:
+    linear-gradient(135deg, rgba(206, 220, 255, .5) 0%, rgba(214, 245, 236, .34) 62%, rgba(255, 243, 216, .28) 100%),
+    linear-gradient(168deg, #fff 0%, #fff 100%);
+  border-color: rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(20, 22, 40, .05), 0 12px 28px rgba(20, 22, 40, .1);
+}
+.pf-stat.is-static { cursor: default; }
+.pf-stat:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+.pf-stat-n {
+  font-size: 13.5px;
+  font-weight: 600;
+  /* 1, so the pill's padding is the only thing above and below the text. A
+     default line-height adds leading that is invisible until you wonder why
+     the pill looks taller on one side. */
+  line-height: 1;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-ink);
+}
+.pf-stat-l {
+  font-size: 11.5px;
+  font-weight: 450;
+  line-height: 1;
+  letter-spacing: -.005em;
+  color: var(--pf-ink-4);
+}
+.pf-stat:not(.is-static):hover .pf-stat-l { color: var(--pf-ink-2); }
+
+@media (max-width: 400px) {
+  /* Tighter, so six still come to two rows rather than three. */
+  .pf-stats { gap: 6px; }
+  .pf-stat { padding: 8px 11px 7px; gap: 5px; }
+  .pf-stat-n { font-size: 13px; }
+  .pf-stat-l { font-size: 11px; }
+}
+
+/* ══ Tabs ═════════════════════════════════════════════════════════════════
+   A scrolling row of pills, sticky under the shell's own bar. Eleven tabs do
+   not fit on a phone and never will, so they scroll rather than wrap into
+   three rows that push the content off the screen. */
+/* NO SURFACE OF ITS OWN. The white gradient, the hairline and the inner
+   specular are all gone: the strip is the page's ground with labels on it.
+
+   It stays STICKY, which the original markup was made sticky on purpose —
+   eleven tabs do not fit a phone, and before that, reaching Gigs from the
+   bottom of About meant scrolling all the way back up. But a sticky strip with
+   nothing behind it has the page's content sliding through the labels, so it
+   keeps a BLUR and no colour: nothing is painted, and what passes underneath
+   is softened enough that the labels stay readable. If even the blur is
+   unwanted, the strip has to stop being sticky — that is the trade, and it is
+   the caller's to make, not one to hide here. */
+.pf-tabs-wrap {
+  position: sticky;
+  z-index: 6;
+  /* Bleeds to the panel edge so the row can scroll the full width, while the
+     pills still start on the page's own gutter. */
+  margin: 0 -16px 18px;
+  padding: 6px 16px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.pf-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.pf-tabs::-webkit-scrollbar { display: none; }
+.pf-tab {
+  flex: 0 0 auto;
+  padding: 7px 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -.012em;
+  color: var(--pf-ink-4);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--pf-fast) var(--pf-ease), color var(--pf-fast) var(--pf-ease),
+              border-color var(--pf-fast) var(--pf-ease);
+}
+.pf-tab:hover { background: rgba(255, 255, 255, .7); color: var(--pf-ink-2); }
+/* The current tab wears the HOVER treatment — the same soft wash, no solid
+   pill, no rim, no shadow. It carries the full ink rather than the secondary
+   one, which is the only thing separating it from a tab the pointer happens to
+   be over; `aria-selected` is what actually announces it, and that is on the
+   button either way. */
+.pf-tab[aria-selected='true'] {
+  background: rgba(255, 255, 255, .7);
+  color: var(--pf-ink);
+}
+.pf-tab:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+/* ══ Section heads ════════════════════════════════════════════════════════
+   The same head the rest of the app uses: title, a rule that fades, and an
+   action at the end. */
+.pf-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 0 0 16px;
+}
+.pf-sec-t {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 15.5px;
+  font-weight: 500;
+  letter-spacing: -.025em;
+  color: var(--pf-ink);
+}
+.pf-sec-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, var(--pf-rim-2) 0%, rgba(20, 22, 40, 0) 92%);
+}
+.pf-sec-a {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--pf-ink-4);
+  text-decoration: none;
+}
+.pf-sec-a:hover { color: var(--pf-ink); }
+
+.pf-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--pf-deco);
+}
+
+/* ══ Controls ═════════════════════════════════════════════════════════════ */
+
+.pf-btn,
+.pf-btn-primary,
+.pf-btn-gold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--pf-fast) var(--pf-ease), border-color var(--pf-fast) var(--pf-ease),
+              transform var(--pf-fast) var(--pf-ease), box-shadow var(--pf-mid) var(--pf-ease);
+}
+.pf-btn {
+  border: 1px solid var(--pf-rim-2);
+  background: rgba(255, 255, 255, .82);
+  color: var(--pf-ink);
+}
+.pf-btn:hover { background: #fff; border-color: var(--pf-rim-3); }
+.pf-btn-primary {
+  border: 1px solid transparent;
+  background: linear-gradient(150deg, #26262b 0%, #15151a 100%);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 8px 22px rgba(20, 22, 40, .2);
+}
+.pf-btn-primary:hover { transform: translateY(-1px); }
+.pf-btn-gold {
+  border: 1px solid var(--pf-gold-rim);
+  background: linear-gradient(150deg, rgba(180, 140, 55, .16) 0%, rgba(180, 140, 55, .08) 100%);
+  color: var(--pf-gold);
+  font-weight: 600;
+}
+.pf-btn-gold:hover { background: linear-gradient(150deg, rgba(180, 140, 55, .24) 0%, rgba(180, 140, 55, .12) 100%); }
+.pf-btn:disabled,
+.pf-btn-primary:disabled,
+.pf-btn-gold:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.pf-btn:focus-visible,
+.pf-btn-primary:focus-visible,
+.pf-btn-gold:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+.pf-btn-sm { height: 32px; padding: 0 11px; font-size: 12px; border-radius: 10px; }
+
+.pf-input,
+.pf-area {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--pf-rim-2);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .86);
+  font: inherit;
+  font-size: 13px;
+  color: var(--pf-ink);
+  outline: none;
+  transition: border-color var(--pf-fast) var(--pf-ease), background var(--pf-fast) var(--pf-ease);
+}
+.pf-input::placeholder,
+.pf-area::placeholder { color: var(--pf-deco); }
+.pf-input:focus-visible,
+.pf-area:focus-visible { border-color: rgba(90, 104, 214, .6); background: #fff; }
+.pf-area { min-height: 92px; resize: vertical; line-height: 1.6; }
+
+.pf-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--pf-ink-3);
+}
+
+/* A chip — a skill, an interest, a tag. */
+.pf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--pf-rim-1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .72);
+  font-size: 12px;
+  color: var(--pf-ink-2);
+  white-space: nowrap;
+}
+.pf-chip-a { text-decoration: none; transition: background var(--pf-fast) var(--pf-ease), border-color var(--pf-fast) var(--pf-ease); }
+.pf-chip-a:hover { background: #fff; border-color: var(--pf-rim-2); color: var(--pf-ink); }
+
+/* ══ Empty states ═════════════════════════════════════════════════════════
+   A dashed panel, the same one the home page uses, so "nothing here yet" looks
+   the same wherever it is said. */
+.pf-empty {
+  padding: 28px 24px;
+  border: 1px dashed var(--pf-rim-3);
+  border-radius: var(--pf-r-md);
+  background: rgba(255, 255, 255, .42);
+  text-align: center;
+}
+.pf-empty-t { font-size: 14px; font-weight: 450; letter-spacing: -.02em; color: var(--pf-ink); }
+.pf-empty-s { margin-top: 5px; font-size: 12.5px; color: var(--pf-ink-4); }
+
+/* While something is in flight. Shaped like what it becomes. */
+.pf-sk {
+  display: block;
+  border-radius: 7px;
+  background: linear-gradient(100deg, rgba(20, 22, 40, .055) 30%, rgba(20, 22, 40, .085) 50%, rgba(20, 22, 40, .055) 70%);
+  background-size: 300% 100%;
+  animation: pf-sk 1.4s ease-in-out infinite;
+}
+@keyframes pf-sk {
+  0% { background-position: 120% 0; }
+  100% { background-position: -20% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-sk { animation: none; }
+  .pf-btn, .pf-btn-primary, .pf-btn-gold, .pf-stat, .pf-tab { transition: none; }
+}
+
+/* ══ Modals ═══════════════════════════════════════════════════════════════
+   Eleven dialogs on this page were built as near-black slabs (#111113,
+   #0E0E10, #0d0e11, #0f0f11, #0a0a0b, #06060f — six shades of the same
+   intention). One surface now, because six nearly identical dark greys were
+   never a design decision, they were six people reaching for "dark". */
+
+.pf-modal {
+  border: 1px solid rgba(255, 255, 255, .9);
+  border-radius: var(--pf-r-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .97) 0%, rgba(250, 251, 253, .95) 100%);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  box-shadow:
+    0 2px 6px rgba(20, 22, 40, .08),
+    0 32px 80px rgba(20, 22, 40, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .9);
+  overflow: hidden;
+}
+
+/* A full-screen dialog on a phone — the same material, no floating edges. */
+.pf-sheet {
+  background: linear-gradient(180deg, rgba(252, 253, 255, .98) 0%, rgba(246, 247, 250, .98) 100%);
+}
+
+/* What sits behind a dialog. A dark scrim still belongs on a light page: its
+   job is to put the page behind out of reach, and that reads as shade. */
+.pf-scrim {
+  background: rgba(24, 26, 42, .34);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ══ The avatar ═══════════════════════════════════════════════════════════
+   The frame around it used to be a 3px border in the page's background colour,
+   which is how you cut a hole in a dark page. On a light page the same trick
+   needs the light colour — and a ring reads better than a border because it
+   does not eat into the image. */
+
+.pf-avatar-frame {
+  overflow: hidden;
+  border: 3px solid #fff;
+  background: linear-gradient(150deg, rgba(150, 175, 255, .22) 0%, rgba(140, 226, 202, .18) 100%);
+  box-shadow:
+    0 2px 6px rgba(20, 22, 40, .12),
+    0 16px 40px rgba(20, 22, 40, .16);
+}
+/* The letter shown when there is no photo. Never a fabricated face. */
+.pf-avatar-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  letter-spacing: -.03em;
+  color: #4854ad;
+}
+
+/* ══ Panels that were dark headers ════════════════════════════════════════ */
+
+.pf-bar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .80) 0%, rgba(255, 255, 255, .62) 100%);
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border-bottom: 1px solid var(--pf-rim-1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .85);
+}
+
+/* A select needs its own arrow once the native dark one stops matching. */
+.pf-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%237a7a80' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+
+/* The page root. Was `min-h-screen bg-[#0D0D0F] text-white`.
+
+   Inside DiscoverShell's `bare` panel the page is handed the whole panel and
+   owns the scrolling from here down — so this is the scroller, not a tall box
+   inside one. `min-height: 100vh` would give the shell a second scrollbar. */
+.pf-page {
+  min-height: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  /* Room for the phone's tab bar, which is fixed over this. */
+  padding-bottom: 88px;
+  color: var(--pf-ink);
+}
+
+/* The "open to work" switch. The knob was the page's own near-black, which is
+   how a dark UI makes a knob read as a hole; on a light track it has to be the
+   lightest thing in the control instead. */
+.pf-knob-on { background: #fff; box-shadow: 0 1px 3px rgba(20, 22, 40, .28); }
+.pf-knob-off { background: rgba(255, 255, 255, .9); box-shadow: 0 1px 2px rgba(20, 22, 40, .16); }
+
+/* ══ Controls that sit on an uploaded image ═══════════════════════════════
+   The cover and the avatar are whatever the person uploaded, so nothing here
+   can assume a light backdrop — these are the one place on the page where a
+   DARK scrim with light ink is the correct answer, because it is the only
+   treatment that holds over an arbitrary photo.
+
+   The dark-to-light pass got this exactly backwards: it rewrote their
+   `text-white` into the page's dark ink but left `bg-black/50` alone, so five
+   controls became dark ink on a dark scrim — the Edit-banner chip, the two
+   picker hover overlays, the remove-image button, and the two spinners whose
+   tracks vanished into the black behind them. */
+
+.pf-on-dark { color: #fff; }
+/* The unfilled part of a spinner's ring, over a dark scrim. */
+.pf-on-dark-rim { border-color: rgba(255, 255, 255, .34); }
+
+/* The Edit-banner chip.
+   LIGHT GLASS, not a dark scrim — deliberately different from the overlays
+   above. It is a control, not a wash over a thumbnail, and it sits inches from
+   the QR button, which is `pf-btn`: two controls on one page in two materials
+   reads as an accident. The white is high enough (.88, rising to full on
+   hover) that the dark ink holds over any cover, light or dark. */
+.pf-cover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, .9);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .88);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  color: var(--pf-ink);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(20, 22, 40, .1), 0 6px 18px rgba(20, 22, 40, .12);
+  transition: background var(--pf-fast) var(--pf-ease), transform var(--pf-fast) var(--pf-ease),
+              box-shadow var(--pf-mid) var(--pf-ease);
+}
+.pf-cover-btn:hover { background: #fff; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(20, 22, 40, .12), 0 10px 24px rgba(20, 22, 40, .16); }
+.pf-cover-btn:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }

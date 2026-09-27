@@ -1,4 +1,5 @@
 'use client';
+import '@/components/profile/profile.css';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -48,15 +49,15 @@ export default function ProfileActivityPanel() {
   }, []);
 
   return (
-    <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] p-5">
+    <div className="rounded-[20px] border pf-rim pf-s1 p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-white/[0.06] border border-white/[0.08]">
-            <Eye className="h-3.5 w-3.5 text-white/50" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-[10px] pf-s2 border pf-rim-2">
+            <Eye className="h-3.5 w-3.5 pf-ink-3" />
           </div>
           <div>
-            <p className="text-[13px] font-semibold text-white/75">Profile activity</p>
-            <p className="text-[10.5px] text-white/30">
+            <p className="text-[13px] font-semibold pf-ink-2">Profile activity</p>
+            <p className="text-[10.5px] pf-ink-4">
               {loading ? 'Loading…' : `${items.length} recent`}
             </p>
           </div>
@@ -74,12 +75,12 @@ export default function ProfileActivityPanel() {
 
       {loading ? (
         <div className="py-8 flex justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-white/25" />
+          <Loader2 className="h-5 w-5 animate-spin pf-ink-4" />
         </div>
       ) : items.length === 0 ? (
         <div className="py-8 text-center">
-          <p className="text-[13px] text-white/35">No activity yet</p>
-          <p className="mt-1 text-[11px] text-white/25">
+          <p className="text-[13px] pf-ink-3">No activity yet</p>
+          <p className="mt-1 text-[11px] pf-ink-4">
             Profile views and resume downloads will appear here.
           </p>
         </div>
@@ -93,28 +94,28 @@ export default function ProfileActivityPanel() {
             return (
               <div
                 key={`${item.type}-${item.createdAt}-${index}`}
-                className="flex items-center gap-3 py-2.5 border-b border-white/[0.04] last:border-0"
+                className="flex items-center gap-3 py-2.5 border-b pf-rim last:border-0"
               >
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-white/[0.05] border border-white/[0.07] overflow-hidden">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] pf-s2 border pf-rim overflow-hidden">
                   {item.user?.avatarUrl ? (
                     /* eslint-disable-next-line @next/next/no-img-element */
                     <img src={item.user.avatarUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <Icon className="h-3.5 w-3.5 text-white/40" />
+                    <Icon className="h-3.5 w-3.5 pf-ink-3" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[12.5px] text-white/70 truncate">
+                  <p className="text-[12.5px] pf-ink-2 truncate">
                     {item.user ? (
-                      <Link href={item.user.href} className="font-semibold text-white/90 hover:underline">
+                      <Link href={item.user.href} className="font-semibold pf-ink hover:underline">
                         {item.user.name}
                       </Link>
                     ) : (
-                      <span className="font-semibold text-white/60">Someone</span>
+                      <span className="font-semibold pf-ink-2">Someone</span>
                     )}{' '}
                     {action}
                   </p>
-                  <p className="text-[10.5px] text-white/30">{timeAgo(item.createdAt)}</p>
+                  <p className="text-[10.5px] pf-ink-4">{timeAgo(item.createdAt)}</p>
                 </div>
               </div>
             );

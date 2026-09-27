@@ -1,0 +1,731 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   THE FEED
+   ══════════════════════════════════════════════════════════════════════════
+
+   The jobs board's system, in the feed's context. It renders inside
+   DiscoverShell, so every `--dh-*` token resolves and there is no second
+   palette. The filter sheet is the shared one — see components/ui/board.
+
+   No `backdrop-filter` anywhere in this file. The navbar is the page's one
+   blurred surface; a second filter under a filtered ancestor renders grey
+   rectangles rather than glass, and everything here is a descendant of the
+   page root. The glass is translucency, a gradient, a hairline and a shadow.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.fd {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  padding-bottom: 88px;
+  position: relative;
+}
+
+.fd-pad { padding-inline: var(--dh-gut); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE ONE ROW
+   ══════════════════════════════════════════════════════════════════════════
+
+   Heading · location buckets · filters, on a single line, sticky to the top of
+   the scroller.
+
+   The grid is `auto minmax(0,1fr) auto`, not flex: the middle track is the only
+   one allowed to take the leftover width, and `minmax(0, …)` is what lets it
+   shrink below its content so the scroller inside it actually scrolls. With
+   `1fr` alone the chips would set the track's minimum and push Filters off the
+   right edge — the classic flexbox/grid overflow trap.
+
+   No blur here. `.dh-panel` already declares one and this row renders inside
+   it; a second backdrop-filter under a filtered ancestor paints grey rectangles
+   rather than glass. The wash is near-opaque instead, with a fade at the bottom
+   so cards scrolling under it are not cut by a hard line.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.fd-bar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 34px 15px;
+  background: linear-gradient(180deg,
+    rgba(251, 251, 253, .97) 0%,
+    rgba(251, 251, 253, .95) 66%,
+    rgba(251, 251, 253, 0) 100%);
+}
+
+/* ── The heading ──
+   It is still the page's h1; it is simply no longer 42px of it. */
+.fd-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  letter-spacing: -.03em;
+}
+.fd-title b {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--dh-ink);
+  font-variant-numeric: tabular-nums;
+}
+.fd-title span {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--dh-ink-3);
+}
+
+/* ── The buckets ──
+   A scroller in the middle track. It bleeds under the row's right edge with a
+   mask rather than stopping at a gutter, so "there is more" is visible without
+   an arrow control taking width from the chips. */
+.fd-cats {
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 2px;
+  padding: 3px 2px;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+}
+.fd-cats::-webkit-scrollbar { display: none; }
+
+.fd-cat-b {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .72);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+}
+.fd-cat-b svg { color: var(--dh-ink-4); transition: color var(--dh-fast) var(--dh-ease); }
+.fd-cat-b:hover { background: rgba(255, 255, 255, .98); color: var(--dh-ink); border-color: rgba(0, 0, 0, .1); }
+.fd-cat-b:hover svg { color: var(--dh-ink-2); }
+.fd-cat-b[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .16);
+}
+.fd-cat-b[data-on="1"] svg { color: rgba(255, 255, 255, .8); }
+.fd-cat-n {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-3);
+}
+.fd-cat-b[data-on="1"] .fd-cat-n { color: rgba(255, 255, 255, .66); }
+
+/* ── Filters ── */
+.fd-fbtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(0, 0, 0, .07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: var(--dh-sh-1);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.fd-fbtn:hover { background: #fff; color: var(--dh-ink); }
+.fd-fbtn svg { color: var(--dh-ink-3); }
+.fd-fbtn[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  border-color: transparent;
+  color: #fff;
+}
+.fd-fbtn[data-on="1"] svg { color: rgba(255, 255, 255, .78); }
+.fd-fbtn-n {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #2c2c2f;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.fd-fbtn[data-on="1"] .fd-fbtn-n { background: rgba(255, 255, 255, .95); color: #1a1a1c; }
+
+/* ── The active filters, when there are any ──
+   Its own line, conditionally rendered, so it costs nothing when empty. */
+/* The label inside a bucket chip. A skill or a city can be long, and without
+   a box of its own the text pushes the count out of the chip. */
+.fd-cat-l {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "Clear all", beside the active filters. It had no rule at all on any board —
+   a raw browser button appeared the moment somebody applied a filter, which no
+   geometry or contrast assertion notices. */
+.fd-clear {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: -.01em;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+  transition: color var(--dh-fast) var(--dh-ease);
+}
+.fd-clear:hover { color: var(--dh-ink); text-decoration: underline; }
+
+.fd-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0 12px;
+}
+
+/* ── Active filters, on the bar ──
+   So the sheet does not have to be opened to find out what is on. */
+.fd-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 11px;
+  border: 1px solid rgba(0, 0, 0, .07);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .72);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.fd-pill svg { color: var(--dh-ink-4); transition: color var(--dh-fast) var(--dh-ease); }
+.fd-pill:hover { background: rgba(255, 255, 255, .95); color: var(--dh-ink); }
+.fd-pill:hover svg { color: var(--dh-ink); }
+
+/* ── The keyword field, in the sheet ──
+   Not in the navbar: that search answers across the whole product, and a
+   single field cannot both go somewhere and narrow something here without the
+   member having to guess which it just did. */
+.fd-kw {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  margin: 2px 6px 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 0, 0, .1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .8);
+  transition: border-color var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.fd-kw:focus-within {
+  border-color: rgba(120, 140, 200, .55);
+  box-shadow: 0 0 0 3.5px rgba(150, 170, 230, .2);
+}
+.fd-kw svg { flex: 0 0 auto; color: var(--dh-ink-3); }
+.fd-kw input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: -.012em;
+  color: var(--dh-ink);
+}
+.fd-kw input:focus { outline: none; }
+.fd-kw input::placeholder { color: var(--dh-ink-3); }
+.fd-kw button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+}
+.fd-kw button:hover { background: rgba(0, 0, 0, .06); color: var(--dh-ink); }
+
+
+
+
+/* ══ The grid ════════════════════════════════════════════════════════════
+   `auto-fill` with a floor rather than a column count per breakpoint: the
+   results column is a different width depending on whether the rail is beside
+   it. `min(320px, 100%)` because a bare 320px track cannot shrink below its
+   own minimum and would overflow the narrowest phones. */
+
+.fd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  gap: 13px;
+  align-items: stretch;
+}
+
+.fd-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 15px 16px 13px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .86) 0%, rgba(255, 255, 255, .62) 100%);
+  box-shadow: var(--dh-sh-1);
+  text-decoration: none;
+  color: inherit;
+  overflow: hidden;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+  animation: fd-in 420ms var(--dh-ease) both;
+}
+@keyframes fd-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.fd-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--dh-sh-2);
+  border-color: rgba(255, 255, 255, .96);
+}
+
+/* The artwork as a square beside the title, not a cover above it — see the
+   note on the card. Either the item's thumbnail or its category's mark, so
+   every card has the same shape whether or not anything was uploaded. */
+.fd-head { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.fd-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .8);
+}
+.fd-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.fd-id { min-width: 0; flex: 1 1 auto; }
+.fd-t {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -.026em;
+  line-height: 1.34;
+  color: var(--dh-ink);
+  /* Two lines always, reserved whether used or not, so the byline beneath sits
+     on the same baseline across a row. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: calc(2 * 1.34em);
+}
+.fd-by {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fd-feat {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(150deg, rgba(186, 205, 255, .55), rgba(214, 199, 255, .46));
+  color: #3c3f63;
+}
+
+.fd-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  min-width: 0;
+}
+.fd-cat {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.fd-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 0, 0, .05);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .64);
+  font-size: 11px;
+  color: var(--dh-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fd-b {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dh-ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fd-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 11px;
+  /* Pushed to the bottom of a stretched cell so the metadata of every card in
+     a row sits on one line. */
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--dh-line-2);
+  min-height: 34px;
+}
+.fd-m {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.fd-m svg { color: var(--dh-ink-4); }
+.fd-go { margin-left: auto; color: var(--dh-ink-4); flex: 0 0 auto; }
+
+/* ══ Load more ═══════════════════════════════════════════════════════════ */
+.fd-more {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid var(--dh-line-2);
+}
+.fd-more-n { font-size: 11.5px; color: var(--dh-ink-3); font-variant-numeric: tabular-nums; }
+.fd-more-b {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 11px;
+  background: var(--dh-glass-2);
+  box-shadow: var(--dh-sh-1);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  color: var(--dh-ink);
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease);
+}
+.fd-more-b:hover:not(:disabled) { background: #fff; transform: translateY(-1px); }
+.fd-more-b:disabled { opacity: .55; cursor: default; }
+
+/* ══ States ══════════════════════════════════════════════════════════════ */
+.fd-skel {
+  height: 168px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(100deg, rgba(255, 255, 255, .58) 30%, rgba(255, 255, 255, .88) 50%, rgba(255, 255, 255, .58) 70%);
+  background-size: 220% 100%;
+  animation: fd-shim 1.5s linear infinite;
+}
+@keyframes fd-shim { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+.fd-empty {
+  padding: 52px 24px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: var(--dh-glass);
+  text-align: center;
+}
+.fd-empty-t { font-size: 15.5px; font-weight: 450; letter-spacing: -.024em; color: var(--dh-ink); }
+.fd-empty-s {
+  margin: 7px auto 0;
+  max-width: 46ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--dh-ink-3);
+}
+.fd-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2), 0 8px 22px rgba(0, 0, 0, .12);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #fff;
+  text-decoration: none;
+}
+
+/* ══ Body and rail ═══════════════════════════════════════════════════════ */
+.fd-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 316px;
+  gap: 24px;
+  align-items: start;
+  padding: 0 var(--dh-gut);
+  margin-top: 2px;
+}
+.fd-rail {
+  position: sticky;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.fd-panel {
+  padding: 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .82) 0%, rgba(255, 255, 255, .56) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+.fd-panel-t { margin: 0 0 4px; font-size: 14.5px; font-weight: 450; letter-spacing: -.026em; color: var(--dh-ink); }
+.fd-panel-s { margin: 0 0 12px; font-size: 11.5px; color: var(--dh-ink-3); }
+
+/* The one panel that asks rather than describes, so it leads the column and
+   carries the only accent in it. */
+.fd-panel-cta {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, .92);
+  background: linear-gradient(158deg, rgba(186, 205, 255, .34) 0%, rgba(214, 199, 255, .26) 46%, rgba(255, 255, 255, .62) 100%);
+  box-shadow: 0 1px 2px rgba(38, 44, 84, .05), 0 10px 30px rgba(38, 44, 84, .11), inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+.fd-panel-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8ea6f0 0%, #b49bf0 52%, #7fd3bd 100%);
+  opacity: .75;
+}
+.fd-panel-cta .fd-panel-t { font-weight: 500; }
+
+.fd-cta {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 12px 0 8px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .22), 0 8px 22px rgba(30, 32, 60, .2);
+  text-decoration: none;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.fd-cta:hover { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0, 0, 0, .26), 0 14px 30px rgba(30, 32, 60, .26); }
+.fd-cta-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .13);
+  color: #fff;
+}
+.fd-cta-b { min-width: 0; flex: 1 1 auto; }
+.fd-cta-t { display: block; font-size: 13px; font-weight: 500; letter-spacing: -.016em; color: #fff; }
+.fd-cta-s { display: block; margin-top: 1px; font-size: 11.5px; color: rgba(255, 255, 255, .72); }
+.fd-cta-a { flex: 0 0 auto; color: rgba(255, 255, 255, .6); }
+
+.fd-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: 11px;
+  text-decoration: none;
+  color: inherit;
+}
+.fd-row-quiet:hover { background: rgba(255, 255, 255, .82); }
+.fd-row-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .84);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dh-ink-2);
+}
+.fd-row-b { min-width: 0; flex: 1 1 auto; }
+.fd-row-t {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.014em;
+  color: var(--dh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fd-row-s {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--dh-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A category row doubles as its own filter. */
+.fd-src {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: calc(100% + 16px);
+  padding: 9px 8px 12px;
+  margin-inline: -8px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease);
+}
+.fd-src:hover { background: rgba(255, 255, 255, .82); }
+.fd-src[data-on="1"] { background: rgba(120, 140, 200, .14); }
+.fd-src-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0, 0, 0, .055);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .8);
+  color: var(--dh-ink-3);
+}
+.fd-src-bar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, .055);
+  overflow: hidden;
+}
+.fd-src-bar::after {
+  content: '';
+  display: block;
+  width: var(--w, 0%);
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4b4b52, #23232a);
+}
+
+/* ══ Responsive ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 1140px) {
+  .fd-body { grid-template-columns: minmax(0, 1fr); }
+  .fd-rail {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+    gap: 12px;
+    order: 2;
+    margin-top: 22px;
+  }
+  .fd-main { order: 1; }
+}
+
+@media (max-width: 1000px) {
+  .fd-bar { gap: 11px; }
+  .fd-cat-b { padding: 0 11px; gap: 6px; }
+}
+
+@media (max-width: 680px) {
+  .fd-title span { display: none; }
+  .fd-title b { font-size: 17px; }
+}
+
+@media (max-width: 620px) {
+  .fd-bar { gap: 9px; padding-top: 13px; padding-bottom: 12px; }
+  .fd-fbtn-l { display: none; }
+  .fd-fbtn { padding: 0 10px; gap: 6px; }
+  .fd-cat-b { height: 32px; font-size: 12px; }
+  .fd-card { padding: 14px 14px 12px; }
+  .fd-mark { width: 40px; height: 40px; border-radius: 12px; }
+  .fd-grid { gap: 11px; }
+  .fd-more-b { margin-left: 0; }
+}

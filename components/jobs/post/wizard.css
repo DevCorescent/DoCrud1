@@ -1,0 +1,710 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   POST A JOB
+   ══════════════════════════════════════════════════════════════════════════
+
+   The boards' system, applied to a form. It renders inside DiscoverShell, so
+   every `--dh-*` token resolves and there is no second palette.
+
+   No `backdrop-filter` in this file. The navbar is the page's one blurred
+   surface; a second filter under a filtered ancestor renders grey rectangles
+   rather than glass. The glass here is translucency, a gradient, a hairline
+   and a shadow — which is what reads as glass anyway.
+
+   A hiring form has to look trustworthy, so this is deliberately quieter than
+   a card grid: one surface per panel, no coloured rims, no second layer of
+   glass inside a glass panel.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.wz {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  padding-bottom: 96px;
+}
+
+.wz-in {
+  display: grid;
+  /* The middle track is capped, not elastic. A job-title input stretched to
+     1090px on a wide monitor reads as a landing page, not a form — a line of
+     input wants to be about as long as the text it holds. */
+  grid-template-columns: 236px minmax(0, 720px) 292px;
+  justify-content: center;
+  gap: 30px 34px;
+  align-items: start;
+  padding: 22px var(--dh-gut) 0;
+  margin-inline: auto;
+}
+
+/* ══ The step rail ═══════════════════════════════════════════════════════ */
+
+.wz-rail { position: sticky; top: 14px; }
+.wz-rail-t {
+  margin: 0 0 12px;
+  padding-inline: 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  color: var(--dh-ink-3);
+}
+.wz-steps { display: flex; flex-direction: column; gap: 2px; }
+
+.wz-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -.014em;
+  color: var(--dh-ink-3);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.wz-step:disabled { cursor: default; opacity: .55; }
+.wz-step:hover:not(:disabled):not([data-on="1"]) { background: rgba(255, 255, 255, .72); color: var(--dh-ink); }
+.wz-step[data-on="1"] {
+  background: linear-gradient(150deg, rgba(174, 198, 255, .4) 0%, rgba(213, 195, 255, .3) 100%);
+  border-color: rgba(255, 255, 255, .92);
+  color: var(--dh-ink);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(40, 46, 82, .06), inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+.wz-num {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .82);
+  font-size: 11.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-3);
+}
+.wz-step[data-on="1"] .wz-num { background: #fff; color: var(--dh-ink); border-color: rgba(255, 255, 255, .95); }
+.wz-step[data-done="1"] .wz-num {
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* The line joining the steps, so the rail reads as a path rather than a menu. */
+.wz-step + .wz-step::before {
+  content: '';
+  position: absolute;
+  left: 22px;
+  top: -3px;
+  width: 1px;
+  height: 5px;
+  background: rgba(0, 0, 0, .1);
+}
+
+/* ══ The step itself ═════════════════════════════════════════════════════ */
+
+.wz-main { min-width: 0; }
+.wz-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+.wz-head-t { min-width: 0; flex: 1 1 auto; }
+/* Focus moves here on every step change so a screen reader announces the new
+   step. That is programmatic focus, not keyboard navigation — and the page's
+   global `:focus-visible` painted a full-width box around the heading every
+   time. The announcement is the point; the ring is not. */
+.wz-h1:focus, .wz-h1:focus-visible { outline: none; }
+
+/* The composer's own name, above the step's heading. The step heading changes
+   seven times; this does not, so it is the line that tells the poster what they
+   are in the middle of making. */
+.wz-kick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  /* The stylesheet exposes its inks as CLASSES rather than custom properties,
+     so `var(--wz-faint)` resolved to nothing and silently used the fallback.
+     This is the same ink `.wz-faint` sets. */
+  color: var(--dh-ink-3, #636368);
+}
+.wz-kick-k {
+  padding: 3px 8px;
+  border: 1px solid rgba(90, 104, 214, .24);
+  border-radius: 999px;
+  background: rgba(90, 104, 214, .09);
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: #4854ad;
+}
+
+/* ══ The single-step composer ═════════════════════════════════════════════
+   The project form is the same language as the seven-step one, minus the parts
+   that only make sense with seven steps: no rail, no Back, no step counter. So
+   it takes the full measure rather than leaving a column empty where the rail
+   would have been, and it ends with one button instead of a footer bar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.wz-in.wz-solo {
+  /* No rail column: one measure, centred, and narrower than the two-column
+     layout so the copy keeps a readable line length. */
+  display: block;
+  max-width: 760px;
+  margin-inline: auto;
+}
+.wz-solo .wz-main { max-width: none; }
+
+/* Each group of fields is its own panel, so a long single-step form reads as
+   four short sections instead of one tall one. */
+.wz-card { margin-bottom: 14px; }
+
+/* An input with a button welded to its right — the skills adder. */
+.wz-add { display: flex; gap: 8px; }
+.wz-add .wz-input { flex: 1 1 auto; min-width: 0; }
+.wz-add .wz-btn { flex: 0 0 auto; width: 44px; padding: 0; justify-content: center; }
+
+/* What has been added. A tag is a button because its whole job is to be
+   removed, and the × is the affordance rather than a decoration. */
+.wz-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.wz-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(20, 22, 40, .12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .78);
+  font: inherit;
+  font-size: 12px;
+  color: #1d1d1f;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(.22, 1, .36, 1), border-color 140ms cubic-bezier(.22, 1, .36, 1);
+}
+.wz-tag svg { color: #86868b; }
+.wz-tag:hover { background: #fff; border-color: rgba(220, 38, 38, .34); }
+.wz-tag:hover svg { color: #b91c1c; }
+.wz-tag:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+/* The way out, not the way on. Text-weight, and it never stretches: in the
+   head's flex row a button-like link took the whole width on a phone. */
+.wz-back {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  flex: 0 0 auto;
+  gap: 7px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #565659;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 140ms cubic-bezier(.22, 1, .36, 1), color 140ms cubic-bezier(.22, 1, .36, 1);
+}
+.wz-back:hover { background: rgba(20, 22, 40, .05); color: #1d1d1f; }
+.wz-back:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+.wz-solo-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.wz-foot-n { font-size: 12px; }
+
+@media (max-width: 620px) {
+  .wz-solo-foot .wz-go { flex: 1 1 100%; justify-content: center; }
+}
+
+/* ── A row of mutually exclusive chips ──
+   Same ink and the same hairline as the inputs beside them, so a chip and a
+   text field read as one form rather than two. The selected one inverts, which
+   is the only state change strong enough to be unambiguous at this size. */
+.wz-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.wz-chip {
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(20, 22, 40, .12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .7);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  color: #565659;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(.22, 1, .36, 1), border-color 140ms cubic-bezier(.22, 1, .36, 1),
+              color 140ms cubic-bezier(.22, 1, .36, 1);
+}
+.wz-chip:hover { background: #fff; border-color: rgba(20, 22, 40, .2); color: #1d1d1f; }
+.wz-chip:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+.wz-chip[data-on="1"] {
+  border-color: transparent;
+  background: linear-gradient(150deg, #26262b 0%, #15151a 100%);
+  color: #fff;
+}
+
+/* Three across where there is room, stacking on a phone rather than squeezing
+   a currency select to nothing. */
+.wz-grid3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: 14px;
+}
+/* The stacked-field rule spaces one field from the NEXT one, which inside a
+   grid means the second and third columns were pushed 18px below the first —
+   measurably, not arguably: labels at 907, 925, 925. The grid's own `gap` is
+   the spacing here, so the sibling margin is cancelled and the three labels
+   share a baseline. */
+.wz-grid3 > .wz-f + .wz-f { margin-top: 0; }
+
+.wz-h1 {
+  margin: 0;
+  font-size: clamp(21px, 1.2vw + 13px, 27px);
+  font-weight: 450;
+  letter-spacing: -.032em;
+  line-height: 1.16;
+  color: var(--dh-ink);
+  outline: none;
+}
+.wz-cap {
+  margin: 7px 0 0;
+  max-width: 58ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--dh-ink-3);
+}
+
+.wz-panel {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .86) 0%, rgba(255, 255, 255, .64) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+
+.wz-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 11px 13px;
+  border: 1px solid rgba(120, 140, 200, .28);
+  border-radius: 12px;
+  background: rgba(150, 170, 230, .12);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dh-ink-2);
+}
+.wz-note svg { flex: 0 0 auto; margin-top: 1px; color: #4a5a8a; }
+
+.wz-err {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 16px;
+  padding: 11px 13px;
+  border: 1px solid rgba(200, 70, 80, .3);
+  border-radius: 12px;
+  background: rgba(230, 110, 120, .1);
+  font-size: 12.5px;
+  font-weight: 450;
+  line-height: 1.5;
+  /* Measured on this surface: 5.6:1. */
+  color: #8c2230;
+}
+.wz-err svg { flex: 0 0 auto; margin-top: 1px; }
+
+/* ══ Fields ══════════════════════════════════════════════════════════════ */
+
+.wz-f { display: block; }
+.wz-f + .wz-f { margin-top: 18px; }
+.wz-lab {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -.012em;
+  color: var(--dh-ink);
+}
+.wz-req { font-size: 10.5px; font-weight: 450; color: #9a3a44; letter-spacing: 0; }
+.wz-opt { font-size: 11px; font-weight: 400; color: var(--dh-ink-3); }
+
+.wz-input,
+.wz-area {
+  width: 100%;
+  border: 1px solid rgba(0, 0, 0, .11);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .9);
+  font: inherit;
+  font-size: 13.5px;
+  letter-spacing: -.012em;
+  color: var(--dh-ink);
+  transition: border-color var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease),
+              background var(--dh-fast) var(--dh-ease);
+}
+.wz-input { height: 42px; padding: 0 13px; }
+/* Tailwind's `pl-10` loses to `.wz-input`'s padding shorthand on source order,
+   which put the location pin on top of the placeholder. This is the wizard's
+   own, so order cannot decide it. */
+.wz-input-icon { padding-left: 38px; }
+.wz-area { padding: 11px 13px; line-height: 1.6; resize: vertical; min-height: 104px; }
+.wz-input::placeholder, .wz-area::placeholder { color: var(--dh-ink-3); }
+.wz-input:focus, .wz-area:focus {
+  outline: none;
+  background: #fff;
+  border-color: rgba(120, 140, 200, .6);
+  box-shadow: 0 0 0 3.5px rgba(150, 170, 230, .2);
+}
+.wz-input[aria-invalid="true"], .wz-area[aria-invalid="true"] {
+  border-color: rgba(190, 70, 80, .55);
+  background: rgba(240, 200, 204, .16);
+}
+
+.wz-hint { margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--dh-ink-3); }
+.wz-ferr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11.5px;
+  font-weight: 450;
+  color: #8c2230;
+}
+
+/* ══ The help card ═══════════════════════════════════════════════════════ */
+
+.wz-help {
+  position: sticky;
+  top: 14px;
+  padding: 16px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .8) 0%, rgba(255, 255, 255, .54) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+.wz-help-t {
+  margin: 0 0 9px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  color: var(--dh-ink);
+}
+.wz-help p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--dh-ink-3);
+}
+.wz-help p + p { margin-top: 9px; }
+
+/* ══ The action bar ══════════════════════════════════════════════════════ */
+
+.wz-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--dh-line-2);
+}
+
+.wz-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 42px;
+  padding: 0 18px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 12px;
+  background: var(--dh-glass-2);
+  box-shadow: var(--dh-sh-1);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease);
+}
+.wz-btn:hover:not(:disabled) { background: #fff; transform: translateY(-1px); }
+.wz-btn:disabled { opacity: .5; cursor: default; }
+
+.wz-go {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 42px;
+  padding: 0 22px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2), 0 8px 22px rgba(30, 32, 60, .16);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.012em;
+  color: #fff;
+  cursor: pointer;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.wz-go:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0, 0, 0, .24), 0 14px 30px rgba(30, 32, 60, .22); }
+.wz-go:disabled { opacity: .6; cursor: default; }
+
+.wz-saved { margin-top: 9px; text-align: right; font-size: 11.5px; color: var(--dh-ink-3); }
+
+/* ══ AI fill ═════════════════════════════════════════════════════════════ */
+
+.wz-ai-open,
+.wz-ai-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background:
+    linear-gradient(145deg, #2b2836 0%, #171619 46%, #221d36 100%) padding-box,
+    linear-gradient(140deg, rgba(182, 170, 255, .9) 0%, rgba(255, 255, 255, .28) 34%,
+      rgba(128, 198, 255, .62) 66%, rgba(182, 170, 255, .55) 100%) border-box;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -.008em;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 6px 18px rgba(30, 24, 74, .2);
+  transition: transform var(--dh-fast) var(--dh-ease);
+}
+.wz-ai-open:hover:not(:disabled) { transform: translateY(-1px); }
+.wz-ai-open:disabled { opacity: .55; cursor: default; }
+
+.wz-ai {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, .9);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(158deg, rgba(186, 205, 255, .3) 0%, rgba(214, 199, 255, .22) 48%, rgba(255, 255, 255, .6) 100%);
+  box-shadow: 0 1px 2px rgba(38, 44, 84, .05), 0 10px 28px rgba(38, 44, 84, .1);
+  animation: wz-ai-in 200ms var(--dh-ease) both;
+}
+@keyframes wz-ai-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+.wz-ai-h { display: flex; align-items: center; gap: 9px; }
+.wz-ai-t { margin: 0; font-size: 13.5px; font-weight: 500; letter-spacing: -.02em; color: var(--dh-ink); }
+.wz-ai-x {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 9px;
+  background: var(--dh-glass-2);
+  color: var(--dh-ink-3);
+  cursor: pointer;
+}
+.wz-ai-x:hover { background: #fff; color: var(--dh-ink); }
+.wz-ai-s { margin: 6px 0 12px; font-size: 12px; line-height: 1.55; color: var(--dh-ink-2); }
+.wz-ai-row { display: flex; gap: 9px; align-items: flex-start; }
+.wz-ai-row .wz-input { flex: 1 1 auto; }
+
+.wz-ai-out { margin-top: 14px; padding-top: 13px; border-top: 1px solid rgba(0, 0, 0, .07); }
+.wz-ai-out-t {
+  margin: 0 0 9px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--dh-ink-3);
+}
+.wz-ai-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.wz-ai-item:hover { background: rgba(255, 255, 255, .7); }
+.wz-ai-box {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid rgba(0, 0, 0, .2);
+  border-radius: 5px;
+  color: transparent;
+  transition: background var(--dh-fast) var(--dh-ease), border-color var(--dh-fast) var(--dh-ease);
+}
+.wz-ai-item[data-on="1"] .wz-ai-box { background: #1d1d1f; border-color: #1d1d1f; color: #fff; }
+.wz-ai-b { min-width: 0; flex: 1 1 auto; }
+.wz-ai-k {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--dh-ink-3);
+}
+.wz-ai-v {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--dh-ink);
+  white-space: pre-line;
+}
+.wz-ai-over { font-size: 11px; color: var(--dh-ink-3); }
+.wz-ai-foot { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.wz-ai-note {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--dh-ink-3);
+}
+
+/* ══ Responsive ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 1240px) {
+  .wz-in { grid-template-columns: 218px minmax(0, 1fr); }
+  .wz-help { position: static; margin-top: 18px; }
+  .wz-help-wrap { grid-column: 2; }
+}
+
+@media (max-width: 900px) {
+  /* Room for the fixed action bar AND the app's own bottom navigation, so the
+     last field can always be scrolled clear of both. */
+  .wz { padding-bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+  .wz-in { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .wz-rail { position: static; }
+  /* The rail becomes a scrolling strip: seven steps stacked above the form is
+     a screen of navigation before the first field. */
+  .wz-steps {
+    flex-direction: row;
+    gap: 7px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .wz-steps::-webkit-scrollbar { display: none; }
+  .wz-step { flex: 0 0 auto; padding: 0 12px; height: 36px; border-radius: 10px; white-space: nowrap; }
+  .wz-step + .wz-step::before { display: none; }
+  .wz-help-wrap { grid-column: 1; }
+}
+
+/* The head stacks before the form does. A full-width AI Fill button sitting in
+   the same flex row as the heading squeezed the title to one word per line —
+   "A / job / basics" on a 390px screen. */
+@media (max-width: 760px) {
+  .wz-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .wz-ai-open { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 620px) {
+  .wz-panel { padding: 16px; }
+  .wz-foot { flex-wrap: wrap; }
+  .wz-go { margin-left: auto; }
+  .wz-ai-row { flex-direction: column; }
+  .wz-ai-row .wz-input { width: 100%; }
+  .wz-ai-go { width: 100%; justify-content: center; }
+}
+
+/* Kept as names the steps already import. */
+.wz-muted { color: var(--dh-ink-2); }
+.wz-faint { color: var(--dh-ink-3); }
+
+/* The Radix select trigger, dressed as one of this form's fields. */
+.wz-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+}
+.wz-opt-desc { margin-left: 8px; font-size: 11.5px; color: var(--dh-ink-3); }
+
+.wz-spin { animation: wz-spin 900ms linear infinite; }
+@keyframes wz-spin { to { transform: rotate(360deg); } }
+
+/* ── Ink, stated locally ──
+   The app's dark scope rewrites Tailwind's slate palette, so `text-slate-800`
+   inside this light surface computed to rgb(248,250,252) — white text on a
+   white form. These are the wizard's own, and they cannot be rewritten by a
+   theme this page does not use. */
+.wz-ink { color: var(--dh-ink); }
+.wz-link {
+  color: #2f5bbf;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(47, 91, 191, .3);
+}
+.wz-link:hover { border-bottom-color: #2f5bbf; }
+
+/* ── The action bar on phones ──
+   Sticky to the bottom of the scroller below 900px, clear of the app's own
+   bottom navigation. In flow it sat at the end of the content, which put
+   Continue below the fold on a short screen — the poster had to scroll to find
+   the only way forward. */
+@media (max-width: 900px) {
+  .wz-foot {
+    /* FIXED, NOT STICKY — the original wizard learned this and I undid it.
+       This bar is the LAST CHILD of its container, so a sticky element has no
+       room to travel: the containing block ends where the bar does, and it
+       simply sits at the end of the content. Measured, that left Continue
+       pinned two thirds of the way down the page with the form scrolling past
+       it. Fixed pins it to the viewport at every height; `.wz` carries matching
+       bottom padding so it never covers the last field. */
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+    z-index: 5;
+    /* Full-bleed to the edges of the scroller, so it reads as a bar the page
+       runs under rather than a button floating over the form. It was a
+       translucent band the width of the column, and the Job title field showed
+       straight through it. */
+    margin: 0;
+    padding: 11px var(--dh-gut);
+    border-top: 1px solid var(--dh-line);
+    /* Opaque. A gradient that starts transparent lets whatever is behind the
+       bar read as part of it. */
+    background: #f4f5f9;
+    box-shadow: 0 -8px 20px rgba(20, 24, 40, .07);
+  }
+  /* Thumb-sized, and sharing the row rather than one floating at the end. */
+  .wz-foot .wz-btn, .wz-foot .wz-go { height: 44px; }
+  .wz-foot .wz-go { flex: 1 1 auto; max-width: 60%; }
+}

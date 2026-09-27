@@ -1,0 +1,227 @@
+/**
+ * The projects board — only what a project has and a job does not.
+ *
+ * The chrome comes from jobs-board.css: the sticky row, the category chips, the
+ * filter button, the grid, the empty states, the rail and the panels are the
+ * SAME classes the jobs board uses, so the two pages cannot drift apart. What
+ * is here is the card's own content — a poster mark, a budget, a description,
+ * a deadline — plus the two controls the jobs board does not have, a search
+ * field in the bar and a sort select.
+ */
+
+/* ── The end of the sticky row ── */
+
+.pj-bar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.pj-find {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--dh-rim, rgba(255, 255, 255, .72));
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .78);
+  box-shadow: var(--dh-sh-1);
+  transition: border-color 140ms cubic-bezier(.22, 1, .36, 1), background 140ms cubic-bezier(.22, 1, .36, 1);
+}
+.pj-find:focus-within { background: #fff; border-color: rgba(90, 104, 214, .5); }
+.pj-find svg { flex: 0 0 auto; color: var(--dh-ink-4, #86868b); }
+.pj-find input {
+  width: 168px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--dh-ink, #1d1d1f);
+  outline: none;
+}
+.pj-find input::placeholder { color: var(--dh-ink-4, #86868b); }
+.pj-find button {
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dh-ink-4, #86868b);
+  cursor: pointer;
+}
+.pj-find button:hover { background: rgba(20, 22, 40, .07); color: var(--dh-ink, #1d1d1f); }
+
+.pj-sort {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--dh-rim, rgba(255, 255, 255, .72));
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .78);
+  box-shadow: var(--dh-sh-1);
+}
+.pj-sort-l { font-size: 11.5px; color: var(--dh-ink-3, #636368); white-space: nowrap; }
+.pj-sort select {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--dh-ink, #1d1d1f);
+  outline: none;
+  cursor: pointer;
+  max-width: 150px;
+}
+
+/* ── The card ── */
+
+.pj-card { min-width: 0; }
+
+/* The poster, not an employer: a person's avatar, or the project glyph when
+   they have none. */
+.pj-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  border: 1px solid rgba(20, 22, 40, .08);
+  border-radius: 12px;
+  background: rgba(150, 175, 255, .14);
+  color: #4854ad;
+}
+.pj-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.pj-desc {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--dh-ink-3, #636368);
+  /* Three lines. A project brief is prose and some of them are very long. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The figure, when there is one. `budgetLine()` decides that — a negotiable
+   budget arrives here as the word, never as a zero. */
+.pj-budget {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border: 1px solid rgba(74, 132, 96, .26);
+  border-radius: 999px;
+  background: rgba(74, 132, 96, .1);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #2f6444;
+  white-space: nowrap;
+}
+
+.pj-sub { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 9px; }
+
+/* Anything but open says so. Open is the default and needs no badge. */
+.pj-status {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.pj-status[data-s='in_progress'] { background: rgba(180, 130, 40, .13); color: #7a5410; }
+.pj-status[data-s='closed'] { background: rgba(20, 22, 40, .08); color: #565659; }
+
+.pj-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dh-ink, #1d1d1f);
+}
+.pj-go svg { color: var(--dh-ink-4, #86868b); transition: transform 140ms cubic-bezier(.22, 1, .36, 1); }
+.pj-card:hover .pj-go svg { transform: translateX(2px); }
+
+/* A quiet inline action — the empty state's and the second rail panel's. The
+   jobs board has no equivalent (its rail ends in the dark `.jb-cta` block), so
+   this one is ours. */
+.pj-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 9px 14px;
+  border: 1px solid var(--dh-line, rgba(0, 0, 0, .09));
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .8);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--dh-ink, #1d1d1f);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(.22, 1, .36, 1), border-color 140ms cubic-bezier(.22, 1, .36, 1),
+              transform 140ms cubic-bezier(.22, 1, .36, 1);
+}
+.pj-link:hover { background: #fff; border-color: rgba(20, 22, 40, .16); transform: translateY(-1px); }
+.pj-link:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+/* ── Paging ── */
+
+.pj-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 22px;
+}
+.pj-pages-n { font-size: 12.5px; color: var(--dh-ink-3, #636368); font-variant-numeric: tabular-nums; }
+.pj-pages .jb-fbtn:disabled { opacity: .45; cursor: default; }
+
+/* ── While the query is out ──
+   Shaped like the card it becomes, so the grid does not reflow when it lands. */
+
+.pj-skel { pointer-events: none; }
+.pj-sk {
+  display: block;
+  border-radius: 7px;
+  background: linear-gradient(100deg, rgba(20, 22, 40, .055) 30%, rgba(20, 22, 40, .085) 50%, rgba(20, 22, 40, .055) 70%);
+  background-size: 300% 100%;
+  animation: pj-sk 1.4s ease-in-out infinite;
+}
+.pj-sk-t { height: 14px; width: 72%; }
+.pj-sk-s { height: 11px; width: 92%; margin-top: 12px; }
+.pj-sk-r { height: 11px; width: 46%; margin-top: 8px; }
+@keyframes pj-sk {
+  0% { background-position: 120% 0; }
+  100% { background-position: -20% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pj-sk { animation: none; }
+}
+
+@media (max-width: 900px) {
+  /* The bar stacks on a phone, so these two take the line they are given
+     rather than competing with the category chips for it. */
+  .pj-bar-end { width: 100%; }
+  .pj-find { flex: 1 1 auto; }
+  .pj-find input { width: 100%; }
+}
+
+@media (max-width: 520px) {
+  .pj-sort-l { display: none; }
+  .pj-sort select { max-width: 116px; }
+}

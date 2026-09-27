@@ -1,0 +1,268 @@
+/**
+ * The job detail page, inside the shell.
+ *
+ * The page's own surfaces are still Tailwind — it carries the whole apply flow
+ * and converting 1000 lines of it to classes would be a rewrite, not a
+ * restyle. What lives here is only what the SHELL needs from it: the scrolling
+ * region, the ground, and the few rhythm values that make the page sit in the
+ * light frame the way /jobs does.
+ */
+
+.jd-page {
+  min-height: 0;
+  /* The shell's `bare` mode hands over the whole panel, so the page owns the
+     scrolling from here down. */
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jd-main {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  /* Room at the bottom for the phone's tab bar, which is fixed over this. */
+  padding-bottom: 84px;
+  scroll-behavior: smooth;
+}
+
+/* ══ Surfaces ═════════════════════════════════════════════════════════════
+   Own classes, because the app's global dark scope rewrites Tailwind's light
+   utilities with `!important` while the document is in dark mode — see the note
+   on the constants in JobDetailPage.tsx. These names it cannot match.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.jd-panel {
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 18px;
+  background: linear-gradient(168deg, rgba(255, 255, 255, .86) 0%, rgba(255, 255, 255, .56) 100%);
+  box-shadow: 0 1px 2px rgba(20, 22, 40, .04), 0 10px 28px rgba(20, 22, 40, .06);
+}
+
+/* Four inks. The theme lightens Tailwind's slate utilities — `text-slate-500`
+   computed to rgb(148,163,184) here, about 2.3:1 — so none of them are used
+   for colour on this page any more.
+
+   RE-MEASURED once the compositing helper was corrected. The old helper picked
+   each ancestor layer's HIGHEST-ALPHA stop, which for a white glass panel is
+   its most opaque white — the lightest, most flattering backdrop the panel
+   ever paints — so these inks had been scored against a surface that is not
+   the worst one. Against the real worst composite, #636368 came out at 4.41:1
+   on the periwinkle end of the panel and the 10px kicker's #86868b at
+   3.47:1. */
+.jd-ink { color: #1d1d1f; }
+.jd-ink-2 { color: #3f3f45; }
+.jd-muted { color: #565659; }
+.jd-faint { color: #5c5c61; }
+.jd-ink-h:hover { color: #1d1d1f; }
+.jd-rim-2 { border-color: rgba(20, 22, 40, .16); }
+/* The bullet before a list item — decoration, so it may be lighter than text. */
+.jd-dot { background: #a9a9ae; }
+
+.jd-kicker {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #6e6e73;
+}
+
+/* A quiet inset surface — what the translucent whites used to be. */
+.jd-soft {
+  background: rgba(255, 255, 255, .62);
+}
+.jd-soft-h:hover { background: #fff; }
+.jd-solid { background: #fff; }
+.jd-rim { border-color: rgba(20, 22, 40, .1); }
+
+.jd-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(20, 22, 40, .13);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .86);
+  font: inherit;
+  font-size: 13px;
+  color: #1d1d1f;
+  outline: none;
+  transition: border-color 140ms cubic-bezier(.22, 1, .36, 1), background 140ms cubic-bezier(.22, 1, .36, 1);
+}
+.jd-input::placeholder { color: #a9a9ae; }
+.jd-input:focus-visible { border-color: rgba(90, 104, 214, .6); background: #fff; }
+
+.jd-btn,
+.jd-btn-primary,
+.jd-apply {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 40px;
+  padding: 0 17px;
+  border-radius: 13px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(.22, 1, .36, 1), border-color 140ms cubic-bezier(.22, 1, .36, 1),
+              transform 140ms cubic-bezier(.22, 1, .36, 1), box-shadow 240ms cubic-bezier(.22, 1, .36, 1);
+}
+.jd-btn {
+  border: 1px solid rgba(20, 22, 40, .12);
+  background: rgba(255, 255, 255, .82);
+  color: #1d1d1f;
+}
+.jd-btn:hover { background: #fff; border-color: rgba(20, 22, 40, .18); }
+
+.jd-btn-primary {
+  border: 1px solid transparent;
+  background: linear-gradient(150deg, #26262b 0%, #15151a 100%);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .18), 0 8px 22px rgba(20, 22, 40, .2);
+}
+.jd-btn-primary:hover { transform: translateY(-1px); }
+
+/* Emerald stays: it is already the jobs accent and reads on a light ground. */
+.jd-apply {
+  border: 1px solid transparent;
+  /* Darker than the jobs accent it started as. White 600-weight 13px on
+     #0f9f6e measures 3.38:1 and on #0a8a5f 4.36:1 — both under 4.5:1, and no
+     ink change can fix a button whose own fill is too light for white. The
+     fill moved instead: 5.15:1 and 6.6:1 on these two stops. */
+  background: linear-gradient(150deg, #0a7d55 0%, #076b4a 100%);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(6, 95, 70, .2), 0 10px 26px rgba(16, 185, 129, .24);
+}
+.jd-apply:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(6, 95, 70, .22), 0 14px 32px rgba(16, 185, 129, .3); }
+.jd-apply:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.jd-apply-sm { height: 36px; padding: 0 13px; font-size: 12.5px; border-radius: 11px; }
+
+.jd-btn:focus-visible,
+.jd-btn-primary:focus-visible,
+.jd-apply:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+/* The description is NOT raw HTML here — `JobDescription` parses it into
+   headings, lists, fact pairs and paragraphs and renders real React elements,
+   so there is no employer markup to override and the prose rules that used to
+   sit here were styling nothing. The blocks carry the page's own inks. */
+
+/* ── More roles ──
+   The related list under the description. Deliberately the board's own card
+   language rather than a third kind of job card: a role looks the same
+   wherever it is shown. */
+
+.jd-more { margin-top: 26px; }
+.jd-more-h {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 0 0 14px;
+}
+.jd-more-t {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  color: #1d1d1f;
+}
+.jd-more-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(20, 22, 40, .1) 0%, rgba(20, 22, 40, 0) 92%);
+}
+.jd-more-a {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #5c5c61;
+  text-decoration: none;
+}
+.jd-more-a:hover { color: #1d1d1f; }
+
+/* The server's score, in the rail. */
+.jd-score {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  color: #3f4aa8;
+}
+.jd-score-u { font-size: 14px; font-weight: 500; opacity: .7; }
+.jd-why {
+  padding: 5px 9px;
+  border-radius: 9px;
+  background: rgba(90, 104, 214, .08);
+  font-size: 11.5px;
+  color: #454c86;
+}
+
+.jd-chip {
+  padding: 4px 9px;
+  border: 1px solid rgba(0, 0, 0, .09);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .7);
+  font-size: 11.5px;
+  color: #565659;
+}
+
+.jd-rel-loc { font-size: 11.5px; color: #5c5c61; }
+.jd-rel-go { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; color: #1d1d1f; }
+
+.jd-more-g {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 10px;
+}
+.jd-rel {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, .72);
+  border-radius: 16px;
+  background: linear-gradient(168deg, rgba(255, 255, 255, .84) 0%, rgba(255, 255, 255, .5) 100%);
+  box-shadow: 0 1px 2px rgba(20, 22, 40, .04), 0 8px 22px rgba(20, 22, 40, .06);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 240ms cubic-bezier(.22, 1, .36, 1), box-shadow 240ms cubic-bezier(.22, 1, .36, 1);
+}
+.jd-rel:hover { transform: translateY(-2px); box-shadow: 0 2px 4px rgba(20, 22, 40, .05), 0 14px 32px rgba(20, 22, 40, .1); }
+.jd-rel-t {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.34;
+  letter-spacing: -.018em;
+  color: #1d1d1f;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.jd-rel-m { display: flex; flex-wrap: wrap; gap: 6px; }
+.jd-rel-c {
+  padding: 2px 8px;
+  border: 1px solid rgba(0, 0, 0, .09);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .6);
+  font-size: 11px;
+  color: #565659;
+  white-space: nowrap;
+}
+.jd-rel-f {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  font-size: 11.5px;
+  color: #5c5c61;
+}
+
+@media (max-width: 620px) {
+  .jd-main { padding-bottom: 92px; }
+}

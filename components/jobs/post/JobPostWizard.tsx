@@ -29,7 +29,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { jobUrgencyLabel } from '@/lib/job-urgency';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, ArrowRight, Briefcase, Check, CloudUpload, Loader2 } from 'lucide-react';
+import { ArrowRight, Check, CloudUpload, Loader2, Sparkles } from 'lucide-react';
 import {
   EMPLOYMENT_TYPE_LABELS, WORK_MODE_LABELS, EXPERIENCE_LABELS,
 } from '@/lib/jobs-ui';
@@ -38,9 +38,10 @@ import {
   clearLocalDraft, draftFromJob, draftHasContent, isStepId, readLocalDraft,
   saveLocalDraft, stepIndex, validateStep,
   type FieldErrors, type JobDraft, type StepId,
+  OPP_KINDS, type OppKind,
 } from '@/lib/jobs/post-wizard';
-import { applyColorMode, getStoredColorMode, type ColorMode } from '@/app/components/ThemeController';
-import { ThemeToggle } from '@/app/components/ThemeToggle';
+import DiscoverShell from '@/components/home/discover/DiscoverShell';
+import { AiFill } from './AiFill';
 import { formatSalary, type JobPreviewPoster } from '../JobPostPreview';
 import { GLASS, MUTED, FAINT } from './ui';
 import { StepArt } from './StepArt';
@@ -55,6 +56,14 @@ export default function JobPostWizard() {
   const router = useRouter();
   const params = useSearchParams();
   const editId = params?.get('edit') ?? '';
+  /* ── Which kind of opportunity this is ──
+     The composer is one form because the draft, the validation and the publish
+     endpoint are one system; the KIND only decides an employment type, a
+     heading and a word or two of copy. `?kind=internship` is what the Jobs
+     menu's "Post an internship" row links to, and an unknown value falls back
+     to a job rather than rendering a category that does not exist. */
+  const kind: OppKind = params?.get('kind') === 'internship' ? 'internship' : 'job';
+  const openAi = params?.get('ai') === '1';
 
   const [step, setStep] = useState<StepId>('basics');
   const [draft, setDraft] = useState<JobDraft>(EMPTY_DRAFT);
@@ -67,7 +76,11 @@ export default function JobPostWizard() {
   const [loading, setLoading] = useState(Boolean(editId));
   const [poster, setPoster] = useState<JobPreviewPoster | null>(null);
   const [posted, setPosted] = useState<{ id: string; title: string; status: string } | null>(null);
-  const [mode, setMode] = useState<ColorMode>('dark');
+  /* "Describe a role instead" in the Jobs menu lands here with `?ai=1`, so the
+     poster arrives in the drafting box rather than on step one of seven. Only
+     for a new posting — arriving to EDIT one should not reopen a drafter over
+     the thing being edited. */
+  const [aiOpen, setAiOpen] = useState(openAi && !editId);
   /** How far the poster has actually reached — the rail may not jump past it. */
   const [furthest, setFurthest] = useState(0);
 
@@ -80,12 +93,17 @@ export default function JobPostWizard() {
   const index = stepIndex(step);
   const current = STEPS[index];
 
-  /* ── Theme ──────────────────────────────────────────────────────────────
-     Reuses the app's existing colour-mode mechanism. Nothing local is stored
-     and no second theme system is introduced: `applyColorMode` is the same
-     function the global nav calls, so a change here changes the whole app. */
-  useEffect(() => { setMode(getStoredColorMode()); }, []);
-  const changeMode = (next: ColorMode) => { setMode(next); applyColorMode(next); };
+  /* No colour-mode control here any more. The wizard renders inside the app
+     shell now, which is a light surface like every other board — a per-page
+     theme toggle on one form was a second theme system to keep in step.
+
+     AI Fill writes through the same setter every field uses, so a suggestion
+     is indistinguishable from something typed: it validates the same way, it
+     is saved to the local draft the same way, and it can be edited or undone
+     the same way. */
+  const applyAi = useCallback((patch: Partial<JobDraft>) => {
+    setDraft((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   /* ── Step from the URL ──────────────────────────────────────────────────
      The URL is the source of truth, so browser Back/Forward moves the wizard
@@ -114,12 +132,22 @@ export default function JobPostWizard() {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     const saved = readLocalDraft(editId);
-    if (!saved || !draftHasContent(saved.draft)) return;
+    if (!saved || !draftHasContent(saved.draft)) {
+      /* No draft to restore, so the kind's preset applies. Done HERE rather
+         than in the initial state so a restored draft always wins: somebody
+         who set this to Contract and came back must not find it silently
+         switched to Internship because of the link they arrived by. The field
+         stays editable either way — the preset is a starting point, not a
+         constraint. */
+      const preset = OPP_KINDS[kind].employmentType;
+      if (preset && !editId) setDraft((d) => ({ ...d, employmentType: preset }));
+      return;
+    }
     setDraft(saved.draft);
     setRestored(true);
     if (!params?.get('step')) goto(saved.step, true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+  }, [editId, kind]);
 
   /* Persist on every change. Cheap, synchronous, and wrapped so a blocked or
      full localStorage degrades to "no restore" rather than a broken page. */
@@ -277,40 +305,9 @@ export default function JobPostWizard() {
   /* ── Chrome ─────────────────────────────────────────────────────────────*/
 
   const shell = (children: React.ReactNode) => (
-    <div className="relative min-h-[100dvh] bg-slate-50 text-slate-900 dark:bg-[#0A0A0C] dark:text-white">
-      {/* The gradient ground. Fixed and behind everything, two very low-alpha
-          orbs — enough to stop the page reading as flat grey, far short of the
-          coloured wash that makes a form look like a landing page. */}
-      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
-        <div className="absolute inset-0 bg-gradient-to-b from-sky-50 via-slate-50 to-slate-100 dark:from-[#0d1018] dark:via-[#0A0A0C] dark:to-[#0A0A0C]" />
-        <div className="absolute -left-32 top-[-10%] h-[min(420px,70vw)] w-[min(420px,70vw)] rounded-full bg-sky-400/[0.10] blur-[150px] dark:bg-sky-500/[0.07]" />
-        <div className="absolute -right-24 top-[35%] h-[min(380px,65vw)] w-[min(380px,65vw)] rounded-full bg-indigo-400/[0.09] blur-[150px] dark:bg-indigo-500/[0.06]" />
-      </div>
-
-      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/75 backdrop-blur-xl dark:border-white/[0.06] dark:bg-[rgba(10,10,12,0.8)]">
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-3 px-3 sm:px-5 lg:px-8">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            aria-label="Back"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-300 bg-white/70 text-slate-600 transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white/50 dark:hover:bg-white/[0.08] dark:hover:text-white"
-          >
-            <ArrowLeft className="h-4 w-4" aria-hidden />
-          </button>
-          <span className="truncate text-[15px] font-bold tracking-[-0.01em]">
-            {editId ? 'Edit job' : 'Post a job'}
-          </span>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <ThemeToggle value={mode} onChange={changeMode} compact />
-            <Link href="/jobs" className={`hidden h-9 sm:inline-flex ${BTN_QUIET}`}>
-              <Briefcase className="h-3.5 w-3.5" aria-hidden /> Browse jobs
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <DiscoverShell softwareName="Docrud" viewer={null} bare>
       {children}
-    </div>
+    </DiscoverShell>
   );
 
   /* ── Success ────────────────────────────────────────────────────────────*/
@@ -323,7 +320,7 @@ export default function JobPostWizard() {
             <Check className="h-6 w-6 text-emerald-600 dark:text-emerald-400" aria-hidden />
           </div>
           <h1 className="mt-5 text-[21px] font-bold tracking-[-0.01em]">
-            {posted.status === 'published' ? 'Job published' : 'Job saved'}
+            {`${OPP_KINDS[kind].posted} ${posted.status === 'published' ? 'published' : 'saved'}`}
           </h1>
           <p className={`mx-auto mt-2.5 max-w-sm text-[14px] leading-relaxed ${MUTED}`}>
             {posted.status === 'published'
@@ -362,67 +359,67 @@ export default function JobPostWizard() {
   }[step as string] ?? null;
 
   return shell(
-    <main className="mx-auto w-full max-w-[1400px] px-3 pb-28 pt-5 sm:px-5 lg:px-8 lg:pb-10">
-      {/* `pb-28` above reserves the height of the fixed action bar below `lg`,
-          so the last field can always be scrolled clear of it. */}
-      <div className="lg:grid lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-8 xl:grid-cols-[230px_minmax(0,1fr)_280px] xl:gap-10">
-        {/* ── Rail ───────────────────────────────────────────────────────*/}
-        <div className="lg:sticky lg:top-[76px] lg:self-start">
-          <WizardProgress current={step} furthest={furthest} onJump={(id) => goto(id)} />
-        </div>
+    <div className="wz">
+      <div className="wz-in">
+        {/* ── The step rail ── */}
+        <WizardProgress current={step} furthest={furthest} onJump={(id) => goto(id)} />
 
-        {/* ── The step ───────────────────────────────────────────────────*/}
-        <div className="mt-5 min-w-0 lg:mt-0">
-          <div className="mx-auto w-full max-w-2xl">
-            <div className="flex items-start gap-4">
-              <div className="min-w-0 flex-1">
-                <h1
-                  ref={headingRef}
-                  tabIndex={-1}
-                  className="text-[22px] font-bold tracking-[-0.02em] outline-none sm:text-[26px]"
-                >
-                  {current.title}
-                </h1>
-                <p className={`mt-1.5 text-[13.5px] leading-relaxed ${MUTED}`}>{current.caption}</p>
-              </div>
-              <StepArt step={step} className="hidden sm:block" />
-            </div>
-
-            {restored && index === 0 && (
-              <p
-                className="mt-4 rounded-xl border border-sky-500/25 bg-sky-500/[0.07] px-3.5 py-2.5 text-[13px] text-sky-800 dark:text-sky-200/90"
-                role="status"
-              >
-                We restored what you had already filled in on this device.
+        {/* ── The step ── */}
+        <div className="wz-main">
+          <div className="wz-head">
+            <div className="wz-head-t">
+              {/* The composer is "Post opportunity" now, and the kicker says
+                  which kind — the step heading below it is about the step, so
+                  without this the page never states what is being posted. */}
+              <p className="wz-kick">
+                Post opportunity
+                <span className="wz-kick-k">{OPP_KINDS[kind].posted}</span>
               </p>
-            )}
-
-            {formError && (
-              <p
-                role="alert"
-                className="mt-4 rounded-xl border border-rose-500/30 bg-rose-500/[0.07] px-3.5 py-2.5 text-[13px] font-medium text-rose-700 dark:text-rose-200"
-              >
-                {formError}
-              </p>
-            )}
-
-            {/* `key` on the step remounts it, which restarts the transition and
-                guarantees no field keeps a value from the previous step. The
-                animation is defined in globals-free inline CSS below and is
-                disabled under prefers-reduced-motion. */}
-            <div key={step} className="hh-step mt-6">
-              {step === 'basics' && <JobBasicsStep {...stepProps} />}
-              {step === 'details' && <JobDetailsStep {...stepProps} />}
-              {step === 'requirements' && <JobRequirementsStep {...stepProps} />}
-              {step === 'compensation' && <JobCompensationStep {...stepProps} />}
-              {step === 'screening' && <JobScreeningStep {...stepProps} />}
-              {step === 'preview' && <JobPreviewStep draft={draft} poster={poster} />}
-              {step === 'publish' && <JobPublishStep draft={draft} editId={editId} summary={summary} />}
+              <h1 ref={headingRef} tabIndex={-1} className="wz-h1">{current.title}</h1>
+              <p className="wz-cap">{current.caption}</p>
             </div>
+            {/* Offered only where there is prose to draft. The last two steps
+                review and publish what is already written, and compensation and
+                screening are deliberately not drafted at all. */}
+            {['basics', 'details', 'requirements'].includes(step) && !aiOpen && (
+              <button
+                type="button"
+                className="wz-ai-open"
+                onClick={() => setAiOpen(true)}
+              >
+                <Sparkles size={14} aria-hidden /> AI Fill
+              </button>
+            )}
+          </div>
 
-            {/* The tip sits under the form below xl, where the third column is
-                gone — it is never dropped silently, only relocated. */}
-            {help && <div className="mt-6 xl:hidden [&>aside]:block">{help}</div>}
+          {aiOpen && (
+            <AiFill draft={draft} onApply={applyAi} onClose={() => setAiOpen(false)} />
+          )}
+
+          {restored && index === 0 && (
+            <p className="wz-note" role="status">
+              <Check size={14} aria-hidden />
+              <span>We restored what you had already filled in on this device.</span>
+            </p>
+          )}
+
+          {formError && (
+            <p className="wz-err" role="alert">
+              <Check size={14} aria-hidden />
+              <span>{formError}</span>
+            </p>
+          )}
+
+          {/* `key` on the step remounts it, which restarts the transition and
+              guarantees no field keeps a value from the previous step. */}
+          <div key={step} className="wz-panel hh-step">
+            {step === 'basics' && <JobBasicsStep {...stepProps} />}
+            {step === 'details' && <JobDetailsStep {...stepProps} />}
+            {step === 'requirements' && <JobRequirementsStep {...stepProps} />}
+            {step === 'compensation' && <JobCompensationStep {...stepProps} />}
+            {step === 'screening' && <JobScreeningStep {...stepProps} />}
+            {step === 'preview' && <JobPreviewStep draft={draft} poster={poster} />}
+            {step === 'publish' && <JobPublishStep draft={draft} editId={editId} summary={summary} />}
           </div>
 
           <WizardFooter
@@ -432,28 +429,21 @@ export default function JobPostWizard() {
             busy={busy}
             continueLabel={step === 'publish' ? (editId ? 'Update job' : 'Publish job') : 'Continue'}
             secondary={canDraft ? (
-              <button
-                type="button"
-                onClick={onSaveDraft}
-                disabled={savingDraft}
-                className={`hidden h-11 px-4 sm:inline-flex ${BTN_QUIET}`}
-              >
+              <button type="button" onClick={onSaveDraft} disabled={savingDraft} className="wz-btn">
                 {savingDraft
-                  ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Saving…</>
-                  : <><CloudUpload className="h-4 w-4" aria-hidden /> Save draft</>}
+                  ? <><Loader2 size={15} className="wz-spin" aria-hidden /> Saving…</>
+                  : <><CloudUpload size={15} aria-hidden /> Save draft</>}
               </button>
             ) : null}
           />
 
           {draftSavedAt && (
-            <p className={`mx-auto mt-2 max-w-2xl text-right text-[12px] ${FAINT}`} role="status">
-              Draft saved to your account at {draftSavedAt}.
-            </p>
+            <p className="wz-saved" role="status">Draft saved to your account at {draftSavedAt}.</p>
           )}
         </div>
 
-        {/* ── Tips, widest layouts only ──────────────────────────────────*/}
-        <div className="hidden xl:block xl:sticky xl:top-[76px] xl:self-start">{help}</div>
+        {/* ── Tips ── */}
+        <div className="wz-help-wrap">{help}</div>
       </div>
 
       <style>{`
@@ -466,6 +456,6 @@ export default function JobPostWizard() {
           .hh-step { animation: none; }
         }
       `}</style>
-    </main>,
+    </div>,
   );
 }

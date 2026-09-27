@@ -1,4 +1,5 @@
 'use client';
+import '@/components/profile/profile.css';
 
 /**
  * ATS visibility inside the profile.
@@ -49,22 +50,22 @@ interface LatestMatch {
   createdAt: string;
 }
 
-const PANEL = 'rounded-[13px] border border-slate-200 bg-white dark:border-white/[0.07] dark:bg-white/[0.03]';
-const MUTED = 'text-slate-600 dark:text-white/40';
-const HEADING = 'text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-white/25';
+const PANEL = 'rounded-[13px] border border-slate-200 pf-solid';
+const MUTED = 'text-slate-600';
+const HEADING = 'text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500';
 
 /** Shared button shape, so this section adds no sixth button variant. */
-/* `dark:text-[#020617]` rather than `dark:text-slate-900`: a global rule in
+/* `` rather than ``: a global rule in
    app/globals.css lightens ANY element whose class string contains
    `text-slate-900` for dark mode, and its companion rule that restores dark
-   text on white controls matches only the exact token `bg-white` — not
-   `dark:bg-white`. A white button labelled `dark:text-slate-900` therefore
+   text on white controls matches only the exact token `pf-solid` — not
+   ``. A white button labelled `` therefore
    rendered near-white on white, 1:1 contrast, invisible. An arbitrary hex
    value is the same colour and matches neither selector. */
 const BTN_PRIMARY =
-  'inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-slate-900 px-3.5 py-2 text-[12px] font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:bg-white dark:text-[#020617] dark:hover:bg-white/90';
+  'inline-flex items-center justify-center gap-1.5 rounded-[10px] bg-slate-900 px-3.5 py-2 text-[12px] font-semibold pf-ink transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500';
 const BTN_QUIET =
-  'inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-slate-300 px-3.5 py-2 text-[12px] font-semibold transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.12] dark:hover:bg-white/[0.06]';
+  'inline-flex items-center justify-center gap-1.5 rounded-[10px] border border-slate-300 px-3.5 py-2 text-[12px] font-semibold transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500';
 
 export default function ProfileAtsSection({
   resumeFiles,
@@ -128,7 +129,7 @@ export default function ProfileAtsSection({
               <FileText className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
               <span className="min-w-0 truncate">{resume.fileName}</span>
             </p>
-            <p className="mt-1 text-[11.5px] text-emerald-700 dark:text-emerald-400/80">Parsed ✓</p>
+            <p className="mt-1 text-[11.5px] text-emerald-700">Parsed ✓</p>
           </div>
 
           {typeof quality === 'number' && <ScoreBadge score={quality} />}
@@ -228,7 +229,7 @@ function Meter({ score }: { score: number }) {
   const tone = scoreTone(score);
   return (
     <div
-      className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-white/[0.07]"
+      className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200"
       role="meter"
       aria-valuenow={displayScore(score)}
       aria-valuemin={0}

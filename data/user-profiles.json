@@ -256,5 +256,29 @@
     "docrudDrivePlanGb": 5,
     "docrudDrivePlanPurchasedAt": "2026-09-09T10:42:50.400Z",
     "docrudDrivePlanPeriod": "monthly"
+  },
+  "individual-1789371594068": {
+    "emailVerified": true,
+    "emailVerifiedAt": "2026-09-14T07:39:54.062Z",
+    "profileSetupDone": true,
+    "roles": [
+      "ai",
+      "design",
+      "software"
+    ],
+    "skills": [
+      "C++",
+      "CSS",
+      "Express.js",
+      "Git",
+      "HTML",
+      "JavaScript",
+      "MongoDB",
+      "Node.js",
+      "Python",
+      "React"
+    ],
+    "profileVersion": 1,
+    "updatedAt": "2026-09-14T07:39:54.122Z"
   }
 }

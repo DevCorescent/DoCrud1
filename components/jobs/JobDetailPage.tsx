@@ -45,39 +45,130 @@ import {
   formatJobLocation, formatPosted, jobSourceLabel, isValidApplyUrl, companyHue,
 } from '@/lib/jobs-ui';
 import { getCompanyLogo } from '@/lib/company-logos';
+import { getJobMatchLabel } from '@/lib/job-match-tone';
+import DiscoverShell from '@/components/home/discover/DiscoverShell';
+import './job-detail.css';
 
 type ResumeFile = { id: string; fileName: string; url: string; uploadedAt: string };
 type UploadedFile = { url: string; fileName: string };
 type AppliedState = { id: string; status: string; appliedAt: string } | null;
 
 /* One definition per surface, each carrying a light value and a dark one. */
-const PANEL = 'rounded-2xl border border-slate-200 bg-white dark:border-white/[0.07] dark:bg-white/[0.02]';
-const MUTED = 'text-slate-600 dark:text-white/45';
-const FAINT = 'text-slate-500 dark:text-white/30';
-const HEADING = 'text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35';
-const INPUT =
-  'w-full rounded-[10px] border px-3 py-2.5 text-[13px] outline-none transition-colors '
-  + 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 '
-  + 'focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:border-sky-500 '
-  + 'dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-white/20 '
-  + 'dark:focus-visible:border-white/20 dark:focus-visible:bg-white/[0.06]';
-const GHOST_BTN =
-  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] border px-5 text-[13px] font-semibold transition '
-  + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 '
-  + 'border-slate-300 bg-[#ffffff] text-slate-700 hover:bg-slate-100 '
-  + 'dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white/55 dark:hover:bg-white/[0.08] dark:hover:text-white/85';
-const PRIMARY_BTN =
-  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] px-5 text-[13px] font-bold transition '
-  + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 '
-  + 'bg-slate-900 text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 '
-  + 'dark:bg-white dark:text-[#020617] dark:hover:bg-white/90';
-/* Apply is emerald-on-white-text so the button and its label stay legible on a
-   light ground as well as this dark one — a white pill vanishes on white.
-   Emerald is already the jobs accent, so no new colour is introduced. */
-const APPLY_BTN =
-  'inline-flex h-10 items-center justify-center gap-1.5 rounded-[13px] bg-emerald-500 px-5 text-[13px] font-bold text-white shadow-[0_1px_8px_rgba(16,185,129,0.30)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60';
-const APPLY_BTN_SM =
-  'inline-flex h-9 items-center gap-1.5 rounded-[10px] bg-emerald-500 px-3.5 text-[12.5px] font-bold text-white transition hover:bg-emerald-400';
+/* ── OWN CLASSES, not Tailwind colour utilities ──
+   The app's global dark scope rewrites Tailwind's light utilities with
+   `!important` while the document is in dark mode:
+
+     body main [class*='jd-solid']   → rgba(10,10,12,.78)
+     body [class*='jd-ink']  → near-white
+
+   So a `jd-solid` panel on this page rendered near-black and its heading
+   rendered white on white, and no amount of `dark:` pruning could change that
+   — the selectors match the LIGHT class. Every surface here is a `jd-*` class
+   in job-detail.css instead, which those selectors cannot match. It is the same
+   reason the boards use `jb-*` rather than utilities.
+
+   Layout utilities are left alone: `flex`, `gap`, `rounded` and the rest carry
+   no colour and nothing rewrites them. */
+const PANEL = 'jd-panel';
+const MUTED = 'jd-muted';
+const FAINT = 'jd-faint';
+const HEADING = 'jd-kicker';
+const INPUT = 'jd-input';
+const GHOST_BTN = 'jd-btn';
+const PRIMARY_BTN = 'jd-btn-primary';
+/* Apply keeps its emerald — it is already the jobs accent, and it reads on a
+   light ground as well as it did on the dark one. */
+const APPLY_BTN = 'jd-apply';
+const APPLY_BTN_SM = 'jd-apply jd-apply-sm';
+
+/* ── More roles ───────────────────────────────────────────────────────────
+   Related by a rule the heading states, so the list can always be checked
+   against its own claim:
+
+     · same employer  → "More roles at Acme"
+     · else same team → "More in Engineering"
+     · else newest    → "Other open roles"
+
+   It is NOT "recommended for you" — that would need the viewer's profile, and
+   the rail already carries the real match when the server has scored one. The
+   current role is excluded, and if the rule yields nothing the section does not
+   render at all rather than showing an empty heading. */
+
+interface RelatedRow {
+  id: string;
+  title?: string;
+  organizationName?: string;
+  location?: string;
+  employmentType?: string;
+  workMode?: string;
+  department?: string;
+  postedAt?: string;
+  createdAt?: string;
+}
+
+function RelatedRoles({ job }: { job: HiringJobPosting }) {
+  const [rows, setRows] = useState<RelatedRow[] | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetch('/api/jobs/public?pageSize=48', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('jobs-failed'))))
+      .then((d) => { if (live) setRows(Array.isArray(d?.items) ? d.items : []); })
+      .catch(() => { if (live) setRows([]); });
+    return () => { live = false; };
+  }, []);
+
+  const { list, heading } = useMemo(() => {
+    const all = (rows ?? []).filter((r) => r.id !== job.id);
+    const co = (job.organizationName ?? '').trim().toLowerCase();
+    const team = (job.department ?? '').trim().toLowerCase();
+
+    const sameCo = co ? all.filter((r) => (r.organizationName ?? '').trim().toLowerCase() === co) : [];
+    if (sameCo.length > 0) {
+      return { list: sameCo.slice(0, 4), heading: `More roles at ${job.organizationName}` };
+    }
+    const sameTeam = team ? all.filter((r) => (r.department ?? '').trim().toLowerCase() === team) : [];
+    if (sameTeam.length > 0) {
+      return { list: sameTeam.slice(0, 4), heading: `More in ${job.department}` };
+    }
+    return { list: all.slice(0, 4), heading: 'Other open roles' };
+  }, [rows, job.id, job.organizationName, job.department]);
+
+  if (rows === null || list.length === 0) return null;
+
+  return (
+    <section className="jd-more">
+      <div className="jd-more-h">
+        <h2 className="jd-more-t">{heading}</h2>
+        <span className="jd-more-rule" aria-hidden />
+        <Link href="/jobs" className="jd-more-a">All roles <ArrowRight className="h-3 w-3" /></Link>
+      </div>
+      <div className="jd-more-g">
+        {list.map((r) => {
+          const facts = [
+            r.workMode ? WORK_MODE_LABELS[r.workMode] ?? r.workMode : null,
+            r.employmentType ? EMPLOYMENT_TYPE_LABELS[r.employmentType] ?? r.employmentType : null,
+          ].filter(Boolean) as string[];
+          return (
+            <Link key={r.id} href={`/jobs/${r.id}`} className="jd-rel">
+              <span className="jd-rel-t">{r.title || 'Untitled role'}</span>
+              {r.location && <span className="jd-rel-loc">{r.location}</span>}
+              {facts.length > 0 && (
+                <span className="jd-rel-m">
+                  {facts.map((f) => <span key={f} className="jd-rel-c">{f}</span>)}
+                </span>
+              )}
+              <span className="jd-rel-f">
+                <span>{formatPosted(r.postedAt || r.createdAt)}</span>
+                <span className="jd-rel-go">View <ArrowRight className="h-3 w-3" /></span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 /* ─── company mark (same rules as the feed card) ──────────────────────── */
 function CompanyLogo({ company }: { company: string }) {
@@ -87,7 +178,7 @@ function CompanyLogo({ company }: { company: string }) {
 
   if (logo && !failed) {
     return (
-      <div className={`${box} flex items-center justify-center border border-slate-200 bg-slate-100 dark:border-white/[0.08] dark:bg-white/[0.05]`}>
+      <div className={`${box} flex items-center justify-center border jd-rim jd-soft`}>
         <img src={logo.src} alt={`${logo.name} logo`} width={64} height={64}
           loading="lazy" decoding="async" onError={() => setFailed(true)}
           className="h-full w-full object-contain p-2" />
@@ -114,11 +205,11 @@ function ListSection({ title, items }: { title: string; items?: string[] }) {
   const real = (items ?? []).filter(Boolean);
   if (real.length === 0) return null;
   return (
-    <section className="border-t border-slate-200 dark:border-white/[0.06] px-5 py-6 sm:px-6">
-      <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">{title}</h2>
+    <section className="border-t jd-rim px-5 py-6 sm:px-6">
+      <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] jd-faint">{title}</h2>
       <ul className="mt-3.5 flex flex-col gap-2">
         {real.map((item) => (
-          <li key={item} className="flex gap-2.5 text-[13.5px] leading-relaxed text-slate-700 dark:text-white/60">
+          <li key={item} className="flex gap-2.5 text-[13.5px] leading-relaxed jd-ink-2">
             <Check className="mt-1 h-3.5 w-3.5 shrink-0 text-emerald-400/70" />
             <span className="min-w-0">{item}</span>
           </li>
@@ -271,7 +362,7 @@ function JobDescription({ description }: { description: string }) {
       {blocks.map((block, i) => {
         if (block.kind === 'heading') {
           return (
-            <h3 key={`h-${i}`} className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:text-white/45 first:mt-0">
+            <h3 key={`h-${i}`} className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] jd-muted first:mt-0">
               {block.text}
             </h3>
           );
@@ -280,8 +371,8 @@ function JobDescription({ description }: { description: string }) {
           return (
             <ul key={`l-${i}`} className="flex flex-col gap-2">
               {block.items.map((item, j) => (
-                <li key={`${i}-${j}`} className="flex gap-2.5 text-[13.5px] leading-relaxed text-slate-700 dark:text-white/60">
-                  <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full bg-slate-400 dark:bg-white/25" />
+                <li key={`${i}-${j}`} className="flex gap-2.5 text-[13.5px] leading-relaxed jd-ink-2">
+                  <span aria-hidden className="mt-[9px] h-1 w-1 shrink-0 rounded-full jd-dot" />
                   <span className="min-w-0">{item}</span>
                 </li>
               ))}
@@ -292,16 +383,16 @@ function JobDescription({ description }: { description: string }) {
           return (
             <dl key={`f-${i}`} className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {block.items.map((item, j) => (
-                <div key={`${i}-${j}`} className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.03] px-3 py-2.5">
-                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-white/25">{item.label}</dt>
-                  <dd className="mt-1 text-[12.5px] font-semibold text-slate-700 dark:text-white/70">{item.value}</dd>
+                <div key={`${i}-${j}`} className="rounded-xl border jd-rim jd-soft px-3 py-2.5">
+                  <dt className="text-[9.5px] font-semibold uppercase tracking-[0.12em] jd-faint">{item.label}</dt>
+                  <dd className="mt-1 text-[12.5px] font-semibold jd-ink-2">{item.value}</dd>
                 </div>
               ))}
             </dl>
           );
         }
         return (
-          <p key={`p-${i}`} className="text-[13.5px] leading-relaxed text-slate-700 dark:text-white/60">{block.text}</p>
+          <p key={`p-${i}`} className="text-[13.5px] leading-relaxed jd-ink-2">{block.text}</p>
         );
       })}
     </div>
@@ -323,11 +414,11 @@ const SAVED_JOBS_KEY = 'docrud-saved-jobs';
 const EARLY_APPLICANT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 const ICON_BTN =
-  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-white/[0.10] bg-white/[0.04] text-white/55 transition hover:bg-white/[0.08] hover:text-white/85';
+  'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border jd-rim jd-soft jd-faint transition jd-soft-h jd-ink-h';
 const ICON_BTN_ON =
   'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] border border-amber-400/25 bg-amber-400/[0.10] text-amber-200/90 transition hover:bg-amber-400/[0.16]';
 const MENU_ITEM =
-  'flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[12.5px] font-semibold text-white/60 transition hover:bg-white/[0.06] hover:text-white/90';
+  'flex w-full items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-left text-[12.5px] font-semibold jd-faint transition hover:jd-soft jd-ink-h';
 
 function readSavedJobs(): string[] {
   try {
@@ -402,7 +493,7 @@ function JobActionBar({
   };
 
   const headline = `${title} at ${company}`;
-  const iconCls = 'h-4 w-4 shrink-0 text-white/40';
+  const iconCls = 'h-4 w-4 shrink-0 jd-faint';
   const channels = [
     { key: 'wp', label: 'Share on WhatsApp', icon: <WhatsAppIcon className={iconCls} />, href: `https://wa.me/?text=${encodeURIComponent(`Check out this job — ${headline}\n${tagged('wp_share')}`)}` },
     { key: 'li', label: 'Share on LinkedIn', icon: <Linkedin className={iconCls} />, href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(tagged('li_share'))}` },
@@ -453,7 +544,7 @@ function JobActionBar({
 
         {menuOpen && (
           <div role="menu" aria-label="Share this job"
-            className="absolute right-0 top-[calc(100%+8px)] z-40 w-60 overflow-hidden rounded-[13px] border border-slate-300 dark:border-white/[0.10] bg-[#111114] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.55)]">
+            className="absolute right-0 top-[calc(100%+8px)] z-40 w-60 overflow-hidden rounded-[13px] border jd-rim-2 bg-[#111114] p-1 shadow-[0_18px_40px_rgba(0,0,0,0.55)]">
             {channels.map(({ key, label, icon, href }) => (
               <a key={key} role="menuitem" href={href} target="_blank" rel="noopener noreferrer"
                 onClick={() => setMenuOpen(false)} className={MENU_ITEM}>
@@ -497,6 +588,9 @@ export default function JobDetailPage({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [applied, setApplied] = useState<AppliedState>(null);
+  /* The server's score for THIS role, if it scored it. Session-scoped: a
+     visitor with no profile gets no scored rows and the rail block is absent. */
+  const [match, setMatch] = useState<{ matchScore?: number; matchReasons?: string[] } | null>(null);
   const [shareNote, setShareNote] = useState('');
   const applyRef = useRef<HTMLDivElement>(null);
 
@@ -554,9 +648,22 @@ export default function JobDetailPage({
     return () => { active = false; };
   }, [isCandidate, externalApply]);
 
-  const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/jobs/${job.id}`
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/jobs/${job.id}`
     : `/jobs/${job.id}`;
+
+  useEffect(() => {
+    let live = true;
+    fetch('/api/recommendations/jobs', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('rec-failed'))))
+      .then((d) => {
+        if (!live) return;
+        const hit = (Array.isArray(d?.jobs) ? d.jobs : [])
+          .find((x: { id?: string; matchScore?: number }) => x.id === job.id && typeof x.matchScore === 'number');
+        setMatch(hit ?? null);
+      })
+      .catch(() => { /* no match shown is the right rendering of a failure */ });
+    return () => { live = false; };
+  }, [job.id]);
 
   const shareJob = useCallback(async () => {
     const payload = { title: `${job.title} at ${company}`, text: `${job.title} at ${company}`, url: shareUrl };
@@ -610,8 +717,7 @@ export default function JobDetailPage({
     setError('');
     setSubmitting(true);
     try {
-      const resumeSource = resumeChoice === 'upload'
-        ? { kind: 'upload', url: uploadedResume!.url, fileName: uploadedResume!.fileName }
+      const resumeSource = resumeChoice === 'upload' ? { kind: 'upload', url: uploadedResume!.url, fileName: uploadedResume!.fileName }
         : { kind: 'profile', resumeId: resumeChoice };
       const response = await fetch('/api/hiring/applications', {
         method: 'POST',
@@ -662,45 +768,21 @@ export default function JobDetailPage({
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0A0A0C] dark:">
+    /* ── THE SHELL, not a header of its own ──
+       This page used to draw its own 56px bar with a back button, which made it
+       the one place in the marketplace where the navbar disappeared. It renders
+       in `DiscoverShell` now — the same frame, navbar and bottom nav as /jobs —
+       so opening a card never leaves the product. The page's own actions (Share,
+       Apply) move into the content, where the sticky rail already carries them.
+
+       `bare` is deliberate: the shell's scroller is not used, because this page
+       manages its own scrolling region for the sticky rail. */
+    <DiscoverShell softwareName="Docrud" viewer={null} bare>
+    <div className="jd-page flex flex-col bg-transparent jd-ink">
       <style>{`.no-sb::-webkit-scrollbar{display:none}.no-sb{scrollbar-width:none}`}</style>
 
-      {/* ══ Header ═══════════════════════════════════════════════════════ */}
-      <header className="shrink-0 z-30 border-b border-slate-200 dark:border-white/[0.06]"
-        style={{ height: 56, backdropFilter: 'blur(20px) saturate(180%)' }}>
-        <div className="h-full px-3 sm:px-5 lg:px-8 flex items-center gap-3">
-          <button onClick={() => router.back()} aria-label="Back"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.04] text-slate-600 dark:text-white/48 hover:text-white hover:bg-white/[0.08] transition-all">
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <Link href="/jobs" className="truncate text-[15px] font-bold tracking-[-0.01em] hover:text-slate-700 dark:hover:text-white/80">
-            Jobs
-          </Link>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <button type="button" onClick={shareJob}
-              className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.04] px-3.5 text-[12.5px] font-semibold text-slate-600 dark:text-white/48 transition-all hover:bg-white/[0.08] hover:text-white/72">
-              <Share2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Share</span>
-            </button>
-            {externalApply ? (
-              <a href={job.applyUrl} target="_blank" rel="noopener noreferrer nofollow"
-                className={APPLY_BTN_SM}>
-                Apply <ArrowUpRight className="h-3.5 w-3.5" />
-              </a>
-            ) : (
-              <button type="button" onClick={scrollToApply}
-                className={APPLY_BTN_SM}>
-                {applied ? 'Applied' : 'Apply'} <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* ══ Body ═════════════════════════════════════════════════════════ */}
-      <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="pointer-events-none fixed inset-0 -z-10" aria-hidden>
-          <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-indigo-500/[0.05] blur-[160px]" />
-        </div>
+      <main className="jd-main">
 
         <div className="mx-auto w-full max-w-6xl px-3 pb-20 pt-7 sm:px-5 lg:px-8">
 
@@ -714,14 +796,14 @@ export default function JobDetailPage({
           <div className="flex items-start gap-4">
             <CompanyLogo company={company} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-slate-600 dark:text-white/45">
-                {company}{source && <span className="text-slate-500 dark:text-white/28"> · via {source}</span>}
+              <p className="truncate text-[13px] font-semibold jd-muted">
+                {company}{source && <span className="jd-faint"> · via {source}</span>}
               </p>
               <h1 className="mt-1 text-[22px] font-bold leading-tight tracking-[-0.02em] sm:text-[26px]">
                 {job.title}
               </h1>
               {locationLabel && (
-                <p className="mt-2 flex items-center gap-1.5 text-[13px] text-slate-500 dark:text-white/35">
+                <p className="mt-2 flex items-center gap-1.5 text-[13px] jd-faint">
                   <MapPin className="h-3.5 w-3.5 shrink-0" /> <span className="min-w-0">{locationLabel}</span>
                 </p>
               )}
@@ -790,10 +872,48 @@ export default function JobDetailPage({
                 {meta.map((m) => (
                   <div key={m.label} className="min-w-0">
                     <dt className={`text-[9.5px] font-semibold uppercase tracking-[0.12em] ${FAINT}`}>{m.label}</dt>
-                    <dd className="mt-0.5 truncate text-[12.5px] font-semibold text-slate-800 dark:text-white/70">{m.value}</dd>
+                    <dd className="mt-0.5 truncate text-[12.5px] font-semibold jd-ink">{m.value}</dd>
                   </div>
                 ))}
               </dl>
+            </div>
+          )}
+
+          {/* ── How this role scores against your profile ─────────────────
+              The server's own number, shown ONLY when the server attached one.
+              `/api/recommendations/jobs` scores against the session's stored
+              profile and returns no score at all for a visitor without one, so
+              this block is absent rather than showing a zero or a guess. The
+              reasons are the scorer's own sentences. */}
+          {match && (
+            <div className={`${PANEL} p-4`}>
+              <h2 className={HEADING}>Your match</h2>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="jd-score">{match.matchScore}<span className="jd-score-u">%</span></span>
+                <span className={`text-[12px] ${MUTED}`}>{getJobMatchLabel(match.matchScore!)} match</span>
+              </div>
+              {(match.matchReasons ?? []).length > 0 && (
+                <ul className="mt-3 flex flex-col gap-1.5">
+                  {match.matchReasons!.slice(0, 3).map((r) => (
+                    <li key={r} className="jd-why">{r}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* ── Skills the posting asks for ──
+              In the rail as well as the body: on a long description they are
+              the one thing a reader wants without scrolling. Only what the
+              posting lists. */}
+          {(job.preferredSkills ?? []).filter(Boolean).length > 0 && (
+            <div className={`${PANEL} p-4`}>
+              <h2 className={HEADING}>Skills asked for</h2>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {job.preferredSkills!.filter(Boolean).slice(0, 10).map((sk) => (
+                  <span key={sk} className="jd-chip">{sk}</span>
+                ))}
+              </div>
             </div>
           )}
 
@@ -826,7 +946,7 @@ export default function JobDetailPage({
           <div className={`overflow-hidden ${PANEL}`}>
             {job.description && (
               <section className="px-5 py-6 sm:px-6">
-                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Job description</h2>
+                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] jd-faint">Job description</h2>
                 <JobDescription description={job.description} />
               </section>
             )}
@@ -834,25 +954,28 @@ export default function JobDetailPage({
             <ListSection title="Requirements" items={job.requirements} />
 
             {(job.preferredSkills ?? []).filter(Boolean).length > 0 && (
-              <section className="border-t border-slate-200 dark:border-white/[0.06] px-5 py-6 sm:px-6">
-                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Preferred skills</h2>
+              <section className="border-t jd-rim px-5 py-6 sm:px-6">
+                <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] jd-faint">Preferred skills</h2>
                 <div className="mt-3.5 flex flex-wrap gap-1.5">
                   {job.preferredSkills.filter(Boolean).map((s) => (
-                    <span key={s} className="rounded-full border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.03] px-2.5 py-1 text-[11.5px] font-medium text-slate-600 dark:text-white/50">{s}</span>
+                    <span key={s} className="rounded-full border jd-rim jd-soft px-2.5 py-1 text-[11.5px] font-medium jd-muted">{s}</span>
                   ))}
                 </div>
               </section>
             )}
           </div>
 
+          {/* ── More roles ───────────────────────────────────────────── */}
+          <RelatedRoles job={job} />
+
           {/* ── Native application ───────────────────────────────────── */}
           {!externalApply && (
             <div id="apply" ref={applyRef} className={`mt-6 overflow-hidden scroll-mt-4 ${PANEL}`}>
-              <div className="border-b border-slate-200 dark:border-white/[0.06] px-5 py-5 sm:px-6">
-                <h2 className="text-[15px] font-bold tracking-[-0.01em] ">
+              <div className="border-b jd-rim px-5 py-5 sm:px-6">
+                <h2 className="text-[15px] font-bold tracking-[-0.01em]">
                   {applied ? 'Your application' : 'Apply on Docrud'}
                 </h2>
-                <p className="mt-1 text-[12.5px] /32">
+                <p className="mt-1 text-[12.5px] jd-faint">
                   {applied
                     ? `Sent to ${company}. The team reviews applications from their Hiring Desk.`
                     : `Your application goes straight to ${company}.`}
@@ -866,14 +989,14 @@ export default function JobDetailPage({
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/[0.12] px-3 py-1 text-[11.5px] font-bold text-emerald-300">
                       <Check className="h-3.5 w-3.5" /> Already applied
                     </span>
-                    <span className="rounded-full border border-slate-300 dark:border-white/[0.10] bg-slate-50 dark:bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold capitalize text-slate-600 dark:text-white/55">
+                    <span className="rounded-full border jd-rim-2 jd-soft px-3 py-1 text-[11.5px] font-semibold capitalize jd-muted">
                       Status: {applied.status}
                     </span>
                     {applied.appliedAt && (
-                      <span className="text-[11.5px] text-slate-400 dark:text-white/25">Applied {formatPosted(applied.appliedAt) || 'recently'}</span>
+                      <span className="text-[11.5px] jd-faint">Applied {formatPosted(applied.appliedAt) || 'recently'}</span>
                     )}
                   </div>
-                  <p className="mt-3.5 text-[12.5px] leading-relaxed /32">
+                  <p className="mt-3.5 text-[12.5px] leading-relaxed jd-faint">
                     You can track this application from your workspace. Applying again would not create a second
                     application for this role.
                   </p>
@@ -883,13 +1006,13 @@ export default function JobDetailPage({
                 </div>
               ) : signedOut ? (
                 <div className="px-5 py-6 sm:px-6">
-                  <p className="text-[13px] text-slate-500 dark:text-white/40">Sign in to apply with your Docrud profile and resume.</p>
+                  <p className="text-[13px] jd-faint">Sign in to apply with your Docrud profile and resume.</p>
                   <Link href={`/login?next=${encodeURIComponent(`/jobs/${job.id}`)}`} className={`${PRIMARY_BTN} mt-4 w-full sm:w-auto`}>
                     Login to apply <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               ) : !isCandidate ? (
-                <div className="px-5 py-6 text-[13px] text-slate-500 dark:text-white/40 sm:px-6">
+                <div className="px-5 py-6 text-[13px] jd-faint sm:px-6">
                   Company workspaces review applications rather than submit them. Sign in with an individual account to apply.
                 </div>
               ) : (
@@ -897,13 +1020,13 @@ export default function JobDetailPage({
 
                   {/* Profile — prefilled, not retyped */}
                   <section>
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Your profile</h3>
-                    <div className="mt-3 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.03] px-3.5 py-3">
-                      <p className="truncate text-[13px] font-semibold /75">{session?.user?.name}</p>
-                      <p className="truncate text-[12px] text-slate-500 dark:text-white/35">{session?.user?.email}</p>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] jd-faint">Your profile</h3>
+                    <div className="mt-3 rounded-xl border jd-rim jd-soft px-3.5 py-3">
+                      <p className="truncate text-[13px] font-semibold jd-ink-2">{session?.user?.name}</p>
+                      <p className="truncate text-[12px] jd-faint">{session?.user?.email}</p>
                     </div>
-                    <label htmlFor="apply-phone" className="mt-3 mb-1.5 block text-[11.5px] font-semibold text-slate-600 dark:text-white/55">
-                      Phone <span className="font-medium text-slate-400 dark:text-white/25">(optional)</span>
+                    <label htmlFor="apply-phone" className="mt-3 mb-1.5 block text-[11.5px] font-semibold jd-muted">
+                      Phone <span className="font-medium jd-faint">(optional)</span>
                     </label>
                     <input id="apply-phone" value={phone} onChange={(e) => setPhone(e.target.value)}
                       inputMode="tel" placeholder="+91…" className={INPUT} />
@@ -911,31 +1034,29 @@ export default function JobDetailPage({
 
                   {/* Resume */}
                   <section>
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">Resume</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] jd-faint">Resume</h3>
                     <div className="mt-3 flex flex-col gap-2">
                       {profileResumes.map((r) => (
                         <label key={r.id}
                           className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 transition ${
-                            resumeChoice === r.id ? 'border-white/[0.20] bg-white/[0.06]' : 'border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]'
-                          }`}>
+                            resumeChoice === r.id ? 'jd-rim jd-soft' : 'jd-rim jd-soft hover:jd-soft' }`}>
                           <input type="radio" name="resume" value={r.id}
                             checked={resumeChoice === r.id} onChange={() => setResumeChoice(r.id)}
                             className="h-3.5 w-3.5 shrink-0 accent-white" />
-                          <FileText className="h-4 w-4 shrink-0 text-slate-500 dark:text-white/30" />
-                          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-700 dark:text-white/70">{r.fileName}</span>
-                          <span className="shrink-0 text-[10.5px] text-slate-400 dark:text-white/22">on your profile</span>
+                          <FileText className="h-4 w-4 shrink-0 jd-faint" />
+                          <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold jd-ink-2">{r.fileName}</span>
+                          <span className="shrink-0 text-[10.5px] jd-faint">on your profile</span>
                         </label>
                       ))}
 
                       <label
                         className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-3 transition ${
-                          resumeChoice === 'upload' ? 'border-white/[0.20] bg-white/[0.06]' : 'border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]'
-                        }`}>
+                          resumeChoice === 'upload' ? 'jd-rim jd-soft' : 'jd-rim jd-soft hover:jd-soft' }`}>
                         <input type="radio" name="resume" value="upload"
                           checked={resumeChoice === 'upload'} onChange={() => setResumeChoice('upload')}
                           className="h-3.5 w-3.5 shrink-0 accent-white" />
-                        <Upload className="h-4 w-4 shrink-0 text-slate-500 dark:text-white/30" />
-                        <span className="min-w-0 flex-1 text-[12.5px] font-semibold text-slate-700 dark:text-white/70">
+                        <Upload className="h-4 w-4 shrink-0 jd-faint" />
+                        <span className="min-w-0 flex-1 text-[12.5px] font-semibold jd-ink-2">
                           {uploadedResume ? uploadedResume.fileName : 'Upload a different resume'}
                         </span>
                       </label>
@@ -953,19 +1074,18 @@ export default function JobDetailPage({
                             }}
                           />
                           <label htmlFor="resume-file"
-                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/[0.10] bg-slate-50 dark:bg-white/[0.04] px-3.5 py-1.5 text-[11.5px] font-semibold text-slate-600 dark:text-white/55 transition hover:bg-white/[0.08] hover:text-white/85">
-                            {busyField === 'resume'
-                              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
+                            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border jd-rim-2 jd-soft px-3.5 py-1.5 text-[11.5px] font-semibold jd-muted transition jd-soft-h jd-ink-h">
+                            {busyField === 'resume' ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
                               : <><Paperclip className="h-3.5 w-3.5" /> {uploadedResume ? 'Replace file' : 'Choose file'}</>}
                           </label>
-                          <p className="mt-1.5 text-[11px] text-slate-400 dark:text-white/22">
+                          <p className="mt-1.5 text-[11px] jd-faint">
                             PDF, Word or text, up to 10 MB. Used for this application only — your profile resume stays as it is.
                           </p>
                         </div>
                       )}
 
                       {profileResumes.length === 0 && resumeChoice !== 'upload' && (
-                        <p className="text-[11.5px] text-slate-400 dark:text-white/25">
+                        <p className="text-[11.5px] jd-faint">
                           No resume on your profile yet — upload one above to apply.
                         </p>
                       )}
@@ -975,7 +1095,7 @@ export default function JobDetailPage({
                   {/* Documents the job actually asked for */}
                   {requiredDocs.length > 0 && (
                     <section>
-                      <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">
+                      <h3 className="text-[10px] font-bold uppercase tracking-[0.16em] jd-faint">
                         Requested documents
                       </h3>
                       <div className="mt-3 flex flex-col gap-2">
@@ -983,15 +1103,15 @@ export default function JobDetailPage({
                           const file = docs[label];
                           const id = `doc-${i}`;
                           return (
-                            <div key={label} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-200 dark:border-white/[0.07] bg-white dark:bg-white/[0.02] px-3.5 py-3">
-                              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-slate-700 dark:text-white/70">{label}</span>
+                            <div key={label} className="flex flex-wrap items-center gap-2.5 rounded-xl border jd-rim jd-solid px-3.5 py-3">
+                              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold jd-ink-2">{label}</span>
                               {file ? (
                                 <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-emerald-300/80">
                                   <Check className="h-3.5 w-3.5 shrink-0" />
                                   <span className="min-w-0 truncate">{file.fileName}</span>
                                   <button type="button" aria-label={`Remove ${label}`}
                                     onClick={() => setDocs((prev) => { const n = { ...prev }; delete n[label]; return n; })}
-                                    className="shrink-0 text-slate-500 dark:text-white/30 hover:text-white/70"><X className="h-3.5 w-3.5" /></button>
+                                    className="shrink-0 jd-faint jd-ink-h"><X className="h-3.5 w-3.5" /></button>
                                 </span>
                               ) : (
                                 <>
@@ -1004,7 +1124,7 @@ export default function JobDetailPage({
                                       if (result) setDocs((prev) => ({ ...prev, [label]: result }));
                                     }} />
                                   <label htmlFor={id}
-                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/[0.10] bg-slate-50 dark:bg-white/[0.04] px-3 py-1 text-[11.5px] font-semibold text-slate-600 dark:text-white/55 transition hover:bg-white/[0.08] hover:text-white/85">
+                                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border jd-rim-2 jd-soft px-3 py-1 text-[11.5px] font-semibold jd-muted transition jd-soft-h jd-ink-h">
                                     {busyField === label
                                       ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</>
                                       : <><Paperclip className="h-3.5 w-3.5" /> Attach</>}
@@ -1020,8 +1140,8 @@ export default function JobDetailPage({
 
                   {/* Optional message */}
                   <section>
-                    <label htmlFor="cover-letter" className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-white/35">
-                      Message <span className="font-semibold normal-case tracking-normal text-slate-400 dark:text-white/25">(optional)</span>
+                    <label htmlFor="cover-letter" className="text-[10px] font-bold uppercase tracking-[0.16em] jd-faint">
+                      Message <span className="font-semibold normal-case tracking-normal jd-faint">(optional)</span>
                     </label>
                     <textarea id="cover-letter" rows={4} value={coverLetter}
                       onChange={(e) => setCoverLetter(e.target.value)}
@@ -1036,7 +1156,7 @@ export default function JobDetailPage({
                   )}
 
                   <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-[11px] text-slate-400 dark:text-white/22">
+                    <p className="text-[11px] jd-faint">
                       {missingDocs.length > 0
                         ? `Still needed: ${missingDocs.join(', ')}`
                         : !resumeReady ? 'Choose a resume to continue.' : 'Your profile, resume and attachments are sent together.'}
@@ -1067,5 +1187,6 @@ export default function JobDetailPage({
         </div>
       </main>
     </div>
+    </DiscoverShell>
   );
 }

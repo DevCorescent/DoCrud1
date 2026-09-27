@@ -1,4 +1,5 @@
 'use client';
+import '@/components/profile/profile.css';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -156,7 +157,7 @@ export default function ProfileQRCode({ userId, userName }: ProfileQRCodeProps) 
         onClick={handleOpen}
         aria-label="Share profile QR code"
         title="Share profile QR code"
-        className="flex items-center gap-2 h-9 px-3 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/70 text-sm hover:bg-white/[0.08] hover:text-white/90 transition-colors active:scale-95"
+        className="pf-btn pf-btn-sm gap-2"
       >
         <QrCode className="h-3.5 w-3.5" />
         <span className="hidden sm:inline text-xs">QR</span>
@@ -180,26 +181,26 @@ export default function ProfileQRCode({ userId, userName }: ProfileQRCodeProps) 
             role="dialog"
             aria-modal="true"
             aria-labelledby="profile-qr-title"
-            className="relative z-10 w-full md:max-w-sm md:mx-4 bg-[#111113] border border-white/[0.08] rounded-t-[28px] md:rounded-[24px] flex flex-col max-h-[calc(92vh-62px)] md:max-h-[88vh]"
+            className="relative z-10 w-full md:max-w-sm md:mx-4 pf-modal border pf-rim-2 rounded-t-[28px] md:rounded-[24px] flex flex-col max-h-[calc(92vh-62px)] md:max-h-[88vh]"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07] shrink-0">
-              <h2 id="profile-qr-title" className="font-semibold text-white">Share profile</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b pf-rim shrink-0">
+              <h2 id="profile-qr-title" className="font-semibold pf-ink">Share profile</h2>
               <button
                 ref={closeRef}
                 type="button"
                 onClick={handleClose}
                 aria-label="Close"
-                className="h-8 w-8 rounded-full bg-white/[0.06] flex items-center justify-center hover:bg-white/[0.10] transition-colors"
+                className="h-8 w-8 rounded-full pf-s2 flex items-center justify-center pf-s2-h transition-colors"
               >
-                <X className="h-4 w-4 text-white/60" />
+                <X className="h-4 w-4 pf-ink-2" />
               </button>
             </div>
 
             {/* Body */}
             <div className="overflow-y-auto px-6 py-5 flex-1">
               {/* QR panel — always on white so the code scans regardless of theme */}
-              <div className="mx-auto w-full max-w-[260px] aspect-square rounded-[20px] bg-white border border-white/[0.08] flex items-center justify-center overflow-hidden p-3">
+              <div className="mx-auto w-full max-w-[260px] aspect-square rounded-[20px] pf-solid border pf-rim-2 flex items-center justify-center overflow-hidden p-3">
                 {state === 'loading' && (
                   <Loader2 className="h-6 w-6 animate-spin text-black/30" aria-label="Generating QR code" />
                 )}
@@ -227,14 +228,14 @@ export default function ProfileQRCode({ userId, userName }: ProfileQRCodeProps) 
               </div>
 
               {/* Profile URL */}
-              <p className="mt-4 text-center text-[11.5px] text-white/40 break-all">{profileUrl}</p>
+              <p className="mt-4 text-center text-[11.5px] pf-ink-3 break-all">{profileUrl}</p>
 
               {/* Actions */}
               <div className="mt-4 flex flex-col gap-2">
                 <button
                   type="button"
                   onClick={() => void handleCopy()}
-                  className="flex items-center justify-center gap-2 h-10 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/80 text-sm hover:bg-white/[0.08] transition-colors"
+                  className="flex items-center justify-center gap-2 h-10 rounded-[12px] border pf-rim-2 pf-s2 pf-ink text-sm pf-s2-h transition-colors"
                 >
                   {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                   {copied ? 'Copied' : 'Copy Profile Link'}
@@ -245,7 +246,7 @@ export default function ProfileQRCode({ userId, userName }: ProfileQRCodeProps) 
                     type="button"
                     onClick={handleDownload}
                     disabled={state !== 'ready'}
-                    className="flex-1 flex items-center justify-center gap-2 h-10 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/70 text-sm hover:bg-white/[0.08] hover:text-white/90 transition-colors disabled:opacity-40"
+                    className="flex-1 flex items-center justify-center gap-2 h-10 rounded-[12px] border pf-rim-2 pf-s2 pf-ink-2 text-sm pf-s2-h pf-ink-h transition-colors disabled:opacity-40"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Download
@@ -254,7 +255,7 @@ export default function ProfileQRCode({ userId, userName }: ProfileQRCodeProps) 
                     <button
                       type="button"
                       onClick={() => void handleShare()}
-                      className="flex-1 flex items-center justify-center gap-2 h-10 rounded-[12px] border border-white/[0.10] bg-white/[0.04] text-white/70 text-sm hover:bg-white/[0.08] hover:text-white/90 transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 h-10 rounded-[12px] border pf-rim-2 pf-s2 pf-ink-2 text-sm pf-s2-h pf-ink-h transition-colors"
                     >
                       <Share2 className="h-3.5 w-3.5" />
                       Share

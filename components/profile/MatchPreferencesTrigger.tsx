@@ -1,4 +1,5 @@
 'use client';
+import '@/components/profile/profile.css';
 
 /**
  * The button that opens the matching-preferences dialog.
@@ -49,13 +50,13 @@ export default function MatchPreferencesTrigger({
       <button
         type="button"
         onClick={onOpen}
-        className="group flex w-full items-center gap-3 rounded-[14px] border border-white/[0.07] bg-white/[0.02] px-3.5 py-3 text-left transition hover:border-white/[0.16] hover:bg-white/[0.05] active:scale-[0.995]"
+        className="group flex w-full items-center gap-3 rounded-[14px] border pf-rim pf-s1 px-3.5 py-3 text-left transition pf-rim-f pf-s2-h active:scale-[0.995]"
       >
         <span
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border transition ${
             complete
               ? 'border-emerald-400/25 bg-emerald-400/[0.10] text-emerald-300'
-              : 'border-white/[0.08] bg-white/[0.04] text-white/45 group-hover:text-white/70'
+              : 'pf-rim-2 pf-s2 pf-ink-3 pf-g-ink'
           }`}
         >
           {complete
@@ -65,20 +66,20 @@ export default function MatchPreferencesTrigger({
 
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="truncate text-[12.5px] font-semibold text-white/80">How you want to be matched</span>
+            <span className="truncate text-[12.5px] font-semibold pf-ink">How you want to be matched</span>
             {!complete && typeof weight === 'number' && (
               <span className="shrink-0 text-[10px] font-semibold text-emerald-300/55">+{weight}%</span>
             )}
           </span>
           {/* Short form where the row is tight, the full sentence where it
               fits — rather than one sentence truncated into nonsense. */}
-          <span className="mt-0.5 block truncate text-[11.5px] text-white/40">
+          <span className="mt-0.5 block truncate text-[11.5px] pf-ink-3">
             <span className="sm:hidden">{shortSummary}</span>
             <span className="hidden sm:inline">{summary}</span>
           </span>
         </span>
 
-        <span className="flex shrink-0 items-center gap-1 rounded-full border border-white/[0.10] px-2.5 py-1 text-[11px] font-semibold text-white/55 transition group-hover:border-white/25 group-hover:text-white/85">
+        <span className="flex shrink-0 items-center gap-1 rounded-full border pf-rim-2 px-2.5 py-1 text-[11px] font-semibold pf-ink-2 transition group-pf-rim-f pf-g-ink">
           {action}
           <ChevronRight className="h-3 w-3" aria-hidden />
         </span>
@@ -90,16 +91,16 @@ export default function MatchPreferencesTrigger({
     <button
       type="button"
       onClick={onOpen}
-      className="group flex w-full items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 text-left transition hover:border-white/[0.16] hover:bg-white/[0.04]"
+      className="group flex w-full items-center gap-4 rounded-2xl border pf-rim-2 pf-s1 p-4 text-left transition pf-rim-f pf-s2-h"
     >
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-white/[0.08] bg-white/[0.04]">
-        <SlidersHorizontal className="h-4 w-4 text-white/50" aria-hidden />
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border pf-rim-2 pf-s2">
+        <SlidersHorizontal className="h-4 w-4 pf-ink-3" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[14px] font-semibold text-white/85">How you want to be matched</span>
-        <span className="mt-0.5 block text-[12px] leading-relaxed text-white/40">{summary}</span>
+        <span className="block text-[14px] font-semibold pf-ink">How you want to be matched</span>
+        <span className="mt-0.5 block text-[12px] leading-relaxed pf-ink-3">{summary}</span>
       </span>
-      <span className="shrink-0 rounded-full border border-white/[0.10] px-3 py-1.5 text-[12px] font-semibold text-white/60 transition group-hover:border-white/25 group-hover:text-white/85">
+      <span className="shrink-0 rounded-full border pf-rim-2 px-3 py-1.5 text-[12px] font-semibold pf-ink-2 transition group-pf-rim-f pf-g-ink">
         {action}
       </span>
     </button>

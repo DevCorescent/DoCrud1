@@ -284,5 +284,50 @@
     "lastLogin": "2026-09-05T09:52:19.203Z",
     "lastSeenAt": "2026-09-05T10:43:55.172Z",
     "presenceEndedAt": "2026-09-05T10:44:00.168Z"
+  },
+  {
+    "id": "individual-1789371594068",
+    "name": "Devansh Tripathi",
+    "email": "kush@yopmail.com",
+    "role": "individual",
+    "accountType": "individual",
+    "permissions": [
+      "self"
+    ],
+    "isActive": true,
+    "createdAt": "2026-09-14T07:39:54.068Z",
+    "organizationName": "Individual Workspace",
+    "createdFromSignup": true,
+    "policyAcceptance": {
+      "version": "2026.04.01",
+      "acceptedAt": "2026-09-14T07:39:56.363Z",
+      "via": "login",
+      "requiredPolicyIds": [
+        "terms",
+        "privacy",
+        "refund-cancellation",
+        "generated-document-policy",
+        "shared-document-policy",
+        "signed-document-policy",
+        "encrypted-document-policy",
+        "data-privacy-policy",
+        "documents-legality"
+      ]
+    },
+    "subscription": {
+      "planId": "workspace-trial",
+      "planName": "docrud Free",
+      "status": "trial",
+      "startedAt": "2026-09-14T07:39:54.068Z",
+      "aiTrialLimit": 6,
+      "aiTrialUsed": 0,
+      "monthlyAiCredits": 0,
+      "remainingAiCredits": 0,
+      "aiCreditsResetAt": "2026-10-14T07:39:54.068Z"
+    },
+    "passwordHash": "9da0b070fbae42640dd2e70fc208c4d5a2168441cdd86ef5f4e7375488624d586ea10044ea1a27c17b1e6591ab73240a4156dfd21f8dfe08ca78880d7423611c",
+    "passwordSalt": "80722221cad080397869bbf8c8e659a5",
+    "lastLogin": "2026-09-14T07:39:56.363Z",
+    "lastSeenAt": "2026-09-14T13:57:54.115Z"
   }
 ]

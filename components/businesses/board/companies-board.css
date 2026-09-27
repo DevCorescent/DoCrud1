@@ -1,0 +1,737 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   COMPANIES
+   ══════════════════════════════════════════════════════════════════════════
+
+   The same system as the jobs, feed and talent boards. It renders inside
+   DiscoverShell, so every `--dh-*` token resolves; the filter sheet is the
+   shared one in components/ui/board.
+
+   No `backdrop-filter` in this file — the navbar is the page's one blurred
+   surface, and a second filter under a filtered ancestor renders grey
+   rectangles rather than glass.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.cp {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  padding-bottom: 88px;
+  position: relative;
+}
+
+.cp-pad { padding-inline: var(--dh-gut); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE ONE ROW
+   ══════════════════════════════════════════════════════════════════════════
+
+   Heading · location buckets · filters, on a single line, sticky to the top of
+   the scroller.
+
+   The grid is `auto minmax(0,1fr) auto`, not flex: the middle track is the only
+   one allowed to take the leftover width, and `minmax(0, …)` is what lets it
+   shrink below its content so the scroller inside it actually scrolls. With
+   `1fr` alone the chips would set the track's minimum and push Filters off the
+   right edge — the classic flexbox/grid overflow trap.
+
+   No blur here. `.dh-panel` already declares one and this row renders inside
+   it; a second backdrop-filter under a filtered ancestor paints grey rectangles
+   rather than glass. The wash is near-opaque instead, with a fade at the bottom
+   so cards scrolling under it are not cut by a hard line.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.cp-bar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 34px 15px;
+  background: linear-gradient(180deg,
+    rgba(251, 251, 253, .97) 0%,
+    rgba(251, 251, 253, .95) 66%,
+    rgba(251, 251, 253, 0) 100%);
+}
+
+/* ── The heading ──
+   It is still the page's h1; it is simply no longer 42px of it. */
+.cp-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  letter-spacing: -.03em;
+}
+.cp-title b {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--dh-ink);
+  font-variant-numeric: tabular-nums;
+}
+.cp-title span {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--dh-ink-3);
+}
+
+/* ── The buckets ──
+   A scroller in the middle track. It bleeds under the row's right edge with a
+   mask rather than stopping at a gutter, so "there is more" is visible without
+   an arrow control taking width from the chips. */
+.cp-cats {
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 2px;
+  padding: 3px 2px;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+}
+.cp-cats::-webkit-scrollbar { display: none; }
+
+.cp-cat {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .72);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+}
+.cp-cat svg { color: var(--dh-ink-4); transition: color var(--dh-fast) var(--dh-ease); }
+.cp-cat:hover { background: rgba(255, 255, 255, .98); color: var(--dh-ink); border-color: rgba(0, 0, 0, .1); }
+.cp-cat:hover svg { color: var(--dh-ink-2); }
+.cp-cat[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .16);
+}
+.cp-cat[data-on="1"] svg { color: rgba(255, 255, 255, .8); }
+.cp-cat-n {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-3);
+}
+.cp-cat[data-on="1"] .cp-cat-n { color: rgba(255, 255, 255, .66); }
+
+/* ── Filters ── */
+.cp-fbtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(0, 0, 0, .07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: var(--dh-sh-1);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.cp-fbtn:hover { background: #fff; color: var(--dh-ink); }
+.cp-fbtn svg { color: var(--dh-ink-3); }
+.cp-fbtn[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  border-color: transparent;
+  color: #fff;
+}
+.cp-fbtn[data-on="1"] svg { color: rgba(255, 255, 255, .78); }
+.cp-fbtn-n {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #2c2c2f;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.cp-fbtn[data-on="1"] .cp-fbtn-n { background: rgba(255, 255, 255, .95); color: #1a1a1c; }
+
+/* ── The active filters, when there are any ──
+   Its own line, conditionally rendered, so it costs nothing when empty. */
+/* The label inside a bucket chip. A skill or a city can be long, and without
+   a box of its own the text pushes the count out of the chip. */
+.cp-cat-l {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "Clear all", beside the active filters. It had no rule at all on any board —
+   a raw browser button appeared the moment somebody applied a filter, which no
+   geometry or contrast assertion notices. */
+.cp-clear {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: -.01em;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+  transition: color var(--dh-fast) var(--dh-ease);
+}
+.cp-clear:hover { color: var(--dh-ink); text-decoration: underline; }
+
+.cp-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0 12px;
+}
+
+/* ── Active filters, on the bar ──
+   So the sheet does not have to be opened to find out what is on. */
+.cp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 11px;
+  border: 1px solid rgba(0, 0, 0, .07);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .72);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.cp-pill svg { color: var(--dh-ink-4); transition: color var(--dh-fast) var(--dh-ease); }
+.cp-pill:hover { background: rgba(255, 255, 255, .95); color: var(--dh-ink); }
+.cp-pill:hover svg { color: var(--dh-ink); }
+
+/* ── The keyword field, in the sheet ──
+   Not in the navbar: that search answers across the whole product, and a
+   single field cannot both go somewhere and narrow something here without the
+   member having to guess which it just did. */
+.cp-kw {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  margin: 2px 6px 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 0, 0, .1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .8);
+  transition: border-color var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.cp-kw:focus-within {
+  border-color: rgba(120, 140, 200, .55);
+  box-shadow: 0 0 0 3.5px rgba(150, 170, 230, .2);
+}
+.cp-kw svg { flex: 0 0 auto; color: var(--dh-ink-3); }
+.cp-kw input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: -.012em;
+  color: var(--dh-ink);
+}
+.cp-kw input:focus { outline: none; }
+.cp-kw input::placeholder { color: var(--dh-ink-3); }
+.cp-kw button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+}
+.cp-kw button:hover { background: rgba(0, 0, 0, .06); color: var(--dh-ink); }
+
+
+
+
+
+
+/* ══ The grid ════════════════════════════════════════════════════════════ */
+
+.cp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 13px;
+  align-items: stretch;
+}
+
+.cp-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 16px 16px 13px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .86) 0%, rgba(255, 255, 255, .62) 100%);
+  box-shadow: var(--dh-sh-1);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+  animation: cp-in 420ms var(--dh-ease) both;
+}
+@keyframes cp-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.cp-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--dh-sh-2);
+  border-color: rgba(255, 255, 255, .96);
+}
+
+.cp-head { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.cp-logo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .88);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+}
+/* `contain`, not `cover`: a company mark is artwork with its own margins and
+   cropping it is how a logo loses its wordmark. */
+.cp-logo img { width: 100%; height: 100%; object-fit: contain; padding: 7px; display: block; }
+
+/* No reserved height for a tagline. Most companies here are known only from
+   the job board and have none, so reserving two lines for one left every real
+   card with an empty band under its name. The grid still stretches a row to
+   its tallest card, so footers stay aligned either way. */
+.cp-id { min-width: 0; flex: 1 1 auto; }
+.cp-n {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -.024em;
+  color: var(--dh-ink);
+}
+.cp-n { overflow: hidden; }
+.cp-vf { flex: 0 0 auto; color: #2f7ad6; }
+.cp-tag {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dh-ink-3);
+}
+
+.cp-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 9px;
+  margin-top: 12px;
+  min-width: 0;
+}
+.cp-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 0, 0, .05);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .66);
+  font-size: 11px;
+  color: var(--dh-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-loc {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-loc svg { flex: 0 0 auto; color: var(--dh-ink-4); }
+/* Says plainly that this company has no page here — we know it only from the
+   roles it published. Quiet, because it is a fact about the record and not a
+   judgement about the company. */
+.cp-src {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  font-size: 11.5px;
+  letter-spacing: -.008em;
+  color: var(--dh-ink-3);
+  white-space: nowrap;
+}
+/* A small dot rather than a dashed box. On a company we know only from the job
+   board this label is the only thing in the row, and a bordered uppercase chip
+   made the quietest fact on the card the loudest thing on it. */
+.cp-src::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--dh-ink-4);
+  flex: 0 0 auto;
+}
+
+.cp-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--dh-line-2);
+  min-height: 34px;
+}
+.cp-m {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.cp-m svg { color: var(--dh-ink-4); }
+.cp-view {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 450;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+}
+
+/* ══ Pagination ══════════════════════════════════════════════════════════ */
+.cp-pager { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 26px; }
+.cp-pg {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 10px;
+  background: var(--dh-glass-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-2);
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.cp-pg:hover:not(:disabled) { background: var(--dh-glass-3); color: var(--dh-ink); }
+.cp-pg:disabled { opacity: .38; cursor: default; }
+.cp-pg[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  border-color: transparent;
+  color: #fff;
+}
+.cp-pg-gap { color: var(--dh-ink-3); padding-inline: 2px; font-size: 12px; }
+.cp-count { margin-top: 12px; text-align: center; font-size: 11.5px; color: var(--dh-ink-3); }
+
+/* ══ States ══════════════════════════════════════════════════════════════ */
+.cp-skel {
+  height: 186px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(100deg, rgba(255, 255, 255, .58) 30%, rgba(255, 255, 255, .88) 50%, rgba(255, 255, 255, .58) 70%);
+  background-size: 220% 100%;
+  animation: cp-shim 1.5s linear infinite;
+}
+@keyframes cp-shim { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+.cp-empty {
+  padding: 52px 24px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: var(--dh-glass);
+  text-align: center;
+}
+.cp-empty-t { font-size: 15.5px; font-weight: 450; letter-spacing: -.024em; color: var(--dh-ink); }
+.cp-empty-s {
+  margin: 7px auto 0;
+  max-width: 46ch;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--dh-ink-3);
+}
+.cp-empty-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 16px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 11px;
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2), 0 8px 22px rgba(0, 0, 0, .12);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #fff;
+  text-decoration: none;
+}
+
+/* ══ Body and rail ═══════════════════════════════════════════════════════ */
+.cp-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 316px;
+  gap: 24px;
+  align-items: start;
+  padding: 0 var(--dh-gut);
+  margin-top: 2px;
+}
+.cp-rail {
+  position: sticky;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.cp-panel {
+  padding: 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .82) 0%, rgba(255, 255, 255, .56) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+.cp-panel-t { margin: 0 0 4px; font-size: 14.5px; font-weight: 450; letter-spacing: -.026em; color: var(--dh-ink); }
+.cp-panel-s { margin: 0 0 12px; font-size: 11.5px; color: var(--dh-ink-3); }
+
+/* The one panel that asks rather than describes, so it leads the column and
+   carries the only accent in it. */
+.cp-panel-cta {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, .92);
+  background: linear-gradient(158deg, rgba(186, 205, 255, .34) 0%, rgba(214, 199, 255, .26) 46%, rgba(255, 255, 255, .62) 100%);
+  box-shadow: 0 1px 2px rgba(38, 44, 84, .05), 0 10px 30px rgba(38, 44, 84, .11), inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+.cp-panel-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8ea6f0 0%, #b49bf0 52%, #7fd3bd 100%);
+  opacity: .75;
+}
+.cp-panel-cta .cp-panel-t { font-weight: 500; }
+
+.cp-cta {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 12px 0 8px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .22), 0 8px 22px rgba(30, 32, 60, .2);
+  text-decoration: none;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.cp-cta:hover { transform: translateY(-1px); box-shadow: 0 2px 5px rgba(0, 0, 0, .26), 0 14px 30px rgba(30, 32, 60, .26); }
+.cp-cta-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .13);
+  color: #fff;
+}
+.cp-cta-b { min-width: 0; flex: 1 1 auto; }
+.cp-cta-t { display: block; font-size: 13px; font-weight: 500; letter-spacing: -.016em; color: #fff; }
+.cp-cta-s { display: block; margin-top: 1px; font-size: 11.5px; color: rgba(255, 255, 255, .72); }
+.cp-cta-a { flex: 0 0 auto; color: rgba(255, 255, 255, .6); }
+
+.cp-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: 11px;
+  text-decoration: none;
+  color: inherit;
+}
+.cp-row-quiet:hover { background: rgba(255, 255, 255, .82); }
+.cp-row-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .84);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dh-ink-2);
+}
+.cp-row-b { min-width: 0; flex: 1 1 auto; }
+.cp-row-t {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.014em;
+  color: var(--dh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cp-row-s {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--dh-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A category row doubles as its own filter. */
+.cp-src {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: calc(100% + 16px);
+  padding: 9px 8px 12px;
+  margin-inline: -8px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease);
+}
+.cp-src:hover { background: rgba(255, 255, 255, .82); }
+.cp-src[data-on="1"] { background: rgba(120, 140, 200, .14); }
+.cp-src-bar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, .055);
+  overflow: hidden;
+}
+.cp-src-bar::after {
+  content: '';
+  display: block;
+  width: var(--w, 0%);
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4b4b52, #23232a);
+}
+
+/* ══ Responsive ══════════════════════════════════════════════════════════ */
+
+@media (max-width: 1140px) {
+  .cp-body { grid-template-columns: minmax(0, 1fr); }
+  .cp-rail {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+    gap: 12px;
+    order: 2;
+    margin-top: 22px;
+  }
+  .cp-main { order: 1; }
+}
+
+@media (max-width: 1000px) {
+  .cp-bar { gap: 11px; }
+  .cp-cat { padding: 0 11px; gap: 6px; }
+}
+
+@media (max-width: 680px) {
+  .cp-title span { display: none; }
+  .cp-title b { font-size: 17px; }
+}
+
+@media (max-width: 620px) {
+  .cp-bar { gap: 9px; padding-top: 13px; padding-bottom: 12px; }
+  .cp-fbtn-l { display: none; }
+  .cp-fbtn { padding: 0 10px; gap: 6px; }
+  .cp-cat { height: 32px; font-size: 12px; }
+  .cp-card { padding: 14px 14px 12px; }
+  .cp-grid { gap: 11px; }
+}
+
+/* A rail row that is a button rather than a link. */
+.cp-row-btn {
+  width: calc(100% + 16px);
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease);
+}
+.cp-row-btn:hover { background: rgba(255, 255, 255, .82); }
+.cp-row-btn[data-on="1"] { background: rgba(120, 140, 200, .14); }

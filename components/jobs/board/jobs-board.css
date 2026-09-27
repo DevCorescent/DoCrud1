@@ -1,0 +1,952 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   THE JOBS BOARD
+   ══════════════════════════════════════════════════════════════════════════
+
+   Drawn inside DiscoverShell, so `.dh`'s tokens resolve here and there is no
+   second palette to keep in sync. Everything below is spacing, structure and
+   the few surfaces this page adds; the ink, glass, radii, shadows and easings
+   all come from discover.css.
+
+   ── ONE BLUR LAYER, AGAIN ──
+   `.dh-panel` already declares `backdrop-filter`, and this page renders inside
+   it. Nesting a second backdrop-filter under a filtered ancestor does not
+   render a softer blur — it renders grey rectangles over content that is laid
+   out but never painted. So nothing in this file blurs. The glass here is
+   translucency, a gradient, a hairline rim and a shadow, which is what actually
+   reads as glass; the blur is already being done once, by the panel, for all
+   of it. The sticky filter bar is the one that most wants a blur and most
+   cannot have one — it uses a near-opaque wash and a mask fade instead.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.jb {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  padding-bottom: 88px;
+  /* The sticky filter bar measures its offset from this box. */
+  position: relative;
+}
+
+.jb-pad { padding-inline: 34px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE ONE ROW
+   ══════════════════════════════════════════════════════════════════════════
+
+   Heading · location buckets · filters, on a single line, sticky to the top of
+   the scroller.
+
+   The grid is `auto minmax(0,1fr) auto`, not flex: the middle track is the only
+   one allowed to take the leftover width, and `minmax(0, …)` is what lets it
+   shrink below its content so the scroller inside it actually scrolls. With
+   `1fr` alone the chips would set the track's minimum and push Filters off the
+   right edge — the classic flexbox/grid overflow trap.
+
+   No blur here. `.dh-panel` already declares one and this row renders inside
+   it; a second backdrop-filter under a filtered ancestor paints grey rectangles
+   rather than glass. The wash is near-opaque instead, with a fade at the bottom
+   so cards scrolling under it are not cut by a hard line.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.jb-bar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 34px 15px;
+  background: linear-gradient(180deg,
+    rgba(251, 251, 253, .97) 0%,
+    rgba(251, 251, 253, .95) 66%,
+    rgba(251, 251, 253, 0) 100%);
+}
+
+/* ── The heading ──
+   It is still the page's h1; it is simply no longer 42px of it. */
+.jb-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  letter-spacing: -.03em;
+}
+.jb-title b {
+  font-size: 19px;
+  font-weight: 500;
+  color: var(--dh-ink);
+  font-variant-numeric: tabular-nums;
+}
+.jb-title span {
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--dh-ink-3);
+}
+
+/* ── The buckets ──
+   A scroller in the middle track. It bleeds under the row's right edge with a
+   mask rather than stopping at a gutter, so "there is more" is visible without
+   an arrow control taking width from the chips. */
+.jb-cats {
+  display: flex;
+  gap: 7px;
+  min-width: 0;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 2px;
+  padding: 3px 2px;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 26px), transparent 100%);
+}
+.jb-cats::-webkit-scrollbar { display: none; }
+
+.jb-cat {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .72);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+}
+.jb-cat svg { color: var(--dh-ink-4); transition: color var(--dh-fast) var(--dh-ease); }
+.jb-cat:hover { background: rgba(255, 255, 255, .98); color: var(--dh-ink); border-color: rgba(0, 0, 0, .1); }
+.jb-cat:hover svg { color: var(--dh-ink-2); }
+.jb-cat[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .16);
+}
+.jb-cat[data-on="1"] svg { color: rgba(255, 255, 255, .8); }
+.jb-cat-n {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-3);
+}
+.jb-cat[data-on="1"] .jb-cat-n { color: rgba(255, 255, 255, .66); }
+
+/* ── Filters ── */
+.jb-fbtn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(0, 0, 0, .07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: var(--dh-sh-1);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.jb-fbtn:hover { background: #fff; color: var(--dh-ink); }
+.jb-fbtn svg { color: var(--dh-ink-3); }
+.jb-fbtn[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  border-color: transparent;
+  color: #fff;
+}
+.jb-fbtn[data-on="1"] svg { color: rgba(255, 255, 255, .78); }
+.jb-fbtn-n {
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: #2c2c2f;
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.jb-fbtn[data-on="1"] .jb-fbtn-n { background: rgba(255, 255, 255, .95); color: #1a1a1c; }
+
+/* ── The active filters, when there are any ──
+   Its own line, conditionally rendered, so it costs nothing when empty. */
+/* The label inside a bucket chip. A skill or a city can be long, and without
+   a box of its own the text pushes the count out of the chip. */
+.jb-cat-l {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "Clear all", beside the active filters. It had no rule at all on any board —
+   a raw browser button appeared the moment somebody applied a filter, which no
+   geometry or contrast assertion notices. */
+.jb-clear {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: -.01em;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+  transition: color var(--dh-fast) var(--dh-ease);
+}
+.jb-clear:hover { color: var(--dh-ink); text-decoration: underline; }
+
+.jb-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0 12px;
+}
+
+/* ── Active filters, on the bar ──
+   So the sheet does not have to be opened to find out what is on. */
+.jb-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 11px;
+  border: 1px solid rgba(0, 0, 0, .07);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .72);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.jb-pill svg { color: var(--dh-ink-4); transition: color var(--dh-fast) var(--dh-ease); }
+.jb-pill:hover { background: rgba(255, 255, 255, .95); color: var(--dh-ink); }
+.jb-pill:hover svg { color: var(--dh-ink); }
+
+/* ── The keyword field, in the sheet ──
+   Not in the navbar: that search answers across the whole product, and a
+   single field cannot both go somewhere and narrow something here without the
+   member having to guess which it just did. */
+.jb-kw {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  margin: 2px 6px 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(0, 0, 0, .1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .8);
+  transition: border-color var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.jb-kw:focus-within {
+  border-color: rgba(120, 140, 200, .55);
+  box-shadow: 0 0 0 3.5px rgba(150, 170, 230, .2);
+}
+.jb-kw svg { flex: 0 0 auto; color: var(--dh-ink-3); }
+.jb-kw input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: -.012em;
+  color: var(--dh-ink);
+}
+.jb-kw input:focus { outline: none; }
+.jb-kw input::placeholder { color: var(--dh-ink-3); }
+.jb-kw button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+}
+.jb-kw button:hover { background: rgba(0, 0, 0, .06); color: var(--dh-ink); }
+
+
+
+/* ══ Section headings ════════════════════════════════════════════════════
+   Title, a count as a quiet token, and a rule that takes the rest of the line.
+   The rule is what makes the column read as sections rather than as one long
+   run of cards, and it fades out so it does not terminate in a hard tick. */
+
+.jb-sec {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 30px 0 15px;
+}
+.jb-sec:first-child { margin-top: 2px; }
+.jb-sec-t {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 16px;
+  font-weight: 450;
+  letter-spacing: -.03em;
+  color: var(--dh-ink);
+}
+.jb-sec-n {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  height: 21px;
+  padding: 0 8px;
+  border: 1px solid rgba(0, 0, 0, .05);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .62);
+  font-size: 11px;
+  color: var(--dh-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.jb-sec-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, var(--dh-line) 0%, rgba(0, 0, 0, 0) 92%);
+}
+
+/* ══ A job card ══════════════════════════════════════════════════════════ */
+
+/* ── The grid ──
+   `auto-fill` with a floor, rather than a column count per breakpoint: the
+   results column is a different width depending on whether the right rail is
+   beside it, so counting columns in media queries would mean keeping two sets
+   of breakpoints in agreement. The track floor is 330px because a job title is
+   long — below that, two-line titles become three-line ones and the cards stop
+   lining up.
+
+   Rows stretch, so every card in a row is the height of the tallest. That is
+   what `margin-top: auto` on the footer is for: the actions line up across the
+   row however little the employer published. */
+.jb-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));
+  gap: 13px;
+  align-items: stretch;
+}
+
+.jb-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 17px 18px 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .84) 0%, rgba(255, 255, 255, .6) 100%);
+  box-shadow: var(--dh-sh-1);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+  animation: jb-card-in 420ms var(--dh-ease) both;
+}
+@keyframes jb-card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.jb-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--dh-sh-2);
+  border-color: rgba(255, 255, 255, .95);
+}
+
+/* ── The identity block ── */
+.jb-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.jb-card-id { min-width: 0; flex: 1 1 auto; }
+
+.jb-card-t {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -.026em;
+  line-height: 1.32;
+  color: var(--dh-ink);
+  /* Two lines, always. Titles here run from "Video Editor" to "Delivery
+     Solutions Architect - Communications, Media, Entertainment & Games", and
+     an unclamped one drags its whole row taller than every card in it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* Reserves the second line whether or not it is used, so the company name
+     sits on the same baseline across a row. */
+  min-height: calc(2 * 1.32em);
+}
+.jb-card-co {
+  margin: 5px 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: -.01em;
+  color: var(--dh-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The "· via Greenhouse" attribution. It is the provenance of the role, not
+   decoration, so it clears AA like the rest. */
+.jb-card-co span { color: var(--dh-ink-3); }
+
+/* The meta row: experience, employment, work mode, location. */
+/* ── Meta ──
+   Pills rather than a dot-separated line: in a 330px cell the line wrapped
+   mid-phrase and the separators ended up at the start of rows. */
+.jb-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 13px;
+}
+.jb-m {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(0, 0, 0, .045);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .62);
+  font-size: 11.5px;
+  letter-spacing: -.008em;
+  color: var(--dh-ink-3);
+  white-space: nowrap;
+}
+.jb-m svg { flex: 0 0 auto; color: var(--dh-ink-4); }
+
+.jb-loc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 9px 0 0;
+  font-size: 11.5px;
+  letter-spacing: -.008em;
+  color: var(--dh-ink-3);
+  min-width: 0;
+}
+.jb-loc svg { flex: 0 0 auto; color: var(--dh-ink-4); }
+/* A role can list six states in one string. */
+.jb-loc span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Skills, when the employer actually stated any. Many scraped roles carry
+   none, which is why this row is conditional rather than an empty line. */
+.jb-skills {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 9px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--dh-ink-3);
+}
+.jb-skills i {
+  font-style: normal;
+  color: var(--dh-ink-4);
+}
+
+.jb-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; min-width: 0; }
+.jb-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, .05);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .6);
+  font-size: 11.5px;
+  font-weight: 450;
+  letter-spacing: -.008em;
+  color: var(--dh-ink-2);
+}
+
+.jb-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Pushed to the bottom of a stretched cell, so every card in a row puts its
+     action on the same line. */
+  margin-top: auto;
+  padding-top: 13px;
+  border-top: 1px solid var(--dh-line-2);
+}
+/* The border needs something above it even on the sparsest card. */
+.jb-card-head + .jb-foot, .jb-meta + .jb-foot { margin-top: 15px; }
+.jb-foot-m {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--dh-ink-4);
+}
+.jb-foot-m svg { color: var(--dh-ink-4); }
+
+.jb-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .78);
+}
+.jb-mark img { width: 100%; height: 100%; object-fit: contain; padding: 6px; }
+.jb-mark-txt {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.03em;
+}
+
+.jb-apply {
+  /* In the footer, pushed to its end — not in the card's side column, where a
+     sparse card's `space-between` left it stranded in the bottom corner. */
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .2), 0 6px 18px rgba(0, 0, 0, .12);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.jb-apply:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0, 0, 0, .24), 0 12px 28px rgba(0, 0, 0, .16); }
+
+/* ── The match badge, in the recommended section only ── */
+.jb-match {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -.008em;
+  white-space: nowrap;
+}
+.jb-why { display: flex; flex-direction: column; gap: 5px; margin-top: 11px; }
+.jb-why-r {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--dh-ink-3);
+}
+.jb-why-r svg { flex: 0 0 auto; margin-top: 2px; color: var(--dh-ink-4); }
+
+/* ══ Body: results beside the right rail ═════════════════════════════════ */
+
+.jb-body {
+  display: grid;
+  /* `minmax(0, 1fr)` and not `1fr`: the results column contains a grid of its
+     own, and without the zero minimum its tracks would set this column's
+     minimum width and push the rail out of the viewport. */
+  grid-template-columns: minmax(0, 1fr) 316px;
+  gap: 24px;
+  align-items: start;
+  padding: 0 34px;
+  margin-top: 2px;
+}
+
+/* ══ The right rail ══════════════════════════════════════════════════════ */
+
+.jb-rail {
+  position: sticky;
+  top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.jb-panel {
+  padding: 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(170deg, rgba(255, 255, 255, .8) 0%, rgba(255, 255, 255, .54) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+.jb-panel-t {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+  font-weight: 450;
+  letter-spacing: -.026em;
+  color: var(--dh-ink);
+}
+.jb-panel-s {
+  margin: 0 0 12px;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+  letter-spacing: -.005em;
+}
+
+.jb-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px;
+  margin-inline: -8px;
+  border-radius: 11px;
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--dh-fast) var(--dh-ease);
+}
+.jb-row:hover { background: rgba(255, 255, 255, .72); }
+.jb-row-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .8);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+}
+.jb-row-mark img { width: 100%; height: 100%; object-fit: contain; padding: 5px; }
+.jb-row-b { min-width: 0; flex: 1 1 auto; }
+.jb-row-t {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.014em;
+  color: var(--dh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jb-row-s {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--dh-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The employer call to action ──
+   The only panel in this rail that ASKS for something; the other two describe
+   the board. So it leads the column and carries the one accent on the page —
+   a soft pastel wash and a filled primary row — while the panels under it stay
+   quiet. Two competing accents in one column and neither would read as the
+   thing to press. */
+.jb-panel-cta {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(255, 255, 255, .92);
+  background:
+    linear-gradient(158deg,
+      rgba(186, 205, 255, .34) 0%,
+      rgba(214, 199, 255, .26) 46%,
+      rgba(255, 255, 255, .62) 100%);
+  box-shadow:
+    0 1px 2px rgba(38, 44, 84, .05),
+    0 10px 30px rgba(38, 44, 84, .11),
+    inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+/* A hairline of colour along the top edge, drawn rather than bordered so it
+   follows the panel'''s radius. */
+.jb-panel-cta::before {
+  content: '''''';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, #8ea6f0 0%, #b49bf0 52%, #7fd3bd 100%);
+  opacity: .75;
+}
+.jb-panel-cta .jb-panel-t { font-weight: 500; }
+
+/* The primary action. Filled, so it is unmistakably the button in this column. */
+.jb-cta {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 12px 0 8px;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: linear-gradient(160deg, #2c2c2f 0%, #191919 100%);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, .22),
+    0 8px 22px rgba(30, 32, 60, .2);
+  text-decoration: none;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-fast) var(--dh-ease);
+}
+.jb-cta:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, .26),
+    0 14px 30px rgba(30, 32, 60, .26);
+}
+.jb-cta-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .13);
+  color: #fff;
+}
+.jb-cta-b { min-width: 0; flex: 1 1 auto; }
+.jb-cta-t {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.016em;
+  color: #fff;
+}
+.jb-cta-s {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  /* On the filled row, not on the panel: measured 6.9:1 against #232326. */
+  color: rgba(255, 255, 255, .72);
+}
+.jb-cta-a { flex: 0 0 auto; color: rgba(255, 255, 255, .6); }
+
+/* The secondary action stays a plain row, so the pair reads as one primary and
+   one alternative rather than as two buttons. */
+.jb-row-quiet { margin-inline: -8px; }
+.jb-row-quiet:hover { background: rgba(255, 255, 255, .8); }
+
+/* ── Where the roles come from ── */
+.jb-src {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 8px 11px;
+  margin-inline: -8px;
+}
+.jb-src-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0, 0, 0, .055);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .78);
+  color: var(--dh-ink-4);
+}
+/* The share of the board, as a rule under the row rather than a second number
+   beside the first. */
+.jb-src-bar {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 4px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, .055);
+  overflow: hidden;
+}
+.jb-src-bar::after {
+  content: '';
+  display: block;
+  width: var(--w, 0%);
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #4b4b52, #23232a);
+}
+.jb-src-note {
+  margin: 12px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--dh-line-2);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dh-ink-3);
+}
+
+/* ══ States ══════════════════════════════════════════════════════════════ */
+
+.jb-skel {
+  height: 186px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: linear-gradient(100deg, rgba(255, 255, 255, .58) 30%, rgba(255, 255, 255, .86) 50%, rgba(255, 255, 255, .58) 70%);
+  background-size: 220% 100%;
+  animation: jb-shim 1.5s linear infinite;
+}
+@keyframes jb-shim { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+.jb-empty {
+  padding: 46px 22px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background: var(--dh-glass);
+  text-align: center;
+}
+.jb-empty-t {
+  font-size: 15px;
+  font-weight: 450;
+  letter-spacing: -.024em;
+  color: var(--dh-ink);
+}
+.jb-empty-s { margin-top: 6px; font-size: 12.5px; color: var(--dh-ink-3); }
+
+/* ══ Pagination ══════════════════════════════════════════════════════════ */
+
+.jb-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 26px;
+}
+.jb-pg {
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 10px;
+  background: var(--dh-glass-2);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-2);
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.jb-pg:hover:not(:disabled) { background: var(--dh-glass-3); color: var(--dh-ink); }
+.jb-pg:disabled { opacity: .38; cursor: default; }
+.jb-pg[data-on="1"] {
+  background: linear-gradient(160deg, #2c2c2f, #191919);
+  border-color: transparent;
+  color: #fff;
+}
+.jb-pg-gap { color: var(--dh-ink-4); padding-inline: 2px; font-size: 12px; }
+.jb-count {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   The right rail is the first thing to go, then the card's side column stops
+   being a column, then the page becomes a single flow. Nothing is hidden that
+   carried information — the rail's contents move into the flow above the list.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* No room for a 316px rail beside the list. */
+@media (max-width: 1140px) {
+  .jb-body { grid-template-columns: minmax(0, 1fr); }
+  .jb-rail {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(258px, 1fr));
+    gap: 12px;
+    order: 2;
+    margin-top: 22px;
+  }
+  .jb-main { order: 1; }
+}
+
+/* ── The row, as it narrows ──
+   The order things give way in: the gutters tighten, then the heading loses its
+   noun, then the Filters button loses its word. The location scroller never
+   loses anything — it simply scrolls, which is what it is for. */
+@media (max-width: 1000px) {
+  .jb-bar { gap: 11px; }
+  .jb-cat { padding: 0 11px; gap: 6px; }
+}
+
+@media (max-width: 820px) {
+  .jb-pad { padding-inline: 20px; }
+  .jb-body { padding: 0 20px; }
+  /* The row's own gutter. The old rule padded `.jb-cats`, which is now a track
+     inside the row rather than a full-width rail — padding it indented the
+     chips away from the heading beside them. */
+  .jb-bar { padding-inline: 20px; }
+}
+
+@media (max-width: 680px) {
+  /* "1,282 roles" becomes "1,282" — the chips beside it say what they are. */
+  .jb-title span { display: none; }
+  .jb-title b { font-size: 17px; }
+}
+
+@media (max-width: 620px) {
+  .jb-card { padding: 15px 15px 13px; }
+  .jb-mark { width: 38px; height: 38px; border-radius: 11px; }
+  .jb-list { gap: 11px; }
+}
+
+@media (max-width: 520px) {
+}
+
+@media (max-width: 430px) {
+  .jb-pad { padding-inline: 16px; }
+  .jb-body { padding: 0 16px; }
+  .jb-bar { padding-inline: 16px; gap: 8px; }
+}

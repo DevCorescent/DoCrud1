@@ -4,7 +4,7 @@
 import { FEED_CARD, FEED_STACK } from '@/components/feed/cardShell';
 import FeedBento from '@/components/feed/FeedBento';
 import { cachedJson } from '@/lib/client/request-cache';
-import FeedJobCard, { FeedJobCardStyles, type FeedJob } from '@/components/feed/FeedJobCard';
+import FeedJobCard, { type FeedJob } from '@/components/feed/FeedJobCard';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePostReactions, PostReactionButton } from '@/components/social/PostReactionButton';
 import { PostSocialProofRow } from '@/components/social/PostSocialProofRow';
@@ -2892,10 +2892,9 @@ function HomepageLiveFeed({ onPublish, guestMode = false }: { onPublish?: () => 
                 From `lg` up FeedBento lays that same stack out in aligned
                 rows; below it, it renders the stack verbatim. */}
             <div className="mx-auto w-full max-w-2xl lg:max-w-[1600px]">
-              {/* The person cards bring their own stylesheet (a real .css file
-                  imported by the component), so nothing has to be mounted here
-                  for them any more. */}
-              {jobsToMix > 0 && <FeedJobCardStyles />}
+              {/* Both the person cards and the job cards bring their own
+                  stylesheet — a real .css file imported by the component — so
+                  nothing has to be mounted here for either of them. */}
               <FeedBento stackClassName={FEED_STACK}>
               {loading
                 ? Array.from({ length: 4 }).map((_, i) => (

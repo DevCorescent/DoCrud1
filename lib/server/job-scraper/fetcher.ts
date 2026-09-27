@@ -51,7 +51,25 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, Math.max(0, ms)));
 }
 
-const MAX_JSON_BYTES = 8 * 1024 * 1024; // 8 MB response-size guard
+/**
+ * Response-size guard.
+ *
+ * 8 MB by default, and that default is unchanged: it is what stops one
+ * pathological response from pulling an unbounded body into memory.
+ *
+ * It is configurable because the limit is an operational judgement, not a
+ * safety invariant. The fetcher only ever calls the fixed provider hosts in
+ * the SSRF allowlist — Greenhouse, Lever, Ashby and their peers — and a few of
+ * their genuinely large boards exceed 8 MB when descriptions are included:
+ * OpenAI's Ashby board is ~13 MB and Databricks' Greenhouse board ~9 MB, so
+ * both failed as `too_large` and contributed nothing. Raising it is a decision
+ * an operator should be able to make for a trusted host without editing code;
+ * leaving it alone stays safe by default.
+ */
+const MAX_JSON_BYTES = Math.max(
+  1024 * 1024,
+  Number(process.env.JOB_SCRAPER_MAX_RESPONSE_BYTES) || 8 * 1024 * 1024,
+);
 
 /**
  * Fetch and parse JSON from an official public job API. HTTPS only, bounded

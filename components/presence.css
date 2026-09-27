@@ -1,0 +1,23 @@
+/**
+ * The presence dot and its label.
+ *
+ * This component is used on BOTH themes, so dark is the default and the light
+ * shell overrides it — keyed on `:root:has(.dh)` rather than on
+ * `data-ui-mode`, because the document carries data-ui-mode="dark" at runtime
+ * even on the pages that paint light, so theming off it changes the colour in
+ * exactly the wrong place.
+ */
+
+.pb-dot, .pb-ping { background: #34d399; }
+.pb-label[data-on='1'] { color: #34d399; }
+.pb-label[data-on='0'] { color: rgba(255, 255, 255, .35); }
+
+/* On the light shell. #34d399 measured 1.42:1 on that ground — the label was
+   there and could not be read. These are the same hue stepped down until they
+   clear their bars: 4.5:1 for the 11.5px label, and 3:1 for the dot, which is
+   an indicator and not decoration — it is the only thing that says "online"
+   when the label is clipped. */
+:root:has(.dh) .pb-label[data-on='1'] { color: #0a6b4a; }
+:root:has(.dh) .pb-label[data-on='0'] { color: #5e5e63; }
+:root:has(.dh) .pb-dot { background: #0f9f6e; }
+:root:has(.dh) .pb-ping { background: #10b981; }

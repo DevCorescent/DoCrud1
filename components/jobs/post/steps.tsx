@@ -370,7 +370,7 @@ export function JobPublishStep({
         <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
           {summary.map((row) => (
             <div key={row.label} className="min-w-0">
-              <dt className={`text-[11px] font-bold uppercase tracking-[0.13em] ${FAINT}`}>{row.label}</dt>
+              <dt className={`text-[11px] font-medium uppercase tracking-[0.13em] ${FAINT}`}>{row.label}</dt>
               <dd className="mt-0.5 truncate text-[13.5px] font-medium text-slate-800 dark:text-white/80">
                 {row.value}
               </dd>

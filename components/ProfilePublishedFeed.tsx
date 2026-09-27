@@ -1,4 +1,5 @@
 'use client';
+import './published-feed.css';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { renderWithMentions } from '@/lib/mentions';
@@ -882,15 +883,15 @@ export default function ProfilePublishedFeed({
 
       {!loading && items.length === 0 && (
         <div className="rounded-[20px] border border-white/[0.06] bg-white/[0.02] py-16 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.04]">
-            <FileText className="h-6 w-6 text-white/20" />
+          <div className="ppf-empty-i mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full">
+            <FileText className="ppf-empty-g h-6 w-6" />
           </div>
-          <p className="text-[14px] font-semibold text-white/30">
+          <p className="ppf-empty-t text-[14px] font-semibold">
             {isOwn ? 'No posts published yet' : 'Nothing published yet'}
           </p>
           {isOwn && (
             <>
-              <p className="text-[12px] text-white/18 mt-1.5">
+              <p className="ppf-empty-s text-[12px] mt-1.5">
                 Share your work with the community — docs, events, jobs, and more.
               </p>
               {onPublish && (

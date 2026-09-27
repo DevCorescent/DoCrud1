@@ -30,14 +30,18 @@ export function PresenceBadge({ userId }: { userId: string }) {
     <span className="inline-flex items-center gap-1.5 select-none">
       {online && (
         <span className="relative flex h-2 w-2 shrink-0">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+          <span className="pb-ping absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping" />
+          <span className="pb-dot relative inline-flex h-2 w-2 rounded-full" />
         </span>
       )}
+      {/* The label carries its state in a CLASS, not in a Tailwind colour.
+          `text-emerald-400` is #34d399: it reads on the near-black page this
+          was written for and measures 1.42:1 on the light shell, which is
+          invisible. `text-white/35` for "last seen" is worse. Dark stays the
+          default and the light shell overrides it — see presence.css. */}
       <span
-        className={`text-[11.5px] font-medium leading-none ${
-          online ? 'text-emerald-400' : 'text-white/35'
-        }`}
+        className={`pb-label text-[11.5px] font-medium leading-none`}
+        data-on={online ? '1' : '0'}
       >
         {label}
       </span>

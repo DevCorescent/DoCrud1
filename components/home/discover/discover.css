@@ -1,0 +1,3864 @@
+/**
+ * The homepage, as a light product surface.
+ *
+ * ═══ WHY THIS IS ITS OWN STYLESHEET ═══
+ *
+ * The rest of Docrud is dark (`#0D0D0F`) and set in Manrope. This page is
+ * neither, so every value it needs is declared here rather than inherited —
+ * inheriting would leave the page half-converted the first time somebody
+ * changed a global, and "mostly converted" is worse than either.
+ *
+ * Everything is scoped under `.dh`. Nothing here reaches a page that does not
+ * opt in by rendering that class.
+ *
+ * ═══ NO BOLD ═══
+ *
+ * Nothing on this page is heavier than 500, and every heading is 400.
+ * Weight is not how hierarchy is built here — SIZE and TRACKING are. The
+ * section heads are 21px at 400 with -0.032em of tracking and a hairline rule
+ * running out towards the gutter, and they separate the page perfectly well
+ * without ever raising their voice. That is the difference between a page that
+ * looks designed and one that looks emphatic.
+ *
+ * ═══ GLASS NEEDS SOMETHING BEHIND IT ═══
+ *
+ * `backdrop-filter` over a flat background produces nothing — blurring a solid
+ * colour returns that colour. So the ground carries the aurora below. It is
+ * nearly invisible on its own and it is the entire reason the panels read as
+ * material; remove it and every frosted surface here collapses into a plain
+ * translucent rectangle.
+ *
+ * ═══ ONE BLUR LAYER, NOT TWENTY ═══
+ *
+ * `backdrop-filter` is declared in exactly two places: the panel, and the
+ * handful of controls that sit on the bare ground beside it. NOTHING inside
+ * the panel blurs.
+ *
+ * Nesting them does not merely cost more — it renders wrongly. A blurred
+ * element inside a blurred element forces a readback of a surface that is
+ * itself still being composited, and the result was grey rectangles painted
+ * over whole regions of the page: the section headings and every card title
+ * were laid out correctly, measured correctly, and simply never drawn.
+ *
+ * The children do not need it. They are translucent white with a rim and an
+ * inner top highlight, sitting ON a blurred surface that already varies
+ * underneath them — which is what makes them read as glass, and is how the
+ * material is built on the platform this page is imitating.
+ *
+ * ═══ WHERE THE COLOUR IS ═══
+ *
+ * In the AURORA, and almost nowhere else.
+ *
+ * Five pastel orbs sit on the ground behind everything. The panel and the
+ * controls on it are translucent, so each picks up whatever happens to be
+ * behind it — the sidebar reads cool, the foot of the feed reads green, and it
+ * shifts as the page scrolls. That is colour arriving THROUGH the material
+ * rather than being painted onto it, which is the only version of this that
+ * stays subtle. Painting the cards instead gives flat swatches that stay the
+ * same colour wherever they are.
+ *
+ * The exceptions are few and deliberate: each category tile pools its own
+ * pastel under its artwork, the role cards share one cool whisper, and the
+ * featured pictures are held at 55% desaturation so they read as dusty rather
+ * than as four identical charcoal blocks.
+ *
+ * Text is never on a colour — every label sits on the clean part of its own
+ * glass. And there is no saturated accent, no coloured button and no coloured
+ * heading.
+ */
+
+.dh {
+  /* ── Ink ──
+     Neutral, not blue-grey. A "black and white" page built from #0f172a and
+     #475569 is a blue page that nobody called blue. */
+  --dh-ink: #1d1d1f;
+  --dh-ink-2: #565659;
+  /* Measured against the real composited panel, not guessed at. On a surface
+     that samples to about rgb(247,248,248), #86868b gave secondary copy
+     3.36:1 and #a9a9ae gave placeholders 2.16:1 — both under the 4.5:1 that
+     11–13px text needs. These two are the system's own greys one step darker,
+     so the palette is unchanged in character and the small text is actually
+     readable. */
+  /* Set against the DARKEST BARE GROUND, not against an average.
+
+     With the white panel gone, small text sits directly on the smoky ground,
+     and the smoke is a field rather than a colour: any given label is over
+     some part of it, so the surface to clear is the WORST part, not the mean.
+     Sampling one point gave rgb(241,241,246); sampling the whole field from a
+     real screenshot gave the darkest patch.
+
+     Re-measured when the pastel wash went under the smoke. The first, more
+     saturated wash cost real contrast — it took the darkest patch from
+     rgb(222,226,234) to rgb(215,218,228) and dropped #636368 to 4.28:1, under
+     the 4.5:1 that 11–13px copy needs — and that is what sent the wash to
+     pale-tint-at-high-alpha instead. With the pale wash the darkest patch is
+     rgb(222,225,230), back where it started, so #636368 would in fact still
+     clear the bar at about 4.6:1.
+
+     This is kept a step darker anyway, at 4.92:1 measured. The margin is the
+     point: the wash is a gradient, so the worst surface under a given label
+     depends on where on the page that label happens to sit and on how the
+     viewport crops the gradient, and 4.6:1 leaves nothing for that to move
+     into. */
+  --dh-ink-3: #5e5e63;
+  /* Never used for text that carries information — icons and separators only.
+     The bar there is 3:1, and this is the first value that actually meets it:
+     #86868b measured 2.79:1 on the old ground and 2.59:1 on the first wash, so
+     the page had been missing the non-text bar all along. 3.25:1 measured. */
+  --dh-ink-4: #7a7a80;
+
+  --dh-line: rgba(0, 0, 0, .09);
+  --dh-line-2: rgba(0, 0, 0, .055);
+
+  /* ── Glass ──
+     Three translucencies and one hairline rim, as tokens: a page with six
+     slightly different glasses on it reads as a mistake. */
+  --dh-glass: rgba(255, 255, 255, .58);
+  --dh-glass-2: rgba(255, 255, 255, .74);
+  --dh-glass-3: rgba(255, 255, 255, .88);
+  --dh-rim: rgba(255, 255, 255, .72);
+  --dh-blur: saturate(180%) blur(26px);
+
+  /* The page's side gutter. `.dh-pad`, the rails and the company row all use
+     it, and the company row's fade stops and its arrows are derived from it —
+     so a change at one breakpoint moves all of them together instead of
+     leaving a mask fading in the wrong place. */
+  --dh-gut: 34px;
+
+  /* The gap between a section head and the section's own body. The rails set
+     this by hand and the two grids set nothing at all, so a grid started flush
+     against its heading while every rail beside it breathed. One number, used
+     by everything that follows a `.dh-sec`. */
+  --dh-sec-gap: 22px;
+
+  /* How much of the next card the deck leaves showing, and the space between
+     two cards. The peek is the scroller's whole affordance, so it is a token:
+     it has to shrink with the gutter or it eats the card on a phone. */
+  /* `.dh-scroll`'s own top padding. A token because THREE things need the same
+     number: the scroller's padding, and the sticky strip's `top` and negative
+     margin — a sticky child's `top: 0` pins to the scroll container's PADDING
+     box, not its edge, so a strip meant to meet the navbar sat exactly this far
+     below it until `top` was given the same value back. */
+  --dh-scroll-top: 30px;
+  --dh-peek: 92px;
+  --dh-deck-gap: 16px;
+  /* The inset from a card's own edge to its content. It replaces the gutter the
+     four panels used when they were full-bleed sections: inside a card, `var(
+     --dh-gut)` would have measured from the page's edge and left the copy
+     hanging off the rounded corner. */
+  --dh-card-pad: 28px;
+
+  /* The one colour the page is built on. Measured, not chosen by eye: the
+     pastel wash and the smoke over it take about 25 levels off whatever this
+     is at the worst point — #f6f7fa composites down to rgb(221,222,233) — and
+     every grey the page sets text in has to clear 4.5:1 against THAT, not
+     against this. At #eef0f4 the bare ground came out at rgb(222,227,237) with
+     `--dh-ink-3` at 3.94:1, which is why the ground is this light. */
+  --dh-ground: #f6f7fa;
+
+  --dh-r-sm: 12px;
+  --dh-r-md: 18px;
+  --dh-r-lg: 28px;
+
+  --dh-ease: cubic-bezier(.22, 1, .36, 1);
+  --dh-fast: 200ms;
+  --dh-mid: 340ms;
+  --dh-slow: 560ms;
+
+  /* Layered, very soft, plus an inner top highlight. The highlight is what
+     makes a translucent panel look like a sheet of something rather than a
+     hole cut in the page. */
+  --dh-sh-1:
+    0 1px 1px rgba(0, 0, 0, .03),
+    0 2px 8px rgba(0, 0, 0, .035),
+    inset 0 1px 0 rgba(255, 255, 255, .7);
+  --dh-sh-2:
+    0 1px 2px rgba(0, 0, 0, .04),
+    0 10px 28px rgba(0, 0, 0, .07),
+    inset 0 1px 0 rgba(255, 255, 255, .8);
+  --dh-sh-3:
+    0 2px 6px rgba(0, 0, 0, .05),
+    0 24px 60px rgba(0, 0, 0, .1),
+    inset 0 1px 0 rgba(255, 255, 255, .9);
+
+  position: fixed;
+  inset: 0;
+  /* A column now: bar on top, panel beneath. It was a row, with the sidebar as
+     the first item. */
+  display: flex;
+  flex-direction: column;
+  /* ── The ground ──
+     Smoky white, with a pastel wash under the smoke.
+
+     The five-orb aurora that was here once read as five distinct coloured
+     regions however large the orbs were made, and the reason is that the eye
+     finds the CENTRE of a radial gradient: brightest point, radial symmetry,
+     and it reads as an object on the page rather than as the page's colour.
+
+     So every centre here is off the frame — the nearest is 18% of the width
+     outside it. What the page shows is only the gradient's tail, which is
+     monotonic across the whole viewport and has no feature in it to find. Four
+     of them, one per corner, so the wash turns hue slowly from corner to
+     corner instead of sitting on one tint.
+
+     The colours are PASTELS AT THE TOP OF THE LIGHTNESS RANGE, and the alphas
+     are high — which is the opposite of the obvious way round, and the reason
+     is contrast. `--dh-ink-3` carries 11–13px copy directly on this ground, so
+     what the wash may not do is darken it. A saturated tint at low alpha and a
+     pale tint at high alpha put the same amount of HUE on the page, but the
+     saturated one costs luminance to do it: rgba(170,188,255,.26) took the
+     darkest bare ground from rgb(222,226,234) to rgb(215,218,228) and pushed
+     the grey under AA. These four sit within a few levels of the ground's own
+     luminance, so they colour it without dimming it.
+
+     Measured after the fact rather than assumed — the darkest bare-ground
+     pixel is sampled from a real screenshot and every grey re-checked against
+     it.
+
+     The smoke in `.dh::before` paints OVER this, which is what keeps it from
+     banding: the turbulence is the dither. */
+  background:
+    radial-gradient(138% 118% at -18% -20%, rgba(206, 220, 255, .86) 0%, rgba(206, 220, 255, .34) 46%, rgba(206, 220, 255, 0) 100%),
+    radial-gradient(130% 112% at 118% -14%, rgba(201, 241, 227, .80) 0%, rgba(201, 241, 227, .30) 44%, rgba(201, 241, 227, 0) 100%),
+    radial-gradient(134% 116% at -12% 116%, rgba(255, 216, 231, .76) 0%, rgba(255, 216, 231, .28) 44%, rgba(255, 216, 231, 0) 100%),
+    radial-gradient(136% 120% at 116% 112%, rgba(255, 239, 203, .72) 0%, rgba(255, 239, 203, .26) 44%, rgba(255, 239, 203, 0) 100%),
+    var(--dh-ground);
+  color: var(--dh-ink);
+
+  /* ── The face ──
+     `-apple-system` resolves to SF Pro on Apple platforms, which is the face
+     being asked for. The rest of the stack is what to reach for when it is not
+     there, ordered by how close it gets. The app's Manrope is deliberately NOT
+     in this list: it is a geometric sans with round, wide forms, and it does
+     not hold the tight tracking this page is set with. */
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", "Segoe UI Variable Display", "Segoe UI", Inter, Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: -.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  /* Above `body::before` / `body::after`, which the app's dark theme paints
+     over the whole window at z-index 0 — a noise texture and a radial wash
+     meant for a dark page. They are nearly invisible on white, but they are
+     drawn ON TOP of an unlayered page. */
+  z-index: 1;
+}
+
+/* ══ The smoke ════════════════════════════════════════════════════════════
+   Real fractal noise, not a stack of gradients. `feTurbulence` at a very low
+   base frequency produces broad, irregular cloud shapes; gradients cannot,
+   because a radial gradient always has a findable centre and the eye goes
+   straight to it — which is exactly how the aurora that used to be here read
+   as five coloured blobs rather than as weather.
+
+   Two layers at different frequencies and scales, drifting at different speeds
+   and in opposite directions, so the texture never repeats visibly. Both are
+   nearly colourless: the tint comes from the single soft wash underneath them,
+   and at this opacity the noise reads as depth rather than as dirt.
+
+   `z-index: -1` keeps it inside `.dh`'s own stacking context (`.dh` has
+   `z-index: 1`, so it establishes one) — above the ground colour, below every
+   piece of content. Without it the pseudo-element, being positioned, would
+   paint over the whole page. */
+.dh::before {
+  content: '';
+  position: absolute;
+  /* Oversized, because it drifts: at exactly `inset: 0` the edges would slide
+     into view as it moves. */
+  inset: -25%;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  /* THREE layers, and the middle one is WHITE.
+
+     A single grey noise layer can only ever darken, so making it visible means
+     dragging the whole ground down — which is what cost `--dh-ink-3` its AA
+     margin the first time. Clouds that are both lighter AND darker than the
+     ground raise the VARIATION without moving the MEAN, so the page reads as
+     weather while the worst surface under small text stays where it was.
+
+     Different frequencies and seeds on each, so nothing reads as one texture.
+
+     The two grey layers are NEUTRAL rather than blue-grey. They used to carry
+     the page's colour themselves (0.44/0.48/0.60 is a blue), and with a pastel
+     wash underneath that fought it: the smoke greyed out the hue it was
+     sitting on and the whole ground came back cool. Colour belongs to the
+     wash; this layer is only weather. */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900'%3E%3Cfilter id='a'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0019' numOctaves='5' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.56 0 0 0 0 0.6 0 0 0 -1.05 0.74'/%3E%3C/filter%3E%3Crect width='900' height='900' filter='url(%23a)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0031' numOctaves='5' seed='41'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -1.1 0.82'/%3E%3C/filter%3E%3Crect width='800' height='800' filter='url(%23c)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='700' height='700'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.0058' numOctaves='4' seed='19'/%3E%3CfeColorMatrix values='0 0 0 0 0.64 0 0 0 0 0.645 0 0 0 0 0.68 0 0 0 -1.25 0.86'/%3E%3C/filter%3E%3Crect width='700' height='700' filter='url(%23b)'/%3E%3C/svg%3E");
+  /* ONE instance of each, stretched over the whole oversized box — not tiled.
+     `feTurbulence` does not tile seamlessly, so `repeat` put a hard seam
+     wherever a tile wrapped: at 1440×900 the box is 2160×1350 and the 2000px
+     and 1000px layers both wrapped inside it, which showed as straight
+     vertical and horizontal edges across the page. Stretching one instance
+     removes the wrap entirely, and it also scales the turbulence up, which
+     makes the clouds larger and softer. */
+  background-size: 100% 100%;
+  opacity: .62;
+  /* Deliberately still. It used to drift, and the drift was visible as a band
+     sliding across the page: the translation was -2000px / -400px while the
+     three tiles are 2000, 1500 and 1000, so only some of them looped on the
+     wrap and the rest jumped. Weather that ticks is worse than weather that
+     does not move, and the page is calmer without it. */
+}
+
+.dh *,
+.dh *::before,
+.dh *::after { box-sizing: border-box; }
+/* The app sets Manrope on `body`; every descendant here has to be told. */
+.dh * { font-family: inherit; }
+
+/* ── Immunity from the app's dark scope ──────────────────────────────────
+   This page renders inside the same `.dark` root as everything else, and that
+   scope reaches in by element name:
+
+     .dark main, .dark header, .dark aside { position: relative; z-index: 1 }
+
+   `.dh-bar` IS a <header>, so that (0,1,1) selector — a class plus an element
+   — outranks a plain `.dh-bar` (0,1,0) and would pin the navbar to z-index 1,
+   underneath the panel it has to sit above. The same trap took the sidebar's
+   `position: fixed` away on phones before now.
+
+   Restated here at (0,2,0) so the page owns its own layering. Doing it this
+   way rather than weakening the global rule keeps every other dark page
+   exactly as it is — the same choice `.dc-topnav > header` already makes. */
+.dh .dh-bar { position: relative; z-index: 20; }
+
+.dh :focus-visible {
+  outline: 1.5px solid var(--dh-ink);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE NAVBAR
+   ══════════════════════════════════════════════════════════════════════════
+
+   One row of glass across the top: brand, tabs, the page's search, actions.
+
+   It is the ONE surface on this page that may blur, and it does. `.dh-panel`
+   blurs too, but the two are siblings — neither is inside the other — so there
+   is no nested backdrop-filter here and none of the grey-rectangle rendering
+   that nesting produces. Nothing *within* either of them may declare its own.
+
+   The pastel is borrowed, not painted: the bar is translucent over the page's
+   aurora, so the tint under it changes as the orbs move across the window. The
+   only colour stated outright is the active tab's, and that is two soft stops
+   at well under a third opacity.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-bar {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 20;
+  padding: 0;
+}
+
+.dh-bar-in {
+  display: flex;
+  align-items: center;
+  /* Wrapping is how the tab list moves to its own line below 860px — see the
+     note on `.dh-tabs`. */
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  height: auto;
+  padding: 11px 22px;
+  /* Merged, like the panel: no card, no rim, no radius. What separates it from
+     the content is a wash that fades out downward and a hairline, not an edge
+     on four sides.
+
+     It keeps its blur — it is the only element on the page that has one now,
+     and it is what stops the tab row from swimming when the smoke drifts
+     underneath it. */
+  border: 0;
+  /* ── The material, not a translucent rectangle ──
+     A thin material works by BLURRING ENOUGH that whatever is behind it stops
+     being legible as content and becomes a wash — which is what lets the glass
+     be genuinely transparent without the text on it having to fight a headline
+     scrolling underneath. 16px was not enough blur for that: you could still
+     read shapes through it, so the white had to be held at .74 to compensate.
+     40px flattens the backdrop, so the white can come down and the bar can
+     actually look like glass.
+
+     The saturation is the other half of it. Blur alone greys everything; a
+     little over-saturation puts the colour back, which is why a pastel page
+     still reads as pastel through it. */
+  background: linear-gradient(180deg,
+    rgba(255, 255, 255, .62) 0%,
+    rgba(255, 255, 255, .40) 100%);
+  backdrop-filter: blur(40px) saturate(190%);
+  -webkit-backdrop-filter: blur(40px) saturate(190%);
+
+  /* Two edges, not one. A white line at the bottom of a light bar is a
+     highlight and reads as a seam; what separates the bar from the page is a
+     faint DARK hairline, with the white specular line sitting just inside it.
+     Together they read as a pane of glass with a lit edge. */
+  border-bottom: 1px solid rgba(20, 22, 40, .07);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, .55),
+    0 1px 0 rgba(255, 255, 255, .35),
+    0 10px 30px rgba(20, 22, 40, .05);
+}
+
+/* ── Brand ── */
+.dh-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 11px;
+}
+.dh-logo-mark {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: linear-gradient(155deg, #3a3a3d 0%, #1d1d1f 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .22), inset 0 1px 0 rgba(255, 255, 255, .22);
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -.05em;
+}
+.dh-logo-word {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -.032em;
+  color: var(--dh-ink);
+  white-space: nowrap;
+}
+
+/* ── Tabs ──
+   ONE element. Below 860px `flex-basis: 100%` inside the wrapping row puts it
+   on a line of its own, where it scrolls. There is no second, mobile copy of
+   these links — that would put every destination in the accessibility tree
+   twice and give the page two navigation landmarks saying the same thing. */
+.dh-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  /* `flex-basis: 0`, and it is the one item that grows.
+
+     Flex line-breaking uses each item's flex BASIS and ignores how much it
+     could shrink, so a tab list whose basis was its content width (~440px)
+     pushed the actions onto a second line at 1100px even though everything
+     would have fitted after shrinking. With a zero basis the tab list never
+     forces a break: it takes whatever is left once the brand, the search and
+     the actions have theirs, and scrolls when five tabs do not fit in it. */
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+.dh-tabs::-webkit-scrollbar { display: none; }
+
+.dh-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -.016em;
+  color: var(--dh-ink-3);
+  white-space: nowrap;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+}
+.dh-tab svg { flex: 0 0 auto; opacity: .75; transition: opacity var(--dh-fast) var(--dh-ease); }
+.dh-tab:hover {
+  background: rgba(255, 255, 255, .72);
+  border-color: rgba(255, 255, 255, .8);
+  color: var(--dh-ink);
+}
+.dh-tab:hover svg { opacity: 1; }
+
+/* The one place colour is stated rather than borrowed. Two soft stops under a
+   third opacity: enough to read as "you are here" on any part of the aurora,
+   not enough to become the loudest thing in the bar. */
+.dh-tab[data-on="1"] {
+  background:
+    linear-gradient(150deg, rgba(174, 198, 255, .42) 0%, rgba(213, 195, 255, .3) 54%, rgba(186, 233, 219, .3) 100%);
+  border-color: rgba(255, 255, 255, .92);
+  color: var(--dh-ink);
+  font-weight: 500;
+  box-shadow:
+    0 1px 2px rgba(40, 46, 82, .06),
+    0 4px 14px rgba(40, 46, 82, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+.dh-tab[data-on="1"] svg { opacity: 1; }
+
+
+/* ══ The Jobs tab's post menu ══════════════════════════════════════════════
+   One pill holding two controls: the tab, which still navigates to the board,
+   and a chevron that opens the menu. The wrapper draws the hover and active
+   states so the pair reads as a single control rather than a link with a
+   button stuck on the end.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-tab-w {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 11px;
+}
+/* The chevron's own pill edge, so the two halves share one outline. */
+.dh-tab-w.has-more {
+  gap: 0;
+  border: 1px solid transparent;
+  transition: background var(--dh-fast) var(--dh-ease), border-color var(--dh-fast) var(--dh-ease);
+}
+.dh-tab-w.has-more:hover {
+  background: rgba(255, 255, 255, .72);
+  border-color: rgba(255, 255, 255, .8);
+}
+.dh-tab-w.has-more[data-on="1"] { background: #fff; border-color: rgba(255, 255, 255, .95); }
+/* The tab inside a wrapper that already draws the surface must not draw a
+   second one on top of it. */
+.dh-tab-w.has-more .dh-tab,
+.dh-tab-w.has-more .dh-tab:hover { background: transparent; border-color: transparent; }
+.dh-tab-w.has-more .dh-tab { padding-right: 6px; }
+
+.dh-tab-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A 30px target inside a 36px row. Smaller than a tab because it is the
+     secondary of the two, but still a thumb's worth on a phone. */
+  width: 30px;
+  height: 30px;
+  margin-right: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.dh-tab-more:hover { background: rgba(20, 22, 40, .06); color: var(--dh-ink); }
+.dh-tab-more:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 1px; }
+.dh-tab-more svg { transition: transform var(--dh-mid) var(--dh-ease); }
+.dh-tab-more svg[data-open="1"] { transform: rotate(180deg); }
+
+/* ══ The panel ════════════════════════════════════════════════════════════
+   Portalled to <body>, so it declares the tokens it needs itself: outside `.dh`
+   every `--dh-*` resolves to nothing, which is how the filter sheet once
+   rendered white text on a white sheet.
+
+   z-index sits above the bottom nav's 9995 and below the filter sheet's 9998 —
+   a menu opened from the bar must clear the bar and the bottom nav, and must
+   not cover a sheet that was opened over it.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-pm {
+  /* Deliberately the pre-wash greys, not `.dh`'s. This panel is portalled to
+     the body and paints its own near-opaque white, so the pastel ground is
+     never behind its text and the darker greys `.dh` now needs would only make
+     this surface heavier than the page it sits over. */
+  --dh-ink: #1d1d1f;
+  --dh-ink-2: #565659;
+  --dh-ink-3: #636368;
+  --dh-ink-4: #86868b;
+  --dh-line: rgba(0, 0, 0, .09);
+  --dh-fast: 140ms;
+  --dh-mid: 240ms;
+  --dh-ease: cubic-bezier(.22, 1, .36, 1);
+
+  position: fixed;
+  z-index: 9996;
+  width: 292px;
+  max-width: calc(100vw - 20px);
+  padding: 7px;
+  border: 1px solid rgba(20, 22, 40, .1);
+  border-radius: 18px;
+  /* Opaque enough to read over anything the page puts under it. The bar above
+     is the blurred surface; a second blur here would be a filter inside a
+     filtered region's stacking neighbourhood for no gain. */
+  background: linear-gradient(168deg, rgba(255, 255, 255, .98) 0%, rgba(255, 255, 255, .95) 100%);
+  box-shadow:
+    0 2px 6px rgba(20, 22, 40, .08),
+    0 26px 60px rgba(20, 22, 40, .18);
+  animation: dh-pm-in 180ms cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes dh-pm-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.dh-pm-h {
+  margin: 0;
+  padding: 6px 9px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--dh-ink-4);
+}
+
+.dh-pm-r {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+  padding: 9px 9px;
+  border-radius: 12px;
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--dh-fast) var(--dh-ease);
+}
+.dh-pm-r:hover, .dh-pm-r:focus-visible { background: rgba(90, 104, 214, .07); outline: none; }
+.dh-pm-r:focus-visible { box-shadow: inset 0 0 0 2px rgba(90, 104, 214, .55); }
+/* The company page is not an opportunity, so it sits below a rule. */
+.dh-pm-r.is-tail { margin-top: 5px; padding-top: 12px; border-top: 1px solid var(--dh-line); border-radius: 0 0 12px 12px; }
+
+.dh-pm-i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(90, 104, 214, .09);
+  color: #4854ad;
+}
+.dh-pm-b { display: flex; flex-direction: column; min-width: 0; }
+.dh-pm-l { font-size: 13px; font-weight: 500; letter-spacing: -.016em; color: var(--dh-ink); }
+.dh-pm-n { margin-top: 2px; font-size: 11.5px; color: var(--dh-ink-3); }
+.dh-pm-a { color: var(--dh-ink-4); opacity: 0; transition: opacity var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease); }
+.dh-pm-r:hover .dh-pm-a, .dh-pm-r:focus-visible .dh-pm-a { opacity: 1; transform: translateX(2px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dh-pm { animation: none; }
+}
+
+/* ══ Search ══════════════════════════════════════════════════════════════ */
+
+.dh-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+.dh-search-i {
+  position: absolute;
+  left: 12px;
+  color: var(--dh-ink-4);
+  pointer-events: none;
+  transition: color var(--dh-fast) var(--dh-ease);
+}
+.dh-search:focus-within .dh-search-i { color: var(--dh-ink-2); }
+
+.dh-search-in {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 60px 0 35px;
+  border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 11px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .78), rgba(255, 255, 255, .56));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .95),
+    0 1px 2px rgba(22, 26, 45, .04);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: -.014em;
+  color: var(--dh-ink);
+  transition: background var(--dh-fast) var(--dh-ease), border-color var(--dh-fast) var(--dh-ease),
+              box-shadow var(--dh-fast) var(--dh-ease);
+}
+.dh-search-in::placeholder { color: var(--dh-ink-3); }
+.dh-search-in:focus {
+  outline: none;
+  background: rgba(255, 255, 255, .96);
+  border-color: rgba(255, 255, 255, 1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 2px 6px rgba(22, 26, 45, .07),
+    0 0 0 3.5px rgba(150, 170, 230, .22);
+}
+/* The browser's own clear affordance, which would sit on top of ours. */
+.dh-search-in::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+
+.dh-search-x,
+.dh-search-sp { position: absolute; right: 11px; }
+.dh-search-x {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--dh-ink-3);
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.dh-search-x:hover { background: rgba(0, 0, 0, .06); color: var(--dh-ink); }
+.dh-search-sp { color: var(--dh-ink-3); animation: dh-spin .9s linear infinite; }
+@keyframes dh-spin { to { transform: rotate(360deg); } }
+
+.dh-search-k {
+  position: absolute;
+  right: 10px;
+  padding: 2px 6px;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .7);
+  font-family: inherit;
+  font-size: 10.5px;
+  letter-spacing: .02em;
+  color: var(--dh-ink-3);
+  pointer-events: none;
+}
+.dh-search:focus-within .dh-search-k { display: none; }
+
+/* ══ The results panel ════════════════════════════════════════════════════
+   On document.body, positioned from the field's rect. Two reasons it cannot
+   live in the bar: `.dh-bar-in` declares `backdrop-filter`, and a blurred
+   panel nested under a filtered ancestor renders grey rectangles instead of
+   glass; and the bar's stacking context sits below the app's bottom
+   navigation at z-index 9995, which would paint over this on a phone.
+
+   Outside `.dh`, so the tokens it uses are re-declared here — the same reason
+   the jobs filter sheet carries its own copy. The drift is caught by a test
+   rather than trusted. */
+.dh-sr {
+  position: fixed;
+  z-index: 9998;
+  max-height: min(66vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, .9);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .97), rgba(250, 251, 253, .95));
+  backdrop-filter: saturate(180%) blur(26px);
+  -webkit-backdrop-filter: saturate(180%) blur(26px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, .05),
+    0 24px 60px rgba(22, 26, 45, .2);
+  animation: dh-sr-in 150ms var(--dh-ease) both;
+
+  /* Deliberately the pre-wash greys, not `.dh`'s. This panel is portalled to
+     the body and paints its own near-opaque white, so the pastel ground is
+     never behind its text and the darker greys `.dh` now needs would only make
+     this surface heavier than the page it sits over. */
+  --dh-ink: #1d1d1f;
+  --dh-ink-2: #565659;
+  --dh-ink-3: #636368;
+  --dh-ink-4: #86868b;
+  --dh-ease: cubic-bezier(.22, 1, .36, 1);
+  --dh-fast: 200ms;
+  color: var(--dh-ink);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", "Segoe UI Variable Display", "Segoe UI", Inter, Roboto, sans-serif;
+  font-size: 14px;
+  letter-spacing: -.01em;
+}
+@keyframes dh-sr-in {
+  from { opacity: 0; transform: translateY(-6px) scale(.99); }
+  to { opacity: 1; transform: none; }
+}
+.dh-sr::-webkit-scrollbar { width: 9px; }
+.dh-sr::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, .14); border-radius: 9px; border: 3px solid transparent; background-clip: content-box; }
+
+.dh-sr-g + .dh-sr-g { margin-top: 3px; border-top: 1px solid rgba(0, 0, 0, .05); padding-top: 4px; }
+.dh-sr-gl {
+  padding: 7px 9px 4px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  color: var(--dh-ink-3);
+}
+
+.dh-sr-r {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+/* Driven by `data-on`, not `:hover`: the keyboard moves this and the pointer
+   moves it, and only one of them can be `:hover`. */
+.dh-sr-r[data-on="1"], .dh-sr-all[data-on="1"] { background: rgba(120, 140, 200, .13); }
+
+.dh-sr-m {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(0, 0, 0, .06);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, .86);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  color: var(--dh-ink-2);
+}
+.dh-sr-b { min-width: 0; flex: 1 1 auto; }
+.dh-sr-t {
+  display: block;
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -.016em;
+  color: var(--dh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dh-sr-s {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dh-sr-s:empty { display: none; }
+.dh-sr-p {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-3);
+}
+.dh-sr-a { flex: 0 0 auto; color: var(--dh-ink-4); }
+
+.dh-sr-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 10px 11px;
+  border-top: 1px solid rgba(0, 0, 0, .05);
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.014em;
+  color: var(--dh-ink-2);
+  text-decoration: none;
+  cursor: pointer;
+}
+.dh-sr-all svg { color: var(--dh-ink-3); }
+
+.dh-sr-note {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 22px 12px;
+  justify-content: center;
+  font-size: 12.5px;
+  color: var(--dh-ink-3);
+}
+
+/* ── The page's search ── */
+.dh-bar-search {
+  /* Does not grow: the tab list absorbs the slack instead, which keeps the
+     search a consistent size across pages rather than stretching to fill a
+     window. */
+  flex: 0 1 320px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* ── Actions ── */
+.dh-bar-acts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  /* With no search on the page this is what pushes the actions to the end. */
+  margin-left: auto;
+}
+
+.dh-tyrai {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  /* Squarer than the pills around it, so it reads as a control rather than a
+     chip. */
+  border-radius: 11px;
+  background:
+    linear-gradient(145deg, #2b2836 0%, #171619 46%, #221d36 100%) padding-box,
+    linear-gradient(140deg,
+      rgba(182, 170, 255, .9) 0%,
+      rgba(255, 255, 255, .28) 34%,
+      rgba(128, 198, 255, .62) 66%,
+      rgba(182, 170, 255, .55) 100%) border-box;
+  color: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, .22),
+    0 8px 22px rgba(30, 24, 74, .24),
+    inset 0 1px 0 rgba(255, 255, 255, .16);
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-tyrai:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, .24),
+    0 14px 32px rgba(30, 24, 74, .3),
+    inset 0 1px 0 rgba(255, 255, 255, .2);
+}
+.dh-tyrai:active { transform: translateY(0) scale(.985); }
+.dh-tyrai-mark { width: 15px; height: 15px; flex: 0 0 auto; }
+.dh-tyrai::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .17) 50%, transparent 62%);
+  transform: translateX(-120%);
+  animation: dh-tyrai-sheen 5.5s var(--dh-ease) infinite;
+  pointer-events: none;
+}
+@keyframes dh-tyrai-sheen {
+  0%, 62% { transform: translateX(-120%); }
+  86%, 100% { transform: translateX(120%); }
+}
+
+/* ══ The deck ═════════════════════════════════════════════════════════════
+   The dark passage is one section now, and the four panels inside it are cards
+   in a snapping horizontal scroller.
+
+   THE PEEK. `--dh-peek` is how much of the next card is left showing, and it is
+   the only number that decides it. A card is the rail's content width minus the
+   peek, so at every viewport the next card is cut off at the right edge — which
+   is the whole affordance. A rail whose contents stop exactly at its edge reads
+   as a page that has ended, and neither an arrow nor a dot corrects that
+   impression as well as a sliver of the next card.
+
+   SNAP PADDING MUST MATCH THE RAIL'S PADDING. `scroll-snap-align: start` snaps
+   to the scroll container's *padding* box, so without `scroll-padding-inline`
+   equal to `padding-inline` every card settles with its left edge under the
+   gutter instead of on it.
+
+   EQUAL HEIGHTS, ON PURPOSE. `align-items: stretch` gives every card the height
+   of the tallest, and each card centres its own contents. Cards that each took
+   their own height turned the rail into a ragged skyline, and the peeking card
+   is the thing that suffers most from it — a short card peeking beside a tall
+   one looks like a rendering fault rather than an invitation.
+
+   NO BLUR. The cards sit on an opaque ground, so they are built from layered
+   rgba. A `backdrop-filter` over opaque dark buys nothing and would have been a
+   second filtered surface on a page that has exactly one.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-deck {
+  position: relative;
+  overflow: hidden;
+  margin: 34px 0 0;
+  padding: 30px 0 22px;
+  /* Darker than every card on it, so the cards read as raised rather than as
+     holes cut in the section. */
+  background: #0e0e12;
+  isolation: isolate;
+}
+.dh-deck::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 480px at 12% -20%, rgba(150, 175, 255, .16) 0%, rgba(150, 175, 255, 0) 68%),
+    radial-gradient(820px 460px at 92% 120%, rgba(206, 168, 255, .13) 0%, rgba(206, 168, 255, 0) 68%);
+}
+
+.dh-deck-rail {
+  /* `relative`, because the hook reads each card's `offsetLeft` and that is
+     measured against the nearest positioned ancestor. Without this the offsets
+     come back relative to whatever is positioned further up the page and the
+     active dot tracks the wrong card. */
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--dh-deck-gap);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  padding-inline: var(--dh-gut);
+  scroll-padding-inline: var(--dh-gut);
+  /* Room for the cards' shadows, which are clipped by the scroller otherwise. */
+  padding-block: 4px 6px;
+  /* The height is set from the card in view (see `useDeck`), so it has to move
+     rather than jump. `box-sizing: content-box` would have made that height
+     mean something different from what was measured. */
+  box-sizing: content-box;
+  transition: height 380ms var(--dh-ease);
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.dh-deck-rail::-webkit-scrollbar { display: none; }
+.dh-deck-rail:focus-visible {
+  outline: 2px solid rgba(180, 190, 255, .85);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.dh-deck-c {
+  position: relative;
+  flex: 0 0 auto;
+  /* `100%` here is the rail's CONTENT box — already inside the gutter — so the
+     peek is exactly what is subtracted, with no gutter arithmetic. */
+  width: calc(100% - var(--dh-peek));
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  padding: 30px 0;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 26px;
+  box-shadow:
+    0 28px 64px rgba(0, 0, 0, .4),
+    inset 0 1px 0 rgba(255, 255, 255, .06);
+  isolation: isolate;
+}
+
+/* ── The controls ──
+   Under the rail rather than floating over it: an arrow laid on top of a card
+   this large covers content, and these cards are the content. */
+
+.dh-deck-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding-inline: var(--dh-gut);
+}
+.dh-deck-dots { display: flex; align-items: center; gap: 7px; }
+.dh-deck-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .22);
+  cursor: pointer;
+  transition: background var(--dh-mid) var(--dh-ease), width var(--dh-mid) var(--dh-ease);
+}
+.dh-deck-dot:hover { background: rgba(255, 255, 255, .42); }
+/* The active one stretches into a lozenge rather than only brightening: on a
+   dark ground a brightness change alone is close to invisible. */
+.dh-deck-dot[aria-current] {
+  width: 22px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(205, 212, 255, .95), rgba(191, 240, 226, .9));
+}
+.dh-deck-dot:focus-visible { outline: 2px solid rgba(180, 190, 255, .85); outline-offset: 3px; }
+
+.dh-deck-arrows { display: flex; gap: 8px; }
+.dh-deck-a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .06);
+  color: rgba(255, 255, 255, .82);
+  cursor: pointer;
+  transition: background var(--dh-fast) var(--dh-ease), border-color var(--dh-fast) var(--dh-ease),
+    color var(--dh-fast) var(--dh-ease), opacity var(--dh-fast) var(--dh-ease);
+}
+.dh-deck-a:hover:not(:disabled) {
+  background: rgba(255, 255, 255, .13);
+  border-color: rgba(255, 255, 255, .26);
+  color: #fff;
+}
+.dh-deck-a:focus-visible { outline: 2px solid rgba(180, 190, 255, .85); outline-offset: 2px; }
+/* Dimmed and inert at the ends, not removed: a control that disappears moves
+   the one beside it, and the pair jumping about as the rail scrolls is exactly
+   the sort of thing that stops a deck feeling smooth. */
+.dh-deck-a:disabled { opacity: .3; cursor: default; }
+
+@media (max-width: 860px) {
+  .dh-deck { margin-top: 24px; padding: 22px 0 18px; }
+  .dh-deck-c { padding: 24px 0; border-radius: 22px; }
+  .dh-deck-nav { margin-top: 14px; }
+}
+
+@media (max-width: 620px) {
+  .dh-deck-c { border-radius: 20px; padding: 20px 0; }
+  .dh-deck-a { width: 32px; height: 32px; }
+}
+/* ══ The dark band ════════════════════════════════════════════════════════
+   A chapter break. A long light page of light cards reads as one undivided
+   scroll; one dark section gives the eye somewhere to land and makes what
+   follows feel like a new part of the page.
+
+   The pastel is INSIDE the dark, not on it: two very soft orbs at low alpha
+   over a near-black ground, which is what keeps it from reading as a black
+   rectangle dropped into a pale page. Full-bleed, so it spans the panel rather
+   than sitting in the gutter like a card.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Ground only. Position, overflow, radius, border, shadow and padding all come
+   from `.dh-deck-c` now — a card that set its own turned into a box with two
+   sets of edges. */
+.dh-band { background: #17171c; }
+/* The pastel. Two orbs, generous and overlapping — a small one reads as a
+   stain and a hard edge would be visible against the flat ground. */
+.dh-band::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(760px 420px at 8% -30%, rgba(150, 175, 255, .3) 0%, rgba(150, 175, 255, 0) 68%),
+    radial-gradient(680px 400px at 94% 130%, rgba(206, 168, 255, .24) 0%, rgba(206, 168, 255, 0) 66%),
+    radial-gradient(520px 320px at 62% 10%, rgba(140, 226, 202, .14) 0%, rgba(140, 226, 202, 0) 70%);
+}
+
+.dh-band-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 28px 40px;
+  align-items: center;
+  padding-inline: var(--dh-card-pad);
+}
+
+/* The copy side of the band. A box of its own so the grid beside it can be
+   centred against it rather than against the heading's first line. */
+.dh-band-h { min-width: 0; }
+
+.dh-band-t {
+  margin: 0;
+  font-size: clamp(22px, 1.5vw + 12px, 31px);
+  font-weight: 300;
+  letter-spacing: -.036em;
+  line-height: 1.12;
+  /* Measured against #17171c with the orbs over it: 15.4:1. */
+  color: #f7f7f9;
+}
+.dh-band-s {
+  margin: 9px 0 0;
+  max-width: 42ch;
+  font-size: 13px;
+  line-height: 1.55;
+  /* 7.4:1 on the same ground. The band states its own ink because `--dh-ink*`
+     are the LIGHT page's and would be invisible here. */
+  color: rgba(255, 255, 255, .62);
+}
+
+.dh-band-g {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 10px;
+}
+
+.dh-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 15px 16px 14px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 15px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .085) 0%, rgba(255, 255, 255, .035) 100%);
+  text-decoration: none;
+  transition: background var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+}
+.dh-stat:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(160deg, rgba(255, 255, 255, .13) 0%, rgba(255, 255, 255, .06) 100%);
+  border-color: rgba(255, 255, 255, .2);
+}
+.dh-stat-n {
+  font-size: 25px;
+  font-weight: 450;
+  letter-spacing: -.038em;
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+}
+.dh-stat-l {
+  font-size: 11.5px;
+  letter-spacing: -.008em;
+  /* 5.9:1 on the stat's own surface. */
+  color: rgba(255, 255, 255, .66);
+}
+.dh-stat-a {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  color: rgba(255, 255, 255, .3);
+  transition: color var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease);
+}
+.dh-stat:hover .dh-stat-a { color: rgba(255, 255, 255, .7); transform: translate(1px, -1px); }
+
+/* ── The logo strip ──
+   Real company marks, and only for the companies the explorer actually gave a
+   logo file for — 11 of 24 here. The rest are simply not in the strip: a row of
+   letter tiles beside real logos would be decoration pretending to be evidence.
+
+   Most of these marks are authored for a light page, so each sits on its own
+   pale plate rather than directly on the band's near-black ground, where a dark
+   wordmark would disappear. */
+.dh-band-logos {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+.dh-band-logos-l {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  /* 5.2:1 on the band's ground. */
+  color: rgba(255, 255, 255, .6);
+}
+.dh-band-logos-r {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.dh-band-logo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .92);
+  transition: transform var(--dh-fast) var(--dh-ease), background var(--dh-fast) var(--dh-ease);
+}
+.dh-band-logo:hover { transform: translateY(-2px); background: #fff; }
+/* `contain`: a company mark has its own margins and cropping it is how a logo
+   loses its wordmark. */
+.dh-band-logo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* ══ Two ways in ══════════════════════════════════════════════════════════
+   Two large panels, not a card grid — the page already has three of those, and
+   a fork in the road should not look like more options to browse.
+
+   Dark, with the pastel inside it as the numbers band does, so the two dark
+   sections read as the same material rather than two different black boxes.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-ways { background: #17171c; }
+.dh-ways::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(720px 420px at 22% -20%, rgba(150, 175, 255, .26) 0%, rgba(150, 175, 255, 0) 66%),
+    radial-gradient(700px 430px at 82% 124%, rgba(140, 226, 202, .18) 0%, rgba(140, 226, 202, 0) 66%);
+}
+
+.dh-ways-in {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 16px;
+  padding-inline: var(--dh-card-pad);
+}
+
+.dh-way {
+  display: flex;
+  flex-direction: column;
+  padding: 24px 24px 18px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 20px;
+  background: linear-gradient(162deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .028) 100%);
+}
+.dh-way-k {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .15em;
+  /* 5.2:1 on the panel's own surface. */
+  color: rgba(255, 255, 255, .6);
+}
+.dh-way-t {
+  margin: 11px 0 0;
+  font-size: clamp(19px, 1.1vw + 11px, 24px);
+  font-weight: 400;
+  letter-spacing: -.032em;
+  line-height: 1.2;
+  color: #f7f7f9;
+}
+.dh-way-b {
+  margin: 9px 0 0;
+  max-width: 46ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, .64);
+}
+.dh-way-l { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
+
+.dh-way-a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  margin-inline: -12px;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: background var(--dh-fast) var(--dh-ease);
+}
+.dh-way-a:hover { background: rgba(255, 255, 255, .07); }
+.dh-way-a-b { min-width: 0; flex: 1 1 auto; }
+.dh-way-a-t {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 450;
+  letter-spacing: -.016em;
+  color: #fff;
+}
+.dh-way-a-n {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, .58);
+}
+.dh-way-a-i { flex: 0 0 auto; color: rgba(255, 255, 255, .35); transition: color var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease); }
+.dh-way-a:hover .dh-way-a-i { color: rgba(255, 255, 255, .8); transform: translateX(2px); }
+
+/* ══ The walkthrough ══════════════════════════════════════════════════════
+   The first of the dark sections, and the only one that is an interface rather
+   than a statement: a vertical stepper on the left, and on the right a small
+   screen showing what that stage actually does.
+
+   DIFFERENTIATED ON PURPOSE. The three dark sections after it are flat grounds
+   with soft orbs. This one adds a faint 44px hairline grid, masked away towards
+   the bottom, which is the one texture that reads as "software" instead of
+   "marketing" — and it is what stops four dark sections in a row from looking
+   like one very long rectangle.
+
+   ONE BLUR LAYER STILL. The ground is opaque, so the screen is built from
+   layered rgba rather than `backdrop-filter`: blurring over an opaque dark
+   ground buys nothing and would have been a second filtered surface.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-tut { background: #15161b; }
+/* The pastel, inside the dark. Teal-led, where the band below is indigo-led,
+   so consecutive sections are not the same photograph twice. */
+.dh-tut::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(760px 430px at 84% -24%, rgba(140, 226, 202, .2) 0%, rgba(140, 226, 202, 0) 66%),
+    radial-gradient(660px 400px at 2% 122%, rgba(166, 178, 255, .24) 0%, rgba(166, 178, 255, 0) 68%),
+    radial-gradient(440px 300px at 46% 46%, rgba(255, 214, 236, .1) 0%, rgba(255, 214, 236, 0) 72%);
+}
+.dh-tut::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .03) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(130% 104% at 50% 0%, #000 0%, transparent 74%);
+  mask-image: radial-gradient(130% 104% at 50% 0%, #000 0%, transparent 74%);
+}
+
+.dh-tut-in {
+  display: grid;
+  gap: 26px;
+  padding-inline: var(--dh-card-pad);
+}
+
+/* The header is its own measure: the copy under a 27px heading needs a shorter
+   line than the section is wide, and the stepper below must not inherit it. */
+.dh-tut-h { max-width: 74ch; }
+.dh-tut-k {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(205, 212, 255, .92);
+}
+.dh-tut-t {
+  margin: 9px 0 0;
+  font-size: clamp(20px, 2.3vw, 27px);
+  line-height: 1.16;
+  letter-spacing: -.03em;
+  color: #fff;
+}
+.dh-tut-b {
+  margin: 10px 0 0;
+  max-width: 58ch;
+  font-size: 13px;
+  line-height: 1.66;
+  color: rgba(255, 255, 255, .66);
+}
+.dh-tut-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 9px 15px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .06);
+  font-size: 12.5px;
+  color: #fff;
+  text-decoration: none;
+  transition: background var(--dh-fast) var(--dh-ease), border-color var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease);
+}
+.dh-tut-cta:hover {
+  background: rgba(255, 255, 255, .12);
+  border-color: rgba(255, 255, 255, .28);
+  transform: translateY(-1px);
+}
+
+.dh-tut-body {
+  display: grid;
+  grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+  gap: 28px 40px;
+  align-items: start;
+}
+
+/* ── The stepper ──
+   A rail behind the numerals with a filled portion that grows as the
+   walkthrough advances. The fill is a proportion of the list's height rather
+   than a measurement of where the open step ends — the open step is taller
+   than the closed ones, so an exact fill would need layout read back into JS
+   every frame for a decoration that only has to point downwards. */
+
+.dh-tut-l {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dh-tut-l::before,
+.dh-tut-l::after {
+  content: '';
+  position: absolute;
+  left: 33px;
+  top: 26px;
+  width: 1.5px;
+  border-radius: 2px;
+}
+.dh-tut-l::before {
+  bottom: 26px;
+  background: rgba(255, 255, 255, .1);
+}
+.dh-tut-l::after {
+  height: var(--fill, 0%);
+  max-height: calc(100% - 52px);
+  background: linear-gradient(180deg, rgba(166, 178, 255, .95), rgba(140, 226, 202, .8));
+  transition: height 620ms var(--dh-ease);
+}
+
+.dh-tut-s {
+  position: relative;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px 14px 14px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dh-mid) var(--dh-ease), border-color var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-tut-s:hover { background: rgba(255, 255, 255, .045); }
+.dh-tut-s:focus-visible { outline: 2px solid rgba(180, 190, 255, .85); outline-offset: 2px; }
+.dh-tut-s.is-on {
+  background: linear-gradient(135deg, rgba(255, 255, 255, .085), rgba(255, 255, 255, .035));
+  border-color: rgba(255, 255, 255, .13);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+.dh-tut-s-n {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 13px;
+  background: #1b1c22;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .58);
+  transition: background var(--dh-mid) var(--dh-ease), color var(--dh-mid) var(--dh-ease),
+    border-color var(--dh-mid) var(--dh-ease), transform var(--dh-mid) var(--dh-ease);
+}
+.dh-tut-s.is-done .dh-tut-s-n {
+  color: rgba(255, 255, 255, .8);
+  border-color: rgba(166, 178, 255, .34);
+}
+.dh-tut-s.is-on .dh-tut-s-n {
+  border-color: transparent;
+  background: linear-gradient(140deg, #cdd4ff 0%, #eaf3ff 48%, #bff0e2 100%);
+  color: #16171c;
+  box-shadow: 0 6px 18px rgba(166, 178, 255, .3);
+  transform: scale(1.04);
+}
+
+.dh-tut-s-x { display: flex; flex-direction: column; min-width: 0; }
+.dh-tut-s-t {
+  padding-top: 9px;
+  font-size: 14.5px;
+  font-weight: 500;
+  letter-spacing: -.022em;
+  color: rgba(255, 255, 255, .74);
+  transition: color var(--dh-mid) var(--dh-ease);
+}
+.dh-tut-s.is-on .dh-tut-s-t { color: #fff; }
+/* `0fr` → `1fr` rather than a max-height guess, so the row collapses to exactly
+   the copy's height without a magic number that breaks when the copy changes. */
+.dh-tut-s-w {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 420ms var(--dh-ease), opacity 260ms var(--dh-ease);
+}
+.dh-tut-s.is-on .dh-tut-s-w { grid-template-rows: 1fr; opacity: 1; }
+/* The breathing room is on the OPEN state only. `overflow: hidden` lets a grid
+   item's content shrink to the 0fr track, but padding is not shrinkable — left
+   on the closed state it kept 7px of the copy's box alive under every closed
+   stage, and three collapsed steps were each 7px taller than they looked. */
+.dh-tut-s-b {
+  overflow: hidden;
+  /* Stacked, a stage card is as wide as the section, and a single line running
+     the full width is the one thing that makes a stepper read as a paragraph. */
+  max-width: 62ch;
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: rgba(255, 255, 255, .66);
+  transition: padding-top 420ms var(--dh-ease);
+}
+.dh-tut-s.is-on .dh-tut-s-b { padding-top: 7px; }
+
+/* The only thing that tells a reader the stage is about to change. Scaled, not
+   animated on `width`, so it does not lay out on every frame. */
+.dh-tut-s-p {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 2px;
+  transform: scaleX(0);
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(166, 178, 255, .95), rgba(140, 226, 202, .9));
+  animation: dh-tut-p 7000ms linear forwards;
+}
+@keyframes dh-tut-p { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ── The screen ── */
+
+.dh-tut-stage { position: relative; min-width: 0; }
+.dh-tut-frame { animation: dh-tut-in 480ms var(--dh-ease) both; }
+@keyframes dh-tut-in {
+  from { opacity: 0; transform: translateY(10px) scale(.994); }
+  to { opacity: 1; transform: none; }
+}
+
+.dh-tut-scr {
+  padding: 16px 18px 18px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 22px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .08) 0%, rgba(255, 255, 255, .03) 54%, rgba(255, 255, 255, .055) 100%);
+  box-shadow: 0 26px 62px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+.dh-tut-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.dh-tut-dots { display: inline-flex; gap: 5px; flex: 0 0 auto; }
+.dh-tut-dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, .17); }
+.dh-tut-scr-h {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  color: rgba(255, 255, 255, .82);
+}
+.dh-tut-scr-f {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 14px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, .62);
+}
+.dh-tut-scr-f svg { flex: 0 0 auto; color: rgba(255, 255, 255, .46); }
+
+/* Stage 1 — the composer's seven steps, staggered in. */
+.dh-tut-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.dh-tut-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px 6px 7px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .035);
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, .7);
+  animation: dh-tut-rise 420ms var(--dh-ease) both;
+  animation-delay: calc(var(--i, 0) * 65ms);
+}
+.dh-tut-chip.is-on {
+  border-color: rgba(166, 178, 255, .42);
+  background: rgba(166, 178, 255, .15);
+  color: #fff;
+}
+.dh-tut-chip-n {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .11);
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .74);
+}
+.dh-tut-chip.is-on .dh-tut-chip-n { background: rgba(196, 204, 255, .92); color: #16171c; }
+@keyframes dh-tut-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Stage 2 — the scorer's weights, and the lines it writes on a card. */
+.dh-tut-w { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.dh-tut-w-r {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) 26px;
+  gap: 10px;
+  align-items: center;
+  animation: dh-tut-rise 420ms var(--dh-ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+.dh-tut-w-l { font-size: 11.5px; color: rgba(255, 255, 255, .7); }
+.dh-tut-w-t {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  overflow: hidden;
+}
+.dh-tut-w-f {
+  display: block;
+  height: 100%;
+  width: var(--w, 0%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(166, 178, 255, .95), rgba(140, 226, 202, .9));
+  transform-origin: left center;
+  animation: dh-tut-bar 760ms var(--dh-ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 120ms);
+}
+@keyframes dh-tut-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.dh-tut-w-v {
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, .58);
+}
+.dh-tut-rs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.dh-tut-r {
+  padding: 5px 10px;
+  border: 1px solid rgba(140, 226, 202, .28);
+  border-radius: 999px;
+  background: rgba(140, 226, 202, .11);
+  font-size: 11px;
+  color: rgba(228, 255, 248, .92);
+  animation: dh-tut-rise 420ms var(--dh-ease) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 380ms);
+}
+
+/* Stage 3 — the two ends of the handoff, and the button the candidate meets.
+   `.dh-tut-apply` is a SPAN: it depicts the employer's own button, so making
+   it a link would send someone to a form this page cannot know the URL of. */
+.dh-tut-hop {
+  display: grid;
+  grid-template-columns: auto minmax(40px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.dh-tut-node {
+  padding: 9px 13px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .05);
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, .82);
+}
+.dh-tut-node.is-out {
+  border-color: rgba(166, 178, 255, .38);
+  background: rgba(166, 178, 255, .15);
+  color: #fff;
+}
+.dh-tut-wire {
+  position: relative;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .24) 0 5px, transparent 5px 10px);
+}
+.dh-tut-run {
+  position: absolute;
+  top: -2.5px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #cdd4ff;
+  box-shadow: 0 0 10px rgba(205, 212, 255, .8);
+  animation: dh-tut-run 2.4s var(--dh-ease) infinite;
+}
+@keyframes dh-tut-run {
+  0% { left: 0; opacity: 0; }
+  14% { opacity: 1; }
+  86% { opacity: 1; }
+  100% { left: calc(100% - 6px); opacity: 0; }
+}
+.dh-tut-apply {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 13px;
+  background: linear-gradient(140deg, #cdd4ff 0%, #eaf3ff 50%, #bff0e2 100%);
+  font-size: 12px;
+  font-weight: 500;
+  color: #16171c;
+  box-shadow: 0 10px 26px rgba(166, 178, 255, .2);
+  cursor: default;
+}
+
+/* The page-wide reduced-motion rule squeezes every animation to .01ms, which is
+   the right generic answer: an animation whose END state is the real one still
+   lands on it. Here that is not enough. These animations start from hidden, so a
+   reader who asked for less motion — or any browser whose timeline is not
+   advancing — would be left looking at an empty screen waiting for a frame that
+   settles it. Removing the animation outright is what they asked for anyway: the
+   resting style IS the finished state, so the walkthrough simply arrives. */
+
+@media (prefers-reduced-motion: reduce) {
+  .dh-tut-frame,
+  .dh-tut-chip,
+  .dh-tut-w-r,
+  .dh-tut-r { animation: none; }
+  /* Base width is already the weight; without the animation it just draws. */
+  .dh-tut-w-f { animation: none; transform: none; }
+  /* A dot circling forever, and a countdown for an advance that is switched
+     off, are the two things this reader specifically did not want. */
+  .dh-tut-run,
+  .dh-tut-s-p { display: none; }
+}
+
+@media (max-width: 1000px) {
+  .dh-tut-body { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 860px) {
+}
+
+@media (max-width: 620px) {
+  .dh-tut-s { grid-template-columns: 32px minmax(0, 1fr); gap: 11px; padding: 12px 12px 12px 11px; }
+  .dh-tut-s-n { width: 32px; height: 32px; border-radius: 11px; font-size: 10.5px; }
+  .dh-tut-s-t { padding-top: 6px; font-size: 13.5px; }
+  .dh-tut-l::before, .dh-tut-l::after { left: 27px; top: 22px; }
+  .dh-tut-l::before { bottom: 22px; }
+  .dh-tut-l::after { max-height: calc(100% - 44px); }
+  .dh-tut-scr { padding: 14px 14px 16px; border-radius: 18px; }
+  .dh-tut-w-r { grid-template-columns: 64px minmax(0, 1fr) 22px; gap: 8px; }
+  /* The wire becomes the divider between two stacked nodes; the dot still
+     travels along it, so the diagram keeps its direction. */
+  .dh-tut-hop { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+}
+
+/* ══ Provenance ═══════════════════════════════════════════════════════════
+   The third dark section, and the quietest: copy on the left, the systems it
+   reads from on the right. No counts — see the note on the component. */
+
+.dh-prov { background: #141419; }
+.dh-prov::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(660px 400px at 88% -24%, rgba(206, 168, 255, .2) 0%, rgba(206, 168, 255, 0) 64%),
+    radial-gradient(560px 360px at 4% 120%, rgba(150, 175, 255, .16) 0%, rgba(150, 175, 255, 0) 66%);
+}
+.dh-prov-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 26px 44px;
+  align-items: center;
+  padding-inline: var(--dh-card-pad);
+}
+.dh-prov-h { min-width: 0; }
+.dh-prov-k {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .15em;
+  color: rgba(255, 255, 255, .58);
+}
+.dh-prov-t {
+  margin: 11px 0 0;
+  max-width: 24ch;
+  font-size: clamp(20px, 1.3vw + 11px, 27px);
+  font-weight: 300;
+  letter-spacing: -.034em;
+  line-height: 1.16;
+  color: #f7f7f9;
+}
+.dh-prov-b {
+  margin: 11px 0 0;
+  max-width: 52ch;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, .62);
+}
+.dh-prov-a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  height: 36px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .07);
+  font-size: 12.5px;
+  font-weight: 450;
+  color: #fff;
+  text-decoration: none;
+  transition: background var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease);
+}
+.dh-prov-a:hover { background: rgba(255, 255, 255, .13); transform: translateY(-1px); }
+
+.dh-prov-l {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(168px, 100%), 1fr));
+  gap: 8px;
+}
+.dh-prov-i {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 12px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, .075) 0%, rgba(255, 255, 255, .03) 100%);
+  font-size: 12.5px;
+  letter-spacing: -.01em;
+  /* 8.1:1 on the row's own surface. */
+  color: rgba(255, 255, 255, .78);
+}
+.dh-prov-i svg { flex: 0 0 auto; color: rgba(255, 255, 255, .42); }
+
+@media (max-width: 860px) {
+  .dh-prov-in { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+}
+
+@media (max-width: 620px) {
+  .dh-way { padding: 20px 18px 14px; border-radius: 18px; }
+}
+
+/* ══ Roles by city ════════════════════════════════════════════════════════ */
+
+.dh-city-g {
+  margin-top: var(--dh-sec-gap);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(232px, 100%), 1fr));
+  gap: 10px;
+}
+
+.dh-city {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 16px;
+  /* The page's own tile language: a pastel pooling in the far corner under a
+     sheet of white glass, rather than a tinted card. The colour is a glow
+     BEHIND the glass, which is what keeps a grid of eight of them from reading
+     as eight coloured boxes. */
+  background:
+    radial-gradient(125% 120% at 92% 118%, var(--t-wash, transparent) 0%, transparent 66%),
+    linear-gradient(168deg, rgba(255, 255, 255, .82) 0%, rgba(255, 255, 255, .42) 100%);
+  box-shadow: var(--dh-sh-1);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              border-color var(--dh-mid) var(--dh-ease);
+}
+/* The same slow sheen the category tiles sweep on hover. */
+.dh-city::after, .dh-skill::after {
+  content: '';
+  position: absolute;
+  inset: -40% -60% auto auto;
+  width: 140%;
+  height: 180%;
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, .55) 50%, rgba(255, 255, 255, 0) 62%);
+  opacity: 0;
+  transform: translateX(-14%);
+  transition: opacity var(--dh-slow, 620ms) var(--dh-ease), transform var(--dh-slow, 620ms) var(--dh-ease);
+  pointer-events: none;
+}
+.dh-city:hover::after, .dh-skill:hover::after { opacity: 1; transform: translateX(6%); }
+.dh-city:hover, .dh-skill:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--dh-sh-2);
+  border-color: rgba(255, 255, 255, .96);
+}
+.dh-city-i {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 12px;
+  /* Takes the card's own pastel, so the mark belongs to the card rather than
+     every card wearing the same blue tile. */
+  background:
+    linear-gradient(150deg, var(--t-wash, rgba(196, 206, 228, .34)) 0%, rgba(255, 255, 255, .5) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9);
+  color: var(--t-ink, #4a5170);
+}
+.dh-city-b { min-width: 0; flex: 1 1 auto; }
+.dh-city-t {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  color: var(--dh-ink);
+}
+.dh-city-n {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--dh-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dh-city-a { flex: 0 0 auto; color: var(--dh-ink-4); transition: color var(--dh-fast) var(--dh-ease); }
+.dh-city:hover .dh-city-a { color: var(--dh-ink-2); }
+
+/* ══ Skills ═══════════════════════════════════════════════════════════════ */
+
+.dh-skill-g {
+  margin-top: var(--dh-sec-gap);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(168px, 100%), 1fr));
+  gap: 9px;
+}
+
+.dh-skill {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 14px;
+  background:
+    radial-gradient(130% 125% at 94% 120%, var(--t-wash, transparent) 0%, transparent 64%),
+    linear-gradient(168deg, rgba(255, 255, 255, .8) 0%, rgba(255, 255, 255, .42) 100%);
+  box-shadow: var(--dh-sh-1);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  transition: transform var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              border-color var(--dh-mid) var(--dh-ease);
+}
+
+/* A skill has no logo, and inventing one would be a brand mark this product
+   does not hold. A dot in the card's own pastel is an honest mark instead. */
+.dh-skill-d {
+  width: 7px;
+  height: 7px;
+  margin-bottom: 7px;
+  border-radius: 999px;
+  background: var(--t-ink, var(--dh-ink-3));
+  opacity: .75;
+}
+.dh-skill-t {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.02em;
+  color: var(--dh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dh-skill-n { font-size: 11.5px; color: var(--dh-ink-3); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 860px) {
+  .dh-band-in { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+}
+
+@media (max-width: 620px) {
+  .dh-band-g { grid-template-columns: repeat(auto-fit, minmax(min(132px, 100%), 1fr)); }
+  .dh-band-logos { gap: 11px; padding-top: 16px; }
+  .dh-band-logo { width: 38px; height: 38px; border-radius: 11px; padding: 6px; }
+  .dh-stat { padding: 13px 13px 12px; }
+  .dh-stat-n { font-size: 22px; }
+  .dh-city-g { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ══ The panel ════════════════════════════════════════════════════════════
+   The largest sheet of glass on the page. One big blur layer rather than a
+   dozen small ones: the compositor handles one cheaply, and the aurora behind
+   it is what makes it read. */
+
+/* Merged into the ground rather than floating on it. It was a rounded, bordered
+   sheet of glass with its own shadow — a card the size of the window, which put
+   a hard edge between the page and its content on all four sides.
+
+   No `backdrop-filter` either. The smoke behind it is already soft, so blurring
+   it bought nothing but a full-window compositor layer; and removing it means
+   the panel imposes no filter on its subtree, so anything inside may now blur
+   on its own without nesting. */
+.dh-panel {
+  flex: 1 1 auto;
+  /* A column child of a column flex parent needs BOTH: `min-width` for the
+     grids inside it, `min-height: 0` so it may be shorter than its content and
+     hand the overflow to `.dh-scroll` instead of growing the page. */
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 0;
+  background: none;
+  overflow: hidden;
+}
+
+/* ── Companies that are hiring ────────────────────────────────────────────
+   The top bar's centre, in place of a search box. A horizontal strip of glass
+   pills that scrolls, because there are two dozen employers and the bar is one
+   line tall.
+
+   It has to survive being squeezed: the bar also holds a burger, a "For
+   Business" button and a sign-in, and at 400px there is very little left. So
+   the wrapper is `flex: 1` with `min-width: 0` — without the latter a flex item
+   refuses to shrink below its content and pushes the sign-in button off the
+   edge of the screen. */
+
+.dh-cos-wrap {
+  /* PINNED UNDER THE BAR. `.dh-scroll` is the scroller and the bar sits above
+     it, so `top: 0` parks this at the top of the scrollport — flush under the
+     navbar, without moving anything into the shell. */
+  position: sticky;
+  /* NOT `0`. A sticky element's offset is measured from its scroll container's
+     padding box, so `top: 0` pinned this 30px below the bar — the same
+     padding-box trap `scroll-padding-inline` sets elsewhere on this page.
+     Given the padding back, it meets the bar. */
+  top: calc(var(--dh-scroll-top) * -1);
+  z-index: 6;
+  min-width: 0;
+  /* And the same amount again in flow, so it starts against the bar rather
+     than 30px under it. The shell renders this as the scroller's FIRST child —
+     above the incognito banner — which is what makes "attached to the navbar"
+     true at rest and not only once scrolled. */
+  margin: calc(var(--dh-scroll-top) * -1) 0 18px;
+  padding: 7px 0 8px;
+  /* ── PART OF THE BAR'S MATERIAL, so it is blurred like the bar ──
+     This strip used to be near-opaque, on the rule that `.dh-bar-in` was the
+     page's only blurred surface. Made merely translucent to sit under glass, it
+     looked worse than either: without a blur, transparency reveals READABLE
+     CONTENT rather than a wash, and a headline scrolling under a row of company
+     pills is noise. Blur is the thing that makes transparency work.
+
+     The old rule was about nesting — a filtered element INSIDE a filtered
+     ancestor renders grey rectangles — and this is the bar's sibling, not its
+     child, and the two do not overlap. So it takes the same material, and the
+     harnesses that asserted "only the bar" now assert "the bar and the strip
+     attached to it". */
+  background: linear-gradient(180deg, rgba(246, 247, 250, .72) 0%, rgba(246, 247, 250, .58) 100%);
+  backdrop-filter: blur(34px) saturate(180%);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  border-bottom: 1px solid rgba(20, 22, 40, .06);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .4);
+  transition: transform 340ms var(--dh-ease), opacity 240ms var(--dh-ease);
+}
+/* Out of the way going down, back on the way up. */
+.dh-cos-wrap[data-hide="1"] {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dh-cos-mask {
+  overflow: hidden;
+  /* ── The smoke at the ends ──
+     A long, eased ramp rather than a cliff: six stops approximating a curve,
+     because a two-stop linear fade reads as a straight grey wedge and the point
+     is for the row to dissolve rather than to stop. Both ends fade here — the
+     track never rests, so there is no "start" to keep fully drawn. */
+  --dh-cos-fade:
+    linear-gradient(90deg,
+      rgba(0, 0, 0, 0) 0,
+      rgba(0, 0, 0, .12) calc(var(--dh-gut) * .3),
+      rgba(0, 0, 0, .45) calc(var(--dh-gut) * .58),
+      rgba(0, 0, 0, .8) calc(var(--dh-gut) * .82),
+      #000 var(--dh-gut),
+      #000 calc(100% - var(--dh-gut)),
+      rgba(0, 0, 0, .8) calc(100% - var(--dh-gut) * .82),
+      rgba(0, 0, 0, .45) calc(100% - var(--dh-gut) * .58),
+      rgba(0, 0, 0, .12) calc(100% - var(--dh-gut) * .3),
+      rgba(0, 0, 0, 0) 100%);
+  -webkit-mask-image: var(--dh-cos-fade);
+  mask-image: var(--dh-cos-fade);
+}
+
+.dh-cos-track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  gap: 7px;
+  padding-left: var(--dh-gut);
+  animation: dh-cos-run 46s linear infinite;
+}
+/* BRAKES. These are links to real company boards, and a target that slides
+   away is a target nobody can hit. */
+.dh-cos-wrap:hover .dh-cos-track,
+.dh-cos-wrap:focus-within .dh-cos-track { animation-play-state: paused; }
+
+.dh-cos-run { display: flex; align-items: center; gap: 7px; }
+.dh-cos-track > * { flex: 0 0 auto; }
+
+/* Half, because the track is the row twice: at -50% the second copy sits
+   exactly where the first began, so the loop has no seam. */
+@keyframes dh-cos-run {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No movement at all. The row becomes a plain scroller, so every employer is
+     still reachable — the duplicate is hidden so nothing is listed twice. */
+  .dh-cos-track { animation: none; width: auto; overflow-x: auto; scrollbar-width: none; }
+  .dh-cos-track::-webkit-scrollbar { display: none; }
+  .dh-cos-run[aria-hidden="true"] { display: none; }
+  .dh-cos-wrap { transition: none; }
+}
+.dh-co {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px 0 8px;
+  border: 1px solid var(--dh-line);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .78) 0%, rgba(255, 255, 255, .5) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+  text-decoration: none;
+  color: var(--dh-ink);
+  white-space: nowrap;
+  transition: transform var(--dh-fast) var(--dh-ease), background var(--dh-fast) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-co:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, .96);
+  border-color: rgba(122, 134, 186, .34);
+  box-shadow: var(--dh-sh-2);
+}
+.dh-co:active { transform: translateY(0) scale(.98); }
+.dh-co-n {
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -.016em;
+}
+/* The open-role count. Tabular so a row of pills does not jitter as the
+   numbers change width. */
+.dh-co-c {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(214, 224, 255, .62);
+  color: #3d4468;
+  font-size: 10.5px;
+  font-weight: 450;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── The mark ──
+   A light chip either way, so a logo and a monogram sit at the same weight in
+   the row. */
+.dh-co-logo {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  object-fit: contain;
+  padding: 1.5px;
+  background: #fff;
+  border: 1px solid var(--dh-line);
+}
+.dh-co-ini {
+  width: 19px;
+  height: 19px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  /* Pale ground, mid ink — the inverse of the dark-surface mark this page
+     deliberately does not use. Hue comes from the name, so a company is the
+     same colour on every reload. */
+  background: hsl(var(--h, 220) 58% 94%);
+  border: 1px solid hsl(var(--h, 220) 45% 84%);
+  color: hsl(var(--h, 220) 42% 40%);
+  font-size: 9px;
+  font-weight: 450;
+  letter-spacing: -.02em;
+}
+
+.dh-co-sk { height: 34px; border-radius: 999px; }
+
+
+/* ══ Post an opportunity ══════════════════════════════════════════════════
+   Three buttons where the employer chips used to be. The first is the filled
+   one: posting a job is the common case and a row of three identical outlines
+   makes the reader choose before they have read anything.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 4px;
+}
+.dh-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 42px;
+  padding: 0 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 13px;
+  background: linear-gradient(168deg, rgba(255, 255, 255, .88) 0%, rgba(255, 255, 255, .56) 100%);
+  box-shadow: var(--dh-sh-1);
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -.016em;
+  color: var(--dh-ink);
+  text-decoration: none;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+}
+.dh-cta svg { flex: 0 0 auto; color: var(--dh-ink-3); }
+/* The full label on a wide screen; the short one only where three buttons have
+   to share a phone's width. */
+.dh-cta-s { display: none; }
+.dh-cta:hover { transform: translateY(-1px); box-shadow: var(--dh-sh-2); border-color: rgba(255, 255, 255, .96); }
+.dh-cta:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+.dh-cta-a { opacity: 0; transition: opacity var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease); }
+.dh-cta:hover .dh-cta-a { opacity: 1; transform: translateX(2px); }
+
+/* The lead button. Dark, because it is the one most posters want. */
+.dh-cta[data-lead="1"] {
+  border-color: transparent;
+  background: linear-gradient(150deg, #26262b 0%, #15151a 100%);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 10px 26px rgba(20, 22, 40, .22);
+}
+.dh-cta[data-lead="1"] svg { color: rgba(255, 255, 255, .7); }
+.dh-cta[data-lead="1"]:hover { border-color: transparent; }
+
+@media (max-width: 620px) {
+  /* ── Three across, not three stacked ──
+     A GRID, so all three are exactly the same width whatever their label —
+     `flex: 1` would have handed "Internship" more room than "Job" and left the
+     row looking misaligned. The arrow goes: at ~100px a button holds an icon
+     and a word, and the word is the part that has to survive. */
+  .dh-cta-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .dh-cta {
+    height: 44px;
+    padding: 0 8px;
+    gap: 7px;
+    justify-content: center;
+    font-size: 12.5px;
+    letter-spacing: -.02em;
+  }
+  .dh-cta-l { display: none; }
+  .dh-cta-s { display: inline; }
+  .dh-cta-a { display: none; }
+}
+
+/* Under 380px the words run out of room before the buttons do. */
+@media (max-width: 380px) {
+  .dh-cta { gap: 5px; padding: 0 5px; font-size: 11.5px; }
+  .dh-cta svg { width: 14px; height: 14px; }
+}
+
+/* ── The two buttons on the right ── */
+/* Kept: the pages still render these two. The navbar's own wrapper is
+   `.dh-bar-acts`. */
+.dh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 17px;
+  border-radius: 999px;
+  border: 1px solid var(--dh-line);
+  background: rgba(255, 255, 255, .55);
+  color: var(--dh-ink);
+  font-size: 13.5px;
+  font-weight: 400;
+  letter-spacing: -.015em;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+  transition: background var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease),
+              box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-btn b { font-weight: 500; }
+.dh-btn:hover { background: rgba(255, 255, 255, .92); box-shadow: var(--dh-sh-2); }
+.dh-btn:active { transform: scale(.98); }
+.dh-btn svg { opacity: .65; }
+
+.dh-btn-solid {
+  border-color: transparent;
+  background: linear-gradient(180deg, #38383b 0%, #1d1d1f 100%);
+  color: #fff;
+  font-weight: 450;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, .14),
+    0 8px 20px rgba(0, 0, 0, .16),
+    inset 0 1px 0 rgba(255, 255, 255, .18);
+}
+.dh-btn-solid:hover { background: linear-gradient(180deg, #45454a 0%, #26262a 100%); }
+
+.dh-avatar {
+  width: 38px; height: 38px;
+  border-radius: 999px;
+  border: 1px solid var(--dh-rim);
+  background: var(--dh-glass-2);
+  color: var(--dh-ink);
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 450;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--dh-sh-1);
+  transition: box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-avatar:hover { box-shadow: var(--dh-sh-2); }
+
+/* ══ The scrolling content ════════════════════════════════════════════════ */
+
+.dh-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--dh-scroll-top) 0 70px;
+  scroll-behavior: smooth;
+}
+.dh-scroll::-webkit-scrollbar { width: 10px; }
+.dh-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, .14);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 99px;
+}
+.dh-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, .26); background-clip: padding-box; }
+
+.dh-pad { padding-inline: var(--dh-gut); }
+
+/* ══ Rails ════════════════════════════════════════════════════════════════
+   One horizontal scroller, used for the category tiles, the featured cards and
+   the roles. Bleeds to the panel edge on purpose — a rail that stops at the
+   gutter looks finished at the point where it should look continuable. */
+
+.dh-rail-wrap { position: relative; margin-top: var(--dh-sec-gap); }
+/* The first rail used to sit under the headline, which gave it its top space.
+   With nothing above it, it has to make its own — otherwise the tiles start
+   flush against the search bar. */
+.dh-scroll > .dh-rail-wrap:first-child { margin-top: 4px; }
+.dh-rail {
+  display: flex;
+  gap: 13px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-behavior: smooth;
+  padding: 5px var(--dh-gut) 8px;
+  /* The snapport has to know about the gutter, or the browser snaps the first
+     card's edge to the PADDING BOX and settles at scrollLeft: 34 the moment
+     the rail lays out — which clipped the first card under the panel edge and
+     left "scrolled to the start" reading as false, so the back arrow was
+     visible on every rail before anybody had scrolled anything. */
+  scroll-padding-inline: var(--dh-gut);
+  /* Hidden, not absent: the arrows are the affordance on a pointer device and
+     a trackpad still swipes. */
+  scrollbar-width: none;
+}
+.dh-rail::-webkit-scrollbar { display: none; }
+.dh-rail > * { scroll-snap-align: start; flex: 0 0 auto; }
+
+.dh-arrow {
+  position: absolute;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--dh-rim);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .78);
+  color: var(--dh-ink);
+  cursor: pointer;
+  box-shadow: var(--dh-sh-2);
+  transform: translateY(-50%);
+  transition: opacity var(--dh-mid) var(--dh-ease), transform var(--dh-fast) var(--dh-ease),
+              background var(--dh-fast) var(--dh-ease);
+  z-index: 4;
+}
+.dh-arrow:hover { background: #fff; }
+.dh-arrow:active { transform: translateY(-50%) scale(.9); }
+.dh-arrow[data-side="l"] { left: 10px; }
+.dh-arrow[data-side="r"] { right: 10px; }
+/* Gone when there is nothing that way, rather than present and inert. */
+.dh-arrow[data-off="1"] { opacity: 0; pointer-events: none; transform: translateY(-50%) scale(.84); }
+
+/* ── Section heads ──
+   No bar, no colour, no weight. A quiet 21px line at 400 with a hairline rule
+   running out towards the gutter — the rule does the separating that the bold
+   was doing badly. */
+.dh-sec {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  margin: 42px 0 0;
+}
+.dh-sec-t {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 21px;
+  font-weight: 400;
+  letter-spacing: -.032em;
+  color: var(--dh-ink);
+}
+.dh-sec-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(154, 164, 208, .45) 0%, rgba(154, 164, 208, 0) 100%);
+  transform: translateY(-5px);
+}
+.dh-sec-more {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 3px 4px;
+  transition: gap var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease);
+}
+.dh-sec-more:hover { gap: 9px; color: var(--dh-ink); }
+.dh-sec-more svg { opacity: .5; }
+
+/* ══ Category tiles ═══════════════════════════════════════════════════════
+   Glass first, then the tile's own pastel POOLED IN THE BOTTOM-RIGHT, under
+   the motif — so the colour is a glow behind the artwork and the label above
+   it stays on clean glass. A flat fill would put the text on a coloured card,
+   which is what made the first coloured version look like a toy. */
+
+.dh-tile {
+  position: relative;
+  width: 164px;
+  height: 176px;
+  padding: 16px 15px;
+  overflow: hidden;
+  border: 1px solid var(--dh-rim);
+  border-radius: 22px;
+  background:
+    radial-gradient(125% 115% at 88% 112%, var(--t-wash, transparent) 0%, transparent 68%),
+    linear-gradient(168deg, rgba(255, 255, 255, .8) 0%, rgba(255, 255, 255, .34) 100%);
+  text-decoration: none;
+  color: var(--dh-ink);
+  box-shadow: var(--dh-sh-1);
+  transition: transform var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              background var(--dh-mid) var(--dh-ease);
+}
+.dh-tile:hover {
+  transform: translateY(-5px);
+  background:
+    radial-gradient(125% 115% at 88% 112%, var(--t-wash-on, transparent) 0%, transparent 70%),
+    linear-gradient(168deg, rgba(255, 255, 255, .92) 0%, rgba(255, 255, 255, .5) 100%);
+  box-shadow: var(--dh-sh-3);
+}
+/* A diagonal sheen, brought across on hover. The thing glass does that a flat
+   panel cannot. */
+.dh-tile::after {
+  content: "";
+  position: absolute;
+  inset: -40% -60% auto auto;
+  width: 140%;
+  height: 160%;
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, .6) 50%, rgba(255, 255, 255, 0) 62%);
+  opacity: 0;
+  transform: translateX(-14%);
+  transition: opacity var(--dh-slow) var(--dh-ease), transform var(--dh-slow) var(--dh-ease);
+  pointer-events: none;
+}
+.dh-tile:hover::after { opacity: 1; transform: translateX(6%); }
+
+.dh-tile-t {
+  position: relative;
+  z-index: 2;
+  font-size: 15.5px;
+  font-weight: 450;
+  line-height: 1.24;
+  letter-spacing: -.028em;
+  max-width: 112px;
+}
+.dh-tile-n {
+  position: relative;
+  z-index: 2;
+  margin-top: 4px;
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: -.004em;
+  color: var(--dh-ink-3);
+}
+.dh-tile-art {
+  position: absolute;
+  right: -8px;
+  bottom: -8px;
+  width: 106px;
+  height: 106px;
+  z-index: 1;
+  opacity: .46;
+  transition: transform var(--dh-slow) var(--dh-ease), opacity var(--dh-mid) var(--dh-ease);
+}
+.dh-tile:hover .dh-tile-art { transform: scale(1.1) rotate(-3deg); opacity: .74; }
+
+/* ══ Featured ═════════════════════════════════════════════════════════════ */
+
+.dh-card { width: 312px; border-radius: 20px; text-decoration: none; color: inherit; }
+.dh-card-img {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--dh-rim);
+  /* Neutral, and not the banner's own background colour: those are dark blues
+     and greens chosen for the dark hero, and one of them showing through
+     behind a picture that had not loaded would be the only hue on the page. */
+  background: #ececee;
+  box-shadow: var(--dh-sh-1);
+  transition: box-shadow var(--dh-mid) var(--dh-ease), transform var(--dh-mid) var(--dh-ease);
+}
+.dh-card:hover .dh-card-img { box-shadow: var(--dh-sh-3); transform: translateY(-3px); }
+.dh-card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  /* Dusty, not grey. Fully desaturated it matched the old monochrome page but
+     made four near-identical charcoal blocks; at 55% the artwork's own hues
+     come back as pastel and each card is its own colour again. Still lifted,
+     because this was drawn on a near-black ground for the dark hero and
+     dropped straight onto white it reads as a hole rather than a picture. */
+  filter: grayscale(.55) saturate(1.15) contrast(.9) brightness(1.52);
+  transition: transform var(--dh-slow) var(--dh-ease), filter var(--dh-slow) var(--dh-ease);
+}
+.dh-card:hover .dh-card-img img {
+  transform: scale(1.055);
+  filter: grayscale(0) saturate(1.05) contrast(1) brightness(1.06);
+}
+/* A hairline of the banner's own accent, held back until hover. */
+.dh-card-img::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--c-accent, #2b5ce6);
+  opacity: 0;
+  transition: opacity var(--dh-mid) var(--dh-ease);
+}
+.dh-card:hover .dh-card-img::after { opacity: .85; }
+
+.dh-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 13px 0 0; }
+.dh-chip {
+  padding: 4px 11px;
+  border: 1px solid var(--dh-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .6);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .75);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: -.006em;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+}
+.dh-chip[data-k="accent"] {
+  border-color: rgba(122, 134, 186, .36);
+  background: rgba(214, 224, 255, .52);
+  color: #3d4468;
+}
+
+.dh-card-t {
+  margin: 10px 0 0;
+  font-size: 15px;
+  font-weight: 450;
+  line-height: 1.34;
+  letter-spacing: -.024em;
+  color: var(--dh-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dh-card-s {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.48;
+  letter-spacing: -.004em;
+  color: var(--dh-ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ══ Role cards ═══════════════════════════════════════════════════════════ */
+
+.dh-role {
+  display: flex;
+  flex-direction: column;
+  width: 294px;
+  min-height: 160px;
+  padding: 16px 17px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background:
+    radial-gradient(120% 130% at 100% 0%, rgba(198, 216, 255, .22) 0%, transparent 62%),
+    linear-gradient(170deg, rgba(255, 255, 255, .78) 0%, rgba(255, 255, 255, .38) 100%);
+  text-decoration: none;
+  color: inherit;
+  box-shadow: var(--dh-sh-1);
+  transition: transform var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              background var(--dh-mid) var(--dh-ease);
+}
+.dh-role:hover {
+  transform: translateY(-4px);
+  background:
+    radial-gradient(120% 130% at 100% 0%, rgba(198, 216, 255, .32) 0%, transparent 64%),
+    linear-gradient(170deg, rgba(255, 255, 255, .9) 0%, rgba(255, 255, 255, .5) 100%);
+  box-shadow: var(--dh-sh-3);
+}
+.dh-role-top { display: flex; align-items: center; gap: 11px; }
+.dh-role-mark {
+  width: 36px; height: 36px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  border: 1px solid var(--dh-line);
+  background: rgba(255, 255, 255, .72);
+  color: var(--dh-ink);
+  font-size: 14px; font-weight: 450;
+  letter-spacing: -.02em;
+}
+.dh-role-co { font-size: 12.5px; font-weight: 450; color: var(--dh-ink); letter-spacing: -.015em; }
+.dh-role-loc { font-size: 11px; color: var(--dh-ink-3); margin-top: 1px; }
+.dh-role-t {
+  margin: 13px 0 0;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.34;
+  letter-spacing: -.024em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dh-role-foot { margin-top: auto; padding-top: 13px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ══ People ═══════════════════════════════════════════════════════════════
+   ═══ THE PICTURE IS THE CARD ═══
+
+   A person card that leads with text is a row; one that leads with a face is a
+   card, and at a glance down a rail the face is the only thing anybody reads.
+   So the portrait is large, centred and given a gradient ring, and everything
+   else is arranged under it in decreasing size.
+
+   `avatarUrl` is optional on a Docrud profile and today nobody has set one, so
+   the monogram is not a fallback to be tolerated — it is what this rail looks
+   like. Its gradient comes from the person's id, so a given face is always the
+   same colour, and the ring is the same object whether it holds a photograph
+   or two letters. */
+
+.dh-person {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 214px;
+  min-height: 214px;
+  padding: 20px 16px 18px;
+  overflow: hidden;
+  border: 1px solid var(--dh-rim);
+  border-radius: 22px;
+  /* The same recipe as a tile: a wash pooled behind the portrait, glass over
+     the top, so the colour is a glow and the name sits on clean glass. */
+  background:
+    radial-gradient(90% 62% at 50% 0%, rgba(198, 216, 255, .3) 0%, transparent 70%),
+    linear-gradient(170deg, rgba(255, 255, 255, .82) 0%, rgba(255, 255, 255, .4) 100%);
+  text-decoration: none;
+  color: inherit;
+  text-align: center;
+  box-shadow: var(--dh-sh-1);
+  transition: transform var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              background var(--dh-mid) var(--dh-ease);
+}
+.dh-person:hover {
+  transform: translateY(-5px);
+  background:
+    radial-gradient(90% 62% at 50% 0%, rgba(198, 216, 255, .42) 0%, transparent 72%),
+    linear-gradient(170deg, rgba(255, 255, 255, .94) 0%, rgba(255, 255, 255, .54) 100%);
+  box-shadow: var(--dh-sh-3);
+}
+/* The same diagonal sheen the tiles have, so the two rails feel like one
+   material. */
+.dh-person::after {
+  content: "";
+  position: absolute;
+  inset: -40% -60% auto auto;
+  width: 150%;
+  height: 170%;
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, .55) 50%, rgba(255, 255, 255, 0) 62%);
+  opacity: 0;
+  transform: translateX(-16%);
+  transition: opacity var(--dh-slow) var(--dh-ease), transform var(--dh-slow) var(--dh-ease);
+  pointer-events: none;
+}
+.dh-person:hover::after { opacity: 1; transform: translateX(6%); }
+
+/* ── The portrait ──
+   A gradient ring drawn as the parent's background with the photo inset on top
+   of it, rather than as a border: a gradient cannot be a border-color, and a
+   second absolutely-positioned element would have to be kept in sync with the
+   avatar's size by hand. */
+.dh-person-ring {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  padding: 2.5px;
+  background: linear-gradient(145deg, var(--f-1, #aac4ff) 0%, var(--f-2, #7f9cf0) 100%);
+  box-shadow:
+    0 2px 10px rgba(16, 32, 68, .12),
+    0 8px 22px rgba(16, 32, 68, .09);
+  transition: transform var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-person:hover .dh-person-ring {
+  transform: scale(1.06);
+  box-shadow: 0 3px 14px rgba(16, 32, 68, .16), 0 12px 30px rgba(16, 32, 68, .14);
+}
+/* The white gap between the ring and the portrait. Two pixels of the page
+   showing through is what makes the ring read as a ring. */
+.dh-person-av {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, .92);
+  background: linear-gradient(145deg, var(--f-1, #aac4ff) 0%, var(--f-2, #7f9cf0) 100%);
+}
+.dh-person-av img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.dh-person-ini {
+  font-size: 23px;
+  font-weight: 450;
+  letter-spacing: -.03em;
+  /* White on the gradient, not ink: the gradients are mid-tone pastels and
+     dark text on them is muddy at this size. */
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(16, 32, 68, .18);
+  user-select: none;
+}
+
+/* ── Under the portrait ── */
+.dh-person-n {
+  position: relative;
+  z-index: 1;
+  margin-top: 13px;
+  max-width: 100%;
+  font-size: 14.5px;
+  font-weight: 450;
+  letter-spacing: -.024em;
+  color: var(--dh-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dh-person-h {
+  position: relative;
+  z-index: 1;
+  margin-top: 3px;
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dh-ink-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dh-person-l {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--dh-ink-3);
+}
+.dh-person-l svg { opacity: .55; }
+.dh-person-tags {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 11px;
+}
+.dh-person-tags .dh-chip { font-size: 10.5px; padding: 3px 9px; }
+.dh-person-meta {
+  position: relative;
+  z-index: 1;
+  margin-top: 9px;
+  font-size: 10.5px;
+  color: var(--dh-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* `margin-top: auto` is what pins this to the bottom whatever is above it, so
+   a sparse card and a full one end with the same row in the same place. */
+.dh-person-cta {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  padding-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 450;
+  letter-spacing: -.012em;
+  color: var(--dh-ink-2);
+  opacity: .82;
+  transition: gap var(--dh-fast) var(--dh-ease), color var(--dh-fast) var(--dh-ease),
+              opacity var(--dh-fast) var(--dh-ease);
+}
+.dh-person-cta svg { opacity: .6; }
+.dh-person:hover .dh-person-cta { gap: 8px; color: var(--dh-ink); opacity: 1; }
+
+/* ══ Skeletons ════════════════════════════════════════════════════════════
+   Shaped like the thing they stand in for, so the row does not resize when the
+   data lands. */
+.dh-sk {
+  border-radius: var(--dh-r-md);
+  border: 1px solid var(--dh-rim);
+  background:
+    linear-gradient(100deg, rgba(255, 255, 255, .28) 30%, rgba(255, 255, 255, .78) 50%, rgba(255, 255, 255, .28) 70%),
+    rgba(255, 255, 255, .42);
+  background-size: 300% 100%, auto;
+  animation: dh-sheen 1.4s linear infinite;
+}
+@keyframes dh-sheen { to { background-position: -200% 0, 0 0; } }
+
+/* ══ Empty states ═════════════════════════════════════════════════════════ */
+
+.dh-empty {
+  /* The section gap, not 14px. This panel stands in for a grid or a rail when
+     a section has nothing to show, and it was sitting 8px closer to its own
+     heading than every loaded section on the page — visible only when an
+     empty section happened to land next to a full one, which is exactly when
+     it matters. */
+  margin: var(--dh-sec-gap) var(--dh-gut) 0;
+  padding: 28px;
+  border: 1px dashed rgba(0, 0, 0, .13);
+  border-radius: var(--dh-r-md);
+  background: rgba(255, 255, 255, .4);
+  text-align: center;
+}
+.dh-empty-t { font-size: 14px; font-weight: 450; color: var(--dh-ink); letter-spacing: -.02em; }
+.dh-empty-s { font-size: 12.5px; color: var(--dh-ink-3); margin-top: 5px; }
+.dh-empty-s a { color: var(--dh-ink); text-decoration: none; border-bottom: 1px solid var(--dh-line); }
+
+/* ══ Guest note ═══════════════════════════════════════════════════════════
+   A warm breath rather than an amber panel: a hue on an otherwise restrained
+   page makes a mild notice the loudest element on the screen. */
+.dh-guest {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0 var(--dh-gut) 20px;
+  padding: 12px 15px;
+  border: 1px solid var(--dh-rim);
+  border-radius: var(--dh-r-md);
+  background:
+    radial-gradient(80% 240% at 0% 50%, rgba(255, 219, 190, .5) 0%, transparent 72%),
+    rgba(255, 255, 255, .52);
+  box-shadow: var(--dh-sh-1);
+  font-size: 12.5px;
+  font-weight: 400;
+  letter-spacing: -.008em;
+  color: var(--dh-ink-2);
+}
+.dh-guest svg { opacity: .45; flex: 0 0 auto; }
+.dh-guest a { color: var(--dh-ink); font-weight: 450; text-decoration: none; border-bottom: 1px solid rgba(0, 0, 0, .2); }
+
+/* ══ Responsive ═══════════════════════════════════════════════════════════
+   The bar gives things up in this order: the brand word, then the tab labels,
+   then the tabs move to a line of their own, then "For Business" and the TYRAI
+   word. Every destination stays reachable at every width — the tab list
+   scrolls rather than collapsing into a menu. */
+
+/* Below this the leftover width would squeeze the tab list under about 240px,
+   which is a scrolling sliver between two other controls. It takes a line of
+   its own instead; `flex-basis: 100%` is what forces the wrap. */
+@media (max-width: 1060px) {
+  .dh-bar-in { padding: 10px 18px; }
+  .dh-tabs {
+    order: 3;
+    flex: 1 0 100%;
+    /* The bar's own left padding, so the first tab lines up with the brand. */
+    padding: 1px 0 0;
+    gap: 2px;
+  }
+  .dh-bar-search { flex: 1 1 200px; }
+}
+
+@media (max-width: 760px) {
+  .dh-bar-in { padding: 10px 16px; }
+  .dh-logo-word { display: none; }
+  /* The search's 260px flex BASIS is what wraps, not its final width. At 390
+     the basis alone exceeded what was left after the brand, so the actions were
+     pushed onto a line of their own with a dead gap beside them and the bar
+     became three rows tall. A small basis lets brand, search and actions share
+     line one; `flex-grow` still hands the search everything left over. */
+  .dh-bar-search { flex: 1 1 90px; }
+  .dh-bar-acts { gap: 7px; }
+}
+
+@media (max-width: 900px) {
+  /* One override moves the gutter, the rails' snap gutter, the company row's
+     padding, its fade stops and its arrows together. */
+  .dh { --dh-gut: 20px; --dh-peek: 44px; --dh-deck-gap: 12px; --dh-card-pad: 20px; }
+  .dh-empty, .dh-guest { padding-inline: var(--dh-gut); }
+  .dh-empty, .dh-guest { margin-inline: 20px; }
+  .dh-arrow { display: none; }
+  /* The app's global bottom navigation is fixed over this page at 60px plus
+     the home-indicator inset, and `.dh` covers the whole viewport — so without
+     this the last card in the last rail sits underneath it and cannot be
+     reached by scrolling. Matches GlobalBottomNav's own measurement rather
+     than guessing at it. */
+  .dh-scroll { padding-bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+}
+
+@media (max-width: 620px) {
+  /* "For Business" is a destination the tab list also carries as "Companies";
+     the TYRAI word goes and its mark stays, which is the recognisable part. */
+  .dh-bar-acts .dh-btn-ghost { display: none; }
+  .dh-tyrai { padding: 0 11px; gap: 0; }
+  .dh-tyrai span { display: none; }
+  .dh-tab { height: 34px; padding: 0 11px; font-size: 12.5px; }
+  .dh-bar-in { padding: 10px 14px; gap: 8px 10px; }
+  .dh-co { height: 32px; padding: 0 10px 0 7px; gap: 7px; }
+  .dh-co-n { font-size: 12px; }
+  .dh-co-c { display: none; }
+  .dh-card { width: 264px; }
+  .dh-role { width: 262px; }
+  .dh-person { width: 186px; min-height: 198px; }
+  .dh-sec { margin-top: 34px; }
+}
+
+/* ── When glass is not available ──
+   Some Firefox users still have `backdrop-filter` behind a flag, and a
+   translucent panel with nothing blurred behind it is unreadable rather than
+   merely plain. So the fallback is opaque. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .dh-tile, .dh-role, .dh-person, .dh-btn, .dh-chip, .dh-co,
+  .dh-arrow, .dh-avatar, .dh-guest, .dh-sk {
+    background: #fff;
+  }
+  /* The panel no longer blurs, so there is nothing to fall back to there. The
+     bar is the only blurred surface left on the page. */
+  .dh-bar-in { background: rgba(255, 255, 255, .96); }
+}
+
+/* Parked at the end of the stylesheet ON PURPOSE. A media query adds no
+   specificity, so these rules only beat the base ones they narrow by coming
+   after them — sitting up beside the deck they lost every contest to the
+   per-card rules further down and changed nothing at all. */
+
+/* ══ Opportunity cards ════════════════════════════════════════════════════
+   The grids under Featured: one matched against the viewer's profile, one of
+   what arrived most recently, both drawing the same card.
+
+   THE GLASS IS THE PAGE'S OWN, NOT A NEW ONE. A pastel pooling in the far
+   corner under a sheet of white, exactly as `.dh-city` and `.dh-skill` do it —
+   the colour is a glow BEHIND the glass rather than a tint on the card, which
+   is what stops a grid of nine from reading as nine coloured boxes. No
+   `backdrop-filter`: there is nothing behind these but the page's own ground,
+   so a filter would cost a compositor pass per card and show nothing. The bar
+   is still the only blurred surface on the page.
+
+   THE GRID FLOORS AT `min(272px, 100%)`. A bare `272px` floor overflows any
+   container narrower than that — which is every phone once the gutter is taken
+   off — so the floor collapses to the container's own width when it has to.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-opp-g {
+  margin-top: var(--dh-sec-gap);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(272px, 100%), 1fr));
+  gap: 12px;
+}
+
+.dh-opp {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 18px;
+  background:
+    radial-gradient(130% 125% at 94% 118%, var(--t-wash, transparent) 0%, transparent 64%),
+    linear-gradient(168deg, rgba(255, 255, 255, .84) 0%, rgba(255, 255, 255, .46) 100%);
+  box-shadow: var(--dh-sh-1);
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--dh-mid) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              border-color var(--dh-mid) var(--dh-ease);
+}
+/* The same slow sheen the city and skill tiles sweep. */
+.dh-opp::after {
+  content: '';
+  position: absolute;
+  inset: -40% -60% auto auto;
+  width: 140%;
+  height: 180%;
+  background: linear-gradient(118deg, rgba(255, 255, 255, 0) 38%, rgba(255, 255, 255, .5) 50%, rgba(255, 255, 255, 0) 62%);
+  opacity: 0;
+  transform: translateX(-14%);
+  transition: opacity var(--dh-slow, 620ms) var(--dh-ease), transform var(--dh-slow, 620ms) var(--dh-ease);
+  pointer-events: none;
+}
+.dh-opp:hover::after { opacity: 1; transform: translateX(6%); }
+.dh-opp:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--dh-sh-2);
+  border-color: rgba(255, 255, 255, .96);
+}
+.dh-opp:focus-visible {
+  outline: 2px solid rgba(90, 104, 214, .85);
+  outline-offset: 2px;
+}
+
+/* ── The head: mark, title, employer, and the score when there is one ── */
+
+.dh-opp-top {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: start;
+}
+.dh-opp-mark { position: relative; width: 38px; height: 38px; }
+.dh-opp-logo,
+.dh-opp-mono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(20, 22, 40, .07);
+  border-radius: 11px;
+  /* A pale plate under the logo, so a mark with a transparent background and a
+     mark with a white one sit on the same tile. */
+  background: #fff;
+  object-fit: contain;
+  /* Logos are authored at all sorts of sizes; this keeps them inside the plate
+     rather than cropped to it. */
+  padding: 5px;
+}
+/* The monogram also carries an icon, for a project that has no employer to
+   take an initial from. */
+.dh-opp-mono svg { opacity: .85; }
+.dh-opp-mono {
+  padding: 0;
+  background: hsl(var(--h, 220) 52% 95%);
+  border-color: hsl(var(--h, 220) 44% 86%);
+  /* 30%, not 32%. The monogram takes a different hue per employer, so the bar
+     has to be cleared by the WORST hue rather than by a sample of one: swept
+     across all 360, lightness 32% bottomed out at 4.44:1 on yellow (hue 60)
+     against a 4.5:1 bar, and 30% bottoms out at 4.90:1. */
+  color: hsl(var(--h, 220) 46% 30%);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dh-opp-head { display: flex; flex-direction: column; min-width: 0; padding-top: 1px; }
+.dh-opp-t {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.32;
+  letter-spacing: -.018em;
+  color: var(--dh-ink);
+  /* Two lines, then ellipsis: a 14-word scraped title must not set the height
+     of every other card in its row. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dh-opp-co {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--dh-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The server's own integer. Neutral, not a traffic light: the number is the
+   claim and a green pill would be a second, louder one. */
+.dh-opp-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 4px 8px;
+  border: 1px solid rgba(90, 104, 214, .26);
+  border-radius: 999px;
+  background: rgba(90, 104, 214, .1);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #3f4aa8;
+  white-space: nowrap;
+}
+.dh-opp-score-u { font-size: 9.5px; font-weight: 500; opacity: .75; }
+
+/* ── Location, facts, reasons ── */
+
+.dh-opp-loc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--dh-ink-2);
+}
+.dh-opp-loc svg { flex: 0 0 auto; color: var(--dh-ink-4); }
+.dh-opp-loc span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dh-opp-facts { display: flex; flex-wrap: wrap; gap: 5px; }
+.dh-opp-fact {
+  padding: 3px 8px;
+  border: 1px solid var(--dh-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .62);
+  font-size: 11px;
+  color: var(--dh-ink-2);
+  white-space: nowrap;
+}
+
+/* Why the scorer picked it. Only ever the strings it wrote itself. */
+.dh-opp-why {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 9px;
+  border-top: 1px solid var(--dh-line);
+}
+.dh-opp-r {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(90, 104, 214, .08);
+  font-size: 11px;
+  color: #454c86;
+}
+
+.dh-opp-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.dh-opp-when { font-size: 11.5px; color: var(--dh-ink-3); font-variant-numeric: tabular-nums; }
+.dh-opp-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dh-ink);
+}
+.dh-opp-go svg { color: var(--dh-ink-4); transition: transform var(--dh-fast) var(--dh-ease); }
+.dh-opp:hover .dh-opp-go svg { transform: translateX(2px); }
+
+/* ── The matched grid with nothing to match against ──
+   A panel, not an empty grid cell: it is a statement about the viewer's
+   account rather than a missing card. */
+
+.dh-opp-none {
+  margin-top: var(--dh-sec-gap);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 18px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 130% at 6% 110%, rgba(150, 175, 255, .16) 0%, transparent 62%),
+    linear-gradient(168deg, rgba(255, 255, 255, .84) 0%, rgba(255, 255, 255, .5) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+.dh-opp-none-i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(150, 175, 255, .18);
+  color: #4854ad;
+}
+.dh-opp-none-b { display: flex; flex-direction: column; min-width: 0; }
+.dh-opp-none-t { font-size: 13.5px; font-weight: 500; letter-spacing: -.018em; color: var(--dh-ink); }
+.dh-opp-none-s { margin-top: 3px; max-width: 62ch; font-size: 12.5px; line-height: 1.55; color: var(--dh-ink-3); }
+.dh-opp-none-a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid var(--dh-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .8);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--dh-ink);
+  text-decoration: none;
+  transition: background var(--dh-fast) var(--dh-ease), border-color var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease);
+}
+.dh-opp-none-a:hover { background: #fff; border-color: rgba(20, 22, 40, .16); transform: translateY(-1px); }
+
+/* ── While the fetch is out ──
+   Shaped like the card it becomes, so the grid does not reflow when it lands. */
+
+.dh-opp.is-skel { pointer-events: none; }
+.dh-sk {
+  display: block;
+  border-radius: 7px;
+  background: linear-gradient(100deg, rgba(20, 22, 40, .055) 30%, rgba(20, 22, 40, .085) 50%, rgba(20, 22, 40, .055) 70%);
+  background-size: 300% 100%;
+  animation: dh-sk-slide 1.4s ease-in-out infinite;
+}
+.dh-sk-mark { width: 38px; height: 38px; border-radius: 11px; }
+.dh-sk-t { height: 13px; width: 86%; }
+.dh-sk-co { height: 10px; width: 52%; margin-top: 7px; }
+.dh-sk-l { height: 11px; width: 64%; }
+.dh-sk-f { height: 19px; width: 68px; border-radius: 999px; }
+@keyframes dh-sk-slide {
+  0% { background-position: 120% 0; }
+  100% { background-position: -20% 0; }
+}
+
+@media (max-width: 620px) {
+  .dh-opp { padding: 14px 14px 12px; border-radius: 16px; }
+  .dh-opp-g { gap: 10px; }
+  .dh-opp-none {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 14px;
+  }
+  /* The link drops to its own row rather than squeezing the copy to nothing. */
+  .dh-opp-none-a { grid-column: 1 / -1; justify-content: center; }
+}
+
+
+/* ══ Explore categories ═══════════════════════════════════════════════════
+   A row of pills, one per category that actually has roles in it. Each carries
+   its own pastel — the same `pastelFor` hash the city and skill tiles use, so a
+   category is the same colour everywhere on the page — pooled behind a sheet of
+   white rather than painted on the pill, which is what stops a row of twelve
+   from reading as twelve coloured buttons.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-cat-row {
+  margin-top: var(--dh-sec-gap);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dh-cat-p {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 999px;
+  background:
+    radial-gradient(120% 160% at 100% 120%, var(--t-wash, transparent) 0%, transparent 70%),
+    linear-gradient(168deg, rgba(255, 255, 255, .86) 0%, rgba(255, 255, 255, .58) 100%);
+  box-shadow: var(--dh-sh-1);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: -.016em;
+  color: var(--dh-ink);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease),
+              border-color var(--dh-fast) var(--dh-ease);
+}
+.dh-cat-p svg { flex: 0 0 auto; color: var(--t-ink, var(--dh-ink-2)); }
+.dh-cat-p:hover { transform: translateY(-2px); box-shadow: var(--dh-sh-2); border-color: rgba(255, 255, 255, .96); }
+.dh-cat-p:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+/* The count the endpoint returned — not a rounded-up one. */
+.dh-cat-n {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(20, 22, 40, .07);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--dh-ink-3);
+}
+
+.dh-cat-sk { height: 38px; border-radius: 999px; }
+
+/* ══ Where the roles are ══════════════════════════════════════════════════
+   Three panels, one per busiest category, each holding that category's three
+   newest roles. The panel takes the category's pastel as a soft ground, which
+   is the one place on this page a colour is allowed to be the surface rather
+   than a glow behind it — three large tinted fields read as three sections,
+   which is the point.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-trend {
+  margin-top: var(--dh-sec-gap);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 14px;
+}
+
+.dh-tp {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding: 16px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 22px;
+  background:
+    radial-gradient(150% 120% at 0% 0%, var(--t-wash, transparent) 0%, transparent 72%),
+    linear-gradient(168deg, rgba(255, 255, 255, .7) 0%, rgba(255, 255, 255, .42) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+
+.dh-tp-h {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 3px 2px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--dh-ink);
+}
+.dh-tp-t { font-size: 14.5px; font-weight: 500; letter-spacing: -.024em; }
+.dh-tp-h svg { color: var(--dh-ink-3); transition: transform var(--dh-fast) var(--dh-ease); }
+.dh-tp-h:hover svg { transform: translateX(3px); }
+.dh-tp-h:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+.dh-tp-l { display: flex; flex-direction: column; gap: 8px; }
+
+/* One role. White on the panel's tint, so the cards read as items ON a
+   section rather than as more panels. */
+.dh-tr {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  padding: 11px;
+  border: 1px solid rgba(255, 255, 255, .8);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .84);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--dh-fast) var(--dh-ease), transform var(--dh-fast) var(--dh-ease),
+              box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-tr:hover {
+  background: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 1px 2px rgba(20, 22, 40, .05), 0 8px 20px rgba(20, 22, 40, .08);
+}
+.dh-tr:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+
+.dh-tr-m { width: 34px; height: 34px; }
+/* The employer mark is the opportunity card's, at this row's size. */
+.dh-tr-m .dh-opp-logo,
+.dh-tr-m .dh-opp-mono { width: 34px; height: 34px; border-radius: 10px; font-size: 13px; }
+
+.dh-tr-b { display: flex; flex-direction: column; min-width: 0; }
+.dh-tr-co {
+  font-size: 11px;
+  color: var(--dh-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dh-tr-t {
+  margin-top: 1px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.016em;
+  color: var(--dh-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* What the posting states. There is no rating in this product, so this line is
+   the work mode, the employment type and the age — never a score. */
+.dh-tr-s {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--dh-ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ══ What brings you here ═════════════════════════════════════════════════
+   One wide pastel band with the question and four answers. Each answer is a
+   route that exists.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dh-why {
+  margin-top: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 22px;
+  padding: 20px 22px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 24px;
+  background:
+    radial-gradient(700px 300px at 4% 120%, rgba(150, 175, 255, .2) 0%, transparent 66%),
+    radial-gradient(600px 280px at 96% -20%, rgba(140, 226, 202, .16) 0%, transparent 64%),
+    linear-gradient(168deg, rgba(255, 255, 255, .74) 0%, rgba(255, 255, 255, .46) 100%);
+  box-shadow: var(--dh-sh-1);
+}
+.dh-why-q {
+  margin: 0;
+  flex: 0 0 auto;
+  max-width: 100%;
+  font-size: clamp(15px, 1.1vw + 9px, 18px);
+  font-weight: 500;
+  letter-spacing: -.026em;
+  color: var(--dh-ink);
+}
+.dh-why-r { display: flex; flex-wrap: wrap; gap: 9px; }
+.dh-why-b {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 15px 0 11px;
+  border: 1px solid var(--dh-rim);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .88);
+  box-shadow: var(--dh-sh-1);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -.016em;
+  color: var(--dh-ink);
+  text-decoration: none;
+  transition: transform var(--dh-fast) var(--dh-ease), box-shadow var(--dh-mid) var(--dh-ease);
+}
+.dh-why-b:hover { transform: translateY(-2px); box-shadow: var(--dh-sh-2); }
+.dh-why-b:focus-visible { outline: 2px solid rgba(90, 104, 214, .85); outline-offset: 2px; }
+.dh-why-i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 11px;
+  background: linear-gradient(150deg, rgba(150, 175, 255, .26) 0%, rgba(140, 226, 202, .2) 100%);
+  color: #4854ad;
+}
+
+@media (max-width: 620px) {
+  .dh-why { padding: 16px; border-radius: 20px; gap: 14px; }
+  .dh-why-r { width: 100%; }
+  /* Two by two rather than one long column. */
+  .dh-why-b { flex: 1 1 calc(50% - 5px); justify-content: flex-start; height: 44px; padding: 0 10px; font-size: 12px; }
+  .dh-cat-p { height: 36px; font-size: 12.5px; }
+  .dh-tp { padding: 14px; border-radius: 18px; }
+}
+
+/* ── The category panels, sideways ══════════════════════════════════════════
+   Three panels of three roles, stacked, ran about 2100px on a 390px screen:
+   the same vertical-length problem the deck had. So below the width where all
+   three fit side by side they scroll sideways instead, in the page's own rail
+   language — snap to the gutter, with the next panel peeking so it is obvious
+   there is more.
+
+   The breakpoint is the width at which the grid can actually seat three, and
+   it was measured rather than derived: 3 × 300px minimum + two 14px gaps + two
+   34px gutters = 996px, and 968px — the figure the 20px phone gutter suggests
+   — still wrapped. Under 996px the grid drops to two columns and leaves the
+   third panel alone on a second row, which looks like a mistake.
+
+   The gutter is negative margin plus matching padding, not a narrower rail, so
+   the panels line up with every other section's edge while the scroller still
+   runs the full width of the screen. `scroll-padding-inline` has to equal
+   `padding-inline` or the snap lands on the padding box and the first panel
+   sits under the gutter. */
+@media (max-width: 995px) {
+  .dh-trend {
+    display: flex;
+    gap: 12px;
+    margin-inline: calc(var(--dh-gut) * -1);
+    padding-inline: var(--dh-gut);
+    scroll-padding-inline: var(--dh-gut);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .dh-trend::-webkit-scrollbar { display: none; }
+  .dh-tp {
+    flex: 0 0 calc(100% - var(--dh-peek));
+    scroll-snap-align: start;
+  }
+}
+
+/* ══ The deck on a phone ══════════════════════════════════════════════════
+   Stacked, these cards were 846px tall and every card stretched to the tallest
+   of them, so one long card set the height of all four. The fix is not smaller
+   type — it is to stop stacking things that have room to sit side by side.
+
+   WHERE THE HEIGHT WENT, measured at 390px before any of this:
+     · the two ways, one under the other      804px  → two cards of ~420
+     · three statistics, one per row          240px  → one row of three
+     · six source pills, one per row          258px  → two columns
+     · seven step chips over four rows        124px  → two rows
+     · eleven 44px logos over several rows    176px  → 30px logos
+   Nothing is hidden and no link is dropped: every one of those items is still
+   in the card and still reachable. The height comes out of the layout, not out
+   of the content.
+
+   NO NESTED HORIZONTAL SCROLLER, deliberately. Turning each of these rows into
+   its own sideways scroller would have been the shortest possible card, but a
+   horizontal pan inside a horizontal deck is ambiguous under a thumb — the
+   inner one swallows the gesture and the deck stops answering. Columns give
+   most of the saving and cost nothing.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 620px) {
+  /* One path per card. The card is the deck's, so it only has to stop being
+     two columns. */
+  .dh-ways-one .dh-ways-in { grid-template-columns: minmax(0, 1fr); }
+  .dh-ways-one .dh-way { padding: 20px 18px 14px; }
+
+  /* Three numbers across, not three rows down. They are short — "1,282", "24",
+     "3" — so the row fits where the column never could. */
+  .dh-band-g {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .dh-stat { padding: 12px 10px 12px 12px; border-radius: 15px; }
+  .dh-stat-n { font-size: clamp(19px, 5.4vw, 25px); }
+  .dh-stat-l { font-size: 10.5px; line-height: 1.3; }
+  /* The arrow is the first thing to go when the card is 84px wide: the whole
+     stat is the link, so the glyph was never what made it clickable. */
+  .dh-stat-a { display: none; }
+
+  /* Two columns of sources rather than six rows of one. */
+  .dh-prov-l { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .dh-prov-i { padding: 8px 9px; font-size: 11px; }
+
+  /* Smaller marks, so eleven of them take two rows instead of four. Every one
+     is still a link to that company's roles. */
+  .dh-band-logo { width: 30px; height: 30px; border-radius: 9px; }
+  .dh-band-logos { gap: 10px 12px; }
+
+  /* The walkthrough: the same three stages and the same screen, tighter. */
+  .dh-tut-t { font-size: clamp(18px, 5.2vw, 22px); margin-top: 7px; }
+  .dh-tut-b { margin-top: 8px; font-size: 12.5px; line-height: 1.55; }
+  .dh-tut-cta { margin-top: 12px; padding: 8px 13px; }
+  .dh-tut-in { gap: 18px; }
+  .dh-tut-body { gap: 18px; }
+  .dh-tut-l { gap: 2px; }
+  .dh-tut-s { padding: 10px 12px 10px 10px; }
+  .dh-tut-s-b { font-size: 12px; line-height: 1.55; }
+  .dh-tut-scr { padding: 12px 12px 14px; }
+  .dh-tut-top { margin-bottom: 11px; padding-bottom: 10px; }
+  .dh-tut-scr-f { margin-top: 11px; }
+  /* The step numerals are decoration once the chips are in order — dropping
+     them is what gets seven chips onto two rows. */
+  .dh-tut-chips { gap: 6px; }
+  .dh-tut-chip { padding: 5px 9px; font-size: 10.5px; }
+  .dh-tut-chip-n { display: none; }
+  .dh-tut-w-r { grid-template-columns: 58px minmax(0, 1fr) 20px; gap: 7px; }
+  .dh-tut-w { gap: 7px; }
+  .dh-tut-rs { margin-top: 11px; padding-top: 10px; gap: 5px; }
+  .dh-tut-r { padding: 4px 8px; font-size: 10.5px; }
+
+  /* ── The walkthrough, across instead of down ──
+     Three numbered pips on one line, then the stage being explained. The
+     vertical stepper is not hidden here, it is not rendered at all on a phone —
+     see the note on `HowItWorks`. */
+  .dh-tut-m .dh-tut-in { gap: 14px; }
+  .dh-tut-strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 8px;
+    align-items: center;
+  }
+  .dh-tut-pip {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* A 44px row: the pip is the only way through the stages on a phone, so it
+       is a thumb-sized target rather than a 20px dot. */
+    min-height: 44px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .04);
+    font: inherit;
+    cursor: pointer;
+    transition: background var(--dh-mid) var(--dh-ease), border-color var(--dh-mid) var(--dh-ease);
+  }
+  .dh-tut-pip:focus-visible { outline: 2px solid rgba(180, 190, 255, .85); outline-offset: 2px; }
+  .dh-tut-pip-n {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .1em;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, .58);
+    transition: color var(--dh-mid) var(--dh-ease);
+  }
+  .dh-tut-pip.is-done { border-color: rgba(166, 178, 255, .3); }
+  .dh-tut-pip.is-done .dh-tut-pip-n { color: rgba(255, 255, 255, .8); }
+  .dh-tut-pip.is-on {
+    border-color: transparent;
+    background: linear-gradient(140deg, #cdd4ff 0%, #eaf3ff 48%, #bff0e2 100%);
+    box-shadow: 0 6px 18px rgba(166, 178, 255, .26);
+  }
+  .dh-tut-pip.is-on .dh-tut-pip-n { color: #16171c; }
+  /* The countdown runs along the bottom of the open pip, the same 7s as the
+     bar on the desktop stepper. */
+  .dh-tut-pip-p {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 2px;
+    transform: scaleX(0);
+    transform-origin: left center;
+    background: rgba(22, 23, 28, .38);
+    animation: dh-tut-p 7000ms linear forwards;
+  }
+
+  .dh-tut-m-t {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -.024em;
+    color: #fff;
+  }
+  .dh-tut-m-b {
+    margin: 6px 0 0;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, .68);
+  }
+  .dh-tut-m .dh-tut-scr { margin-top: 13px; }
+  /* The screen is the biggest single piece of the phone card now, so it is the
+     one worth tightening: smaller chips put the composer's seven steps on two
+     rows instead of three, and the chrome gives back another 8px. */
+  .dh-tut-m .dh-tut-scr { padding: 11px 11px 12px; border-radius: 16px; }
+  .dh-tut-m .dh-tut-top { margin-bottom: 9px; padding-bottom: 8px; }
+  .dh-tut-m .dh-tut-chip { padding: 4px 8px; font-size: 10px; }
+  .dh-tut-m .dh-tut-chips { gap: 5px; }
+  .dh-tut-m .dh-tut-scr-f { margin-top: 9px; font-size: 11px; }
+  .dh-tut-m .dh-tut-w { gap: 6px; }
+  .dh-tut-m .dh-tut-rs { margin-top: 9px; padding-top: 9px; }
+
+  /* The two paths and the provenance, a little tighter — they sit beside a
+     526px card, so every row they give back closes the gap. */
+  .dh-way-b { font-size: 12.5px; line-height: 1.52; }
+  .dh-way-a { padding-block: 9px; }
+  .dh-way-a-n { font-size: 11px; }
+  .dh-prov-b { font-size: 12.5px; line-height: 1.55; }
+  .dh-prov-t { line-height: 1.18; }
+
+  .dh-tut-m-a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 13px;
+    padding: 8px 13px;
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 11px;
+    background: rgba(255, 255, 255, .06);
+    font-size: 12px;
+    color: #fff;
+    text-decoration: none;
+  }
+}
+
+/* Under 400px the stat row is the one thing that genuinely runs out of room. */
+@media (max-width: 400px) {
+  .dh-band-g { gap: 6px; }
+  .dh-stat { padding: 11px 8px 11px 10px; }
+  .dh-stat-l { font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dh *, .dh *::before, .dh *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

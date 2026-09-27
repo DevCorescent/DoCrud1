@@ -241,6 +241,11 @@ const SEED: Array<{
   );
   console.log('Artwork: public/uploads/ad-banners/seed-hero-*.svg');
   console.log('Edit or replace them in Super Admin → the ad banners section.');
+  /* Explicit, because a MongoDB-backed storage layer holds an open connection
+     pool and Node will not exit while it exists — the script finished its work
+     and then simply sat there, which reads as a hang. Same reason
+     scripts/ingest-jobs.ts ends this way. */
+  process.exit(0);
 })().catch((err) => {
   console.error('Seeding failed:', err);
   process.exit(1);

@@ -1,0 +1,195 @@
+/**
+ * The boot loader.
+ *
+ * ═══ IT IS THE PAGE'S OWN GROUND ═══
+ *
+ * This was a near-black panel with a gold ring on it, and the app it covers is
+ * light: every load began with a black screen that flashed to #f6f7fa. So the
+ * loader now paints the SAME ground as the page underneath it — the discover
+ * shell's colour, its pastel orbs, its soft tint — and the handoff stops being
+ * a transition at all. You are looking at the page's background the whole time;
+ * only the mark in the middle goes away.
+ *
+ * ═══ NOTHING HERE CLAIMS PROGRESS ═══
+ *
+ * The bar under the wordmark is a shimmer travelling along a hairline, not a
+ * fill. A determinate bar would be a lie told in 2px: this loader is a fixed
+ * hold, so it knows nothing about how far along anything is. A sweep says
+ * "working" without saying how much is left, which is the only honest thing a
+ * timer-driven loader can say.
+ *
+ * ═══ ONE BLUR LAYER, NO GLASS ═══
+ *
+ * There is nothing behind this to blur — it is the bottom layer — so it is
+ * built from flat colour and gradients. A backdrop-filter here would cost a
+ * compositor pass on the first frame of every load and show nothing.
+ */
+
+.sp {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-items: center;
+  /* The discover shell's ground, so the loader and the page are one colour. */
+  background: #f6f7fa;
+  opacity: 0;
+  transition: opacity 620ms cubic-bezier(.4, 0, .2, 1);
+  pointer-events: none;
+}
+.sp-in { opacity: 1; pointer-events: all; }
+.sp-out { opacity: 0; transition-duration: 780ms; }
+
+/* The pastel, inside the light — the same two orbs the dark sections carry,
+   at the alpha a pale ground can take. */
+.sp::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(760px 460px at 14% -12%, rgba(150, 175, 255, .22) 0%, rgba(150, 175, 255, 0) 66%),
+    radial-gradient(700px 440px at 88% 112%, rgba(140, 226, 202, .18) 0%, rgba(140, 226, 202, 0) 66%),
+    radial-gradient(520px 340px at 64% 26%, rgba(255, 214, 236, .14) 0%, rgba(255, 214, 236, 0) 70%);
+  pointer-events: none;
+}
+
+.sp-in-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+/* ── The mark ── */
+
+.sp-mark {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  /* Lifts and settles rather than appearing: the one movement that makes a
+     loader feel like a beginning instead of a delay. */
+  animation: sp-rise 720ms cubic-bezier(.22, 1, .36, 1) both;
+}
+.sp-out .sp-mark {
+  /* On the way out it keeps going up, so it reads as dissolving into the page
+     rather than being switched off. */
+  animation: sp-leave 700ms cubic-bezier(.4, 0, .2, 1) both;
+}
+.sp-mark img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  object-fit: cover;
+  /* An app icon's own shadow on a pale ground. Two layers: a tight contact
+     shadow so the tile sits on the surface, and a wide soft one for depth. */
+  box-shadow:
+    0 2px 6px rgba(20, 22, 40, .14),
+    0 18px 44px rgba(20, 22, 40, .18);
+}
+
+/* The sweep around the mark. Pastel, where it used to be gold: the app's
+   accents are lavender, mint and the palest blue, and a gold arc on a pale
+   lavender ground was the one warm thing on the whole page. */
+.sp-ring {
+  position: absolute;
+  /* Clear of the tile rather than hugging it. At -3px the arc was a 3px halo
+     against a rounded corner, which read as a rendering artefact instead of a
+     ring going round; out here it is unmistakably orbiting the mark. */
+  inset: -9px;
+  border-radius: 26px;
+  padding: 2px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    transparent 52%,
+    rgba(205, 212, 255, .3) 66%,
+    rgba(166, 178, 255, .85) 78%,
+    rgba(191, 240, 226, 1) 87%,
+    rgba(205, 212, 255, .55) 93%,
+    transparent 100%
+  );
+  /* MASKED TO A BAND, not covered by a matching centre. Filling the middle with
+     the ground colour would have been a flat patch over the pastel orbs behind
+     it — visible as a pale square wherever an orb passed under the mark. The
+     mask takes the middle out instead, so whatever is behind shows through. */
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: sp-spin 2.6s linear infinite;
+  pointer-events: none;
+}
+
+/* ── The wordmark and the shimmer ── */
+
+.sp-word {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -.01em;
+  color: #1d1d1f;
+  animation: sp-fade 560ms cubic-bezier(.22, 1, .36, 1) 140ms both;
+}
+.sp-track {
+  position: relative;
+  width: 132px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(20, 22, 40, .08);
+  animation: sp-fade 560ms cubic-bezier(.22, 1, .36, 1) 300ms both;
+}
+.sp-track::after {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 42%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(166, 178, 255, 0), rgba(166, 178, 255, .95) 45%, rgba(140, 226, 202, .9) 75%, rgba(140, 226, 202, 0));
+  animation: sp-sweep 1.35s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+
+@keyframes sp-rise {
+  from { opacity: 0; transform: translateY(10px) scale(.94); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sp-leave {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(-8px) scale(1.03); }
+}
+@keyframes sp-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes sp-spin { to { transform: rotate(360deg); } }
+@keyframes sp-sweep {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(240%); }
+}
+
+/* ── Reduced motion ──
+   Everything here starts from hidden, so these cannot merely be shortened:
+   removed outright, the resting style IS the finished state and the loader
+   simply arrives. The spin and the shimmer are the two things a reader who
+   asked for less motion specifically did not want, so they go entirely. */
+@media (prefers-reduced-motion: reduce) {
+  .sp-mark,
+  .sp-out .sp-mark,
+  .sp-word,
+  .sp-track { animation: none; }
+  .sp-ring { animation: none; }
+  .sp-track::after { animation: none; transform: none; width: 100%; opacity: .55; }
+}
+
+@media (max-width: 420px) {
+  .sp-mark, .sp-mark img { width: 66px; height: 66px; }
+  .sp-mark img { border-radius: 16px; }
+  .sp-ring { inset: -8px; border-radius: 23px; }
+  .sp-in-box { gap: 16px; }
+  .sp-track { width: 112px; }
+}

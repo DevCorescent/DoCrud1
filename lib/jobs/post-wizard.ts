@@ -66,6 +66,29 @@ export const EMPTY_DRAFT: JobDraft = {
   country: 'India',
 };
 
+/**
+ * Which kind of opportunity the composer is being used for.
+ *
+ * One form, two configurations. An internship is not a separate posting type in
+ * this product — it is `employmentType: 'internship'` on a job — so the kind
+ * decides the heading, one preset field and a couple of words of copy, and
+ * nothing at all about how the posting is stored or published. Anything that
+ * needed a genuinely different shape (a project) has its own form already.
+ */
+export type OppKind = 'job' | 'internship';
+
+export const OPP_KINDS: Record<OppKind, {
+  /** The composer's own name for what is being posted. */
+  noun: string;
+  /** The word for the published thing, for the success screen. */
+  posted: string;
+  /** Preset on arrival, and still editable — the poster may change it. */
+  employmentType?: string;
+}> = {
+  job: { noun: 'job', posted: 'Job' },
+  internship: { noun: 'internship', posted: 'Internship', employmentType: 'internship' },
+};
+
 export type StepId =
   | 'basics' | 'details' | 'requirements' | 'compensation'
   | 'screening' | 'preview' | 'publish';

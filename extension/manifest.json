@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "Docrud Auto-Apply",
+  "version": "1.0.0",
+  "description": "Fills job application forms from your Docrud profile. You review every answer and press submit yourself.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "https://docrud.com/*",
+    "https://*.docrud.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Auto-fill this application with Docrud",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "//": "The applicant tracking systems that carry most postings. Everywhere else the toolbar button injects the same script on demand, so no site is read without being asked.",
+      "matches": [
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
+        "https://*.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://jobs.ashbyhq.com/*",
+        "https://*.workable.com/*",
+        "https://jobs.smartrecruiters.com/*",
+        "https://*.icims.com/*",
+        "https://jobs.jobvite.com/*",
+        "https://*.bamboohr.com/*",
+        "https://*.recruitee.com/*",
+        "https://*.teamtailor.com/*",
+        "https://*.zohorecruit.com/*",
+        "https://*.keka.com/*",
+        "https://*.darwinbox.in/*"
+      ],
+      "js": [
+        "lang.js",
+        "confidence.js",
+        "content.js"
+      ],
+      "css": [
+        "marks.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "panel.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

@@ -32,3 +32,4 @@ profile-image-migration-backup-*.json
 # machine-specific. It has sat untracked-but-unignored, which meant every
 # `git add -A` risked committing it.
 *.tsbuildinfo
+public/uploads/resumes/

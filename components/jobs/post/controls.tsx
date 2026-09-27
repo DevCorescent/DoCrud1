@@ -106,7 +106,7 @@ export function LocationAutocomplete({
           onChange={(e) => { onChange(e.target.value); setOpen(true); setActive(-1); }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          className={`${INPUT_CLASS} pl-10 ${error ? INVALID_CLASS : ''}`}
+          className={`${INPUT_CLASS} wz-input-icon ${error ? INVALID_CLASS : ''}`}
         />
         {open && suggestions.length > 0 && (
           <ul
@@ -126,8 +126,8 @@ export function LocationAutocomplete({
                   className={[
                     'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13.5px]',
                     i === active
-                      ? 'bg-slate-900/[0.06] text-slate-900 dark:bg-white/[0.09] dark:text-white'
-                      : 'text-slate-700 dark:text-white/70',
+                      ? 'bg-slate-900/[0.06] wz-ink'
+                      : 'wz-muted',
                   ].join(' ')}
                 >
                   <MapPin className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
@@ -201,9 +201,9 @@ export function LanguageCountryBar({
       <p className={`flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] ${MUTED}`}>
         <Globe className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
         <span>The job post will be in</span>
-        <span className="font-semibold text-slate-800 dark:text-white/80">{language}</span>
+        <span className="font-medium wz-ink">{language}</span>
         <span>in</span>
-        <span className="font-semibold text-slate-800 dark:text-white/80">{country}</span>
+        <span className="font-medium wz-ink">{country}</span>
         <button
           ref={triggerRef}
           type="button"
@@ -211,7 +211,7 @@ export function LanguageCountryBar({
           /* `min-h-[32px]` is not decoration: measured at every width, this
              button rendered 22px tall, well under a comfortable touch target,
              and it is the only control on the first step besides the fields. */
-          className="inline-flex min-h-[32px] items-center rounded-md px-2 text-[13px] font-bold text-sky-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-sky-300"
+          className="inline-flex min-h-[32px] items-center rounded-md px-2 text-[13px] font-medium wz-link underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
         >
           Change<span className="sr-only"> the language and country of this job post</span>
         </button>
@@ -231,15 +231,15 @@ export function LanguageCountryBar({
             aria-labelledby={titleId}
             className={`${GLASS} max-h-[85dvh] w-full overflow-hidden rounded-b-none sm:max-w-md sm:rounded-2xl`}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-4 dark:border-white/[0.07]">
-              <h2 id={titleId} className="text-[15px] font-bold text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-4">
+              <h2 id={titleId} className="text-[15px] font-medium wz-ink">
                 Language and country
               </h2>
               <button
                 type="button"
                 onClick={() => { setOpen(false); triggerRef.current?.focus(); }}
                 aria-label="Close"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-900/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-white/50 dark:hover:bg-white/[0.07]"
+                className="flex h-8 w-8 items-center justify-center rounded-lg wz-faint hover:bg-slate-900/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 <X className="h-4 w-4" aria-hidden />
               </button>
@@ -255,7 +255,7 @@ export function LanguageCountryBar({
                 ['Country', COUNTRIES, draft.country, (v: string) => setDraft((d) => ({ ...d, country: v }))],
               ] as const).map(([label, options, selected, set]) => (
                 <fieldset key={label} className="mt-4">
-                  <legend className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-white/40">
+                  <legend className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] wz-faint">
                     {label}
                   </legend>
                   <div className="flex flex-wrap gap-1.5">
@@ -269,8 +269,8 @@ export function LanguageCountryBar({
                           'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors',
                           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500',
                           selected === option
-                            ? 'border-sky-600 bg-sky-600 text-white dark:border-sky-400 dark:bg-sky-500 dark:text-[#0b1220]'
-                            : 'border-slate-300 bg-white/60 text-slate-700 hover:bg-white dark:border-white/[0.10] dark:bg-white/[0.04] dark:text-white/70 dark:hover:bg-white/[0.08]',
+                            ? 'border-sky-600 bg-sky-600 text-white'
+                            : 'border-slate-300 bg-white/60 wz-muted hover:bg-white',
                         ].join(' ')}
                       >
                         {selected === option && <Check className="h-3.5 w-3.5" aria-hidden />}
@@ -282,18 +282,18 @@ export function LanguageCountryBar({
               ))}
             </div>
 
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))] dark:border-white/[0.07]">
+            <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 px-5 py-3.5 pb-[max(0.875rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
                 onClick={() => { setOpen(false); triggerRef.current?.focus(); }}
-                className="h-10 rounded-xl border border-slate-300 px-4 text-[13.5px] font-semibold text-slate-700 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-white/[0.10] dark:text-white/70 dark:hover:bg-white/[0.07]"
+                className="h-10 rounded-xl border border-slate-300 px-4 text-[13.5px] font-medium wz-muted hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => { onChange(draft); setOpen(false); triggerRef.current?.focus(); }}
-                className="h-10 rounded-xl bg-slate-900 px-4 text-[13.5px] font-bold text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 dark:bg-white dark:text-[#0b1220] dark:hover:bg-white/90"
+                className="h-10 rounded-xl bg-slate-900 px-4 text-[13.5px] font-medium text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
                 Save
               </button>

@@ -30,6 +30,9 @@
     "test:ats-hardening": "tsx scripts/ats-hardening.selftest.ts",
     "test:ats-profile": "tsx scripts/ats-profile.selftest.ts",
     "test:ats-modal": "tsx scripts/ats-modal.selftest.ts",
+    "test:apply-map": "tsx scripts/apply-field-map.selftest.ts",
+    "test:apply-answers": "tsx scripts/apply-answers.selftest.ts",
+    "test:apply-question": "tsx scripts/apply-question.selftest.ts",
     "test:resume-upload-fallback": "tsx scripts/resume-upload-fallback.selftest.ts",
     "test:ai-model-config": "tsx scripts/ai-model-config.selftest.ts",
     "test:job-match": "tsx scripts/job-match-tone.selftest.ts",
@@ -53,6 +56,7 @@
     "test:mail-recipients": "tsx scripts/mail-recipients.selftest.ts",
     "test:mail-provider": "tsx scripts/mail-provider.selftest.ts",
     "verify:sources": "tsx scripts/india-sources.verify.ts",
+    "ingest:jobs": "tsx scripts/ingest-jobs.ts",
     "db:init": "node scripts/db-init.mjs",
     "db:indexes": "node scripts/db-indexes.mjs",
     "db:migrate-hiring-jobs": "node scripts/db-migrate-hiring-jobs.mjs",
@@ -121,7 +125,9 @@
     "bench:ingestion-scale": "tsx scripts/ingestion-scale.bench.ts",
     "bench:job-scale": "tsx scripts/job-scale.bench.ts",
     "test:public-sort-parity": "tsx scripts/public-sort-parity.selftest.ts",
-    "test:observability": "tsx scripts/observability.selftest.ts"
+    "test:observability": "tsx scripts/observability.selftest.ts",
+    "test:apply-i18n": "tsx scripts/apply-i18n.selftest.ts",
+    "test:apply-confidence": "node scripts/apply-confidence.selftest.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1070.0",

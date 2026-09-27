@@ -1,0 +1,325 @@
+/**
+ * The job card in the homepage feed.
+ *
+ * ═══ IT HAS TO LOOK LIKE A DIFFERENT KIND OF THING ═══
+ *
+ * Three kinds of card share this feed. A post is the quiet one:
+ * `bg-white/[0.045]` with a `0.07` hairline. The suggested-profile card
+ * (components/recommendations/feed-profile-card.css) is the same material lit
+ * from above, with a WARM corner. This is its sibling with a COOL one — so the
+ * three are told apart by temperature before a word is read, and none of them
+ * is a different palette from the others.
+ *
+ * The left spine is the strongest signal and the cheapest: a 2px rule down the
+ * leading edge that no post card has.
+ *
+ * ═══ A REAL STYLESHEET ═══
+ *
+ * Not an inline <style>. This repo has shipped a hydration mismatch from inline
+ * style text twice — see components/jobs/company/company-explorer.css and
+ * app/people/people.css — and the previous version of this card mounted its
+ * rules through a `<FeedJobCardStyles />` element the feed had to remember to
+ * render, which is a second thing to keep in step for no benefit.
+ */
+
+.fjc{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  /* The rhythm between GROUPS. Inside a group the spacing is tighter — the
+     percentage sits 5px above its bar, the company 0 above its title — so the
+     card reads as four blocks rather than eight evenly-spaced lines. */
+  gap:12px;
+  padding:15px 16px 13px;
+  padding-left:18px;             /* the spine's width, plus the usual inset */
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,0.13);
+  background:linear-gradient(180deg, rgba(255,255,255,0.085) 0%, rgba(255,255,255,0.028) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.14),
+    0 1px 2px rgba(0,0,0,0.26);
+  text-decoration:none;
+  overflow:hidden;
+  transition:border-color 180ms ease, background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+/* The cool corner. Four per cent, like the profile card's warm one: enough
+   that the eye classifies the card before reading it, not enough to compete
+   with a photograph in the next column. */
+.fjc::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  pointer-events:none;
+  background:radial-gradient(120% 90% at 0% 0%, rgba(140,170,255,0.07), transparent 60%);
+}
+
+/* The spine. Its colour is the match tone when there is a score, and a neutral
+   blue when there is not — never a tone that implies a score nobody computed. */
+.fjc::after{
+  content:"";
+  position:absolute;
+  left:0;
+  top:0;
+  bottom:0;
+  width:2px;
+  pointer-events:none;
+  background:linear-gradient(180deg, var(--fjc-accent, rgba(140,170,255,0.85)) 0%, rgba(140,170,255,0.10) 100%);
+}
+
+.fjc:hover{
+  border-color:rgba(255,255,255,0.22);
+  background:linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.035) 100%);
+  transform:translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    0 16px 38px rgba(0,0,0,0.34);
+}
+.fjc:focus-visible{
+  outline:2px solid rgba(255,255,255,0.55);
+  outline-offset:2px;
+}
+.fjc > *{ position:relative; z-index:1; }
+
+/* ── What it is ── */
+.fjc-top{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.fjc-kind{
+  flex:0 0 auto;
+  border-radius:999px;
+  border:1px solid rgba(140,170,255,0.28);
+  background:rgba(140,170,255,0.11);
+  padding:3px 9px;
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:0.11em;
+  text-transform:uppercase;
+  color:rgba(199,214,255,0.95);
+  white-space:nowrap;
+}
+/* The employer's own claim about timing, in the employer's own colours — the
+   tint comes from lib/job-urgency.ts as an inline style, so a role that reads
+   "hiring now" here reads the same on the Jobs page, from the same value. */
+.fjc-urgency{
+  flex:0 0 auto;
+  margin-left:auto;
+  border-radius:999px;
+  border:1px solid;
+  padding:2px 8px;
+  font-size:9.5px;
+  font-weight:700;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+.fjc-posted{
+  flex:0 0 auto;
+  font-size:10.5px;
+  font-variant-numeric:tabular-nums;
+  color:rgba(255,255,255,0.42);
+  white-space:nowrap;
+}
+/* When there is no urgency chip, the date is what takes the right-hand end. */
+.fjc-posted-end{ margin-left:auto; }
+
+/* ── Who is hiring ── */
+.fjc-org{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  min-width:0;
+}
+.fjc-org-n{
+  min-width:0;
+  font-size:11.5px;
+  font-weight:650;
+  letter-spacing:0.02em;
+  color:rgba(255,255,255,0.74);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+/* ── The role ──
+   Tucked up against the company above it: "Northwind Labs" and "Senior
+   Frontend Engineer" are one thought — who, and what for — and a full gap
+   between them breaks it into two. */
+.fjc-title{
+  margin-top:-5px;
+  font-size:15.5px;
+  font-weight:650;
+  line-height:1.28;
+  letter-spacing:-0.018em;
+  color:rgba(255,255,255,0.96);
+  /* A job title is typed by whoever posted it, and this is the one block on
+     the card that WRAPS — the company name and the skill chips are single-line
+     with an ellipsis, where `overflow-wrap` could never apply. Without it
+     `Senior_Frontend_Engineer_II` runs out of the card instead of breaking. */
+  overflow-wrap:anywhere;
+  /* Two lines. A real posting is "Senior Frontend Engineer, Design Systems"
+     and cutting it at one leaves the half that says least. */
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* ── How well it fits you ──
+   Only rendered when the server actually computed a score, which needs a
+   profile. Signed out there is no bar and no empty rail where one would be. */
+.fjc-match{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+}
+.fjc-match-h{
+  display:flex;
+  align-items:baseline;
+  gap:6px;
+  min-width:0;
+}
+.fjc-match-n{
+  font-size:12.5px;
+  font-weight:700;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-0.01em;
+  color:var(--fjc-accent);
+}
+.fjc-match-l{
+  font-size:10.5px;
+  font-weight:600;
+  letter-spacing:0.05em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,0.45);
+}
+.fjc-bar{
+  position:relative;
+  height:3px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.09);
+  overflow:hidden;
+}
+.fjc-bar > i{
+  position:absolute;
+  inset:0 auto 0 0;
+  display:block;
+  border-radius:inherit;
+  background:var(--fjc-accent);
+}
+.fjc-why{
+  display:flex;
+  align-items:center;
+  gap:5px;
+  min-width:0;
+  font-size:11px;
+  line-height:1.35;
+  color:rgba(255,255,255,0.60);
+}
+.fjc-why-i{ width:11px; height:11px; flex:0 0 auto; opacity:0.8; }
+.fjc-why-t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── The facts ──
+   Location, employment type and work mode, separated by a dot rather than
+   boxed into chips: three pills here and three skill pills below turns the
+   card into a bag of pills with no hierarchy in it. */
+.fjc-facts{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:4px 7px;
+  font-size:11.5px;
+  line-height:1.4;
+  color:rgba(255,255,255,0.62);
+  min-width:0;
+}
+.fjc-fact{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  min-width:0;
+}
+.fjc-fact-t{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fjc-fact-i{ width:12px; height:12px; flex:0 0 auto; opacity:0.65; }
+.fjc-dot{
+  width:2.5px;
+  height:2.5px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.28);
+  flex:0 0 auto;
+}
+
+/* ── What it is built on ── */
+.fjc-skills{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+}
+.fjc-skill{
+  border-radius:9px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(255,255,255,0.05);
+  padding:3px 9px;
+  font-size:11px;
+  line-height:1.35;
+  color:rgba(255,255,255,0.70);
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+/* A skill the viewer actually has. Lit rather than merely listed — it is the
+   difference between "this role wants React" and "this role wants React and
+   you have it", which is the whole reason the match is worth showing. */
+.fjc-skill-on{
+  border-color:rgba(140,170,255,0.38);
+  background:rgba(140,170,255,0.14);
+  color:rgba(214,225,255,0.96);
+}
+.fjc-more{
+  font-size:11px;
+  color:rgba(255,255,255,0.45);
+}
+
+/* ── The way in ── */
+.fjc-foot{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:1px;
+  padding-top:11px;
+  border-top:1px solid rgba(255,255,255,0.07);
+  min-width:0;
+}
+.fjc-cta{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  font-size:12px;
+  font-weight:650;
+  color:rgba(255,255,255,0.88);
+}
+.fjc-cta-i{
+  width:13px;
+  height:13px;
+  transition:transform 220ms cubic-bezier(0.22,1,0.36,1);
+}
+.fjc:hover .fjc-cta-i{ transform:translateX(3px); }
+.fjc-src{
+  margin-left:auto;
+  font-size:10.5px;
+  color:rgba(255,255,255,0.40);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .fjc,.fjc-cta-i{ transition:none; }
+  .fjc:hover{ transform:none; }
+  .fjc:hover .fjc-cta-i{ transform:none; }
+}

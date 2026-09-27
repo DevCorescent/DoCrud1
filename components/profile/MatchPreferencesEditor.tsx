@@ -1,4 +1,5 @@
 'use client';
+import '@/components/profile/profile.css';
 
 /**
  * "How you want to be matched" — the answers that feed the matching engine, and
@@ -113,22 +114,22 @@ export interface MatchPreferencesValue {
 
 /* ─── Shared classes, so every control in the dialog is the same control ──── */
 const INPUT =
-  'w-full rounded-[10px] border border-white/[0.09] bg-white/[0.03] px-3 py-2 text-[13px] text-white/85 '
-  + 'placeholder:text-white/25 outline-none transition focus:border-white/30 focus:bg-white/[0.05]';
+  'w-full rounded-[10px] border pf-rim-2 pf-s1 px-3 py-2 text-[13px] pf-ink '
+  + 'pf-ph outline-none transition pf-rim-f pf-s2-h';
 const CHIP = 'rounded-full border px-3 py-[5px] text-[12px] font-medium transition active:scale-[0.97]';
 /* A chosen answer reads as FILLED. At the earlier contrast it was a slightly
    lighter outline, which on a multi-select is the difference between "I picked
    that" and "I might have picked that".
 
-   `bg-white`, NOT `bg-white/90` — and the difference is not cosmetic. A global
+   `pf-solid`, NOT `pf-solid` — and the difference is not cosmetic. A global
    dark-mode rule repaints anything carrying `text-slate-950` to near-white
    (globals.css), and the rule that restores dark text on light controls is
-   scoped to `button[class~='bg-white']` — an EXACT token match, so translucent
-   glass surfaces are left alone. `bg-white/90` is a different token: it took
+   scoped to `button[class~='pf-solid']` — an EXACT token match, so translucent
+   glass surfaces are left alone. `pf-solid` is a different token: it took
    the whitening and missed the restore, leaving white text on a white pill at
    1.05:1. Measured, not guessed. */
-const CHIP_ON = 'border-white bg-white text-slate-950 font-semibold';
-const CHIP_OFF = 'border-white/[0.08] bg-white/[0.02] text-white/45 hover:border-white/[0.16] hover:text-white/75';
+const CHIP_ON = 'pf-rim-2 pf-solid text-slate-950 font-semibold';
+const CHIP_OFF = 'pf-rim-2 pf-s1 pf-ink-3 pf-rim-f pf-ink-h';
 
 /** A titled group of answers. Sections are what keep sixteen fields readable. */
 function Section({ title, note, locked, children }: {
@@ -137,10 +138,10 @@ function Section({ title, note, locked, children }: {
   return (
     <section className="px-5 py-4 sm:px-6 sm:py-5">
       <div className="mb-1 flex items-center gap-1.5">
-        {locked && <Lock className="h-3 w-3 shrink-0 text-white/35" aria-hidden />}
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">{title}</h3>
+        {locked && <Lock className="h-3 w-3 shrink-0 pf-ink-3" aria-hidden />}
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] pf-ink-3">{title}</h3>
       </div>
-      {note && <p className="mb-3 text-[11.5px] leading-relaxed text-white/30">{note}</p>}
+      {note && <p className="mb-3 text-[11.5px] leading-relaxed pf-ink-4">{note}</p>}
       <div className="mt-3 space-y-3.5 sm:space-y-4">{children}</div>
     </section>
   );
@@ -160,8 +161,8 @@ function Row({ title, help, visibility, onVisibility, children }: {
     <div>
       <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold text-white/80">{title}</p>
-          <p className="mt-0.5 text-[11.5px] leading-relaxed text-white/35">{help}</p>
+          <p className="text-[13px] font-semibold pf-ink">{title}</p>
+          <p className="mt-0.5 text-[11.5px] leading-relaxed pf-ink-3">{help}</p>
         </div>
         {onVisibility && (
           <button
@@ -173,7 +174,7 @@ function Row({ title, help, visibility, onVisibility, children }: {
             className={`flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-[0.06em] transition active:scale-[0.97] ${
               isPublic
                 ? 'border-emerald-400/30 bg-emerald-400/[0.12] text-emerald-300'
-                : 'border-white/[0.09] bg-white/[0.03] text-white/40 hover:border-white/[0.18] hover:text-white/70'
+                : 'pf-rim-2 pf-s1 pf-ink-3 pf-rim-f pf-ink-h'
             }`}
           >
             {isPublic ? <Eye className="h-3 w-3" aria-hidden /> : <EyeOff className="h-3 w-3" aria-hidden />}
@@ -404,13 +405,13 @@ export default function MatchPreferencesEditor({
         role="dialog"
         aria-modal="true"
         aria-labelledby="match-prefs-title"
-        className="relative z-10 flex max-h-[calc(92vh-62px)] w-full flex-col overflow-hidden rounded-t-[26px] border border-white/[0.09] bg-[#111113] shadow-2xl md:mx-4 md:max-h-[86vh] md:max-w-[680px] md:rounded-[22px]"
+        className="relative z-10 flex max-h-[calc(92vh-62px)] w-full flex-col overflow-hidden rounded-t-[26px] border pf-rim-2 pf-modal shadow-2xl md:mx-4 md:max-h-[86vh] md:max-w-[680px] md:rounded-[22px]"
       >
         {/* ── Header ── */}
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-white/[0.07] px-5 py-4 sm:px-6">
+        <div className="flex shrink-0 items-start justify-between gap-4 border-b pf-rim px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <h2 id="match-prefs-title" className="text-[15px] font-semibold text-white">How you want to be matched</h2>
-            <p className="mt-0.5 text-[12px] leading-relaxed text-white/40">
+            <h2 id="match-prefs-title" className="text-[15px] font-semibold pf-ink">How you want to be matched</h2>
+            <p className="mt-0.5 text-[12px] leading-relaxed pf-ink-3">
               {STEPS[step].blurb}
             </p>
             {/* Where you are, and how much is left. Tapping a dot jumps — the
@@ -425,18 +426,18 @@ export default function MatchPreferencesEditor({
                   aria-label={`Step ${i + 1}: ${s.title}`}
                   aria-current={i === step ? 'step' : undefined}
                   className={`h-1.5 rounded-full transition-all ${
-                    i === step ? 'w-6 bg-white/80' : 'w-1.5 bg-white/20 hover:bg-white/40'
+                    i === step ? 'w-6 pf-solid' : 'w-1.5 pf-s4 pf-s2-h'
                   }`}
                 />
               ))}
-              <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] text-white/30">
+              <span className="ml-1.5 text-[10.5px] font-semibold uppercase tracking-[0.1em] pf-ink-4">
                 {step + 1}/{STEPS.length}
               </span>
             </div>
           </div>
           <button ref={closeRef} type="button" onClick={() => closeDialog()} aria-label="Close"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/[0.06] transition hover:bg-white/[0.11]">
-            <X className="h-4 w-4 text-white/60" />
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full pf-s2 transition pf-s2-h">
+            <X className="h-4 w-4 pf-ink-2" />
           </button>
         </div>
 
@@ -530,7 +531,7 @@ export default function MatchPreferencesEditor({
                   placeholder="INR" onChange={(e) => set('salaryCurrency', e.target.value.toUpperCase())} />
                 <OneOf options={SALARY_PERIODS} value={prefs.salaryPeriod} onChange={(v) => set('salaryPeriod', v)} />
               </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-white/30">
+              <p className="mt-1.5 text-[11px] leading-relaxed pf-ink-4">
                 A figure on its own is not used — it needs a currency and a period, or there is
                 nothing to compare it against.
               </p>
@@ -545,22 +546,22 @@ export default function MatchPreferencesEditor({
         </div>
 
         {/* ── Footer ── */}
-        <div className="shrink-0 border-t border-white/[0.07] bg-[#111113] px-5 py-3.5 sm:px-6">
+        <div className="shrink-0 border-t pf-rim pf-modal px-5 py-3.5 sm:px-6">
           {error && <p role="alert" className="mb-2.5 text-[12px] font-medium text-rose-300">{error}</p>}
           {confirmDiscard && (
             <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px]">
               <span className="text-amber-300/90">You have unsaved changes.</span>
               <button type="button" onClick={() => closeDialog(true)}
-                className="font-semibold text-white/70 underline underline-offset-2 hover:text-white">
+                className="font-semibold pf-ink-2 underline underline-offset-2 pf-ink-h">
                 Discard and close
               </button>
               <button type="button" onClick={() => setConfirmDiscard(false)}
-                className="font-semibold text-white/45 hover:text-white/70">
+                className="font-semibold pf-ink-3 pf-ink-h">
                 Keep editing
               </button>
             </div>
           )}
-          <p className="mb-2.5 text-[11.5px] leading-snug text-white/35">
+          <p className="mb-2.5 text-[11.5px] leading-snug pf-ink-3">
             {publicCount === 0
               ? 'Nothing here is shown on your profile.'
               : `${publicCount} shown on your profile · the rest are used for matching only.`}
@@ -571,7 +572,7 @@ export default function MatchPreferencesEditor({
                 control; Cancel takes its place there. */}
             <button type="button" disabled={saving}
               onClick={() => (step === 0 ? closeDialog() : setStep((n) => n - 1))}
-              className="inline-flex items-center gap-1 rounded-full px-3.5 py-2 text-[13px] font-semibold text-white/50 transition hover:text-white/80 disabled:opacity-50">
+              className="inline-flex items-center gap-1 rounded-full px-3.5 py-2 text-[13px] font-semibold pf-ink-3 transition pf-ink-h disabled:opacity-50">
               {step > 0 && <ChevronLeft className="h-3.5 w-3.5" aria-hidden />}
               {step === 0 ? 'Cancel' : 'Back'}
             </button>
@@ -584,21 +585,21 @@ export default function MatchPreferencesEditor({
                 once there is something to save. */}
             {dirty && step < STEPS.length - 1 && !justSaved && (
               <button type="button" onClick={save} disabled={saving}
-                className="rounded-full px-3 py-2 text-[13px] font-semibold text-white/60 transition hover:text-white/90 disabled:opacity-50">
+                className="rounded-full px-3 py-2 text-[13px] font-semibold pf-ink-2 transition pf-ink-h disabled:opacity-50">
                 {saving ? 'Saving…' : 'Save'}
               </button>
             )}
 
             {step < STEPS.length - 1 ? (
               <button type="button" onClick={() => setStep((n) => n + 1)} disabled={saving}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-[13px] font-semibold text-slate-950 transition hover:bg-white/90 active:scale-[0.98] disabled:opacity-60">
+                className="inline-flex items-center gap-1.5 rounded-full pf-solid px-4 py-2 text-[13px] font-semibold text-slate-950 transition pf-s2-h active:scale-[0.98] disabled:opacity-60">
                 Next
                 <ChevronRight className="h-3.5 w-3.5" aria-hidden />
               </button>
             ) : (
               <button type="button" onClick={save} disabled={saving || justSaved}
                 className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition active:scale-[0.98] disabled:cursor-default ${
-                  justSaved ? 'bg-emerald-400 text-emerald-950' : 'bg-white text-slate-950 hover:bg-white/90 disabled:opacity-60'
+                  justSaved ? 'bg-emerald-400 text-emerald-950' : 'pf-solid text-slate-950 pf-s2-h disabled:opacity-60'
                 }`}>
                 {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
                 {justSaved && <Check className="h-3.5 w-3.5" aria-hidden />}
